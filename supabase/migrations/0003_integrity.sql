@@ -7,7 +7,7 @@ declare s int; paste_in_exercise int; st public.account_status;
 begin
   if new.user_id::text = any (regexp_split_to_array(coalesce(current_setting('app.admin_user_ids', true), ''), '\s*,\s*')) then return new; end if;
   s := public.integrity_score(new.user_id);
-  select count(*) into paste_in_exercise from public.integrity_events where user_id = new.user_id and exercise_id = new.exercise_id and type = 'paste-blocked';
+  select count(*) into paste_in_exercise from public.integrity_events where user_id = new.user_id and exercise_id = new.exercise_id and type = 'paste-blocked' and created_at > now() - interval '7 days';
   select account_status into st from public.profiles where id = new.user_id;
   if st = 'banned' then return new; end if;
   if s >= 40 then
