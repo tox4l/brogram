@@ -1,0 +1,92 @@
+{
+  "$note": "BroGram seed. Course codes are internal keys only; the UI shows titles, never institution names. CLOs are rewritten in BroGram's own words.",
+  "courses": [
+    {
+      "code": "INFS1101",
+      "slug": "intro-computing",
+      "title": "Intro to Computing & Problem Solving",
+      "language": "python",
+      "runtime": "browser",
+      "level": 1,
+      "prerequisites": [],
+      "topics": ["problem-solving", "flowcharts", "variables", "selection", "iteration", "strings", "lists", "functions", "errors"],
+      "clo_ids": ["INFS1101-1", "INFS1101-2", "INFS1101-3", "INFS1101-4"],
+      "status": "live"
+    },
+    {
+      "code": "INFS1201",
+      "slug": "computer-programming",
+      "title": "Computer Programming",
+      "language": "python",
+      "runtime": "browser",
+      "level": 1,
+      "prerequisites": ["INFS1101"],
+      "topics": ["lists", "aliasing", "tuples", "dictionaries", "sets", "searching", "sorting", "functions", "csv", "files"],
+      "clo_ids": ["INFS1201-1", "INFS1201-2", "INFS1201-3", "INFS1201-4"],
+      "status": "live",
+      "note": "CLOs drafted from the course appendix material; replace when the official syllabus arrives."
+    },
+    {
+      "code": "INFS2101",
+      "slug": "web-technologies-1",
+      "title": "Web Technologies I",
+      "language": "web",
+      "runtime": "browser",
+      "level": 2,
+      "prerequisites": ["INFS1201"],
+      "topics": ["html", "accessibility", "css", "flexbox", "grid", "tables", "responsive", "forms", "javascript", "events", "validation"],
+      "clo_ids": ["INFS2101-1", "INFS2101-2", "INFS2101-3", "INFS2101-4"],
+      "status": "live"
+    },
+    {
+      "code": "INFS2201",
+      "slug": "database-systems",
+      "title": "Database Management Systems",
+      "language": "sql",
+      "secondary_language": "mongo",
+      "runtime": "browser",
+      "level": 2,
+      "prerequisites": ["INFS1201"],
+      "topics": ["relational-model", "er-modeling", "normalization", "sql-ddl", "sql-dml", "joins", "aggregation", "subqueries", "nosql", "mongodb"],
+      "clo_ids": ["INFS2201-1", "INFS2201-2", "INFS2201-3", "INFS2201-4", "INFS2201-5"],
+      "status": "live"
+    },
+    {
+      "code": "INFS3102",
+      "slug": "object-oriented-programming",
+      "title": "Object Oriented Programming",
+      "language": "java",
+      "runtime": "judge",
+      "level": 3,
+      "prerequisites": ["INFS1201"],
+      "topics": ["paradigms", "java-syntax", "classes-objects", "encapsulation", "static", "inheritance", "polymorphism", "interfaces", "associations", "collections", "exceptions", "streams", "uml", "design-patterns"],
+      "clo_ids": ["INFS3102-1", "INFS3102-2", "INFS3102-3", "INFS3102-4"],
+      "status": "live"
+    },
+    {
+      "code": "DSAI2201",
+      "slug": "data-science-ai",
+      "title": "Intro to Data Science & AI",
+      "language": "python",
+      "runtime": "browser",
+      "level": 2,
+      "prerequisites": ["INFS1201"],
+      "topics": ["descriptive-stats", "probability", "bayes", "numpy", "pandas", "cleaning", "feature-engineering", "visualization", "ml-fundamentals", "regression", "classification", "evaluation", "clustering"],
+      "clo_ids": ["DSAI2201-1", "DSAI2201-2", "DSAI2201-3", "DSAI2201-4", "DSAI2201-5"],
+      "status": "live",
+      "packages": ["numpy", "pandas", "matplotlib", "scikit-learn"]
+    }
+  ],
+  "coming_soon": [
+    { "slug": "advanced-python", "title": "Advanced Python", "language": "python" },
+    { "slug": "principles-of-software-engineering", "title": "Principles of Software Engineering", "language": "python" },
+    { "slug": "cryptography", "title": "Cryptography", "language": "python" },
+    { "slug": "web-backend", "title": "Web Development (Back-end)", "language": "javascript" },
+    { "slug": "cpp", "title": "C++", "language": "cpp" },
+    { "slug": "csharp", "title": "C#", "language": "csharp" },
+    { "slug": "typescript", "title": "TypeScript", "language": "typescript" },
+    { "slug": "php", "title": "PHP", "language": "php" },
+    { "slug": "react", "title": "React", "language": "javascript" },
+    { "slug": "tailwind", "title": "Tailwind CSS", "language": "web" }
+  ]
+}

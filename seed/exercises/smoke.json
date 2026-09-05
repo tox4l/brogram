@@ -1,0 +1,105 @@
+{
+  "$note": "Hand-written smoke exercises so runtimes, the exercise screen, and the e2e flows have real rows from Phase 0. One per browser runtime plus Java. Function tests: input is a JSON array of arguments, expected is the JSON-serialized return value.",
+  "exercises": [
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "early-return",
+      "title": "First late train",
+      "prompt": "A station logs the minutes past the hour at which trains arrived. A train is late if it arrived after the limit.\n\nWrite `first_late(times, limit)` that returns the first arrival time that is greater than `limit`. If no train is late, return `-1`.\n\nExample: `first_late([3, 5, 9], 6)` returns `9`. `first_late([1, 2], 10)` returns `-1`.",
+      "starterCode": "def first_late(times, limit):\n    pass\n",
+      "tests": [
+        { "id": "t1", "input": "[[3,5,9],6]", "expected": "9", "hidden": false, "name": "example" },
+        { "id": "t2", "input": "[[1,2],10]", "expected": "-1", "hidden": false, "name": "none late" },
+        { "id": "t3", "input": "[[],4]", "expected": "-1", "hidden": true },
+        { "id": "t4", "input": "[[7],7]", "expected": "-1", "hidden": true },
+        { "id": "t5", "input": "[[8,2,9],7]", "expected": "8", "hidden": true },
+        { "id": "t6", "input": "[[0,0,1],0]", "expected": "1", "hidden": true }
+      ],
+      "referenceSolution": "def first_late(times, limit):\n    for t in times:\n        if t > limit:\n            return t\n    return -1\n",
+      "tags": ["loops", "lists"]
+    },
+    {
+      "cloId": "INFS2101-3",
+      "language": "javascript",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "guard",
+      "title": "Username check",
+      "prompt": "A sign-up form accepts a username. Write `validateUsername(name)` that returns `\"ok\"` when the name is 3 to 12 characters long and contains only lowercase letters or digits. Otherwise return the first problem found, in this order: `\"too short\"`, `\"too long\"`, `\"bad characters\"`.\n\nExample: `validateUsername(\"ali7\")` returns `\"ok\"`. `validateUsername(\"Al\")` returns `\"too short\"`.",
+      "starterCode": "export function validateUsername(name) {\n  \n}\n",
+      "tests": [
+        { "id": "t1", "input": "[\"ali7\"]", "expected": "\"ok\"", "hidden": false, "name": "example" },
+        { "id": "t2", "input": "[\"Al\"]", "expected": "\"too short\"", "hidden": false, "name": "short" },
+        { "id": "t3", "input": "[\"abcdefghijklm\"]", "expected": "\"too long\"", "hidden": true },
+        { "id": "t4", "input": "[\"Ali\"]", "expected": "\"bad characters\"", "hidden": true },
+        { "id": "t5", "input": "[\"\"]", "expected": "\"too short\"", "hidden": true },
+        { "id": "t6", "input": "[\"abc def\"]", "expected": "\"bad characters\"", "hidden": true }
+      ],
+      "referenceSolution": "export function validateUsername(name) {\n  if (name.length < 3) return 'too short'\n  if (name.length > 12) return 'too long'\n  if (!/^[a-z0-9]+$/.test(name)) return 'bad characters'\n  return 'ok'\n}\n",
+      "tags": ["validation", "strings"]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "sql-aggregate",
+      "title": "Orders per city",
+      "prompt": "A shop stores customers and their orders. Write one query that returns each city with the number of orders placed by customers from that city, as columns `city` and `order_count`, ordered by `order_count` descending then `city` ascending. Cities with zero orders must still appear.\n\nTables: `customers(id, name, city)` and `orders(id, customer_id, amount)`.",
+      "starterCode": "-- expected columns: city, order_count\n",
+      "fixture": "create table customers(id integer primary key, name text, city text);\ncreate table orders(id integer primary key, customer_id integer, amount real);\ninsert into customers values (1,'Noor','Doha'),(2,'Sara','Al Wakrah'),(3,'Omar','Doha'),(4,'Huda','Al Khor');\ninsert into orders values (1,1,20.0),(2,3,15.5),(3,2,9.0),(4,1,3.0);",
+      "tests": [
+        { "id": "t1", "input": "select city, count(o.id) as order_count from customers c left join orders o on o.customer_id = c.id group by city order by order_count desc, city asc", "expected": "{\"columns\":[\"city\",\"order_count\"],\"values\":[[\"Doha\",3],[\"Al Wakrah\",1],[\"Al Khor\",0]]}", "hidden": false, "name": "example" },
+        { "id": "t2", "input": "__STUDENT__", "expected": "{\"columns\":[\"city\",\"order_count\"],\"values\":[[\"Doha\",3],[\"Al Wakrah\",1],[\"Al Khor\",0]]}", "hidden": false, "name": "your query" },
+        { "id": "t3", "input": "__STUDENT__ /* after: insert into customers values (5,'Lina','Dukhan') */", "expected": "{\"columns\":[\"city\",\"order_count\"],\"values\":[[\"Doha\",3],[\"Al Wakrah\",1],[\"Al Khor\",0],[\"Dukhan\",0]]}", "hidden": true },
+        { "id": "t4", "input": "__STUDENT__ /* after: delete from orders */", "expected": "{\"columns\":[\"city\",\"order_count\"],\"values\":[[\"Al Khor\",0],[\"Al Wakrah\",0],[\"Doha\",0]]}", "hidden": true },
+        { "id": "t5", "input": "__STUDENT__ /* after: insert into orders values (5,4,1.0),(6,4,1.0),(7,4,1.0),(8,4,1.0) */", "expected": "{\"columns\":[\"city\",\"order_count\"],\"values\":[[\"Al Khor\",4],[\"Doha\",3],[\"Al Wakrah\",1]]}", "hidden": true }
+      ],
+      "referenceSolution": "select c.city, count(o.id) as order_count\nfrom customers c\nleft join orders o on o.customer_id = c.id\ngroup by c.city\norder by order_count desc, c.city asc;",
+      "tags": ["group-by", "left-join"]
+    },
+    {
+      "cloId": "INFS2101-3",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "dom-event",
+      "title": "Counter button",
+      "prompt": "The page has a button with id `inc` and a paragraph with id `count` showing `0`. Write the script so that each click on the button increases the number in the paragraph by one.\n\nExample: after three clicks the paragraph shows `3`.",
+      "starterCode": "<script>\n  // your code\n</script>\n",
+      "fixture": "<button id=\"inc\">Add one</button><p id=\"count\">0</p>",
+      "tests": [
+        { "id": "t1", "input": "const b=document.getElementById('inc');b.click();b.click();b.click();return document.getElementById('count').textContent.trim()==='3'?'ok':'expected 3, got '+document.getElementById('count').textContent", "expected": "ok", "hidden": false, "name": "three clicks" },
+        { "id": "t2", "input": "return document.getElementById('count').textContent.trim()==='0'?'ok':'should start at 0'", "expected": "ok", "hidden": false, "name": "starts at zero" },
+        { "id": "t3", "input": "const b=document.getElementById('inc');for(let i=0;i<10;i++)b.click();return document.getElementById('count').textContent.trim()==='10'?'ok':'expected 10'", "expected": "ok", "hidden": true },
+        { "id": "t4", "input": "const b=document.getElementById('inc');b.click();return /^\\d+$/.test(document.getElementById('count').textContent.trim())?'ok':'not a number'", "expected": "ok", "hidden": true },
+        { "id": "t5", "input": "return document.getElementById('inc')?'ok':'button removed'", "expected": "ok", "hidden": true }
+      ],
+      "referenceSolution": "<script>\n  let n = 0\n  document.getElementById('inc').addEventListener('click', () => {\n    n += 1\n    document.getElementById('count').textContent = String(n)\n  })\n</script>\n",
+      "tags": ["events", "dom"]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "inheritance-dispatch",
+      "title": "Shapes report",
+      "prompt": "Complete the class `Solution` with a static method `String describe(String kind, double a)` that builds the right shape and returns its description. A `Circle` with radius `a` describes itself as `circle:<area rounded to 1 decimal>`; a `Square` with side `a` as `square:<area rounded to 1 decimal>`. Both must extend an abstract `Shape` with an abstract `area()` and a concrete `describe()` that does the formatting, so the subclasses only compute area. Unknown kinds return `unknown`.\n\nExample: `describe(\"square\", 2)` returns `square:4.0`.",
+      "starterCode": "public class Solution {\n    public static String describe(String kind, double a) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String kind = in.next();\n        double a = in.nextDouble();\n        System.out.print(Solution.describe(kind, a));\n    }\n}\n",
+      "tests": [
+        { "id": "t1", "input": "square 2", "expected": "square:4.0", "hidden": false, "name": "example" },
+        { "id": "t2", "input": "circle 1", "expected": "circle:3.1", "hidden": false, "name": "circle" },
+        { "id": "t3", "input": "triangle 3", "expected": "unknown", "hidden": true },
+        { "id": "t4", "input": "square 0", "expected": "square:0.0", "hidden": true },
+        { "id": "t5", "input": "circle 2.5", "expected": "circle:19.6", "hidden": true }
+      ],
+      "referenceSolution": "abstract class Shape {\n    abstract double area();\n    String describe(String name) { return name + \":\" + String.format(java.util.Locale.US, \"%.1f\", area()); }\n}\nclass Circle extends Shape {\n    private final double r;\n    Circle(double r) { this.r = r; }\n    double area() { return Math.PI * r * r; }\n}\nclass Square extends Shape {\n    private final double s;\n    Square(double s) { this.s = s; }\n    double area() { return s * s; }\n}\npublic class Solution {\n    public static String describe(String kind, double a) {\n        if (kind.equals(\"circle\")) return new Circle(a).describe(\"circle\");\n        if (kind.equals(\"square\")) return new Square(a).describe(\"square\");\n        return \"unknown\";\n    }\n}\n",
+      "tags": ["inheritance", "abstract", "polymorphism"]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+# Source material that must never reach the public repo (contains instructor names and institution documents)
+UDST START*/
+UDST START*
+BroGram.pdf
+
+# Research scratch (kept locally, not published)
+docs/research/raw-condensed.txt
+docs/research/review-findings.txt
+docs/research/condense-review.mjs
+
+# Node / Next
+node_modules/
+.next/
+out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+/brogram-scaffold/
+/.a0-artifacts/
+npm-debug.log*
+
+# Env
+.env
+.env*.local
+.env*
+!.env.example
+
+# Supabase
+supabase/.temp
+supabase/.branches
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Leftovers from the first scaffold attempt (Codex sandbox could not delete them)
+brogram-scaffold/
+.a0-artifacts/
