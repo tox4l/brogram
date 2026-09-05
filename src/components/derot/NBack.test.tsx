@@ -1,0 +1,139 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
+import type { DrillItem } from '@/lib/contracts'
+import { NBack } from './NBack'
+import { countPlantedMatches } from './scoring'
+
+// tokens: index 2 repeats index 1 -> 1 planted match at n=1 ('b','b')
+const tokens = ['a', 'b', 'b', 'c']
+const item: DrillItem = {
+  id: 'n-back-001',
+  kind: 'n-back',
+  language: 'python',
+  difficulty: 1,
+  timeLimitS: 60,
+  payload: { n: 1, tokens, language: 'python' },
+}
+
+/** Advancing the fake clock must happen inside act() so the effect that reschedules the next 1500ms timer flushes before the next advance. */
+function advance(ms: number) {
+  act(() => {
+    vi.advanceTimersByTime(ms)
+  })
+}
+
+describe('NBack', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
+  it('shows tokens one at a time, advancing every 1500ms', () => {
+    render(<NBack item={item} onResult={() => {}} />)
+    expect(screen.getByText('a')).toBeTruthy()
+
+    advance(1500)
+    expect(screen.getByText('b')).toBeTruthy()
+  })
+
+  it('counts a hit for a correct match press and ends after the last token', () => {
+    const onResult = vi.fn()
+    render(<NBack item={item} onResult={onResult} now={() => 0} />)
+
+    // token 0: 'a' - no press (correctly withheld)
+    advance(1500)
+    // token 1: 'b' - tokens[1] vs tokens[0]: 'b' vs 'a', no match - no press
+    advance(1500)
+    // token 2: 'b' - matches tokens[1]='b' -> press Match (hit)
+    fireEvent.click(screen.getByRole('button', { name: /match/i }))
+    advance(1500)
+    // token 3: 'c' - no match, no press
+    advance(1500)
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+    const result = onResult.mock.calls[0][0]
+    expect(result).toMatchObject({ drillId: 'n-back-001', kind: 'n-back' })
+    expect(countPlantedMatches(tokens, 1)).toBe(1)
+    // 1 hit, 0 false alarms, 1 planted match -> correct, score 100
+    expect(result.correct).toBe(true)
+    expect(result.score).toBe(100)
+  })
+
+  it('counts a false alarm for a press on a non-match, lowering the score', () => {
+    const onResult = vi.fn()
+    render(<NBack item={item} onResult={onResult} now={() => 0} />)
+
+    // token 0: 'a' - false alarm
+    fireEvent.click(screen.getByRole('button', { name: /match/i }))
+    advance(1500)
+    // token 1: 'b' - no press
+    advance(1500)
+    // token 2: 'b' - hit
+    fireEvent.click(screen.getByRole('button', { name: /match/i }))
+    advance(1500)
+    // token 3: 'c' - no press
+    advance(1500)
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+    const result = onResult.mock.calls[0][0]
+    // net = 1 hit - 1 false alarm = 0; plantedMatches = 1; correct needs net >= 0.5 -> false
+    expect(result.correct).toBe(false)
+    expect(result.score).toBe(0)
+  })
+
+  it('responds to the space key as well as the Match button', () => {
+    const onResult = vi.fn()
+    render(<NBack item={item} onResult={onResult} now={() => 0} />)
+
+    advance(1500) // token 1 'b'
+    fireEvent.keyDown(window, { key: ' ', code: 'Space' })
+    // that press was on token 1 (no match), so it is a false alarm
+    advance(1500) // token 2 'b'
+    fireEvent.click(screen.getByRole('button', { name: /match/i })) // hit
+    advance(1500) // token 3 'c'
+    advance(1500) // past the last token -> finish
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a second press on the same token', () => {
+    const onResult = vi.fn()
+    render(<NBack item={item} onResult={onResult} now={() => 0} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /match/i }))
+    fireEvent.click(screen.getByRole('button', { name: /match/i })) // should not double count
+    advance(1500) // token 1
+    advance(1500) // token 2 (planted match, never pressed)
+    advance(1500) // token 3
+    advance(1500) // past the last token -> finish
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+    // only 1 false alarm counted from token 0 (the planted match at token 2 was never pressed)
+    expect(onResult.mock.calls[0][0].score).toBe(0)
+  })
+
+  it('does not call onResult more than once even if the overall time limit is also reached', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    render(<NBack item={item} onResult={onResult} now={now} />)
+
+    t = 1500
+    advance(1500)
+    t = 3000
+    advance(1500)
+    t = 4500
+    advance(1500)
+    t = 6000
+    advance(1500)
+    expect(onResult).toHaveBeenCalledTimes(1)
+
+    t = 60000
+    advance(54000)
+    expect(onResult).toHaveBeenCalledTimes(1)
+  })
+})
