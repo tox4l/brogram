@@ -64,6 +64,30 @@ describe('applyPass', () => {
   it('scores points from difficulty, hints and quality', () => {
     expect(applyPass(mastery(), 1, 'p', 0, 5).points).toBe(50)
   })
+
+  it('moves a repeated pattern to the end of patternsPassed instead of duplicating it', () => {
+    const pass = (m: Mastery, pattern: string) => applyPass(m, 3, pattern, 70, 0).mastery
+    const m = pass(pass(pass(mastery(), 'a'), 'b'), 'a')
+
+    expect(m.patternsPassed).toEqual(['b', 'a'])
+    expect(m.chain).toBe(2)
+    expect(m.patternsPassed.slice(-m.chain)).toEqual(['b', 'a'])
+  })
+
+  it('caps the chain at patternsPassed.length and keeps a closed CLO closed on a fourth distinct pass', () => {
+    const pass = (m: Mastery, pattern: string) => applyPass(m, 3, pattern, 70, 0).mastery
+    let m = pass(pass(pass(mastery(), 'a'), 'b'), 'c')
+    expect(m.chain).toBe(3)
+    expect(m.closed).toBe(true)
+
+    m = pass(m, 'd')
+    expect(m.patternsPassed).toEqual(['a', 'b', 'c', 'd'])
+    expect(m.chain).toBe(m.patternsPassed.length)
+    expect(m.closed).toBe(true)
+
+    const inconsistent = pass(mastery({ chain: 9, patternsPassed: ['a'] }), 'b')
+    expect(inconsistent.chain).toBe(inconsistent.patternsPassed.length)
+  })
 })
 
 describe('applyFail', () => {

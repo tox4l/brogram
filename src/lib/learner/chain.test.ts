@@ -67,6 +67,67 @@ describe('nextInChain', () => {
   })
 })
 
+describe('the chain is recoverable from the order of patternsPassed', () => {
+  const [A, B, C] = CLO_PATTERNS
+  const pass = (m: Mastery, pattern: string) => applyPass(m, 3, pattern, 70, 0).mastery
+
+  it('closes on A, B, fail, A, B, C', () => {
+    let m = pass(pass(mastery(), A), B)
+    m = applyFail(m, 3)
+    expect(m.chain).toBe(0)
+
+    m = pass(m, A)
+    expect(m.chain).toBe(1)
+    expect(m.patternsPassed.slice(-m.chain)).toEqual([A])
+
+    m = pass(m, B)
+    expect(m.chain).toBe(2)
+    expect(m.patternsPassed.slice(-m.chain)).toEqual([A, B])
+
+    m = pass(m, C)
+    expect(m.chain).toBe(3)
+    expect(m.closed).toBe(true)
+    expect(m.patternsPassed.slice(-m.chain)).toEqual([A, B, C])
+    expect([...m.patternsPassed].sort()).toEqual([A, B, C].sort())
+  })
+
+  it('leaves A, A, A at chain 1 with the CLO open', () => {
+    const m = pass(pass(pass(mastery(), A), A), A)
+
+    expect(m.chain).toBe(1)
+    expect(m.closed).toBe(false)
+    expect(m.patternsPassed).toEqual([A])
+  })
+
+  it('closes on A, B, A, C', () => {
+    let m = pass(pass(mastery(), A), B)
+
+    m = pass(m, A)
+    expect(m.chain).toBe(2)
+    expect(m.patternsPassed).toEqual([B, A])
+
+    m = pass(m, C)
+    expect(m.chain).toBe(3)
+    expect(m.closed).toBe(true)
+    expect(m.patternsPassed.slice(-3)).toEqual([B, A, C])
+  })
+
+  it('prefers exactly the other CLO patterns after A, B, fail, A', () => {
+    const failed = applyFail(pass(pass(mastery(), A), B), 3)
+
+    const onA = nextInChain(failed, A, CLO_PATTERNS)
+    expect(onA.chain).toBe(1)
+    expect(onA.preferPatterns).toEqual(CLO_PATTERNS.filter((pattern) => pattern !== A))
+
+    const m = pass(failed, A)
+    expect(m.patternsPassed).toEqual([B, A])
+
+    const onB = nextInChain(m, B, CLO_PATTERNS)
+    expect(onB.chain).toBe(2)
+    expect(onB.preferPatterns).toEqual(CLO_PATTERNS.filter((pattern) => pattern !== A && pattern !== B))
+  })
+})
+
 describe('a fail in the middle of a chain', () => {
   it('resets the chain to 0 and keeps patternsPassed', () => {
     let m = applyPass(mastery(), 3, 'loop-accumulate', 70, 0).mastery
