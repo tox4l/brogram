@@ -103,6 +103,41 @@ describe('profiler module', () => {
     expect(() => profiler.schema.parse(reply)).not.toThrow()
   })
 
+  it('counts the questions the model asked live, not only the fixture ones', () => {
+    const live = Array.from({ length: 5 }, (_, i) => ({ questionId: `p1q${i + 1}`, answer: 'A diagram' }))
+    expect(profiler.fallback!(req(1, live)).nextQuestion?.id).toBe('p2q1')
+  })
+
+  it('mixes live and fixture phase-1 answers when counting towards the five', () => {
+    const mixed = [
+      ...Array.from({ length: 3 }, (_, i) => ({ questionId: `p1q${i + 1}`, answer: 'A diagram' })),
+      { questionId: 'p1f1', answer: 'A diagram showing how the loop moves through the list' },
+      { questionId: 'p1f2', answer: 'The rule for what a dictionary can and cannot hold' },
+    ]
+    expect(profiler.fallback!(req(1, mixed)).nextQuestion?.id).toBe('p2q1')
+  })
+
+  it('serves the fixture questions in order after the live ones stop', () => {
+    const live = Array.from({ length: 3 }, (_, i) => ({ questionId: `p1q${i + 1}`, answer: 'A diagram' }))
+    expect(profiler.fallback!(req(1, live)).nextQuestion?.id).toBe('p1f4')
+  })
+
+  it('finishes onboarding inside the thirteen answers a request may carry', () => {
+    const answers = Array.from({ length: 3 }, (_, i) => ({ questionId: `p1q${i + 1}`, answer: 'A diagram' }))
+    let reply = profiler.fallback!(req(1, answers))
+    while (!reply.done && answers.length < 20) {
+      const question = reply.nextQuestion!
+      answers.push({ questionId: question.id, answer: question.options[0] })
+      reply = profiler.fallback!(req(question.id.startsWith('p2') ? 2 : 1, answers))
+    }
+    expect(reply.done).toBe(true)
+    expect(answers).toHaveLength(11)
+    expect(answers.length).toBeLessThanOrEqual(13)
+    expect(reply.profileDelta.onboardingComplete).toBe(true)
+    expect(reply.profileDelta.motivation?.depth).toBe('pass')
+    expect(() => profiler.schema.parse(reply)).not.toThrow()
+  })
+
   it('counts each phase on its own when the answers of both are in the list', () => {
     const answers = [
       ...Array.from({ length: 5 }, (_, i) => ({ questionId: `p1f${i + 1}`, answer: 'x' })),

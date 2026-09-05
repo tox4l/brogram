@@ -100,12 +100,13 @@ function motivationFromAnswers(answers: ProfilerRequest['answers']) {
   return delta
 }
 
-/** `answers` is cumulative across both phases, so each phase is positioned by its own ids. */
-const answeredIn = (answers: ProfilerRequest['answers'], ids: Set<string>) =>
-  answers.filter(a => ids.has(a.questionId)).length
-
-const PHASE1_IDS = new Set(PHASE1.map(q => q.id))
-const PHASE2_IDS = new Set(PHASE2.map(q => q.id))
+/**
+ * `answers` is cumulative across both phases, so each phase is positioned by its own count.
+ * Membership is the id prefix, not the fixture list: a question the model asked live (`p1q3`)
+ * counts towards its phase exactly like a fixture one (`p1f3`).
+ */
+const answeredInPhase = (answers: ProfilerRequest['answers'], phase: 'p1' | 'p2') =>
+  answers.filter(a => a.questionId.startsWith(phase)).length
 
 export const profiler: AgentModule<ProfilerRequest, ProfilerReply> = {
   name: 'profiler',
@@ -117,12 +118,12 @@ export const profiler: AgentModule<ProfilerRequest, ProfilerReply> = {
     if (req.phase === 1) {
       const { styleVector, learningStyle } = styleFromAnswers(req.answers)
       const profileDelta = { styleVector, learningStyle }
-      const next = PHASE1[answeredIn(req.answers, PHASE1_IDS)]
+      const next = PHASE1[answeredInPhase(req.answers, 'p1')]
       if (next) return { nextQuestion: { id: next.id, text: next.text, options: next.options.map(o => o.text) }, profileDelta, done: false }
       return { nextQuestion: PHASE2[0], profileDelta, done: false }
     }
     const profileDelta = motivationFromAnswers(req.answers)
-    const next = PHASE2[answeredIn(req.answers, PHASE2_IDS)]
+    const next = PHASE2[answeredInPhase(req.answers, 'p2')]
     if (next) return { nextQuestion: next, profileDelta, done: false }
     return { nextQuestion: null, profileDelta: { ...profileDelta, onboardingComplete: true }, done: true }
   },
