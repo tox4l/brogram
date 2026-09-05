@@ -1,0 +1,364 @@
+{
+  "items": [
+    {
+      "id": "spot-the-bug-001",
+      "kind": "spot-the-bug",
+      "language": "python",
+      "difficulty": 1,
+      "payload": {
+        "language": "python",
+        "snippet": "def sum_to_n(n):\n    total = 0\n    for i in range(1, n):\n        total += i\n    return total\nprint(sum_to_n(5))",
+        "bugLines": [
+          3
+        ],
+        "explanation": "range(1, n) stops before n, so the loop never adds n itself; it should be range(1, n + 1)."
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "spot-the-bug-002",
+      "kind": "spot-the-bug",
+      "language": "javascript",
+      "difficulty": 1,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function isPositive(n) {\n  if (n = 0) {\n    return false;\n  }\n  return n > 0;\n}\nconsole.log(isPositive(5));",
+        "bugLines": [
+          2
+        ],
+        "explanation": "if (n = 0) assigns 0 to n instead of comparing, so n is always reset to 0 and the function incorrectly returns false for every input."
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "spot-the-bug-003",
+      "kind": "spot-the-bug",
+      "language": "sql",
+      "difficulty": 1,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE products (\n  id INTEGER,\n  name TEXT,\n  price INTEGER\n);\nINSERT INTO products VALUES (1, 'Pen', 2);\nINSERT INTO products VALUES (2, 'Book', 15);\nINSERT INTO products VALUES (3, 'Bag', 40);\nSELECT MAX(price) AS cheapest\nFROM products;",
+        "bugLines": [
+          9
+        ],
+        "explanation": "The query aliases the result as cheapest but uses MAX(price), which returns the most expensive product instead of the least expensive one; it should use MIN(price)."
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "spot-the-bug-004",
+      "kind": "spot-the-bug",
+      "language": "java",
+      "difficulty": 1,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Main {\n    public static void main(String[] args) {\n        int a = 5;\n        int b = 10;\n        int max = a;\n        if (b < max) {\n            max = b;\n        }\n        System.out.println(max);\n    }\n}",
+        "bugLines": [
+          6
+        ],
+        "explanation": "if (b < max) only updates max when b is smaller, so it never captures the larger value; the comparison should be b > max."
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "spot-the-bug-005",
+      "kind": "spot-the-bug",
+      "language": "javascript",
+      "difficulty": 2,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function sumArray(nums) {\n  let total = 0;\n  for (let i = 0; i <= nums.length; i++) {\n    total += nums[i];\n  }\n  return total;\n}\nconsole.log(sumArray([1, 2, 3]));",
+        "bugLines": [
+          3
+        ],
+        "explanation": "The loop condition i <= nums.length lets i reach nums.length, an out-of-bounds index that is undefined, turning total into NaN."
+      },
+      "timeLimitS": 45
+    },
+    {
+      "id": "spot-the-bug-006",
+      "kind": "spot-the-bug",
+      "language": "sql",
+      "difficulty": 2,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE users (\n  id INTEGER,\n  name TEXT,\n  manager_id INTEGER\n);\nINSERT INTO users VALUES (1, 'Ana', NULL);\nINSERT INTO users VALUES (2, 'Sam', 1);\nSELECT name\nFROM users\nWHERE manager_id = NULL;",
+        "bugLines": [
+          10
+        ],
+        "explanation": "manager_id = NULL never evaluates to true because comparisons with NULL always yield unknown; the query should use manager_id IS NULL instead."
+      },
+      "timeLimitS": 45
+    },
+    {
+      "id": "spot-the-bug-007",
+      "kind": "spot-the-bug",
+      "language": "java",
+      "difficulty": 2,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Main {\n    public static void main(String[] args) {\n        int[] scores = {10, 20, 30};\n        for (int i = 0; i <= scores.length; i++) {\n            System.out.println(scores[i]);\n        }\n    }\n}",
+        "bugLines": [
+          4
+        ],
+        "explanation": "i <= scores.length lets i reach 3, which is out of bounds for a 3-element array and throws an ArrayIndexOutOfBoundsException; the condition should be i < scores.length."
+      },
+      "timeLimitS": 45
+    },
+    {
+      "id": "spot-the-bug-008",
+      "kind": "spot-the-bug",
+      "language": "python",
+      "difficulty": 2,
+      "payload": {
+        "language": "python",
+        "snippet": "def describe_age(name, age):\n    return name + \" is \" + age + \" years old\"\npeople = [(\"Sam\", 20), (\"Ana\", 22), (\"Lee\", 19)]\nfor name, age in people:\n    print(describe_age(name, age))",
+        "bugLines": [
+          2
+        ],
+        "explanation": "age is an int, so concatenating it directly with strings raises a TypeError; it needs to be converted with str(age) or an f-string."
+      },
+      "timeLimitS": 45
+    },
+    {
+      "id": "spot-the-bug-009",
+      "kind": "spot-the-bug",
+      "language": "javascript",
+      "difficulty": 2,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function double(n) {\n  n * 2;\n}\nconst result = double(5);\nconsole.log(result);",
+        "bugLines": [
+          2
+        ],
+        "explanation": "The function computes n * 2 but never returns it, so double(5) evaluates to undefined instead of 10."
+      },
+      "timeLimitS": 45
+    },
+    {
+      "id": "spot-the-bug-010",
+      "kind": "spot-the-bug",
+      "language": "sql",
+      "difficulty": 3,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE orders (\n  id INTEGER,\n  customer_id INTEGER,\n  amount INTEGER\n);\nINSERT INTO orders VALUES (1, 100, 50);\nINSERT INTO orders VALUES (2, 100, 30);\nINSERT INTO orders VALUES (3, 200, 20);\nSELECT customer_id, SUM(amount)\nFROM orders\nGROUP BY id;",
+        "bugLines": [
+          11
+        ],
+        "explanation": "GROUP BY id groups by the unique primary key instead of customer_id, so each group has only one row and SUM(amount) never combines a customer's orders."
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "spot-the-bug-011",
+      "kind": "spot-the-bug",
+      "language": "java",
+      "difficulty": 3,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Main {\n    public static void main(String[] args) {\n        int total = 7;\n        int count = 2;\n        double average = total / count;\n        System.out.println(average);\n    }\n}",
+        "bugLines": [
+          5
+        ],
+        "explanation": "total / count performs integer division and truncates to 3 before being assigned to the double, so average prints 3.0 instead of 3.5; it needs a cast such as (double) total / count."
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "spot-the-bug-012",
+      "kind": "spot-the-bug",
+      "language": "python",
+      "difficulty": 3,
+      "payload": {
+        "language": "python",
+        "snippet": "def find_min(nums):\n    smallest = nums[0]\n    for i in range(1, len(nums) + 1):\n        if nums[i] < smallest:\n            smallest = nums[i]\n    return smallest\nprint(find_min([5, 2, 9, 1]))",
+        "bugLines": [
+          3
+        ],
+        "explanation": "range(1, len(nums) + 1) lets i reach len(nums), which is one past the last valid index and raises an IndexError on nums[i]."
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "spot-the-bug-013",
+      "kind": "spot-the-bug",
+      "language": "javascript",
+      "difficulty": 3,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function sortNumbers(nums) {\n  return nums.sort();\n}\nconst scores = [10, 1, 21, 2];\nconsole.log(sortNumbers(scores));",
+        "bugLines": [
+          2
+        ],
+        "explanation": "Array.sort() without a comparator sorts elements as strings, so it orders numbers lexicographically instead of numerically; it needs (a, b) => a - b."
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "spot-the-bug-014",
+      "kind": "spot-the-bug",
+      "language": "sql",
+      "difficulty": 3,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE signups (id INTEGER, email TEXT);\nINSERT INTO signups VALUES (1, 'a@x.com');\nINSERT INTO signups VALUES (2, 'a@x.com');\nINSERT INTO signups VALUES (3, 'b@x.com');\n-- Find email addresses used by more than one signup\nSELECT email, COUNT(*) AS uses\nFROM signups\nGROUP BY email\nHAVING COUNT(*) = 1;",
+        "bugLines": [
+          9
+        ],
+        "explanation": "HAVING COUNT(*) = 1 keeps emails that appear exactly once, the opposite of the duplicates the comment asks for; it should be HAVING COUNT(*) > 1."
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "spot-the-bug-015",
+      "kind": "spot-the-bug",
+      "language": "java",
+      "difficulty": 4,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Main {\n    public static void main(String[] args) {\n        String input = new String(\"yes\");\n        if (input == \"yes\") {\n            System.out.println(\"Confirmed\");\n        } else {\n            System.out.println(\"Not confirmed\");\n        }\n    }\n}",
+        "bugLines": [
+          4
+        ],
+        "explanation": "input == \"yes\" compares object references, and since input was created with new String(...), it is a different object from the literal, so the comparison is false even though the text matches; the fix is input.equals(\"yes\")."
+      },
+      "timeLimitS": 75
+    },
+    {
+      "id": "spot-the-bug-016",
+      "kind": "spot-the-bug",
+      "language": "python",
+      "difficulty": 4,
+      "payload": {
+        "language": "python",
+        "snippet": "def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 2)\nprint(factorial(5))",
+        "bugLines": [
+          4
+        ],
+        "explanation": "The recursive call decrements n by 2 instead of 1, so for odd inputs it skips over the n == 0 base case and recurses forever."
+      },
+      "timeLimitS": 75
+    },
+    {
+      "id": "spot-the-bug-017",
+      "kind": "spot-the-bug",
+      "language": "javascript",
+      "difficulty": 4,
+      "payload": {
+        "language": "javascript",
+        "snippet": "class Counter {\n  constructor() {\n    this.count = 0;\n  }\n  start() {\n    setInterval(function () {\n      this.count++;\n      console.log(this.count);\n    }, 1000);\n  }\n}\nnew Counter().start();",
+        "bugLines": [
+          6
+        ],
+        "explanation": "The callback passed to setInterval is a regular function, so this inside it no longer refers to the Counter instance; it should be an arrow function to keep this bound to the instance."
+      },
+      "timeLimitS": 75
+    },
+    {
+      "id": "spot-the-bug-018",
+      "kind": "spot-the-bug",
+      "language": "sql",
+      "difficulty": 4,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE customers (id INTEGER, name TEXT);\nCREATE TABLE orders (id INTEGER, customer_id INTEGER);\nINSERT INTO customers VALUES (1, 'Ana');\nINSERT INTO customers VALUES (2, 'Sam');\nINSERT INTO orders VALUES (1, 1);\n-- List every customer with their order count, including customers with zero orders\nSELECT c.name, COUNT(o.id) AS order_count\nFROM customers c\nJOIN orders o ON o.customer_id = c.id\nGROUP BY c.name;",
+        "bugLines": [
+          9
+        ],
+        "explanation": "A plain JOIN excludes customers with no matching orders, such as Sam, even though the comment asks for every customer; it should be a LEFT JOIN."
+      },
+      "timeLimitS": 75
+    },
+    {
+      "id": "spot-the-bug-019",
+      "kind": "spot-the-bug",
+      "language": "java",
+      "difficulty": 4,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Main {\n    public static boolean isPrime(int n) {\n        if (n < 2) return false;\n        for (int i = 3; i < n; i++) {\n            if (n % i == 0) return false;\n        }\n        return true;\n    }\n    public static void main(String[] args) {\n        System.out.println(isPrime(4));\n    }\n}",
+        "bugLines": [
+          4
+        ],
+        "explanation": "The loop starts at i = 3 instead of i = 2, so it never tests divisibility by 2, making isPrime(4) incorrectly return true."
+      },
+      "timeLimitS": 75
+    },
+    {
+      "id": "spot-the-bug-020",
+      "kind": "spot-the-bug",
+      "language": "python",
+      "difficulty": 5,
+      "payload": {
+        "language": "python",
+        "snippet": "def add_item(item, basket=[]):\n    basket.append(item)\n    return basket\nfirst = add_item(\"apple\")\nsecond = add_item(\"banana\")\nprint(second)",
+        "bugLines": [
+          1
+        ],
+        "explanation": "The default argument basket=[] is created once and reused across every call, so items from earlier calls leak into later ones; it should default to None and build a new list inside the function."
+      },
+      "timeLimitS": 90
+    },
+    {
+      "id": "spot-the-bug-021",
+      "kind": "spot-the-bug",
+      "language": "javascript",
+      "difficulty": 5,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function createLoggers() {\n  const loggers = [];\n  for (var i = 0; i < 3; i++) {\n    loggers.push(function () {\n      console.log(i);\n    });\n  }\n  return loggers;\n}\ncreateLoggers().forEach(fn => fn());",
+        "bugLines": [
+          3
+        ],
+        "explanation": "var i is function-scoped and shared by every closure, so by the time the callbacks run they all read the final value 3 instead of each capturing its own loop index."
+      },
+      "timeLimitS": 90
+    },
+    {
+      "id": "spot-the-bug-022",
+      "kind": "spot-the-bug",
+      "language": "sql",
+      "difficulty": 5,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE orders (id INTEGER, customer_id INTEGER, amount INTEGER);\nCREATE TABLE order_items (order_id INTEGER, product TEXT);\nINSERT INTO orders VALUES (1, 100, 50);\nINSERT INTO order_items VALUES (1, 'Pen');\nINSERT INTO order_items VALUES (1, 'Book');\nSELECT o.customer_id, SUM(o.amount) AS total\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nGROUP BY o.customer_id;",
+        "bugLines": [
+          8
+        ],
+        "explanation": "The JOIN to order_items multiplies each order row by its number of items before the SUM runs, so an order with more than one item has its amount counted multiple times."
+      },
+      "timeLimitS": 90
+    },
+    {
+      "id": "spot-the-bug-023",
+      "kind": "spot-the-bug",
+      "language": "java",
+      "difficulty": 5,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Main {\n    public static void main(String[] args) {\n        Integer a = 200;\n        Integer b = 200;\n        if (a == b) {\n            System.out.println(\"Equal\");\n        } else {\n            System.out.println(\"Not equal\");\n        }\n    }\n}",
+        "bugLines": [
+          5
+        ],
+        "explanation": "a == b compares object references for boxed Integers, and 200 falls outside the cached -128 to 127 range, so the two boxed values are different objects; the comparison should use a.equals(b)."
+      },
+      "timeLimitS": 90
+    },
+    {
+      "id": "spot-the-bug-024",
+      "kind": "spot-the-bug",
+      "language": "python",
+      "difficulty": 1,
+      "payload": {
+        "language": "python",
+        "snippet": "def countdown(n):\n    while n > 0:\n        print(n)\n        n += 1\n    print(\"Liftoff!\")\ncountdown(3)",
+        "bugLines": [
+          4
+        ],
+        "explanation": "n += 1 increases n instead of decreasing it, so the condition n > 0 never becomes false and the loop runs forever."
+      },
+      "timeLimitS": 30
+    }
+  ]
+}

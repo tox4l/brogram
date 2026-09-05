@@ -1,0 +1,268 @@
+{
+  "items": [
+    {
+      "id": "speed-type-001",
+      "kind": "speed-type",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 30,
+      "payload": {
+        "language": "python",
+        "snippet": "numbers = [1, 2, 3, 4, 5]\ntotal = sum(numbers)\nprint(total)"
+      }
+    },
+    {
+      "id": "speed-type-002",
+      "kind": "speed-type",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function isEven(n) {\n    return n % 2 === 0;\n}\nconsole.log([1, 2, 3, 4].filter(isEven));"
+      }
+    },
+    {
+      "id": "speed-type-003",
+      "kind": "speed-type",
+      "language": "typescript",
+      "difficulty": 3,
+      "timeLimitS": 75,
+      "payload": {
+        "language": "typescript",
+        "snippet": "interface Point {\n    x: number;\n    y: number;\n}\nconst origin: Point = { x: 0, y: 0 };"
+      }
+    },
+    {
+      "id": "speed-type-004",
+      "kind": "speed-type",
+      "language": "java",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "java",
+        "snippet": "public class Counter {\n    private int count = 0;\n    public void increment() {\n        count++;\n    }\n}"
+      }
+    },
+    {
+      "id": "speed-type-005",
+      "kind": "speed-type",
+      "language": "sql",
+      "difficulty": 5,
+      "timeLimitS": 120,
+      "payload": {
+        "language": "sql",
+        "snippet": "SELECT students.name, COUNT(enrollments.id) AS course_count\nFROM students\nJOIN enrollments ON enrollments.student_id = students.id\nWHERE students.active = 1\nGROUP BY students.name\nHAVING COUNT(enrollments.id) > 2\nORDER BY course_count DESC;"
+      }
+    },
+    {
+      "id": "speed-type-006",
+      "kind": "speed-type",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 30,
+      "payload": {
+        "language": "python",
+        "snippet": "words = [\"apple\", \"banana\", \"cherry\"]\nfor word in words:\n    print(word.upper())"
+      }
+    },
+    {
+      "id": "speed-type-007",
+      "kind": "speed-type",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "const arr = [5, 3, 8, 1];\narr.sort((a, b) => a - b);\nconsole.log(arr[0]);\nconsole.log(arr[arr.length - 1]);"
+      }
+    },
+    {
+      "id": "speed-type-008",
+      "kind": "speed-type",
+      "language": "typescript",
+      "difficulty": 3,
+      "timeLimitS": 75,
+      "payload": {
+        "language": "typescript",
+        "snippet": "type Shape = \"circle\" | \"square\";\n\nfunction area(shape: Shape, size: number): number {\n    if (shape === \"circle\") return Math.PI * size ** 2;\n    return size ** 2;\n}"
+      }
+    },
+    {
+      "id": "speed-type-009",
+      "kind": "speed-type",
+      "language": "java",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "java",
+        "snippet": "public static int factorial(int n) {\n    int result = 1;\n    for (int i = 2; i <= n; i++) {\n        result *= i;\n    }\n    return result;\n}"
+      }
+    },
+    {
+      "id": "speed-type-010",
+      "kind": "speed-type",
+      "language": "sql",
+      "difficulty": 5,
+      "timeLimitS": 120,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE enrollments (\n    id INTEGER PRIMARY KEY,\n    student_id INTEGER NOT NULL,\n    course_id INTEGER NOT NULL,\n    enrolled_at DATE NOT NULL,\n    FOREIGN KEY (student_id) REFERENCES students(id),\n    FOREIGN KEY (course_id) REFERENCES courses(id)\n);"
+      }
+    },
+    {
+      "id": "speed-type-011",
+      "kind": "speed-type",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 30,
+      "payload": {
+        "language": "python",
+        "snippet": "temperatures = [72, 68, 75, 71]\naverage = sum(temperatures) / len(temperatures)\nprint(round(average, 1))"
+      }
+    },
+    {
+      "id": "speed-type-012",
+      "kind": "speed-type",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "async function fetchUser(id) {\n    const response = await fetch(`/api/users/${id}`);\n    return response.json();\n}"
+      }
+    },
+    {
+      "id": "speed-type-013",
+      "kind": "speed-type",
+      "language": "web",
+      "difficulty": 3,
+      "timeLimitS": 75,
+      "payload": {
+        "language": "web",
+        "snippet": ".btn-primary {\n    background-color: #2563eb;\n    color: white;\n    padding: 8px 16px;\n}"
+      }
+    },
+    {
+      "id": "speed-type-014",
+      "kind": "speed-type",
+      "language": "java",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "java",
+        "snippet": "List<Integer> numbers = new ArrayList<>();\nnumbers.add(10);\nnumbers.add(20);\nnumbers.add(30);\nint sum = numbers.stream().mapToInt(Integer::intValue).sum();\nSystem.out.println(sum);"
+      }
+    },
+    {
+      "id": "speed-type-015",
+      "kind": "speed-type",
+      "language": "mongo",
+      "difficulty": 5,
+      "timeLimitS": 120,
+      "payload": {
+        "language": "mongo",
+        "snippet": "db.orders.aggregate([\n    { $match: { status: \"shipped\" } },\n    { $unwind: \"$items\" },\n    { $group: { _id: \"$customerId\", total: { $sum: \"$amount\" } } },\n    { $sort: { total: -1 } },\n    { $limit: 5 }\n]);"
+      }
+    },
+    {
+      "id": "speed-type-016",
+      "kind": "speed-type",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 30,
+      "payload": {
+        "language": "python",
+        "snippet": "stack = []\nstack.append(1)\nstack.append(2)"
+      }
+    },
+    {
+      "id": "speed-type-017",
+      "kind": "speed-type",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "const queue = [];\nqueue.push(\"a\");\nqueue.push(\"b\");\nconsole.log(queue.shift());"
+      }
+    },
+    {
+      "id": "speed-type-018",
+      "kind": "speed-type",
+      "language": "typescript",
+      "difficulty": 3,
+      "timeLimitS": 75,
+      "payload": {
+        "language": "typescript",
+        "snippet": "class Stack<T> {\n    private items: T[] = [];\n    push(item: T): void {\n        this.items.push(item);\n    }\n}"
+      }
+    },
+    {
+      "id": "speed-type-019",
+      "kind": "speed-type",
+      "language": "sql",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "sql",
+        "snippet": "SELECT category, AVG(price) AS avg_price\nFROM products\nWHERE in_stock = 1\nGROUP BY category\nHAVING AVG(price) > 50\nORDER BY avg_price DESC\nLIMIT 10;"
+      }
+    },
+    {
+      "id": "speed-type-020",
+      "kind": "speed-type",
+      "language": "python",
+      "difficulty": 5,
+      "timeLimitS": 120,
+      "payload": {
+        "language": "python",
+        "snippet": "class Rectangle:\n    def __init__(self, width, height):\n        self.width = width\n        self.height = height\n\n    def area(self):\n        return self.width * self.height"
+      }
+    },
+    {
+      "id": "speed-type-021",
+      "kind": "speed-type",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 30,
+      "payload": {
+        "language": "python",
+        "snippet": "colors = (\"red\", \"green\", \"blue\")\nfor color in colors:\n    print(color)"
+      }
+    },
+    {
+      "id": "speed-type-022",
+      "kind": "speed-type",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "const nums = [1, 2, 3, 4, 5];\nconst evens = nums.filter(n => n % 2 === 0);\nconst sum = evens.reduce((a, b) => a + b, 0);\nconsole.log(sum);"
+      }
+    },
+    {
+      "id": "speed-type-023",
+      "kind": "speed-type",
+      "language": "typescript",
+      "difficulty": 3,
+      "timeLimitS": 75,
+      "payload": {
+        "language": "typescript",
+        "snippet": "function identity<T>(value: T): T {\n    return value;\n}\n\nconst result = identity<number>(42);"
+      }
+    },
+    {
+      "id": "speed-type-024",
+      "kind": "speed-type",
+      "language": "java",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "java",
+        "snippet": "public static boolean isPrime(int n) {\n    if (n < 2) return false;\n    for (int i = 2; i * i <= n; i++) {\n        if (n % i == 0) return false;\n    }\n    return true;\n}"
+      }
+    }
+  ]
+}

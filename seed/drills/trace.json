@@ -1,0 +1,340 @@
+{
+  "items": [
+    {
+      "id": "trace-001",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 45,
+      "payload": {
+        "language": "python",
+        "snippet": "total = 0\ncount = 0\nfor i in range(1, 6):\n    total += i\n    count += 1",
+        "stepIndex": 2,
+        "variables": ["i", "total", "count"],
+        "expected": { "i": "2", "total": "3", "count": "2" }
+      }
+    },
+    {
+      "id": "trace-002",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 48,
+      "payload": {
+        "language": "python",
+        "snippet": "count = 0\ntotal = 0\nfor n in range(1, 10):\n    if n % 2 == 0:\n        count += 1\n    total += n",
+        "stepIndex": 3,
+        "variables": ["n", "count", "total"],
+        "expected": { "n": "3", "count": "1", "total": "6" }
+      }
+    },
+    {
+      "id": "trace-003",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 1,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let sum = 0;\nfor (let i = 1; i <= 5; i++) {\n  sum += i * 2;\n}",
+        "stepIndex": 2,
+        "variables": ["i", "sum"],
+        "expected": { "i": "2", "sum": "6" }
+      }
+    },
+    {
+      "id": "trace-004",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 46,
+      "payload": {
+        "language": "python",
+        "snippet": "n = 5\nsteps = 0\nwhile n > 0:\n    n -= 1\n    steps += 1",
+        "stepIndex": 3,
+        "variables": ["n", "steps"],
+        "expected": { "n": "2", "steps": "3" }
+      }
+    },
+    {
+      "id": "trace-005",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 1,
+      "timeLimitS": 50,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let result = \"\";\nfor (let i = 0; i < 4; i++) {\n  result += i;\n}",
+        "stepIndex": 3,
+        "variables": ["i", "result"],
+        "expected": { "i": "2", "result": "012" }
+      }
+    },
+    {
+      "id": "trace-006",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 2,
+      "timeLimitS": 60,
+      "payload": {
+        "language": "python",
+        "snippet": "product = 1\ntotal = 0\nfor i in range(1, 6):\n    product *= i\n    total += product",
+        "stepIndex": 3,
+        "variables": ["i", "product", "total"],
+        "expected": { "i": "3", "product": "6", "total": "9" }
+      }
+    },
+    {
+      "id": "trace-007",
+      "kind": "trace",
+      "language": "java",
+      "difficulty": 2,
+      "timeLimitS": 62,
+      "payload": {
+        "language": "java",
+        "snippet": "int sum = 0;\nfor (int i = 1; i <= 5; i++) {\n    sum += i * i;\n}",
+        "stepIndex": 3,
+        "variables": ["i", "sum"],
+        "expected": { "i": "3", "sum": "14" }
+      }
+    },
+    {
+      "id": "trace-008",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 2,
+      "timeLimitS": 65,
+      "payload": {
+        "language": "python",
+        "snippet": "def sum_to(n, acc):\n    if n == 0:\n        return acc\n    return sum_to(n - 1, acc + n)\nsum_to(4, 0)",
+        "stepIndex": 3,
+        "variables": ["n", "acc"],
+        "expected": { "n": "2", "acc": "7" }
+      }
+    },
+    {
+      "id": "trace-009",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 60,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let arr = [];\nfor (let i = 0; i < 5; i++) {\n  arr.push(i * i);\n}",
+        "stepIndex": 3,
+        "variables": ["i", "arr"],
+        "expected": { "i": "2", "arr": "[0, 1, 4]" }
+      }
+    },
+    {
+      "id": "trace-010",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 2,
+      "timeLimitS": 65,
+      "payload": {
+        "language": "python",
+        "snippet": "count = 0\ni = 0\nwhile i < 8:\n    i += 1\n    if i % 3 == 0:\n        count += 1",
+        "stepIndex": 4,
+        "variables": ["i", "count"],
+        "expected": { "i": "4", "count": "1" }
+      }
+    },
+    {
+      "id": "trace-011",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 3,
+      "timeLimitS": 78,
+      "payload": {
+        "language": "python",
+        "snippet": "nums = [3, 7, 2, 9, 4]\nmax_val = 0\nfor i in range(len(nums)):\n    if nums[i] > max_val:\n        max_val = nums[i]",
+        "stepIndex": 3,
+        "variables": ["i", "max_val"],
+        "expected": { "i": "2", "max_val": "7" }
+      }
+    },
+    {
+      "id": "trace-012",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 3,
+      "timeLimitS": 80,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let n = 6;\nlet total = 0;\nwhile (n > 1) {\n  total += n;\n  n -= 2;\n}",
+        "stepIndex": 2,
+        "variables": ["n", "total"],
+        "expected": { "n": "2", "total": "10" }
+      }
+    },
+    {
+      "id": "trace-013",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 3,
+      "timeLimitS": 82,
+      "payload": {
+        "language": "python",
+        "snippet": "def fib(n, a, b):\n    if n == 0:\n        return a\n    return fib(n - 1, b, a + b)\nfib(5, 0, 1)",
+        "stepIndex": 3,
+        "variables": ["n", "a", "b"],
+        "expected": { "n": "3", "a": "1", "b": "2" }
+      }
+    },
+    {
+      "id": "trace-014",
+      "kind": "trace",
+      "language": "java",
+      "difficulty": 3,
+      "timeLimitS": 85,
+      "payload": {
+        "language": "java",
+        "snippet": "StringBuilder sb = new StringBuilder();\nfor (int i = 0; i < 5; i++) {\n    if (i % 2 == 0) {\n        sb.append(i);\n    }\n}",
+        "stepIndex": 3,
+        "variables": ["i", "sb"],
+        "expected": { "i": "2", "sb": "02" }
+      }
+    },
+    {
+      "id": "trace-015",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 3,
+      "timeLimitS": 80,
+      "payload": {
+        "language": "python",
+        "snippet": "words = [\"ab\", \"cde\", \"f\", \"ghij\"]\ntotal_len = 0\nlongest = \"\"\nfor w in words:\n    total_len += len(w)\n    if len(w) > len(longest):\n        longest = w",
+        "stepIndex": 3,
+        "variables": ["w", "total_len", "longest"],
+        "expected": { "w": "f", "total_len": "6", "longest": "cde" }
+      }
+    },
+    {
+      "id": "trace-016",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 4,
+      "timeLimitS": 95,
+      "payload": {
+        "language": "python",
+        "snippet": "total = 0\nfor i in range(1, 4):\n    for j in range(1, 3):\n        total += i * j",
+        "stepIndex": 2,
+        "variables": ["i", "total"],
+        "expected": { "i": "2", "total": "9" }
+      }
+    },
+    {
+      "id": "trace-017",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 4,
+      "timeLimitS": 98,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function power(base, exp, acc) {\n  if (exp === 0) return acc;\n  return power(base, exp - 1, acc * base);\n}\npower(2, 5, 1);",
+        "stepIndex": 3,
+        "variables": ["exp", "acc"],
+        "expected": { "exp": "3", "acc": "4" }
+      }
+    },
+    {
+      "id": "trace-018",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "python",
+        "snippet": "n = 13\nbits = []\nwhile n > 0:\n    bits.append(n % 2)\n    n //= 2",
+        "stepIndex": 3,
+        "variables": ["n", "bits"],
+        "expected": { "n": "1", "bits": "[1, 0, 1]" }
+      }
+    },
+    {
+      "id": "trace-019",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 4,
+      "timeLimitS": 95,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let total = 0;\nlet resets = 0;\nfor (let i = 1; i <= 6; i++) {\n  total += i;\n  if (total > 10) {\n    total = 0;\n    resets++;\n  }\n}",
+        "stepIndex": 5,
+        "variables": ["i", "total", "resets"],
+        "expected": { "i": "5", "total": "0", "resets": "1" }
+      }
+    },
+    {
+      "id": "trace-020",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 4,
+      "timeLimitS": 100,
+      "payload": {
+        "language": "python",
+        "snippet": "def sum_sq(n, i, acc):\n    if i > n:\n        return acc\n    return sum_sq(n, i + 1, acc + i * i)\nsum_sq(4, 1, 0)",
+        "stepIndex": 3,
+        "variables": ["i", "acc"],
+        "expected": { "i": "3", "acc": "5" }
+      }
+    },
+    {
+      "id": "trace-021",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 5,
+      "timeLimitS": 112,
+      "payload": {
+        "language": "python",
+        "snippet": "total = 0\nskipped = 0\nfor i in range(1, 4):\n    for j in range(1, 4):\n        if (i + j) % 2 == 0:\n            skipped += 1\n            continue\n        total += i * j",
+        "stepIndex": 2,
+        "variables": ["i", "total", "skipped"],
+        "expected": { "i": "2", "total": "10", "skipped": "3" }
+      }
+    },
+    {
+      "id": "trace-022",
+      "kind": "trace",
+      "language": "java",
+      "difficulty": 5,
+      "timeLimitS": 115,
+      "payload": {
+        "language": "java",
+        "snippet": "int[] a = {2, 4, 6, 8, 10, 12, 14, 16};\nint lo = 0, hi = 7;\nint target = 6;\nwhile (lo <= hi) {\n    int mid = (lo + hi) / 2;\n    if (a[mid] == target) break;\n    if (a[mid] < target) lo = mid + 1; else hi = mid - 1;\n}",
+        "stepIndex": 2,
+        "variables": ["lo", "hi", "mid"],
+        "expected": { "lo": "2", "hi": "2", "mid": "1" }
+      }
+    },
+    {
+      "id": "trace-023",
+      "kind": "trace",
+      "language": "javascript",
+      "difficulty": 5,
+      "timeLimitS": 118,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let sum = 0;\nlet found = -1;\nfor (let i = 0; i < 6; i++) {\n  if (i * i > 15) {\n    found = i;\n    break;\n  }\n  sum += i;\n}",
+        "stepIndex": 5,
+        "variables": ["i", "sum", "found"],
+        "expected": { "i": "4", "sum": "6", "found": "4" }
+      }
+    },
+    {
+      "id": "trace-024",
+      "kind": "trace",
+      "language": "python",
+      "difficulty": 5,
+      "timeLimitS": 120,
+      "payload": {
+        "language": "python",
+        "snippet": "def collatz(n, steps):\n    if n == 1:\n        return steps\n    if n % 2 == 0:\n        return collatz(n // 2, steps + 1)\n    return collatz(3 * n + 1, steps + 1)\ncollatz(6, 0)",
+        "stepIndex": 5,
+        "variables": ["n", "steps"],
+        "expected": { "n": "16", "steps": "4" }
+      }
+    }
+  ]
+}

@@ -1,0 +1,435 @@
+{
+  "items": [
+    {
+      "id": "hold-focus-001",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 120,
+      "payload": {
+        "passage": "A variable is a named location in memory that stores a value a program can read or change while it runs. In Python, a variable does not need a declared type before it is used; the interpreter figures out the type from the value assigned to it, a behavior called dynamic typing. Writing count = 5 creates a variable named count and binds it to an integer object with the value five. If the next line writes count = 5.5, the same name now refers to a floating-point number instead, because Python variables are labels attached to objects rather than fixed boxes with a single allowed type. Python recognizes several built-in data types. An integer (int) represents a whole number with no fractional part, such as 5 or -12. A floating-point number (float) represents a number with a decimal point, such as 5.5 or 3.14. A string (str) represents a sequence of characters enclosed in quotes, such as 'hello'. A boolean (bool) represents one of exactly two values, True or False, and is commonly produced by comparisons like 5 > 3. Choosing the right data type matters because operations behave differently depending on it: adding two integers produces a sum, but adding two strings concatenates them into one longer string instead. A common early mistake is trying to combine a string and a number directly, such as 'Score: ' + 5, which raises a TypeError because Python will not silently convert between text and numbers during addition; the number must first be converted to a string with a function such as str(). Understanding that a variable's type comes from its current value, not from a fixed declaration, is one of the first ideas needed to read Python code correctly.",
+        "question": "According to the passage, what happens when the code tries to evaluate 'Score: ' + 5 in Python?",
+        "options": [
+          "It raises a TypeError because Python does not automatically convert between text and numbers during addition.",
+          "It automatically converts the number to a string and concatenates them.",
+          "It converts the string to a number and adds them.",
+          "It returns the string 'Score: 5' without error."
+        ],
+        "answerIndex": 0
+      }
+    },
+    {
+      "id": "hold-focus-002",
+      "kind": "hold-focus",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 150,
+      "payload": {
+        "passage": "In JavaScript, strings are immutable, which means that once a string value is created, its contents can never be changed in place. Methods that appear to modify a string, such as toUpperCase(), replace(), or slice(), do not alter the original string at all; instead, each of these methods reads the existing string and returns a brand new string containing the result. If the original value is needed afterward, it must be reassigned to a variable, because the original string object in memory is left untouched. For example, given const greeting = 'hello', calling greeting.toUpperCase() produces the new string 'HELLO' as a return value, but the variable greeting still points to the original lowercase text unless the result is explicitly stored, such as with greeting = greeting.toUpperCase(). This differs from mutable structures like arrays, where methods such as push() or sort() change the original array directly without returning a new one. Immutability has consequences for performance and for reasoning about code. Because a string can never change underneath a reference to it, passing a string into a function is always safe: the function cannot accidentally corrupt the caller's copy, since no in-place modification is possible. On the other hand, building a long string through repeated concatenation inside a loop can be inefficient, because each concatenation creates an entirely new string in memory rather than extending the existing one, and the discarded intermediate strings must eventually be cleaned up by the garbage collector. For this reason, code that assembles large amounts of text is often written to collect pieces in an array and join them once at the end, rather than concatenating strings one at a time inside a loop.",
+        "question": "Based on the passage, what does calling greeting.toUpperCase() do to the original greeting variable if the result is not reassigned?",
+        "options": [
+          "It changes greeting to uppercase permanently.",
+          "It leaves greeting pointing to the original, unchanged text.",
+          "It throws an error because strings cannot be uppercased.",
+          "It deletes the original string from memory immediately."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-003",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 3,
+      "timeLimitS": 180,
+      "payload": {
+        "passage": "Binary search is an algorithm for finding a target value inside a sorted list far faster than checking each element one at a time. Rather than scanning from the beginning, it repeatedly looks at the middle element of the current search range and uses a single comparison to eliminate half of the remaining possibilities. The algorithm keeps two markers, typically called low and high, that define the boundaries of the range still worth searching. At each step it computes a middle index, often written as (low + high) // 2, and compares the value stored there to the target. If the middle value equals the target, the search is finished. If the middle value is smaller than the target, everything at or before that middle index cannot contain the target, so low is moved just past the middle. If the middle value is larger than the target, high is moved just before the middle instead. This process repeats, and the search range shrinks by roughly half on every step, until either the target is found or low passes high, which means the target is not present in the list at all. Because the range is cut in half each time, binary search runs in O(log n) time, meaning that doubling the size of the list only adds one extra comparison rather than doubling the work, a dramatic improvement over the O(n) time of a simple linear scan through every element. The one requirement that makes this possible is that the list must already be sorted before the search begins; running binary search on an unsorted list gives no guarantee of correctness, since eliminating half the range only makes sense when values are ordered.",
+        "question": "According to the passage, what happens when the middle value is smaller than the target during binary search?",
+        "options": [
+          "The search stops immediately and reports the target as missing.",
+          "The high marker moves just before the middle index.",
+          "The low marker moves to just past the middle index.",
+          "The list is re-sorted before continuing."
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-004",
+      "kind": "hold-focus",
+      "language": "java",
+      "difficulty": 4,
+      "timeLimitS": 210,
+      "payload": {
+        "passage": "Arrays and linked lists both store ordered collections of elements, but they place those elements in memory in fundamentally different ways, which affects what each structure is good at. An array reserves one continuous block of memory large enough to hold every element it needs, with each element sitting directly next to the last at a fixed offset. Because the position of any element can be calculated directly from the starting address plus an offset, an array supports constant-time, O(1), access to any element by index. This contiguous layout also makes arrays efficient to iterate over, since visiting neighboring elements in memory is fast for the processor's cache. The tradeoff is that inserting or removing an element in the middle of an array requires shifting every following element over by one position, which takes O(n) time in the worst case, and resizing an array that has run out of space usually means allocating a new, larger block and copying every existing element into it. A linked list takes the opposite approach: each element, called a node, is stored as its own separate object wherever memory happens to be available, and each node holds a reference, or pointer, to the next node in the sequence. There is no requirement that nodes sit near each other in memory. This makes insertion and removal genuinely fast, O(1), once the correct location is found, because only the neighboring pointers need to be updated rather than shifting other elements. The cost is that a linked list has no way to jump directly to the k-th element; reaching it requires walking the list one node at a time from the head, giving O(n) access time, and the extra pointer stored in every node also uses more memory than a plain array would for the same data.",
+        "question": "According to the passage, why can an array access any element by index in constant time?",
+        "options": [
+          "Because each element stores a pointer to the next one.",
+          "Because the position of any element can be calculated from the starting address plus an offset.",
+          "Because arrays are always kept sorted.",
+          "Because the array resizes itself automatically before each access."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-005",
+      "kind": "hold-focus",
+      "language": "java",
+      "difficulty": 5,
+      "timeLimitS": 240,
+      "payload": {
+        "passage": "Garbage collection is the process by which a language runtime automatically reclaims memory occupied by objects that a program can no longer reach, so that the programmer does not have to free memory manually. Two common strategies for deciding what counts as reachable are reference counting and mark-and-sweep. Reference counting attaches a small counter to every object, tracking how many other references currently point to it. Each time a new reference to the object is created, the counter increases; each time a reference is removed or goes out of scope, the counter decreases. When the counter reaches zero, no part of the program can reach the object anymore, so it is immediately deallocated. This approach reclaims memory promptly and spreads the cost of collection evenly throughout the program's execution, but it has a well-known weakness: two objects that reference each other in a cycle, such as object A pointing to object B and object B pointing back to object A, can end up with counters that never reach zero even after the rest of the program has stopped using either one, causing a memory leak unless a separate mechanism detects cycles. Mark-and-sweep works differently. Periodically, the collector pauses and starts from a fixed set of root references, such as global variables and the current call stack, then walks every reachable path outward, marking each object it visits as still in use. Once this traversal finishes, the collector sweeps through all of memory and reclaims any object that was never marked, since an object that the traversal never reached is by definition unreachable from the program, cycles included. Mark-and-sweep correctly handles reference cycles that defeat plain reference counting, but it typically requires pausing normal execution while the mark and sweep phases run, which can introduce noticeable delays in programs that are sensitive to timing.",
+        "question": "Based on the passage, what problem can occur with reference counting that mark-and-sweep does not have?",
+        "options": [
+          "It reclaims memory too slowly for most programs.",
+          "Two objects referencing each other in a cycle can avoid ever reaching a zero counter.",
+          "It requires pausing the entire program before every allocation.",
+          "It cannot track objects created inside functions."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-006",
+      "kind": "hold-focus",
+      "language": "javascript",
+      "difficulty": 1,
+      "timeLimitS": 120,
+      "payload": {
+        "passage": "A function is a named, reusable block of code that performs a specific task and can be run, or called, from anywhere else in a program simply by writing its name followed by parentheses. Functions exist so that a piece of logic only has to be written once and can then be reused many times instead of being copied and pasted wherever it is needed. In JavaScript, a function is defined with the function keyword, a name, and a pair of parentheses that may contain parameters, which are placeholder names for values the function expects to receive. For example, function greet(name) { return 'Hello, ' + name; } defines a function called greet that expects one parameter called name. When the function is actually used, such as in greet('Sam'), the value 'Sam' is called an argument, and it is passed into the function and temporarily assigned to the parameter name for the duration of that call. A function may also use the return keyword to send a value back to whatever code called it; if a function has no return statement, calling it produces the special value undefined instead. Parameters let the same function body behave differently depending on what is passed in, without needing to rewrite the function for every possible input. A function can also take more than one parameter, separated by commas, such as function add(a, b) { return a + b; }, and each argument passed at the call site fills the parameters in order from left to right. Using functions to organize code makes programs easier to read, easier to test in isolated pieces, and easier to fix when something goes wrong, since a bug is more likely to be confined to one small function rather than spread across an entire program.",
+        "question": "According to the passage, what value does a JavaScript function return if it has no return statement?",
+        "options": [
+          "null",
+          "zero",
+          "undefined",
+          "an empty string"
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-007",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 2,
+      "timeLimitS": 150,
+      "payload": {
+        "passage": "Recursion is a technique in which a function solves a problem by calling itself with a smaller or simpler version of the same problem. Every correct recursive function needs two essential parts: a base case and a recursive case. The base case is the simplest possible version of the problem, one that can be answered directly without making any further function calls, and it exists specifically to stop the recursion from continuing forever. The recursive case handles every other, more complicated situation by calling the function again on a smaller piece of the problem and combining that result with the current step. A classic example is computing the factorial of a number n, written n!, which is the product of all positive integers from 1 up to n. A recursive definition says that factorial(0) equals 1, which is the base case, and for any n greater than 0, factorial(n) equals n multiplied by factorial(n - 1), which is the recursive case. Calling factorial(4) triggers factorial(3), which triggers factorial(2), which triggers factorial(1), which triggers factorial(0); once factorial(0) returns 1 directly from the base case, each waiting call multiplies its own n by the result it receives, and the answers combine on the way back up: 1, then 1*1=1, then 2*1=2, then 3*2=6, then 4*6=24. If the base case were left out, or if the recursive case failed to move the problem closer to the base case on every call, the function would keep calling itself indefinitely, adding a new frame to the call stack each time until the program runs out of stack space and crashes with a stack overflow error.",
+        "question": "According to the passage, what is the specific purpose of a base case in a recursive function?",
+        "options": [
+          "To make the function run faster.",
+          "To stop the recursion from continuing forever.",
+          "To combine results from multiple function calls.",
+          "To convert the function into an iterative loop."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-008",
+      "kind": "hold-focus",
+      "language": "mongo",
+      "difficulty": 3,
+      "timeLimitS": 180,
+      "payload": {
+        "passage": "MongoDB is a database that stores data as documents rather than as rows in fixed tables. Each document is a single record represented in a JSON-like format called BSON, which allows fields to hold not just plain values like numbers and strings but also nested objects and arrays within the same document. A group of related documents is stored together in a collection, which is the rough equivalent of a table in a relational database, except that a collection does not enforce a single fixed structure on every document inside it. Two documents in the same collection can have different fields entirely; one user document might include a phone number field while another does not, and MongoDB will store both without complaint. This property is usually called a flexible or dynamic schema, and it is one of the main differences between a document database like MongoDB and a relational database, which normally requires every row in a table to share the same predefined set of columns. Every document that MongoDB stores is automatically given a unique identifier in a field called _id, which functions like a primary key and is generated automatically if the application does not supply one itself. Related data can be modeled in two main ways in MongoDB: embedding, where related information is nested directly inside the same document, such as storing a customer's addresses as an array inside the customer document, or referencing, where a document stores the _id of a related document in another collection instead of duplicating its data. Embedding tends to be faster to read because everything needed is retrieved in a single query, while referencing avoids duplicating data that changes often or that is shared across many documents.",
+        "question": "According to the passage, what field does MongoDB automatically add to every document to serve as a unique identifier?",
+        "options": [
+          "id_number",
+          "_id",
+          "primaryKey",
+          "uuid"
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-009",
+      "kind": "hold-focus",
+      "language": "javascript",
+      "difficulty": 4,
+      "timeLimitS": 210,
+      "payload": {
+        "passage": "Recursion and iteration are two different techniques for repeating work, and while many problems can be solved with either one, they behave very differently underneath. An iterative solution uses a loop, such as a for or while loop, and updates variables directly on each pass without creating any new function calls; the amount of memory it uses generally stays constant no matter how many times the loop repeats. A recursive solution instead has a function call itself, and each of those calls needs its own stack frame, a small region of memory that holds that call's local variables, its parameters, and the address it should return to once it finishes. These stack frames are pushed onto the call stack when a function is called and popped off again once that call returns, and because a recursive call cannot pop its frame until the call it made returns first, all of the pending frames from every nested call sit on the stack at once, waiting. If a recursive function calls itself too many times before reaching its base case, for example because the input is very large or because the base case is written incorrectly, the call stack keeps growing until it exceeds the memory JavaScript has allotted for it, producing a runtime error commonly called a stack overflow. An iterative version of the same logic does not have this failure mode, because it never accumulates a matching pile of pending calls; it simply updates its loop variables and moves on. This is why recursion, while often more elegant and closer to a mathematical definition of a problem, is sometimes deliberately rewritten as an iterative loop for cases where the input size could be very large and stack memory is a real concern.",
+        "question": "Based on the passage, why does an iterative loop generally avoid the stack overflow risk that recursion has?",
+        "options": [
+          "Because loops are always faster than function calls.",
+          "Because it never accumulates a pile of pending function calls waiting on the call stack.",
+          "Because JavaScript automatically converts every loop into a recursive call internally.",
+          "Because loops do not use any memory while they run."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-010",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 5,
+      "timeLimitS": 240,
+      "payload": {
+        "passage": "Dynamic programming is a technique for solving problems that can be broken into overlapping subproblems, meaning the same smaller calculation would otherwise need to be performed many times if solved with plain recursion. The classic illustration is computing Fibonacci numbers, where fib(n) is defined as fib(n-1) + fib(n-2). A naive recursive implementation recalculates the same values repeatedly; computing fib(5) requires computing fib(3) twice and fib(2) three times, and this duplication grows exponentially as n increases, giving the naive approach a time complexity of O(2^n). Memoization fixes this by storing, or caching, the result of each subproblem the first time it is computed, typically in a dictionary or array keyed by the subproblem's input. Before performing any calculation, the function first checks whether that input's answer is already stored; if it is, the cached value is returned immediately instead of recomputing it, and if not, the function computes it once, stores it, and then returns it. This turns the Fibonacci calculation from exponential time down to O(n) time, since each distinct value from 0 to n is now computed only once no matter how many times it would otherwise have been requested. Memoization is one specific strategy for implementing dynamic programming, sometimes called the top-down approach because it still starts from the original call and works backward toward the base cases, adding caching along the way. A separate strategy, called the bottom-up approach, avoids recursion entirely by building a table of answers starting from the smallest subproblems and working upward until the desired value is reached, which avoids both the duplicate work of naive recursion and the overhead of maintaining a call stack full of pending recursive calls. Both approaches rely on the same underlying insight: subproblems overlap, so their answers are worth saving rather than recalculating from scratch every single time they are needed.",
+        "question": "According to the passage, what does memoization do the first time a subproblem's result is computed?",
+        "options": [
+          "It discards the result immediately to save memory.",
+          "It stores the result so it can be returned immediately if requested again.",
+          "It recomputes the result twice to verify accuracy.",
+          "It converts the recursive call into a loop automatically."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-011",
+      "kind": "hold-focus",
+      "language": "java",
+      "difficulty": 1,
+      "timeLimitS": 120,
+      "payload": {
+        "passage": "A for loop is a control structure that repeats a block of code a specific number of times, and it is one of the most common ways to process every item in a collection or to count through a range of numbers. In Java, a standard for loop has three parts, separated by semicolons, all written on the same line: an initialization that runs once before the loop starts, a condition that is checked before every pass through the loop body, and an update that runs after each pass completes. For example, for (int i = 0; i < 5; i++) { System.out.println(i); } first creates a variable i and sets it to 0; then, before each repetition, it checks whether i is less than 5, and only continues if that condition is still true; then it runs the loop body, which prints the current value of i; and finally it increases i by one before checking the condition again. This loop runs a total of five times, printing 0, 1, 2, 3, and 4, and stops as soon as i reaches 5, because at that point the condition i < 5 becomes false and the loop exits without running its body again. If the condition were written incorrectly so that it never becomes false, the loop would run forever, which is called an infinite loop and is a common early mistake. Loops are especially useful for working through arrays or lists, where a loop variable like i can be used as an index to visit each element in turn, such as printing every value stored in an array from its first position to its last without writing a separate line of code for every single element.",
+        "question": "According to the passage, how many times does the loop for (int i = 0; i < 5; i++) run?",
+        "options": [
+          "Four times",
+          "Five times",
+          "Six times",
+          "An unlimited number of times"
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-012",
+      "kind": "hold-focus",
+      "language": "javascript",
+      "difficulty": 2,
+      "timeLimitS": 150,
+      "payload": {
+        "passage": "A stack is a data structure that stores a collection of elements and allows access to only one end of that collection, called the top. Elements can only be added to the top, an operation usually called push, and can only be removed from the top, an operation usually called pop. This restriction means a stack always follows last-in, first-out order, often abbreviated LIFO: whichever element was added most recently is always the very first one to be removed. A helpful physical comparison is a stack of plates; a new plate is placed on top of the pile, and the next plate someone takes is also from the top, so the first plate placed at the bottom of the pile is the last one anyone will ever remove. In JavaScript, a plain array can act as a stack directly, since push() adds an element to the end of the array and pop() removes and returns the element from the end of the array, both operations running in constant time, O(1), because no other elements need to shift position. Many real programs rely on LIFO behavior without it being obvious at first glance. The undo feature in a text editor is commonly built on a stack, where each edit is pushed as it happens and undoing an action pops the most recent edit off the top, reversing it before touching any earlier edit. The call stack used by a programming language to track function calls is also a stack: when a function calls another function, a new frame is pushed on top, and when that inner function finishes, its frame is popped off, returning control to exactly the call that was waiting, which is always the most recent one still pending.",
+        "question": "According to the passage, which end of a stack can elements be added to or removed from?",
+        "options": [
+          "Either end, chosen by the programmer.",
+          "Only the bottom.",
+          "Only the top.",
+          "The middle, to keep the stack balanced."
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-013",
+      "kind": "hold-focus",
+      "language": "java",
+      "difficulty": 3,
+      "timeLimitS": 180,
+      "payload": {
+        "passage": "Inheritance is a feature of object-oriented programming that lets one class reuse the fields and methods defined in another class, rather than rewriting them from scratch. The class being reused is called the superclass, or parent class, and the class that reuses it is called the subclass, or child class. In Java, a subclass is created using the extends keyword, as in class Dog extends Animal, which means Dog automatically gains every non-private field and method that Animal defines, without that code needing to be copied into Dog's own definition. A subclass is not limited to only inheriting; it can also add entirely new fields and methods of its own that the superclass does not have, and it can override an inherited method by providing its own implementation with the same name and parameters, which replaces the superclass version whenever that method is called on an instance of the subclass. For example, if Animal defines a method called makeSound() that prints a generic message, Dog can override makeSound() to print 'Bark' instead, and calling makeSound() on a Dog object will run Dog's version, not Animal's. Inheritance models an is-a relationship between classes: a Dog is an Animal, so it makes sense for Dog to inherit Animal's general behavior while specializing the parts that differ. This differs from a has-a relationship, where one class simply holds a reference to another as a field rather than extending it. Java allows a class to extend only one superclass directly, a rule known as single inheritance, though a class can still implement multiple interfaces to gain multiple sets of required method signatures. Used well, inheritance reduces duplicated code across related classes and lets shared behavior be fixed or updated in exactly one place, the superclass, rather than in every class that relies on it.",
+        "question": "According to the passage, what keyword does Java use to create a subclass that inherits from a superclass?",
+        "options": [
+          "implements",
+          "inherits",
+          "extends",
+          "super"
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-014",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 4,
+      "timeLimitS": 210,
+      "payload": {
+        "passage": "Quicksort is a sorting algorithm that works by repeatedly partitioning a list around a chosen element called the pivot. The core idea is that after one partitioning step, every element smaller than the pivot ends up somewhere to its left, every element larger than the pivot ends up somewhere to its right, and the pivot itself lands in its final, correct sorted position, even though the elements on either side may still be unsorted. A common way to partition selects the last element of the current range as the pivot, then walks through every other element with a pointer, moving any element smaller than the pivot into the growing region on the left, and finally swapping the pivot into place right after that region, so it sits exactly between the smaller and larger groups. Once partitioning finishes, quicksort calls itself recursively on the left region, containing everything smaller than the pivot, and separately on the right region, containing everything larger, and does not need to touch the pivot's position again because it is already correctly placed. This recursive process continues on smaller and smaller sub-ranges until every range has one element or zero elements, both of which count as already sorted, forming the base case. On average, when pivots reasonably split the list into two roughly equal-sized halves each time, quicksort runs in O(n log n) time. However, its worst-case time complexity is O(n^2), which happens when the chosen pivot repeatedly turns out to be the smallest or largest element remaining, such as when the input is already sorted and the algorithm always picks the last element as the pivot; in that situation, each partitioning step only removes one element from consideration instead of splitting the work roughly in half.",
+        "question": "According to the passage, what is true about the pivot's position immediately after one partitioning step completes?",
+        "options": [
+          "The pivot is removed from the list entirely.",
+          "The pivot lands in its final, correct sorted position.",
+          "The pivot is always moved to the very end of the entire list.",
+          "The pivot is compared again against every element in the next step."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-015",
+      "kind": "hold-focus",
+      "difficulty": 5,
+      "timeLimitS": 240,
+      "payload": {
+        "passage": "TCP and UDP are two transport-layer protocols used to send data across a network, and applications choose between them based on whether reliability or speed matters more for a given task. TCP, short for Transmission Control Protocol, establishes a connection between sender and receiver before any data is transmitted, a process commonly called a three-way handshake. Once the connection is open, TCP guarantees that data arrives in the correct order and that nothing is silently lost: every packet is numbered, the receiver acknowledges what it has received, and the sender automatically retransmits any packet that an acknowledgment does not confirm within a certain time. This reliability makes TCP well suited to tasks like loading a webpage or transferring a file, where a corrupted or incomplete result would be unacceptable, but the handshake, acknowledgments, and retransmissions all add delay and overhead compared to simply sending data with no such guarantees. UDP, short for User Datagram Protocol, takes the opposite approach. It sends packets, called datagrams, without first establishing a connection and without any built-in mechanism for acknowledgments, ordering, or retransmission. A datagram sent over UDP might arrive out of order, might arrive duplicated, or might not arrive at all, and UDP itself will never notice or correct any of these problems; if an application needs that guarantee, it must implement its own logic on top of UDP. In exchange for giving up these guarantees, UDP has much lower overhead and lower latency, since there is no handshake to complete and no waiting for acknowledgments before sending the next piece of data. This tradeoff makes UDP a common choice for live video calls, online multiplayer games, and streaming, where a dropped or late packet is better handled by simply skipping it and moving on than by pausing everything to wait for a slow retransmission.",
+        "question": "According to the passage, what does TCP do before any data is transmitted between sender and receiver?",
+        "options": [
+          "It compresses the data to reduce its size.",
+          "It establishes a connection through a three-way handshake.",
+          "It encrypts the data using a shared key.",
+          "It splits the data into equally sized datagrams."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-016",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 120,
+      "payload": {
+        "passage": "A conditional statement lets a program choose between different blocks of code to run depending on whether a certain condition is true or false. In Python, the basic form starts with an if statement followed by a condition and a colon, and the indented block underneath it only runs when that condition evaluates to True. An optional else block can follow, containing code that runs only when the if condition was False, so that exactly one of the two blocks executes, never both and never neither. When there are more than two possible outcomes to check, Python provides elif, short for 'else if', which lets additional conditions be tested in order after the first if condition fails; as soon as one condition in the chain evaluates to True, its block runs and every remaining elif and else in that same chain is skipped entirely, even if a later condition would also have been True. For example, given a variable score, a program might write if score >= 90: print('A') then elif score >= 80: print('B') then elif score >= 70: print('C') then else: print('F'). If score is 85, Python checks score >= 90 first, finds it False, moves to score >= 80, finds it True, prints 'B', and immediately skips the remaining elif and else blocks without evaluating them at all, even though 85 also satisfies score >= 70. This top-to-bottom, first-match behavior means the order in which conditions are written matters: placing a more specific or higher condition after a broader one that would also match it means the broader condition wins and the more specific one is never reached, which is a common source of bugs when conditions are written in the wrong order.",
+        "question": "According to the passage, when score is 85 in the example chain, what does the program print?",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "F"
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-017",
+      "kind": "hold-focus",
+      "language": "typescript",
+      "difficulty": 2,
+      "timeLimitS": 150,
+      "payload": {
+        "passage": "A queue is a data structure that stores a collection of elements while allowing new elements to be added only at one end, called the back or rear, and allowing elements to be removed only from the opposite end, called the front. This restriction means a queue always follows first-in, first-out order, often abbreviated FIFO: whichever element has been waiting the longest is always the next one to be removed, no matter how many elements have been added after it. The two core operations are usually named enqueue, which adds a new element to the back, and dequeue, which removes and returns the element currently at the front. A useful comparison is a line of people waiting at a checkout counter; new people join at the back of the line, and the person served next is always whoever has been standing at the front the longest, never someone who just joined at the back. In TypeScript, a queue can be implemented with a class that wraps an array and adds type safety, such as class Queue<T> { private items: T[] = []; enqueue(item: T): void { this.items.push(item); } dequeue(): T | undefined { return this.items.shift(); } }, where the generic type parameter T lets the same queue class be reused for numbers, strings, or any other type while TypeScript still checks at compile time that only values of that one chosen type are enqueued. Queues appear throughout real systems: a printer that receives multiple print jobs processes them in the order they arrived, and a breadth-first search algorithm exploring a graph uses a queue to visit nodes in the order they were first discovered, level by level, rather than plunging deep down one path first the way a stack-based approach would.",
+        "question": "According to the passage, which element does a queue remove next when dequeue is called?",
+        "options": [
+          "The element that was added most recently.",
+          "A randomly chosen element.",
+          "The element that has been waiting the longest.",
+          "The element in the middle of the queue."
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-018",
+      "kind": "hold-focus",
+      "language": "sql",
+      "difficulty": 3,
+      "timeLimitS": 180,
+      "payload": {
+        "passage": "A join in SQL combines rows from two or more tables based on a related column between them, most often a foreign key in one table that matches a primary key in another. An INNER JOIN, the most commonly used type, returns only the rows where a match is found in both tables; if a row in the first table has no corresponding row in the second table, that row is left out of the result entirely. For example, joining a customers table with an orders table on customer id using an INNER JOIN returns only customers who have placed at least one order, because a customer with zero matching rows in the orders table produces nothing to include. A LEFT JOIN, also called a LEFT OUTER JOIN, behaves differently: it returns every row from the left table no matter what, and for each one it attaches matching data from the right table when a match exists, but fills in NULL values for the right table's columns when no match is found, rather than dropping the row. Using the same example, a LEFT JOIN from customers to orders would include every customer, even ones who have never placed an order, with NULL appearing in the order-related columns for those customers instead of the row being excluded. This makes LEFT JOIN useful specifically when the goal is to find rows in the left table that have no match at all, since a WHERE clause can then filter for rows where the right table's key column is NULL, isolating exactly the customers with no orders. Choosing INNER JOIN versus LEFT JOIN therefore depends entirely on whether unmatched rows from the left table should be excluded from the result or preserved with NULL placeholders standing in for the missing matched data.",
+        "question": "According to the passage, what does a LEFT JOIN put in the right table's columns when no matching row exists?",
+        "options": [
+          "The value zero.",
+          "An empty string.",
+          "NULL values.",
+          "The row is duplicated instead."
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-019",
+      "kind": "hold-focus",
+      "language": "java",
+      "difficulty": 4,
+      "timeLimitS": 210,
+      "payload": {
+        "passage": "A race condition occurs when two or more threads access shared data at the same time and the final outcome depends on the unpredictable order in which their operations happen to be scheduled, rather than on the program's logic alone. A common example involves two threads both trying to increment the same shared counter variable. Even though the code appears to be a single statement, such as counter++, this operation is not actually atomic; it breaks down into at least three separate steps at a lower level: reading the current value of counter, adding one to that value, and writing the new value back. If one thread reads the value, and before it can write its incremented result back, a second thread also reads the same original value, both threads end up computing the same new value and writing it back, so one of the two increments is effectively lost, leaving the counter lower than it should be after both threads finish. This kind of bug is especially dangerous because it does not happen every time; it depends on precise timing between threads, so a program might work correctly during most test runs and only fail unpredictably once deployed under heavier load. A lock, sometimes implemented in Java with the synchronized keyword, is a mechanism that prevents this problem by ensuring that only one thread at a time can execute a particular section of code, called a critical section. When one thread acquires the lock and enters the critical section, any other thread that tries to enter must wait until the lock is released, guaranteeing that the read-modify-write sequence for the shared counter always completes fully before another thread can begin its own read of that same variable, eliminating the lost update.",
+        "question": "According to the passage, why can incrementing a shared counter with counter++ cause a lost update between two threads?",
+        "options": [
+          "Because counter++ deletes the variable after use.",
+          "Because the increment is not a single atomic step but breaks into separate read, add, and write steps.",
+          "Because Java forbids two threads from ever reading the same variable.",
+          "Because the synchronized keyword automatically doubles the counter's value."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-020",
+      "kind": "hold-focus",
+      "language": "sql",
+      "difficulty": 5,
+      "timeLimitS": 240,
+      "payload": {
+        "passage": "A database index is a separate structure that a database maintains alongside a table to speed up how quickly rows can be found, in exchange for using additional storage space and slightly slowing down writes. Without an index, finding a row that matches a particular condition generally requires a full table scan, checking every single row one at a time, which takes O(n) time and becomes slow as a table grows large. Most relational databases implement indexes using a data structure called a B-tree, a balanced tree where each node can hold multiple sorted keys and multiple child pointers, unlike a plain binary tree where each node holds only one key and at most two children. Because every path from the root of a B-tree down to any leaf has exactly the same length, and because each node can branch into many children rather than just two, a B-tree stays shallow even when it holds millions of entries, which means finding any given key takes only a small, predictable number of steps, giving search, insertion, and deletion all O(log n) time complexity. When a query filters or sorts on an indexed column, the database can walk down the B-tree instead of scanning every row, dramatically reducing the number of rows it has to examine. This benefit is not free: every time a row is inserted, updated, or deleted, every index built on that table must also be updated to stay consistent with the new data, so adding indexes to a table that receives frequent writes can noticeably slow those write operations down, even while it speeds up reads. For this reason, indexes are typically added deliberately to specific columns that are searched or joined on often, rather than added to every column in a table without consideration.",
+        "question": "According to the passage, what time complexity do search, insertion, and deletion have in a B-tree?",
+        "options": [
+          "O(n)",
+          "O(n^2)",
+          "O(log n)",
+          "O(1)"
+        ],
+        "answerIndex": 2
+      }
+    },
+    {
+      "id": "hold-focus-021",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 1,
+      "timeLimitS": 120,
+      "payload": {
+        "passage": "A list in Python is an ordered collection that can hold multiple values together under a single variable name, and each value inside it can be accessed using its position, called an index. Python indexing starts counting from zero rather than from one, so the very first element in a list is found at index 0, the second element is at index 1, and so on; a list containing five elements therefore has valid indexes running from 0 through 4, not 1 through 5. Writing fruits = ['apple', 'banana', 'cherry'] creates a list with three elements, where fruits[0] refers to 'apple', fruits[1] refers to 'banana', and fruits[2] refers to 'cherry'. Trying to access fruits[3] would raise an IndexError, because no fourth element exists at that position; the highest valid index in this list is 2, since there are three elements starting the count at zero. Python also supports negative indexing as a convenience, where fruits[-1] refers to the last element in the list regardless of how many elements it contains, and fruits[-2] refers to the second-to-last element. Lists are also mutable, meaning individual elements can be changed after the list is created simply by assigning a new value to a specific index, such as fruits[1] = 'blueberry', which replaces 'banana' with 'blueberry' at index 1 while leaving every other element untouched. The length of a list, meaning the total count of elements it holds, can be found with the built-in len() function, such as len(fruits), which would return 3 for the original three-element list before any elements were added or removed. Understanding that indexing starts at zero is essential, since forgetting this off-by-one detail is one of the most frequent early mistakes when working with lists.",
+        "question": "According to the passage, what index does the first element of a Python list have?",
+        "options": [
+          "1",
+          "0",
+          "-1",
+          "It depends on the list's length."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-022",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 2,
+      "timeLimitS": 150,
+      "payload": {
+        "passage": "Big-O notation describes how the running time or memory use of an algorithm grows as the size of its input, usually called n, grows larger, focusing on the overall trend rather than exact timings that depend on the speed of any particular computer. O(1), read as constant time, means the operation takes roughly the same amount of time no matter how large the input is. Accessing a single element of a Python list by its index, such as my_list[3], is O(1), because the computer can jump directly to that memory location using the index, whether the list has ten elements or ten million. O(n), read as linear time, means the running time grows in direct proportion to the size of the input: doubling the input roughly doubles the work required. Searching for a specific value inside an unsorted list by checking each element one at a time, from the first to the last, is O(n), because in the worst case, the value being searched for is the very last element checked, or is not present at all, requiring every single element to be examined before the search can finish. The key difference in practice is how each one scales: an O(1) operation performed on a list of 10 elements takes about the same time as the same operation performed on a list of 10 million elements, while an O(n) operation on a list of 10 million elements takes roughly a million times longer than the same operation on a list of only 10 elements. This is why choosing an algorithm is not just about whether it works correctly, but about how its cost behaves as the amount of data it must handle keeps growing larger over time.",
+        "question": "According to the passage, why is accessing a Python list element by index considered O(1)?",
+        "options": [
+          "Because Python lists are always short.",
+          "Because the computer can jump directly to that memory location using the index.",
+          "Because indexing only works on sorted lists.",
+          "Because the element is copied into a new list first."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-023",
+      "kind": "hold-focus",
+      "language": "web",
+      "difficulty": 3,
+      "timeLimitS": 180,
+      "payload": {
+        "passage": "The Document Object Model, commonly called the DOM, is the structure a web browser builds in memory to represent an HTML page as a tree of objects that a program can inspect and change while the page is running. Every HTML element on the page, such as a paragraph, a heading, or a button, becomes a node in this tree, and each node can have parent nodes, sibling nodes, and child nodes based on how the original HTML was nested. The topmost node in this tree is the document object itself, and every other element on the page descends from it through a chain of parent-child relationships that mirrors the nesting of the original HTML tags. JavaScript running in the browser can use the DOM to read or modify the page after it has already loaded, without needing to reload the entire page from the server. For example, document.getElementById('title') searches the tree for the single element whose id attribute matches 'title' and returns a reference to that node, which can then be changed directly, such as with element.textContent = 'New heading', which immediately updates what is visibly shown on the page. This is the underlying mechanism behind interactive behavior like a button that changes text when clicked, a form that shows an error message without reloading, or a list that adds new items as a user types, because each of these effects is really just JavaScript navigating the DOM tree to find a node and then changing one of its properties. Because the DOM is a live, in-memory representation rather than the original HTML text file, changes made to it are reflected instantly on the rendered page, but they do not modify the original HTML file stored on the server in any way.",
+        "question": "According to the passage, what is the topmost node in the DOM tree?",
+        "options": [
+          "The body element.",
+          "The document object itself.",
+          "The html tag.",
+          "Whichever element has an id attribute."
+        ],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "hold-focus-024",
+      "kind": "hold-focus",
+      "language": "python",
+      "difficulty": 4,
+      "timeLimitS": 210,
+      "payload": {
+        "passage": "A hash table is a data structure that stores key-value pairs and is designed to let a program insert, look up, and delete a value by its key in close to constant time, O(1), on average. It achieves this using a hash function, which takes a key, such as a string or a number, and converts it into an integer, called a hash code, that is then used to determine which position, or bucket, in an underlying array that key's value should be stored in. Because a good hash function distributes different keys across the available buckets fairly evenly, most lookups can jump almost directly to the correct bucket without needing to check other entries at all. A collision occurs when two different keys happen to produce the same hash code, or produce hash codes that map to the same bucket after being reduced to fit the array's size, meaning both keys want to be stored in the same location. One common way to handle collisions is called chaining, where each bucket does not store a single value directly but instead holds a small list of key-value pairs that have all collided into that same bucket; looking up a key then means finding the correct bucket first, in O(1) time, and then scanning that bucket's short list for the exact matching key. In the worst case, if a poor hash function sends many keys into the same few buckets, one bucket's list could grow very long, and looking up a key inside it degrades toward O(n) time, since every entry in that list might need to be checked. This is why the quality of the hash function matters: a function that spreads keys evenly across buckets keeps every bucket's list short and keeps lookups fast, close to the average constant-time behavior a hash table is expected to provide.",
+        "question": "According to the passage, what is one common technique for handling two keys that collide into the same bucket?",
+        "options": [
+          "Deleting one of the two keys automatically.",
+          "Chaining, where the bucket holds a short list of colliding key-value pairs.",
+          "Resizing the entire hash table to zero buckets.",
+          "Converting the hash table into a sorted array."
+        ],
+        "answerIndex": 1
+      }
+    }
+  ]
+}

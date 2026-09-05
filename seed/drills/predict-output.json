@@ -1,0 +1,292 @@
+{
+  "items": [
+    {
+      "id": "predict-output-001",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 1,
+      "payload": {
+        "language": "python",
+        "snippet": "x = 5\ny = 2\nprint(x // y)\nprint(x % y)",
+        "expectedOutput": "2\n1"
+      },
+      "timeLimitS": 20
+    },
+    {
+      "id": "predict-output-002",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 1,
+      "payload": {
+        "language": "python",
+        "snippet": "name = \"Ali\"\ngreeting = \"Hello, \" + name + \"!\"\nprint(greeting)\nprint(len(name))",
+        "expectedOutput": "Hello, Ali!\n3"
+      },
+      "timeLimitS": 20
+    },
+    {
+      "id": "predict-output-003",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 1,
+      "payload": {
+        "language": "python",
+        "snippet": "fruits = [\"apple\", \"banana\", \"cherry\"]\nprint(fruits[1])\nprint(fruits[-1])\nprint(len(fruits))",
+        "expectedOutput": "banana\ncherry\n3"
+      },
+      "timeLimitS": 20
+    },
+    {
+      "id": "predict-output-004",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 1,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let x = 7;\nlet y = 2;\nconsole.log(x / y);\nconsole.log(x % y);",
+        "expectedOutput": "3.5\n1"
+      },
+      "timeLimitS": 20
+    },
+    {
+      "id": "predict-output-005",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 1,
+      "payload": {
+        "language": "javascript",
+        "snippet": "const arr = [10, 20, 30];\nconsole.log(arr.length);\nconsole.log(arr[arr.length - 1]);",
+        "expectedOutput": "3\n30"
+      },
+      "timeLimitS": 20
+    },
+    {
+      "id": "predict-output-006",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 2,
+      "payload": {
+        "language": "python",
+        "snippet": "total = 0\nfor i in range(1, 5):\n    total += i\nprint(total)\nprint(i)",
+        "expectedOutput": "10\n4"
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "predict-output-007",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 2,
+      "payload": {
+        "language": "python",
+        "snippet": "def square(n):\n    return n * n\n\nnums = [1, 2, 3, 4]\nsquares = [square(n) for n in nums if n % 2 == 0]\nprint(squares)",
+        "expectedOutput": "[4, 16]"
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "predict-output-008",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 2,
+      "payload": {
+        "language": "python",
+        "snippet": "s = \"banana\"\nprint(s.count(\"a\"))\nprint(s.replace(\"a\", \"o\"))\nprint(s[::-1])",
+        "expectedOutput": "3\nbonono\nananab"
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "predict-output-009",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 2,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function add(a, b) {\n  return a + b;\n}\nconsole.log(add(2, 3));\nconsole.log(add(\"2\", 3));\nconsole.log(add(2, \"3\"));",
+        "expectedOutput": "5\n23\n23"
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "predict-output-010",
+      "kind": "predict-output",
+      "language": "sql",
+      "difficulty": 2,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE users (id INTEGER, name TEXT);\nINSERT INTO users VALUES (1, 'Ali');\nINSERT INTO users VALUES (2, 'Sara');\nSELECT id, name FROM users ORDER BY id;",
+        "expectedOutput": "1|Ali\n2|Sara"
+      },
+      "timeLimitS": 30
+    },
+    {
+      "id": "predict-output-011",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 3,
+      "payload": {
+        "language": "python",
+        "snippet": "def mystery(a, b=[]):\n    b.append(a)\n    return b\n\nprint(mystery(1))\nprint(mystery(2))\nprint(mystery(3, []))",
+        "expectedOutput": "[1]\n[1, 2]\n[3]"
+      },
+      "timeLimitS": 40
+    },
+    {
+      "id": "predict-output-012",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 3,
+      "payload": {
+        "language": "python",
+        "snippet": "class Counter:\n    count = 0\n    def __init__(self):\n        Counter.count += 1\n\na = Counter()\nb = Counter()\nc = Counter()\nprint(Counter.count)\nprint(a.count)",
+        "expectedOutput": "3\n3"
+      },
+      "timeLimitS": 40
+    },
+    {
+      "id": "predict-output-013",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 3,
+      "payload": {
+        "language": "javascript",
+        "snippet": "let arr = [1, 2, 3];\nlet doubled = arr.map(x => x * 2);\nconsole.log(JSON.stringify(doubled));\nconsole.log(JSON.stringify(arr));\nconsole.log(doubled.reduce((a, b) => a + b, 0));",
+        "expectedOutput": "[2,4,6]\n[1,2,3]\n12"
+      },
+      "timeLimitS": 40
+    },
+    {
+      "id": "predict-output-014",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 3,
+      "payload": {
+        "language": "javascript",
+        "snippet": "function counter() {\n  let count = 0;\n  return function () {\n    count += 1;\n    return count;\n  };\n}\nconst c1 = counter();\nconsole.log(c1());\nconsole.log(c1());\nconst c2 = counter();\nconsole.log(c2());",
+        "expectedOutput": "1\n2\n1"
+      },
+      "timeLimitS": 40
+    },
+    {
+      "id": "predict-output-015",
+      "kind": "predict-output",
+      "language": "sql",
+      "difficulty": 3,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE scores (student TEXT, points INTEGER);\nINSERT INTO scores VALUES ('Ana', 50);\nINSERT INTO scores VALUES ('Ben', 80);\nINSERT INTO scores VALUES ('Cid', 65);\nSELECT student, points FROM scores WHERE points > 60 ORDER BY points DESC;",
+        "expectedOutput": "Ben|80\nCid|65"
+      },
+      "timeLimitS": 40
+    },
+    {
+      "id": "predict-output-016",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 4,
+      "payload": {
+        "language": "python",
+        "snippet": "def outer():\n    x = 10\n    def inner():\n        nonlocal x\n        x += 5\n        return x\n    print(inner())\n    print(inner())\n    print(x)\n\nouter()",
+        "expectedOutput": "15\n20\n20"
+      },
+      "timeLimitS": 50
+    },
+    {
+      "id": "predict-output-017",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 4,
+      "payload": {
+        "language": "python",
+        "snippet": "data = {\"a\": 1, \"b\": 2, \"c\": 3}\nfor key in sorted(data, key=lambda k: -data[k]):\n    print(f\"{key}:{data[key]}\")",
+        "expectedOutput": "c:3\nb:2\na:1"
+      },
+      "timeLimitS": 50
+    },
+    {
+      "id": "predict-output-018",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 4,
+      "payload": {
+        "language": "python",
+        "snippet": "def gen():\n    for i in range(3):\n        yield i * i\n\ng = gen()\nprint(next(g))\nprint(next(g))\nprint(sum(g))",
+        "expectedOutput": "0\n1\n4"
+      },
+      "timeLimitS": 50
+    },
+    {
+      "id": "predict-output-019",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 4,
+      "payload": {
+        "language": "javascript",
+        "snippet": "console.log(typeof null);\nconsole.log(typeof undefined);\nconsole.log(1 == \"1\");\nconsole.log(1 === \"1\");\nconsole.log(null == undefined);",
+        "expectedOutput": "object\nundefined\ntrue\nfalse\ntrue"
+      },
+      "timeLimitS": 50
+    },
+    {
+      "id": "predict-output-020",
+      "kind": "predict-output",
+      "language": "sql",
+      "difficulty": 4,
+      "payload": {
+        "language": "sql",
+        "snippet": "CREATE TABLE orders (id INTEGER, customer TEXT, amount INTEGER);\nINSERT INTO orders VALUES (1, 'Lee', 20);\nINSERT INTO orders VALUES (2, 'Lee', 35);\nINSERT INTO orders VALUES (3, 'Kim', 15);\nSELECT customer, SUM(amount) FROM orders GROUP BY customer ORDER BY customer;",
+        "expectedOutput": "Kim|15\nLee|55"
+      },
+      "timeLimitS": 50
+    },
+    {
+      "id": "predict-output-021",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 5,
+      "payload": {
+        "language": "python",
+        "snippet": "def fib(n, memo={}):\n    if n in memo:\n        return memo[n]\n    if n <= 1:\n        return n\n    memo[n] = fib(n - 1, memo) + fib(n - 2, memo)\n    return memo[n]\n\nprint([fib(i) for i in range(6)])",
+        "expectedOutput": "[0, 1, 1, 2, 3, 5]"
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "predict-output-022",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 5,
+      "payload": {
+        "language": "python",
+        "snippet": "class Node:\n    def __init__(self, val, nxt=None):\n        self.val = val\n        self.nxt = nxt\n\nn1 = Node(1, Node(2, Node(3)))\ntotal, cur = 0, n1\nwhile cur:\n    total += cur.val\n    cur = cur.nxt\nprint(total)",
+        "expectedOutput": "6"
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "predict-output-023",
+      "kind": "predict-output",
+      "language": "python",
+      "difficulty": 5,
+      "payload": {
+        "language": "python",
+        "snippet": "matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]\ntransposed = list(zip(*matrix))\nprint(transposed[1])\nprint([row[0] for row in matrix])",
+        "expectedOutput": "(2, 5, 8)\n[1, 4, 7]"
+      },
+      "timeLimitS": 60
+    },
+    {
+      "id": "predict-output-024",
+      "kind": "predict-output",
+      "language": "javascript",
+      "difficulty": 5,
+      "payload": {
+        "language": "javascript",
+        "snippet": "class Animal {\n  constructor(name) { this.name = name; }\n  speak() { return `${this.name} makes a sound`; }\n}\nclass Dog extends Animal {\n  speak() { return `${this.name} barks`; }\n}\nconst animals = [new Animal(\"Cat\"), new Dog(\"Rex\")];\nfor (const a of animals) console.log(a.speak());",
+        "expectedOutput": "Cat makes a sound\nRex barks"
+      },
+      "timeLimitS": 60
+    }
+  ]
+}

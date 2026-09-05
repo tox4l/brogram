@@ -1,0 +1,17 @@
+# BroGram build log
+
+One line per decision or lesson, with the reason. Appended as the build runs. Read at the start of every phase.
+
+- 16:53 Doha: build started with about two hours to the 19:00 deadline, not the six the plan assumed; phases will be compressed and anything red is reported as red.
+- 16:53 Doha: pre-flight not done at start: no .env.local, and gh, vercel, supabase, scoop absent from PATH. A0 kicked off anyway so scaffold and build land; Vercel and GitHub steps will block until Musa logs in.
+- 16:53 Doha: openspec 1.12.0 already installed, so the OpenSpec ledger is used instead of the plan checkboxes.
+- 16:58 Doha: A0 is Codex job task-mtog2ukh-p0jpqw. Until its git init lands, nothing may be written into this tree (it would be swept into the scaffold commit), so drill generation, the exercise-bank author phase, and the verifier script are running into the scratchpad and get copied in on claude/* branches afterwards.
+- 16:58 Doha: `python` is a Windows Store alias here; the real interpreter is `py` (3.13.2). Verification agents use `py` or the pyodide npm package.
+- 16:58 Doha: exercise-bank workflow split into an author run (no runtimes needed) and a later verify, merge, critique run, because verification needs node_modules from A0. Same agents and prompts as docs/workflows/exercise-bank-generation.js.
+- 16:58 Doha: OpenSpec change brogram-launch created with skip_specs: true; the spec lives in docs/, the ledger is openspec/changes/brogram-launch/tasks.md.
+- 17:03 Doha: first A0 rescue did nothing in 6 minutes: the Codex rescue wrapper adds a "stop if credentials are missing" gate and Codex applied it to the absent Vercel and GitHub logins. Lesson: every rescue prompt must say explicitly which missing secrets are NOT blockers and what to do instead. A0 re-dispatched with that ruling: scaffold, install, build, local commit on astra/A0; deploy and push wait for Musa's logins.
+- 19:10 Doha: deadline missed. Root causes, in order: pre-flight not done (no logins, no .env.local); the Codex sandbox has no network (npm registry EACCES), so the Astra lane could not install anything; the A0 retry ran 21 minutes then failed. The Claude lane finished A0's local steps itself under a ruling (install, build, commit) because they are tooling, not product code.
+- 19:10 Doha: Codex needs `[sandbox_workspace_write] network_access = true` in ~/.codex/config.toml for any Astra task that installs or deploys. Claude's tools were denied that edit by the permission classifier; Musa adds the two lines.
+- 19:10 Doha: `typescript` pinned to ^5 in package.json; `latest` resolves to 7.0.2, which drops `transpileModule` (the verifier and the JS/TS runtime adapter need it) and is not what Next 16 is tested against.
+- 19:10 Doha: the .git directory was created by the Codex sandbox user, so every git command from Claude runs with `safe.directory` set via GIT_CONFIG_* env vars; deleting it was denied. Musa can run `git config --global --add safe.directory C:/Users/musal/OneDrive/Desktop/V/Brogram` to make it permanent.
+- 19:10 Doha: generated in the scratchpad while the tree was blocked and copied in: 144 drill items (6 kinds x 24, verified by execution or line-by-line reasoning), 105 authored exercises across 26 CLOs (execution verification pending), scripts/verify-exercise.mjs (tested: smoke 4 passed, 1 java unverified; negative case exits 1). mingo 7.2.4 has no updateObject export; the verifier uses updateMany from mingo/updater. Pyodide npm setStdin takes { stdin: fn }, not { string }.
