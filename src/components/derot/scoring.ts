@@ -18,22 +18,30 @@ export function clamp(min: number, max: number, value: number): number {
  * Score for the four timed drills whose grading is a single correct/incorrect
  * verdict (predict-output, spot-the-bug, trace, hold-focus): full credit for
  * an instant answer, decaying to a floor of 50 as the time limit is used up.
- * Wrong answers always score 0.
+ * Wrong answers always score 0. Clamped to [50, 100] so a backwards clock
+ * (elapsedMs < 0) can never push the score past 100.
  */
 export function scoreTimedCorrect(correct: boolean, elapsedMs: number, timeLimitS: number): number {
   if (!correct) return 0
   const totalMs = timeLimitS * 1000
   const ratio = totalMs > 0 ? elapsedMs / totalMs : 1
-  return Math.max(50, Math.round(100 * (1 - 0.5 * ratio)))
+  return clamp(50, 100, Math.round(100 * (1 - 0.5 * ratio)))
 }
 
 // ---------------------------------------------------------------------------
 // predict-output: normalized string match
 // ---------------------------------------------------------------------------
 
-/** Trim, collapse runs of whitespace to a single space; a trailing newline is subsumed by the trim. */
+/**
+ * Normalize line by line: trim each line and collapse runs of spaces/tabs
+ * within it, drop trailing empty lines, then rejoin with '\n'. Newlines are
+ * never collapsed into spaces -- a one-line answer must not match a
+ * multi-line expected output (or vice versa).
+ */
 export function normalizeOutput(value: string): string {
-  return value.trim().replace(/\s+/g, ' ')
+  const lines = value.split('\n').map((line) => line.trim().replace(/[ \t]+/g, ' '))
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+  return lines.join('\n')
 }
 
 export function gradePredictOutput(input: string, expectedOutput: string): boolean {
@@ -85,8 +93,8 @@ export interface NBackGrade {
 export function gradeNBack(hits: number, falseAlarms: number, plantedMatches: number): NBackGrade {
   const net = hits - falseAlarms
   if (plantedMatches === 0) {
-    // Nothing was plantable to hit; only false alarms are possible.
-    return { correct: falseAlarms === 0, score: falseAlarms === 0 ? 100 : 0 }
+    // Nothing was plantable to hit; there is nothing to grade as correct.
+    return { correct: false, score: 0 }
   }
   return {
     correct: net >= plantedMatches / 2,

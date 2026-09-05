@@ -23,6 +23,14 @@ export interface NBackProps {
 
 const TOKEN_INTERVAL_MS = 1500
 
+/** True when the space key should be left alone because the student is typing elsewhere (buddy drawer, wellness rail, etc.). */
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
+
 export function NBack({ item, onResult, now = Date.now }: NBackProps) {
   const payload = item.payload as unknown as NBackPayload
   const total = payload.tokens.length
@@ -54,6 +62,15 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
     })
   }, [item.id, item.kind, onResult, plantedMatches, now, elapsed])
 
+  // Held in a ref (the way useCountdown holds onExpire) so the token-advance
+  // effect below does not depend on `finish` -- a parent re-render that hands
+  // in a fresh inline onResult must never clear and reschedule the current
+  // token's in-flight 1500ms timer.
+  const finishRef = useRef(finish)
+  useEffect(() => {
+    finishRef.current = finish
+  })
+
   const respond = useCallback(() => {
     if (submittedRef.current || respondedRef.current || index >= total) return
     respondedRef.current = true
@@ -66,22 +83,23 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
   useEffect(() => {
     if (submitted) return
     if (index >= total) {
-      finish()
+      finishRef.current()
       return
     }
     respondedRef.current = false
     const id = setTimeout(() => setIndex((i) => i + 1), TOKEN_INTERVAL_MS)
     return () => clearTimeout(id)
-  }, [index, total, submitted, finish])
+  }, [index, total, submitted])
 
-  // Space bar doubles as the Match button.
+  // Space bar doubles as the Match button, but only when focus is not in a
+  // text field elsewhere on the page (e.g. the buddy drawer, wellness rail).
   useEffect(() => {
     if (submitted) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === 'Space' || event.key === ' ') {
-        event.preventDefault()
-        respond()
-      }
+      if (event.code !== 'Space' && event.key !== ' ') return
+      if (isTextEntryTarget(event.target)) return
+      event.preventDefault()
+      respond()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)

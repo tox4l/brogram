@@ -1,7 +1,20 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import type { DrillItem } from '@/lib/contracts'
 import { HoldFocus } from './HoldFocus'
+
+interface HoldFocusSeedItem {
+  id: string
+  payload: { passage: string; question: string; options: string[]; answerIndex: number }
+}
+
+function longestSeedPassageItem(): HoldFocusSeedItem {
+  const seed = JSON.parse(readFileSync('seed/drills/hold-focus.json', 'utf8')) as { items: HoldFocusSeedItem[] }
+  return seed.items.reduce((longest, current) =>
+    current.payload.passage.length > longest.payload.passage.length ? current : longest
+  )
+}
 
 const item: DrillItem = {
   id: 'hold-focus-001',
@@ -27,12 +40,31 @@ describe('HoldFocus', () => {
     vi.useRealTimers()
   })
 
-  it('renders the passage in a fixed-height, non-scrolling container and four options', () => {
+  it('renders the question and four options', () => {
     render(<HoldFocus item={item} onResult={() => {}} />)
     expect(screen.getByText(item.payload.question as string)).toBeTruthy()
     for (const option of item.payload.options as string[]) {
       expect(screen.getByRole('button', { name: option })).toBeTruthy()
     }
+  })
+
+  it('renders the full longest seed passage with no fixed height, only overflow hidden for the void guard', () => {
+    const seedItem = longestSeedPassageItem()
+    const longItem: DrillItem = {
+      id: seedItem.id,
+      kind: 'hold-focus',
+      difficulty: 1,
+      timeLimitS: 180,
+      payload: seedItem.payload,
+    }
+
+    render(<HoldFocus item={longItem} onResult={() => {}} />)
+
+    const passageEl = screen.getByLabelText(/reading passage/i)
+    expect(passageEl.textContent).toBe(seedItem.payload.passage)
+    expect(passageEl.style.height).toBe('')
+    expect(passageEl.style.maxHeight).toBe('')
+    expect(passageEl.style.overflow).toBe('hidden')
   })
 
   it('is correct when the chosen option matches answerIndex', () => {

@@ -116,6 +116,63 @@ describe('NBack', () => {
     expect(onResult.mock.calls[0][0].score).toBe(0)
   })
 
+  it('ignores the space key when focus is in a text field elsewhere on the page, without counting a press', () => {
+    const onResult = vi.fn()
+    render(
+      <>
+        <NBack item={item} onResult={onResult} now={() => 0} />
+        <textarea aria-label="buddy message" />
+      </>
+    )
+
+    const textarea = screen.getByLabelText('buddy message')
+    textarea.focus()
+
+    // token 2 ('b') is the sole planted match; a press here would be a hit if wrongly counted.
+    advance(1500) // token 1
+    advance(1500) // token 2
+    const event = fireEvent.keyDown(textarea, { key: ' ', code: 'Space' })
+    expect(event).toBe(true) // fireEvent returns false only when preventDefault was called
+    advance(1500) // token 3
+    advance(1500) // finish
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+    // no hit and no false alarm counted at all -> net 0, correct false, score 0
+    expect(onResult.mock.calls[0][0]).toMatchObject({ correct: false, score: 0 })
+  })
+
+  it('keeps the current token timer running (no restart) and the response lock intact across a re-render with a new inline onResult', () => {
+    const onResultA = vi.fn()
+    const { rerender } = render(<NBack item={item} onResult={onResultA} now={() => 0} />)
+
+    // token 0 'a': press once (a false alarm, since there is no token to look back to yet)
+    fireEvent.click(screen.getByRole('button', { name: /match/i }))
+
+    advance(700) // partway through token 0's 1500ms window
+    expect(screen.getByText('a')).toBeTruthy() // still token 0 - no restart yet
+
+    // Parent re-renders with a brand-new inline onResult identity mid-token.
+    const onResultB = vi.fn()
+    rerender(<NBack item={item} onResult={onResultB} now={() => 0} />)
+
+    // A second press for the same token must still be locked out (not reset by the re-render).
+    fireEvent.click(screen.getByRole('button', { name: /match/i }))
+
+    // Only the remaining 800ms should be needed to reach token 1 - not a fresh 1500ms from the re-render.
+    advance(800)
+    expect(screen.getByText('b')).toBeTruthy()
+
+    advance(1500) // token 1 -> token 2
+    fireEvent.click(screen.getByRole('button', { name: /match/i })) // token 2 'b' matches token 1 'b' -> hit
+    advance(1500) // token 2 -> token 3
+    advance(1500) // token 3 -> finish
+
+    expect(onResultA).not.toHaveBeenCalled()
+    expect(onResultB).toHaveBeenCalledTimes(1)
+    // 1 false alarm (token 0, counted once despite two presses) + 1 hit (token 2) -> net 0 -> incorrect, score 0
+    expect(onResultB.mock.calls[0][0]).toMatchObject({ correct: false, score: 0 })
+  })
+
   it('does not call onResult more than once even if the overall time limit is also reached', () => {
     const onResult = vi.fn()
     let t = 0

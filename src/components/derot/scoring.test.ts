@@ -14,23 +14,36 @@ import {
 } from './scoring'
 
 describe('normalizeOutput', () => {
-  it('trims, collapses whitespace runs, and ignores a trailing newline', () => {
-    expect(normalizeOutput('2\n1\n')).toBe('2 1')
+  it('trims each line and collapses runs of spaces/tabs within it, but never across newlines', () => {
+    expect(normalizeOutput('a  b \n c')).toBe('a b\nc')
     expect(normalizeOutput('  Hello,   Ali!  ')).toBe('Hello, Ali!')
-    expect(normalizeOutput('a\n\n\nb')).toBe('a b')
+  })
+
+  it('drops a trailing newline (trailing empty lines)', () => {
+    expect(normalizeOutput('2\n1\n')).toBe('2\n1')
+    expect(normalizeOutput('a\n\n\n')).toBe('a')
+  })
+
+  it('does not collapse newlines into spaces', () => {
+    expect(normalizeOutput('a\n\n\nb')).toBe('a\n\n\nb')
+    expect(normalizeOutput('1|Ali\n2|Sara')).toBe('1|Ali\n2|Sara')
   })
 })
 
 describe('gradePredictOutput', () => {
-  it('matches after normalizing both sides', () => {
+  it('matches after normalizing both sides, line by line', () => {
     expect(gradePredictOutput('2\n1', '2\n1')).toBe(true)
     expect(gradePredictOutput('2\n1\n', '2\n1')).toBe(true)
-    expect(gradePredictOutput('  2   1  ', '2\n1')).toBe(true)
+    expect(gradePredictOutput('a  b \n c', 'a b\nc')).toBe(true)
   })
 
   it('rejects a different output', () => {
     expect(gradePredictOutput('2\n2', '2\n1')).toBe(false)
     expect(gradePredictOutput('', '2\n1')).toBe(false)
+  })
+
+  it('does not let a one-line answer match a multi-line expected output', () => {
+    expect(gradePredictOutput('1|Ali 2|Sara', '1|Ali\n2|Sara')).toBe(false)
   })
 })
 
@@ -85,6 +98,10 @@ describe('scoreTimedCorrect', () => {
     expect(scoreTimedCorrect(true, 30000, 30)).toBe(50)
     expect(scoreTimedCorrect(true, 60000, 30)).toBe(50)
   })
+
+  it('is clamped to 100 even with a backwards clock (negative elapsed time)', () => {
+    expect(scoreTimedCorrect(true, -5000, 30)).toBe(100)
+  })
 })
 
 describe('countPlantedMatches', () => {
@@ -118,8 +135,8 @@ describe('gradeNBack', () => {
     expect(gradeNBack(10, 0, 4).score).toBe(100)
   })
 
-  it('handles zero planted matches without dividing by zero', () => {
-    expect(gradeNBack(0, 0, 0)).toEqual({ correct: true, score: 100 })
+  it('handles zero planted matches without dividing by zero, and never grades it correct', () => {
+    expect(gradeNBack(0, 0, 0)).toEqual({ correct: false, score: 0 })
     expect(gradeNBack(0, 2, 0)).toEqual({ correct: false, score: 0 })
   })
 })

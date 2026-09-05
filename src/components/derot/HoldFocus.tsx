@@ -21,8 +21,6 @@ export interface HoldFocusProps {
   now?: () => number
 }
 
-const PASSAGE_HEIGHT_PX = 288
-
 export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
   const payload = item.payload as unknown as HoldFocusPayload
 
@@ -101,7 +99,7 @@ export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
   }, [submitted, voidDrill])
 
   return (
-    <Card className="mx-auto w-full max-w-2xl">
+    <Card className="mx-auto w-full max-w-3xl">
       <CardHeader className="gap-3">
         <CardTitle>Hold focus</CardTitle>
         <CardDescription>Read the passage without scrolling, then answer the question. Leaving the page voids the drill.</CardDescription>
@@ -117,7 +115,7 @@ export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
           ref={containerRef}
           aria-label="Reading passage"
           className="rounded-lg bg-muted p-4 text-sm leading-relaxed"
-          style={{ height: PASSAGE_HEIGHT_PX, overflow: 'hidden' }}
+          style={{ overflow: 'hidden' }}
         >
           {payload.passage}
         </div>
