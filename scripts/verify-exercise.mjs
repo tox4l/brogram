@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
+import { normalizeJavaSolution } from './lib/java-normalize.mjs'
 
 const TEST_TIMEOUT_MS = 10_000
 const PACKAGE_IMPORT_RE = {
@@ -292,7 +293,7 @@ async function runJava(exercise) {
         },
         body: JSON.stringify({
           language_id: 62,
-          source_code: `${exercise.fixture}\n${exercise.referenceSolution}`,
+          source_code: `${exercise.fixture}\n${normalizeJavaSolution(exercise.referenceSolution)}`,
           stdin: test.input,
           cpu_time_limit: 10,
           wall_time_limit: 15,
