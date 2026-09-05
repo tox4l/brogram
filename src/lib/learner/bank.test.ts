@@ -180,20 +180,29 @@ interface FakeCall {
   eq?: [string, unknown]
 }
 
+interface FakeBuilder {
+  eq(column: string, value: unknown): FakeBuilder
+  then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown): Promise<unknown>
+}
+
 function fakeClient(result: { data: unknown; error: unknown }) {
   const calls: FakeCall[] = []
+  const builder: FakeBuilder = {
+    eq(column: string, value: unknown) {
+      calls.push({ eq: [column, value] })
+      return builder
+    },
+    then(onFulfilled, onRejected) {
+      return Promise.resolve(result).then(onFulfilled, onRejected)
+    },
+  }
   const client = {
     from(table: string) {
       calls.push({ table })
       return {
         select(columns: string) {
           calls.push({ columns })
-          return {
-            eq(column: string, value: unknown) {
-              calls.push({ eq: [column, value] })
-              return Promise.resolve(result)
-            },
-          }
+          return builder
         },
       }
     },
@@ -209,9 +218,21 @@ describe('fetchBank', () => {
     expect(calls[0].table).toBe('exercises_public')
     expect(calls[2].eq).toEqual(['clo_id', CLO])
     expect(rows).toHaveLength(1)
+    expect(rows[0].difficulty).toBe(4)
     expect(rows[0].id).toBe('ex-1')
     expect(rows[0].cloId).toBe(CLO)
     expect((rows[0] as Record<string, unknown>).referenceSolution).toBeUndefined()
+  })
+
+  it('asks the server for verified rows only, so a failed generated exercise never returns as a candidate', async () => {
+    const { client, calls } = fakeClient({ data: [], error: null })
+    await fetchBank(client, query())
+
+    const filters = calls.map((call) => call.eq).filter(Boolean)
+    expect(filters).toEqual([
+      ['clo_id', CLO],
+      ['verified', true],
+    ])
   })
 
   it('never reads the exercises table', async () => {

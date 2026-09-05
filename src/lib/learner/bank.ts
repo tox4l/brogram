@@ -82,9 +82,16 @@ export function pickFromBank(query: BankQuery, rows: ExercisePublic[]): Exercise
   return null
 }
 
-/** Reads the bank view for one CLO. The widening happens in `pickFromBank`, on the rows this returns. */
+/**
+ * Reads the bank view for one CLO. The widening happens in `pickFromBank`, on the rows this returns.
+ *
+ * `verified` is filtered server-side because it is not part of `ExercisePublic`
+ * (the contract is frozen): an Author-generated row whose reference solution
+ * failed execution stays in the view for its author, and must never come back
+ * as a bank candidate.
+ */
 export async function fetchBank(supabase: SupabaseClient, query: BankQuery): Promise<ExercisePublic[]> {
-  const { data, error } = await supabase.from(BANK_VIEW).select('*').eq('clo_id', query.cloId)
+  const { data, error } = await supabase.from(BANK_VIEW).select('*').eq('clo_id', query.cloId).eq('verified', true)
   if (error) throw new Error(`bank query failed: ${error.message}`)
   return (data ?? []).map((row: Record<string, unknown>) => toExercisePublic(row))
 }

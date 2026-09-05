@@ -138,7 +138,7 @@ describe('compileLearnerState', () => {
       attemptRow({ id: 'a-3', created_at: '2026-03-02T09:00:00+03:00' }),
       attemptRow({ id: 'a-4', created_at: '2026-03-03T12:00:00+03:00' }),
     ]
-    const state = compileLearnerState(profileRow(), [], attempts, [], NO_WELLNESS)
+    const state = compileLearnerState(profileRow(), [], attempts, [], NO_WELLNESS, null, new Date('2026-03-03T21:00:00.000Z'))
 
     expect(state.streak.exerciseDays).toBe(3)
     expect(state.streak.lastExerciseDate).toBe('2026-03-03')
@@ -151,10 +151,46 @@ describe('compileLearnerState', () => {
       attemptRow({ id: 'a-3', created_at: '2026-03-05T10:00:00.000Z' }),
       attemptRow({ id: 'a-4', created_at: '2026-03-06T10:00:00.000Z' }),
     ]
-    const state = compileLearnerState(profileRow(), [], attempts, [], NO_WELLNESS)
+    const state = compileLearnerState(profileRow(), [], attempts, [], NO_WELLNESS, null, new Date('2026-03-06T12:00:00.000Z'))
 
     expect(state.streak.exerciseDays).toBe(2)
     expect(state.streak.lastExerciseDate).toBe('2026-03-06')
+  })
+
+  it('counts a run that ended yesterday and one that ends today', () => {
+    const now = new Date('2026-09-05T09:00:00.000Z')
+    const endingYesterday = [
+      attemptRow({ id: 'a-1', created_at: '2026-09-03T10:00:00.000Z' }),
+      attemptRow({ id: 'a-2', created_at: '2026-09-04T10:00:00.000Z' }),
+    ]
+    const yesterday = compileLearnerState(profileRow(), [], endingYesterday, [], NO_WELLNESS, null, now)
+    expect(yesterday.streak.exerciseDays).toBe(2)
+    expect(yesterday.streak.lastExerciseDate).toBe('2026-09-04')
+
+    const endingToday = [
+      attemptRow({ id: 'a-1', created_at: '2026-09-04T10:00:00.000Z' }),
+      attemptRow({ id: 'a-2', created_at: '2026-09-05T08:00:00.000Z' }),
+    ]
+    const today = compileLearnerState(profileRow(), [], endingToday, [], NO_WELLNESS, null, now)
+    expect(today.streak.exerciseDays).toBe(2)
+    expect(today.streak.lastExerciseDate).toBe('2026-09-05')
+  })
+
+  it('expires a streak whose last day is older than yesterday but keeps the last date', () => {
+    const now = new Date('2026-09-05T09:00:00.000Z')
+    const attempts = [
+      attemptRow({ id: 'a-1', created_at: '2026-09-01T10:00:00.000Z' }),
+      attemptRow({ id: 'a-2', created_at: '2026-09-02T10:00:00.000Z' }),
+    ]
+    const wellness: WellnessRow = {
+      drill_results: [{ drillId: 'd1', kind: 'trace', correct: true, timeMs: 900, score: 10, at: '2026-03-04T20:00:00.000Z' }],
+    }
+    const state = compileLearnerState(profileRow(), [], attempts, [], wellness, null, now)
+
+    expect(state.streak.exerciseDays).toBe(0)
+    expect(state.streak.lastExerciseDate).toBe('2026-09-02')
+    expect(state.streak.derotDays).toBe(0)
+    expect(state.streak.lastDerotDate).toBe('2026-03-04')
   })
 
   it('counts the de-rot streak from drill results and leaves both streaks at zero with no activity', () => {
@@ -164,7 +200,7 @@ describe('compileLearnerState', () => {
         { drillId: 'd2', kind: 'n-back', correct: false, timeMs: 900, score: 0, at: '2026-03-05T20:00:00.000Z' },
       ],
     }
-    const state = compileLearnerState(profileRow(), [], [], [], wellness)
+    const state = compileLearnerState(profileRow(), [], [], [], wellness, null, new Date('2026-03-06T06:00:00.000Z'))
     expect(state.streak.derotDays).toBe(2)
     expect(state.streak.lastDerotDate).toBe('2026-03-05')
 
@@ -172,7 +208,7 @@ describe('compileLearnerState', () => {
     expect(empty.streak).toEqual({ exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null })
   })
 
-  it('scores integrity over the last seven days and escalates the account status', () => {
+  it('scores integrity over the last seven days', () => {
     const events = [
       ...Array.from({ length: 10 }, () => eventRow('blur')),
       ...Array.from({ length: 30 }, () => eventRow('paste-blocked', { created_at: ago(9) })),
@@ -180,20 +216,18 @@ describe('compileLearnerState', () => {
     const state = compileLearnerState(profileRow(), [], [], events, NO_WELLNESS)
 
     expect(state.integrityScore).toBe(10)
-    expect(state.accountStatus).toBe('warned')
   })
 
-  it('restricts on five blocked pastes in one exercise whatever the score', () => {
-    const events = Array.from({ length: 5 }, () => eventRow('paste-blocked', { exercise_id: 'ex-9' }))
-    const state = compileLearnerState(profileRow(), [], [], events, NO_WELLNESS)
+  it('mirrors the account status the server set, so a lifted restriction is not re-imposed', () => {
+    const events = Array.from({ length: 10 }, () => eventRow('paste-blocked', { exercise_id: 'ex-9' }))
+    const lifted = compileLearnerState(profileRow({ account_status: 'warned' }), [], [], events, NO_WELLNESS)
 
-    expect(state.integrityScore).toBe(10)
-    expect(state.accountStatus).toBe('restricted')
-  })
+    expect(lifted.integrityScore).toBe(20)
+    expect(lifted.accountStatus).toBe('warned')
 
-  it('never softens a status the server already set', () => {
-    const state = compileLearnerState(profileRow({ account_status: 'banned' }), [], [], [], NO_WELLNESS)
-    expect(state.accountStatus).toBe('banned')
+    expect(compileLearnerState(profileRow({ account_status: 'banned' }), [], [], [], NO_WELLNESS).accountStatus).toBe('banned')
+    expect(compileLearnerState(profileRow({ account_status: 'restricted' }), [], [], [], NO_WELLNESS).accountStatus).toBe('restricted')
+    expect(compileLearnerState(profileRow({ account_status: null }), [], [], [], NO_WELLNESS).accountStatus).toBe('active')
   })
 
   it('does not mutate the previous document or the rows it was given', () => {
