@@ -1,0 +1,973 @@
+{
+  "exercises": [
+    {
+      "cloId": "DSAI2201-1",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "data-pipeline",
+      "title": "Warm Day Temperature Average",
+      "prompt": "A small weather station logs one temperature reading per day. Each record is a dictionary with keys `day` and `temp` (degrees Fahrenheit).\n\nWrite `average_temp_above(records, threshold)` that returns the mean `temp` (rounded to 1 decimal place) among the days where `temp` is strictly greater than `threshold`. Return `None` when no day qualifies, including when `records` is empty.\n\nExample: `average_temp_above([{\"day\": \"Mon\", \"temp\": 72}, {\"day\": \"Tue\", \"temp\": 65}, {\"day\": \"Wed\", \"temp\": 80}], 70)` returns `76.0`, the average of 72 and 80.",
+      "starterCode": "import pandas as pd\n\ndef average_temp_above(records, threshold):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[{\"day\":\"Mon\",\"temp\":72},{\"day\":\"Tue\",\"temp\":65},{\"day\":\"Wed\",\"temp\":80}],70]",
+          "expected": "76.0",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[{\"day\":\"Mon\",\"temp\":60},{\"day\":\"Tue\",\"temp\":55}],70]",
+          "expected": "null",
+          "hidden": false,
+          "name": "none above threshold"
+        },
+        {
+          "id": "t3",
+          "input": "[[],5]",
+          "expected": "null",
+          "hidden": true,
+          "name": "empty log"
+        },
+        {
+          "id": "t4",
+          "input": "[[{\"day\":\"Mon\",\"temp\":90},{\"day\":\"Tue\",\"temp\":95}],10]",
+          "expected": "92.5",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[{\"day\":\"Mon\",\"temp\":-10},{\"day\":\"Tue\",\"temp\":-5},{\"day\":\"Wed\",\"temp\":0}],-8]",
+          "expected": "-2.5",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[{\"day\":\"Mon\",\"temp\":70}],70]",
+          "expected": "null",
+          "hidden": true,
+          "name": "exact threshold excluded"
+        }
+      ],
+      "referenceSolution": "import pandas as pd\n\ndef average_temp_above(records, threshold):\n    df = pd.DataFrame(records)\n    if df.empty:\n        return None\n    above = df[df[\"temp\"] > threshold]\n    if above.empty:\n        return None\n    return round(float(above[\"temp\"].mean()), 1)\n",
+      "tags": [
+        "pandas",
+        "dataframe",
+        "filtering",
+        "mean"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-1",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "aggregate",
+      "title": "Top Selling Book Genre",
+      "prompt": "A bookstore records every sale as one entry with a `genre` and the `copies` sold in that sale. The same genre can appear across many entries.\n\nWrite `top_selling_genre(sales)` that returns the genre with the highest total copies sold across all entries. When two or more genres tie for the highest total, return whichever name comes first alphabetically. Return `None` when `sales` is empty.\n\nExample: `top_selling_genre([{\"genre\": \"Fantasy\", \"copies\": 120}, {\"genre\": \"Mystery\", \"copies\": 80}, {\"genre\": \"Fantasy\", \"copies\": 50}])` returns `\"Fantasy\"`, since the combined Fantasy total of 170 beats the Mystery total of 80.",
+      "starterCode": "import pandas as pd\n\ndef top_selling_genre(sales):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[{\"genre\":\"Fantasy\",\"copies\":120},{\"genre\":\"Mystery\",\"copies\":80},{\"genre\":\"Fantasy\",\"copies\":50}]]",
+          "expected": "\"Fantasy\"",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[{\"genre\":\"Romance\",\"copies\":40},{\"genre\":\"Sci-Fi\",\"copies\":40}]]",
+          "expected": "\"Romance\"",
+          "hidden": false,
+          "name": "tie broken alphabetically"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "null",
+          "hidden": true,
+          "name": "no sales"
+        },
+        {
+          "id": "t4",
+          "input": "[[{\"genre\":\"Horror\",\"copies\":15}]]",
+          "expected": "\"Horror\"",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[{\"genre\":\"Drama\",\"copies\":10},{\"genre\":\"Drama\",\"copies\":10},{\"genre\":\"Comedy\",\"copies\":15}]]",
+          "expected": "\"Drama\"",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[{\"genre\":\"Zeta\",\"copies\":5},{\"genre\":\"Alpha\",\"copies\":5},{\"genre\":\"Beta\",\"copies\":5}]]",
+          "expected": "\"Alpha\"",
+          "hidden": true,
+          "name": "three-way tie"
+        }
+      ],
+      "referenceSolution": "import pandas as pd\n\ndef top_selling_genre(sales):\n    if not sales:\n        return None\n    df = pd.DataFrame(sales)\n    totals = df.groupby(\"genre\")[\"copies\"].sum()\n    best = totals.max()\n    return sorted(totals[totals == best].index)[0]\n",
+      "tags": [
+        "pandas",
+        "groupby",
+        "tiebreak",
+        "sales"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-1",
+      "language": "python",
+      "kind": "predict-output",
+      "difficulty": 4,
+      "pattern": "predict-output",
+      "title": "Step Tracker Statistics",
+      "prompt": "A fitness app records how many steps a walker took each day. One reading is missing because the tracker lost signal that day, so that entry is stored as `None`.\n\nExample: on a shorter log, `pd.Series([10, 20, None]).dtype` prints `float64` and `pd.Series([10, 20, None]).count()` prints `2`, because a missing value forces pandas to use decimals and is skipped when counting.\n\nRead the program below and work out exactly what it prints, without running it.\n\n```python\nimport pandas as pd\n\nsteps = pd.Series([4000, 6500, 3200, None, 7800])\nprint(steps.dtype)\nprint(int(steps.count()))\nprint(round(steps.mean(), 1))\nprint(round(steps.std(), 2))\n```\n\nAnswer with exactly four lines, in order: the dtype, then the count, then the mean, then the standard deviation, matching what the program prints.",
+      "starterCode": "# Nothing to write here.\n# Read the program in the prompt and predict its output.\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "float64\n4\n5375.0\n2142.23",
+          "hidden": false,
+          "name": "predicted output"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "float64\n4\n5375.0\n2142.23",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "float64\n4\n5375.0\n2142.23",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "float64\n4\n5375.0\n2142.23",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "float64\n4\n5375.0\n2142.23",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "float64\n4\n5375.0\n2142.23",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "import pandas as pd\n\nsteps = pd.Series([4000, 6500, 3200, None, 7800])\nprint(steps.dtype)\nprint(int(steps.count()))\nprint(round(steps.mean(), 1))\nprint(round(steps.std(), 2))\n",
+      "tags": [
+        "pandas",
+        "dtypes",
+        "std-dev",
+        "missing-data"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "data-pipeline",
+      "title": "Sunlight and Growth",
+      "prompt": "A greenhouse team records, for several plants, the hours of sunlight each plant received and the height it grew to (in centimetres). They want one number that shows whether more sunlight lines up with more growth.\n\nWrite `correlation_score(sunlight_hours, plant_heights)` that returns the Pearson correlation coefficient between the two equal-length lists, rounded to 3 decimal places. When one of the lists has no variation at all (every value identical, including when there is only a single plant), the coefficient is undefined, so return `None` instead of a number.\n\nExample: `correlation_score([1, 2, 3, 4], [10, 20, 30, 40])` returns `1.0`. `correlation_score([1, 2, 3, 4], [40, 30, 20, 10])` returns `-1.0`.",
+      "starterCode": "import pandas as pd\n\ndef correlation_score(sunlight_hours, plant_heights):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[1,2,3,4],[10,20,30,40]]",
+          "expected": "1.0",
+          "hidden": false,
+          "name": "perfect positive"
+        },
+        {
+          "id": "t2",
+          "input": "[[1,2,3,4],[40,30,20,10]]",
+          "expected": "-1.0",
+          "hidden": false,
+          "name": "perfect negative"
+        },
+        {
+          "id": "t3",
+          "input": "[[2,4,6,8,10],[3,7,5,9,8]]",
+          "expected": "0.788",
+          "hidden": true,
+          "name": "moderate positive"
+        },
+        {
+          "id": "t4",
+          "input": "[[5,5,5,5],[1,2,3,4]]",
+          "expected": "null",
+          "hidden": true,
+          "name": "boundary: constant sunlight"
+        },
+        {
+          "id": "t5",
+          "input": "[[1,3,2,5,4,6],[2,8,5,13,10,15]]",
+          "expected": "0.998",
+          "hidden": true,
+          "name": "near-perfect, six days"
+        },
+        {
+          "id": "t6",
+          "input": "[[7],[9]]",
+          "expected": "null",
+          "hidden": true,
+          "name": "boundary: single plant"
+        },
+        {
+          "id": "t7",
+          "input": "[[-2,-1,0,1,2],[10,8,6,4,2]]",
+          "expected": "-1.0",
+          "hidden": true,
+          "name": "negative-valued readings"
+        }
+      ],
+      "referenceSolution": "import pandas as pd\nimport math\n\ndef correlation_score(sunlight_hours, plant_heights):\n    df = pd.DataFrame({'sun': sunlight_hours, 'height': plant_heights})\n    corr = df['sun'].corr(df['height'])\n    if corr is None or (isinstance(corr, float) and math.isnan(corr)):\n        return None\n    return round(float(corr), 3)\n",
+      "tags": [
+        "pandas",
+        "correlation",
+        "statistics"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "aggregate",
+      "title": "Average Watch Time",
+      "prompt": "A streaming app logs each viewing session as the device used and the number of minutes watched.\n\nWrite `average_watch_time(sessions)`, where `sessions` is a list of `[device, minutes]` pairs. Return a list of `[device, average_minutes]` pairs, one for each distinct device, with the average rounded to 1 decimal place. Sort the result alphabetically by device name. If `sessions` is empty, return an empty list.\n\nExample: `average_watch_time([[\"mobile\", 30], [\"tv\", 90], [\"mobile\", 45], [\"laptop\", 60]])` returns `[[\"laptop\", 60.0], [\"mobile\", 37.5], [\"tv\", 90.0]]`.",
+      "starterCode": "import pandas as pd\n\ndef average_watch_time(sessions):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"mobile\",30],[\"tv\",90],[\"mobile\",45],[\"laptop\",60]]]",
+          "expected": "[[\"laptop\", 60.0], [\"mobile\", 37.5], [\"tv\", 90.0]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"tablet\",20]]]",
+          "expected": "[[\"tablet\", 20.0]]",
+          "hidden": false,
+          "name": "single session"
+        },
+        {
+          "id": "t3",
+          "input": "[[[\"tv\",100],[\"mobile\",10],[\"tv\",50],[\"mobile\",20],[\"tv\",30]]]",
+          "expected": "[[\"mobile\", 15.0], [\"tv\", 60.0]]",
+          "hidden": true,
+          "name": "interleaved duplicates"
+        },
+        {
+          "id": "t4",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "boundary: no sessions"
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"mobile\",10.333],[\"mobile\",10.334],[\"desktop\",5]]]",
+          "expected": "[[\"desktop\", 5.0], [\"mobile\", 10.3]]",
+          "hidden": true,
+          "name": "rounding to one decimal"
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"console\",20],[\"console\",20],[\"console\",20]]]",
+          "expected": "[[\"console\", 20.0]]",
+          "hidden": true,
+          "name": "repeated identical values"
+        }
+      ],
+      "referenceSolution": "import pandas as pd\n\ndef average_watch_time(sessions):\n    if not sessions:\n        return []\n    df = pd.DataFrame(sessions, columns=['device', 'minutes'])\n    grouped = df.groupby('device')['minutes'].mean().round(1)\n    grouped = grouped.sort_index()\n    return [[device, float(avg)] for device, avg in grouped.items()]\n",
+      "tags": [
+        "pandas",
+        "groupby",
+        "averages"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "plot-spec",
+      "title": "Pick the Right Chart",
+      "prompt": "A small dashboard tool has to pick a chart before it can draw one. It receives one column of values, and sometimes a second column measured on the same rows.\n\nWrite `chart_spec(x, y=None)`:\n- If `x` is empty, return `{\"type\": \"empty\"}`.\n- With only `x`, and its values are numbers: return `{\"type\": \"histogram\", \"bins\": b, \"min\": ..., \"max\": ...}`, where `b` is the ceiling of the square root of the count of values (at least 1).\n- With only `x`, and its values are text: return `{\"type\": \"bar\", \"categories\": [...], \"counts\": [...]}`, categories sorted alphabetically with counts in that same order.\n- With both `x` and `y` holding numbers: return `{\"type\": \"scatter\", \"n\": len(x), \"x_range\": [min, max], \"y_range\": [min, max]}`.\n- With both given and `x` holding text: return `{\"type\": \"bar\", \"categories\": [...], \"means\": [...]}`, the mean of the matching `y` values per category, categories sorted and means rounded to 1 decimal.\n\nExample: `chart_spec([4, 8, 15, 16, 23, 42])` returns `{\"type\": \"histogram\", \"bins\": 3, \"min\": 4, \"max\": 42}`. `chart_spec([\"cat\", \"dog\", \"cat\", \"bird\"])` returns `{\"type\": \"bar\", \"categories\": [\"bird\", \"cat\", \"dog\"], \"counts\": [1, 2, 1]}`.",
+      "starterCode": "import math\n\ndef chart_spec(x, y=None):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[4,8,15,16,23,42]]",
+          "expected": "{\"type\": \"histogram\", \"bins\": 3, \"min\": 4, \"max\": 42}",
+          "hidden": false,
+          "name": "numeric column"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"cat\",\"dog\",\"cat\",\"bird\"]]",
+          "expected": "{\"type\": \"bar\", \"categories\": [\"bird\", \"cat\", \"dog\"], \"counts\": [1, 2, 1]}",
+          "hidden": false,
+          "name": "text column"
+        },
+        {
+          "id": "t3",
+          "input": "[[1,2,3],[4,5,6]]",
+          "expected": "{\"type\": \"scatter\", \"n\": 3, \"x_range\": [1, 3], \"y_range\": [4, 6]}",
+          "hidden": true,
+          "name": "two numeric columns"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"A\",\"B\",\"A\",\"B\",\"A\"],[10,20,30,40,50]]",
+          "expected": "{\"type\": \"bar\", \"categories\": [\"A\", \"B\"], \"means\": [30.0, 30.0]}",
+          "hidden": true,
+          "name": "text plus numeric"
+        },
+        {
+          "id": "t5",
+          "input": "[[5,3,9,1,7,2,8,4,6,10]]",
+          "expected": "{\"type\": \"histogram\", \"bins\": 4, \"min\": 1, \"max\": 10}",
+          "hidden": true,
+          "name": "larger numeric column"
+        },
+        {
+          "id": "t6",
+          "input": "[[]]",
+          "expected": "{\"type\": \"empty\"}",
+          "hidden": true,
+          "name": "boundary: no rows"
+        }
+      ],
+      "referenceSolution": "import math\n\ndef chart_spec(x, y=None):\n    if len(x) == 0:\n        return {\"type\": \"empty\"}\n\n    def is_numeric(seq):\n        return all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in seq)\n\n    if y is None:\n        if is_numeric(x):\n            n = len(x)\n            bins = max(1, math.ceil(math.sqrt(n)))\n            return {\"type\": \"histogram\", \"bins\": bins, \"min\": min(x), \"max\": max(x)}\n        categories = sorted(set(x))\n        counts = [x.count(c) for c in categories]\n        return {\"type\": \"bar\", \"categories\": categories, \"counts\": counts}\n\n    if is_numeric(x) and is_numeric(y):\n        return {\"type\": \"scatter\", \"n\": len(x), \"x_range\": [min(x), max(x)], \"y_range\": [min(y), max(y)]}\n\n    categories = sorted(set(x))\n    means = []\n    for c in categories:\n        vals = [y[i] for i in range(len(x)) if x[i] == c]\n        means.append(round(sum(vals) / len(vals), 1))\n    return {\"type\": \"bar\", \"categories\": categories, \"means\": means}\n",
+      "tags": [
+        "charts",
+        "conditionals",
+        "visualization"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "guard",
+      "title": "Clean the Water Meter Log",
+      "prompt": "A smart water meter logs one number per day for a household's liter usage, but the sensor glitches often. Some days the log holds a missing reading, an error code, or a wildly wrong number instead of real usage.\n\nWrite `clean_meter_readings(readings)` that returns a new list containing only the trustworthy entries, in their original order.\n\nA reading is trustworthy when it is a whole number or decimal number of liters — not text, not missing, and not a stray `True`/`False` — **and** it falls between 50 and 2000 liters inclusive; anything outside that range is a misread, not real usage. Round each kept value to 1 decimal place.\n\nExample: `clean_meter_readings([120, None, \"ERR\", 340.5, 5000, -10, 875])` returns `[120.0, 340.5, 875.0]`. `clean_meter_readings([None, \"x\", True])` returns `[]`.",
+      "starterCode": "def clean_meter_readings(readings):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[120, null, \"ERR\", 340.5, 5000, -10, 875]]",
+          "expected": "[120.0, 340.5, 875.0]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[null, \"x\", true]]",
+          "expected": "[]",
+          "hidden": false,
+          "name": "all invalid"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[50, 2000]]",
+          "expected": "[50.0, 2000.0]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[49.9, 2000.1]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[true, false, 100]]",
+          "expected": "[100.0]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def clean_meter_readings(readings):\n    valid = []\n    for r in readings:\n        if isinstance(r, bool):\n            continue\n        if not isinstance(r, (int, float)):\n            continue\n        val = float(r)\n        if val < 50 or val > 2000:\n            continue\n        valid.append(round(val, 1))\n    return valid\n",
+      "tags": [
+        "validation",
+        "outliers",
+        "missing-values",
+        "types"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "boundary",
+      "title": "Undo the Vending Machine Bounces",
+      "prompt": "The vending machine in a break room sometimes double-registers a single tap, logging the exact same purchase twice in a row because of a flaky coin sensor. Buying the same snack again later, as a genuinely separate purchase, is completely normal and must be left alone.\n\nWrite `remove_bounce_taps(taps)` where `taps` is a list of `[item, price]` pairs in the order they were logged. Return a new list with a purchase collapsed into a single entry whenever it is immediately followed by another entry with the identical item name and price. Keep everything else exactly as logged, including a repeat of the same item that is not directly adjacent to its twin, and preserve the original order.\n\nExample: `remove_bounce_taps([[\"cola\", 1.5], [\"cola\", 1.5], [\"chips\", 2.0], [\"cola\", 1.5]])` returns `[[\"cola\", 1.5], [\"chips\", 2.0], [\"cola\", 1.5]]` — the first two colas were one bounce, but the last cola is a separate purchase.",
+      "starterCode": "def remove_bounce_taps(taps):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"cola\", 1.5], [\"cola\", 1.5], [\"chips\", 2.0], [\"cola\", 1.5]]]",
+          "expected": "[[\"cola\", 1.5], [\"chips\", 2.0], [\"cola\", 1.5]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": false,
+          "name": "empty log"
+        },
+        {
+          "id": "t3",
+          "input": "[[[\"water\", 1.0]]]",
+          "expected": "[[\"water\", 1.0]]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"chips\", 2.0], [\"chips\", 2.0], [\"chips\", 2.0], [\"chips\", 2.0]]]",
+          "expected": "[[\"chips\", 2.0]]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"soda\", 1.25], [\"soda\", 1.25], [\"gum\", 0.75]]]",
+          "expected": "[[\"soda\", 1.25], [\"gum\", 0.75]]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"tea\", 1.0], [\"tea\", 1.25]]]",
+          "expected": "[[\"tea\", 1.0], [\"tea\", 1.25]]",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[[[\"gum\", 0.75], [\"soda\", 1.25], [\"soda\", 1.25]]]",
+          "expected": "[[\"gum\", 0.75], [\"soda\", 1.25]]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def remove_bounce_taps(taps):\n    cleaned = []\n    for tap in taps:\n        item, price = tap[0], float(tap[1])\n        if cleaned and cleaned[-1][0] == item and cleaned[-1][1] == price:\n            continue\n        cleaned.append([item, price])\n    return cleaned\n",
+      "tags": [
+        "lists",
+        "duplicates",
+        "edge-cases",
+        "iteration"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "transform",
+      "title": "Label Product Profit Margins",
+      "prompt": "A small online shop tracks what each product costs to make and what it sells for. The owner wants a quick label for how healthy each product's profit is.\n\nWrite `label_margins(products)` where `products` is a list of `[name, cost, price]` entries (numbers in the same currency). For each product, compute the profit margin as a percentage of price, `(price - cost) / price * 100`, rounded to 1 decimal place, then attach a label: `\"low\"` when the margin is under 20, `\"medium\"` from 20 up to (but not including) 50, and `\"high\"` from 50 and above. Return a new list of `[name, margin_percent, label]` entries in the original order.\n\nExample: `label_margins([[\"Notebook\", 9, 10], [\"Backpack\", 60, 80], [\"Headphones\", 20, 100]])` returns `[[\"Notebook\", 10.0, \"low\"], [\"Backpack\", 25.0, \"medium\"], [\"Headphones\", 80.0, \"high\"]]`. A margin of exactly 20 counts as `\"medium\"`, and exactly 50 counts as `\"high\"`.",
+      "starterCode": "def label_margins(products):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"Notebook\", 9, 10], [\"Backpack\", 60, 80], [\"Headphones\", 20, 100]]]",
+          "expected": "[[\"Notebook\", 10.0, \"low\"], [\"Backpack\", 25.0, \"medium\"], [\"Headphones\", 80.0, \"high\"]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"Chair\", 80, 100]]]",
+          "expected": "[[\"Chair\", 20.0, \"medium\"]]",
+          "hidden": false,
+          "name": "boundary at 20"
+        },
+        {
+          "id": "t3",
+          "input": "[[[\"Desk\", 50, 100]]]",
+          "expected": "[[\"Desk\", 50.0, \"high\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"Pen\", 7, 30]]]",
+          "expected": "[[\"Pen\", 76.7, \"high\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"Bulk\", 95, 100]]]",
+          "expected": "[[\"Bulk\", 5.0, \"low\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[[[\"A\", 50, 100], [\"B\", 10, 100]]]",
+          "expected": "[[\"A\", 50.0, \"high\"], [\"B\", 90.0, \"high\"]]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def label_margins(products):\n    out = []\n    for name, cost, price in products:\n        pct = round((price - cost) / price * 100, 1)\n        if pct < 20:\n            label = \"low\"\n        elif pct < 50:\n            label = \"medium\"\n        else:\n            label = \"high\"\n        out.append([name, pct, label])\n    return out\n",
+      "tags": [
+        "feature-engineering",
+        "percentages",
+        "thresholds",
+        "e-commerce"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "data-pipeline",
+      "title": "Untangle the Bike-Share Ride Log",
+      "prompt": "A city bike-share program logs every ride as rider id, minutes ridden, and kilometers covered, but the tracking app on the bikes is unreliable. Some rides get logged twice with identical numbers, some units drop out and leave a blank or text value, and a few rides show impossible durations or distances from a stuck sensor.\n\nWrite `clean_ride_log(rides)` where `rides` is a list of `[rider_id, minutes, distance_km]` entries. First remove any entry that is an exact repeat of an earlier one (same rider, same minutes, same distance) — riding the same route again later with different numbers is not a repeat. Then drop any remaining entry where minutes or distance is missing, is not a plain number, or is out of a realistic range: minutes from 1 to 180, distance above 0 up to 50 kilometers. For every entry that survives both checks, compute its speed in kilometers per hour, `distance_km / (minutes / 60)`, rounded to 1 decimal place, and return a list of `[rider_id, speed_kmh]` entries in the original order.\n\nExample: `clean_ride_log([[\"ann\", 30, 5], [\"ben\", 15, 5], [\"ann\", 30, 5]])` returns `[[\"ann\", 10.0], [\"ben\", 20.0]]` — the second `ann` row is dropped as an exact repeat.",
+      "starterCode": "def clean_ride_log(rides):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"ann\", 30, 5], [\"ben\", 15, 5], [\"ann\", 30, 5]]]",
+          "expected": "[[\"ann\", 10.0], [\"ben\", 20.0]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"cara\", 200, 5], [\"drew\", 30, -1], [\"eli\", 30, 10]]]",
+          "expected": "[[\"eli\", 20.0]]",
+          "hidden": false,
+          "name": "outliers dropped"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"fay\", 30, 5], [\"fay\", 45, 10]]]",
+          "expected": "[[\"fay\", 10.0], [\"fay\", 13.3]]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"gus\", true, 5], [\"gus\", 30, false]]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"hana\", 1, 1], [\"ivan\", 180, 50]]]",
+          "expected": "[[\"hana\", 60.0], [\"ivan\", 16.7]]",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[[[\"jon\", null, 5], [\"kya\", \"30\", 5], [\"liu\", 30, null]]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t8",
+          "input": "[[[\"mo\", 20, 4], [\"mo\", 20, 4], [\"nia\", 40, 8], [\"omar\", 400, 9], [\"omar\", 40, 0], [\"priya\", null, 6], [\"quinn\", 60, 50], [\"quinn\", 60, 50.5], [\"ravi\", true, 5], [\"sam\", 90, 22.5]]]",
+          "expected": "[[\"mo\", 12.0], [\"nia\", 12.0], [\"quinn\", 50.0], [\"sam\", 15.0]]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def clean_ride_log(rides):\n    seen = set()\n    deduped = []\n    for r in rides:\n        rider_id, minutes, distance_km = r[0], r[1], r[2]\n        key = (rider_id, minutes, distance_km)\n        if key in seen:\n            continue\n        seen.add(key)\n        deduped.append((rider_id, minutes, distance_km))\n\n    result = []\n    for rider_id, minutes, distance_km in deduped:\n        if isinstance(minutes, bool) or not isinstance(minutes, (int, float)):\n            continue\n        if isinstance(distance_km, bool) or not isinstance(distance_km, (int, float)):\n            continue\n        if minutes < 1 or minutes > 180:\n            continue\n        if distance_km <= 0 or distance_km > 50:\n            continue\n        speed = round(distance_km / (minutes / 60), 1)\n        result.append([rider_id, speed])\n    return result\n",
+      "tags": [
+        "data-cleaning",
+        "duplicates",
+        "outliers",
+        "feature-engineering"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-4",
+      "language": "python",
+      "kind": "trace",
+      "difficulty": 2,
+      "pattern": "spec-to-steps",
+      "title": "Observatory Learning Checklist",
+      "prompt": "An observatory's software team turned their planning notes into an ordered checklist before writing any code. The function below runs that checklist top to bottom to label a new project.\n\n```python\ndef pick_approach(has_reward, all_labeled, some_labeled):\n    if has_reward:\n        approach = \"reinforcement\"\n    elif all_labeled:\n        approach = \"supervised\"\n    elif some_labeled:\n        approach = \"semi-supervised\"\n    else:\n        approach = \"unsupervised\"\n    return approach\n```\n\nExample: `pick_approach(False, True, False)` checks reward first (no), then `all_labeled` (yes), and stops there, so `approach` ends as `\"supervised\"`.\n\nA new project sorts telescope images by galaxy shape. No reward signal is used, and not a single image has been reviewed or labeled yet by an astronomer.\n\nTrace the checklist for this project and type the final value of `approach`, exactly as the function would set it (one word, such as `unsupervised`).",
+      "starterCode": "def pick_approach(has_reward, all_labeled, some_labeled):\n    if has_reward:\n        approach = \"reinforcement\"\n    elif all_labeled:\n        approach = \"supervised\"\n    elif some_labeled:\n        approach = \"semi-supervised\"\n    else:\n        approach = \"unsupervised\"\n    return approach\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "unsupervised",
+          "hidden": false,
+          "name": "checklist result"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "unsupervised",
+          "hidden": false,
+          "name": "checklist result repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "unsupervised",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "unsupervised",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "unsupervised",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "unsupervised",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def pick_approach(has_reward, all_labeled, some_labeled):\n    if has_reward:\n        approach = \"reinforcement\"\n    elif all_labeled:\n        approach = \"supervised\"\n    elif some_labeled:\n        approach = \"semi-supervised\"\n    else:\n        approach = \"unsupervised\"\n    return approach\n\n\nprint(pick_approach(False, False, False))\n",
+      "tags": [
+        "machine-learning",
+        "decision-logic",
+        "tracing"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-4",
+      "language": "python",
+      "kind": "predict-output",
+      "difficulty": 3,
+      "pattern": "predict-output",
+      "title": "Camera Trap Approach Check",
+      "prompt": "A wildlife-monitoring project sorts camera-trap photos and needs to know which learning approach fits its data before any training starts.\n\n```python\ndef suggest_approach(labeled_count, total_count, has_reward_signal):\n    if has_reward_signal:\n        print(\"reinforcement\")\n    elif labeled_count == 0:\n        print(\"unsupervised\")\n    elif labeled_count == total_count:\n        print(\"supervised\")\n    else:\n        print(\"semi-supervised\")\n```\n\nExample: `suggest_approach(500, 500, False)` has every photo already tagged, so `labeled_count == total_count` and it prints `supervised`.\n\nThe camera traps collected 4000 photos in total. Rangers have manually confirmed the species in only 250 of them so far, and the training setup gives the model no reward signal.\n\nWhat does `suggest_approach(250, 4000, False)` print? Answer with just the single word it prints.",
+      "starterCode": "def suggest_approach(labeled_count, total_count, has_reward_signal):\n    if has_reward_signal:\n        print(\"reinforcement\")\n    elif labeled_count == 0:\n        print(\"unsupervised\")\n    elif labeled_count == total_count:\n        print(\"supervised\")\n    else:\n        print(\"semi-supervised\")\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": false,
+          "name": "printed word"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": false,
+          "name": "printed word repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "",
+          "expected": "semi-supervised",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def suggest_approach(labeled_count, total_count, has_reward_signal):\n    if has_reward_signal:\n        print(\"reinforcement\")\n    elif labeled_count == 0:\n        print(\"unsupervised\")\n    elif labeled_count == total_count:\n        print(\"supervised\")\n    else:\n        print(\"semi-supervised\")\n\n\nsuggest_approach(250, 4000, False)\n",
+      "tags": [
+        "machine-learning",
+        "semi-supervised",
+        "reasoning"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-4",
+      "language": "python",
+      "kind": "spot-the-bug",
+      "difficulty": 4,
+      "pattern": "spot-the-bug",
+      "title": "Buggy Maze Bot Classifier",
+      "prompt": "A robotics lab trains a maze-solving bot and logs every run for later review. Someone wrote this helper to label each batch of runs, but it has one bug that mislabels a common case.\n\n```python\ndef label_approach(has_reward, labeled_count, total_count):  # line 1\n    if has_reward:  # line 2\n        return \"reinforcement\"  # line 3\n    if labeled_count == 0:  # line 4\n        return \"unsupervised\"  # line 5\n    if labeled_count <= total_count:  # line 6\n        return \"supervised\"  # line 7\n    return \"semi-supervised\"  # line 8\n```\n\nA batch of 300 runs has no reward signal recorded, since this batch is being reused for a labeling study. Reviewers have confirmed the outcome for 180 of the 300 runs so far; the other 120 are still waiting on review. Calling `label_approach(False, 180, 300)` returns `\"supervised\"`, even though only part of the batch has actually been reviewed.\n\nWhich line number causes this mistake? Reply with just the number, for example `3`.",
+      "starterCode": "def label_approach(has_reward, labeled_count, total_count):  # line 1\n    if has_reward:  # line 2\n        return \"reinforcement\"  # line 3\n    if labeled_count == 0:  # line 4\n        return \"unsupervised\"  # line 5\n    if labeled_count <= total_count:  # line 6\n        return \"supervised\"  # line 7\n    return \"semi-supervised\"  # line 8\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "6",
+          "hidden": false,
+          "name": "buggy line"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "6",
+          "hidden": false,
+          "name": "buggy line repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "6",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "6",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "6",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "6",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def label_approach(has_reward, labeled_count, total_count):\n    if has_reward:\n        return \"reinforcement\"\n    if labeled_count == 0:\n        return \"unsupervised\"\n    if labeled_count == total_count:\n        return \"supervised\"\n    return \"semi-supervised\"\n\n\n# Bug was on line 6 of the original: \"labeled_count <= total_count\" is always\n# true once labeled_count > 0, so it always returned \"supervised\" and the\n# semi-supervised branch on line 8 could never run. Fixed here using \"==\".\nprint(label_approach(False, 180, 300))  # semi-supervised\n",
+      "tags": [
+        "machine-learning",
+        "debugging",
+        "classification"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-5",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "data-pipeline",
+      "title": "Ready the churn features",
+      "prompt": "A gym app is getting ready to train a churn model. Each member record has `visits` (visits logged last month, or `null` if never recorded), `device` (`ios` or `android`), and `renewed` (`yes` or `no`).\n\nWrite `prepare_features(records)` that returns a dict with two keys: `\"X\"`, a list of `[visits, device_ios]` pairs where `device_ios` is `1` when `device` is `ios` and `0` otherwise, and `\"y\"`, a list of `1` for a `renewed` value of `yes` and `0` for `no`. Drop any record whose `visits` is `null` before building the lists, and keep the remaining records in their original order.\n\nExample: `prepare_features([{\"visits\": 5, \"device\": \"ios\", \"renewed\": \"yes\"}, {\"visits\": 2, \"device\": \"android\", \"renewed\": \"no\"}])` returns `{\"X\": [[5, 1], [2, 0]], \"y\": [1, 0]}`.",
+      "starterCode": "import pandas as pd\n\n\ndef prepare_features(records):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[{\"visits\":5,\"device\":\"ios\",\"renewed\":\"yes\"},{\"visits\":2,\"device\":\"android\",\"renewed\":\"no\"}]]",
+          "expected": "{\"X\": [[5, 1], [2, 0]], \"y\": [1, 0]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[{\"visits\":3,\"device\":\"android\",\"renewed\":\"yes\"},{\"visits\":null,\"device\":\"ios\",\"renewed\":\"no\"},{\"visits\":0,\"device\":\"ios\",\"renewed\":\"no\"}]]",
+          "expected": "{\"X\": [[3, 0], [0, 1]], \"y\": [1, 0]}",
+          "hidden": false,
+          "name": "drops missing visits, zero kept"
+        },
+        {
+          "id": "t3",
+          "input": "[[{\"visits\":10,\"device\":\"ios\",\"renewed\":\"no\"}]]",
+          "expected": "{\"X\": [[10, 1]], \"y\": [0]}",
+          "hidden": true,
+          "name": "single record"
+        },
+        {
+          "id": "t4",
+          "input": "[[{\"visits\":null,\"device\":\"ios\",\"renewed\":\"yes\"}]]",
+          "expected": "{\"X\": [], \"y\": []}",
+          "hidden": true,
+          "name": "all missing"
+        },
+        {
+          "id": "t5",
+          "input": "[[{\"visits\":7,\"device\":\"windows\",\"renewed\":\"yes\"}]]",
+          "expected": "{\"X\": [[7, 0]], \"y\": [1]}",
+          "hidden": true,
+          "name": "unknown device"
+        },
+        {
+          "id": "t6",
+          "input": "[[{\"visits\":4,\"device\":\"android\",\"renewed\":\"no\"},{\"visits\":4,\"device\":\"android\",\"renewed\":\"no\"}]]",
+          "expected": "{\"X\": [[4, 0], [4, 0]], \"y\": [0, 0]}",
+          "hidden": true,
+          "name": "duplicate records"
+        }
+      ],
+      "referenceSolution": "import pandas as pd\n\n\ndef prepare_features(records):\n    df = pd.DataFrame(records)\n    df = df[df[\"visits\"].notna()].copy()\n    df[\"visits\"] = df[\"visits\"].astype(int)\n    df[\"device_ios\"] = (df[\"device\"] == \"ios\").astype(int)\n    df[\"renewed_flag\"] = (df[\"renewed\"] == \"yes\").astype(int)\n    X = df[[\"visits\", \"device_ios\"]].values.tolist()\n    y = df[\"renewed_flag\"].tolist()\n    return {\"X\": X, \"y\": y}\n",
+      "tags": [
+        "pandas",
+        "data-cleaning",
+        "features"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-5",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "model-fit-eval",
+      "title": "Wine batch quality check",
+      "prompt": "A small winery scores tasting batches as `0` (needs more ageing) or `1` (ready to bottle) using two lab readings per batch: acidity and tannin level.\n\nWrite `evaluate_wine_model(train_features, train_labels, test_features, test_labels)`. Fit a 3-nearest-neighbour classifier on the training readings and labels, predict a label for each test reading, and return the fraction of test predictions that match `test_labels`, rounded to 2 decimals.\n\nExample: `evaluate_wine_model([[0, 0], [1, 0], [0, 1], [10, 10], [11, 10], [10, 11]], [0, 0, 0, 1, 1, 1], [[1, 1], [10, 9]], [0, 1])` returns `1.0`.",
+      "starterCode": "from sklearn.neighbors import KNeighborsClassifier\n\n\ndef evaluate_wine_model(train_features, train_labels, test_features, test_labels):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[0,0],[1,0],[0,1],[10,10],[11,10],[10,11]],[0,0,0,1,1,1],[[1,1],[10,9]],[0,1]]",
+          "expected": "1.0",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[0,0],[1,0],[0,1],[10,10],[11,10],[10,11]],[0,0,0,1,1,1],[[1,1],[10,9]],[1,1]]",
+          "expected": "0.5",
+          "hidden": false,
+          "name": "one mislabeled test point"
+        },
+        {
+          "id": "t3",
+          "input": "[[[0,0],[1,0],[0,1],[10,10],[11,10],[10,11]],[0,0,0,1,1,1],[[0,0]],[0]]",
+          "expected": "1.0",
+          "hidden": true,
+          "name": "single test reading"
+        },
+        {
+          "id": "t4",
+          "input": "[[[-10,-10],[-11,-9],[-9,-11],[5,5],[6,5],[5,6]],[0,0,0,1,1,1],[[-10,-9],[5,5]],[1,1]]",
+          "expected": "0.5",
+          "hidden": true,
+          "name": "negative coordinates"
+        },
+        {
+          "id": "t5",
+          "input": "[[[0,0],[1,0],[0,1],[1,1],[20,20],[21,20],[20,21],[21,21]],[0,0,0,0,1,1,1,1],[[0.5,0.5],[20.5,20.5],[1,1]],[0,1,0]]",
+          "expected": "1.0",
+          "hidden": true,
+          "name": "larger balanced batches"
+        },
+        {
+          "id": "t6",
+          "input": "[[[0,0],[5,5],[10,10]],[0,1,1],[[0,0],[100,100]],[0,1]]",
+          "expected": "0.5",
+          "hidden": true,
+          "name": "training set equal to k"
+        }
+      ],
+      "referenceSolution": "from sklearn.neighbors import KNeighborsClassifier\nfrom sklearn.metrics import accuracy_score\n\n\ndef evaluate_wine_model(train_features, train_labels, test_features, test_labels):\n    model = KNeighborsClassifier(n_neighbors=3)\n    model.fit(train_features, train_labels)\n    preds = model.predict(test_features)\n    return round(float(accuracy_score(test_labels, preds)), 2)\n",
+      "tags": [
+        "scikit-learn",
+        "classification",
+        "evaluation"
+      ]
+    },
+    {
+      "cloId": "DSAI2201-5",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "boundary",
+      "title": "Rapid test scorecard",
+      "prompt": "A hospital's rapid test flags each patient as at-risk (`1`) or not (`0`). `actual` holds the lab-confirmed diagnosis for a batch of patients and `predicted` holds what the rapid test said, in the same order; both lists are always the same length.\n\nWrite `screening_scores(actual, predicted)` returning a dict with two keys rounded to 2 decimals: `\"precision\"`, the fraction of at-risk flags that were correct, and `\"recall\"`, the fraction of truly at-risk patients that were flagged. If the test never flags anyone as at-risk, precision is `0.0`. If nobody in the batch is actually at-risk, recall is `0.0`.\n\nExample: `screening_scores([1, 0, 1, 1, 0], [1, 0, 0, 1, 0])` returns `{\"precision\": 1.0, \"recall\": 0.67}`.",
+      "starterCode": "import numpy as np\n\n\ndef screening_scores(actual, predicted):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[1,0,1,1,0],[1,0,0,1,0]]",
+          "expected": "{\"precision\": 1.0, \"recall\": 0.67}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[1,1,1],[0,0,0]]",
+          "expected": "{\"precision\": 0.0, \"recall\": 0.0}",
+          "hidden": false,
+          "name": "test flags nobody"
+        },
+        {
+          "id": "t3",
+          "input": "[[],[]]",
+          "expected": "{\"precision\": 0.0, \"recall\": 0.0}",
+          "hidden": true,
+          "name": "empty batch"
+        },
+        {
+          "id": "t4",
+          "input": "[[0,0,0],[1,0,1]]",
+          "expected": "{\"precision\": 0.0, \"recall\": 0.0}",
+          "hidden": true,
+          "name": "nobody actually at-risk"
+        },
+        {
+          "id": "t5",
+          "input": "[[1],[1]]",
+          "expected": "{\"precision\": 1.0, \"recall\": 1.0}",
+          "hidden": true,
+          "name": "single patient, correct"
+        },
+        {
+          "id": "t6",
+          "input": "[[0,1,0,1,0,1,0,1,0,1],[0,1,1,1,0,0,0,1,1,1]]",
+          "expected": "{\"precision\": 0.67, \"recall\": 0.8}",
+          "hidden": true,
+          "name": "larger mixed batch"
+        }
+      ],
+      "referenceSolution": "import numpy as np\n\n\ndef screening_scores(actual, predicted):\n    actual = np.array(actual)\n    predicted = np.array(predicted)\n    true_positive = int(np.sum((actual == 1) & (predicted == 1)))\n    predicted_positive = int(np.sum(predicted == 1))\n    actual_positive = int(np.sum(actual == 1))\n    precision = true_positive / predicted_positive if predicted_positive > 0 else 0.0\n    recall = true_positive / actual_positive if actual_positive > 0 else 0.0\n    return {\"precision\": round(precision, 2), \"recall\": round(recall, 2)}\n",
+      "tags": [
+        "numpy",
+        "metrics",
+        "precision-recall",
+        "edge-cases"
+      ]
+    }
+  ]
+}

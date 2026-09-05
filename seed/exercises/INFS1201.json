@@ -1,0 +1,1224 @@
+{
+  "exercises": [
+    {
+      "cloId": "INFS1201-1",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "transform",
+      "title": "Scaling a Recipe",
+      "prompt": "A home cook found a recipe written for one batch size but needs a different amount today.\n\nWrite `scale_recipe(amounts, factor)` that takes a list of ingredient amounts in grams and a scaling `factor`, and returns a NEW list where each amount is multiplied by `factor` and rounded to 1 decimal place. The original list of amounts must not be changed by your function.\n\nExample: `scale_recipe([100, 50, 25], 2.0)` returns `[200.0, 100.0, 50.0]`.",
+      "starterCode": "def scale_recipe(amounts, factor):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[100, 50, 25], 2.0]",
+          "expected": "[200.0, 100.0, 50.0]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[60, 45], 1.5]",
+          "expected": "[90.0, 67.5]",
+          "hidden": false,
+          "name": "fractional factor"
+        },
+        {
+          "id": "t3",
+          "input": "[[10, 21, 7], 0.5]",
+          "expected": "[5.0, 10.5, 3.5]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[], 3.0]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "empty list"
+        },
+        {
+          "id": "t5",
+          "input": "[[7], 3.0]",
+          "expected": "[21.0]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[33], 0.1]",
+          "expected": "[3.3]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def scale_recipe(amounts, factor):\n    return [round(a * factor, 1) for a in amounts]\n",
+      "tags": [
+        "lists",
+        "rounding",
+        "recipes"
+      ]
+    },
+    {
+      "cloId": "INFS1201-1",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "dict-lookup",
+      "title": "Weekend Activity Groups",
+      "prompt": "A community center collects sign-up slips for its Saturday activities. Each slip lists a person's name and the activity they picked, in the order the slips came in.\n\nWrite `group_signups(entries)` that takes a list of `[name, activity]` pairs and returns a dictionary mapping each activity to the list of names who picked it, in the order they signed up. Activities must appear in the dictionary in the order they were first chosen.\n\nExample: `group_signups([[\"Mona\", \"yoga\"], [\"Sam\", \"chess\"], [\"Lina\", \"yoga\"]])` returns `{\"yoga\": [\"Mona\", \"Lina\"], \"chess\": [\"Sam\"]}`.",
+      "starterCode": "def group_signups(entries):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"Mona\", \"yoga\"], [\"Sam\", \"chess\"], [\"Lina\", \"yoga\"]]]",
+          "expected": "{\"yoga\": [\"Mona\", \"Lina\"], \"chess\": [\"Sam\"]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"Ali\", \"chess\"]]]",
+          "expected": "{\"chess\": [\"Ali\"]}",
+          "hidden": false,
+          "name": "single entry"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "{}",
+          "hidden": true,
+          "name": "empty entries"
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"Omar\", \"chess\"], [\"Huda\", \"art\"], [\"Sara\", \"chess\"], [\"Nabil\", \"yoga\"], [\"Maya\", \"art\"]]]",
+          "expected": "{\"chess\": [\"Omar\", \"Sara\"], \"art\": [\"Huda\", \"Maya\"], \"yoga\": [\"Nabil\"]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"A\", \"swim\"], [\"B\", \"swim\"], [\"C\", \"swim\"]]]",
+          "expected": "{\"swim\": [\"A\", \"B\", \"C\"]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"Zoe\", \"chess\"], [\"Zoe\", \"art\"]]]",
+          "expected": "{\"chess\": [\"Zoe\"], \"art\": [\"Zoe\"]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def group_signups(entries):\n    groups = {}\n    for name, activity in entries:\n        if activity not in groups:\n            groups[activity] = []\n        groups[activity].append(name)\n    return groups\n",
+      "tags": [
+        "dictionaries",
+        "grouping",
+        "lists"
+      ]
+    },
+    {
+      "cloId": "INFS1201-1",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "set-ops",
+      "title": "Guest List Overlap",
+      "prompt": "Alia and Ben are each drafting a guest list for a joint party, and a few names got written down more than once by mistake.\n\nWrite `guest_summary(list_a, list_b)` that takes two lists of guest names and returns a list of three lists: names that appear on both lists, names that appear only on `list_a`, and names that appear only on `list_b`. Each of the three lists must be sorted alphabetically, and a name repeated within one list should only count once.\n\nExample: `guest_summary([\"Sam\", \"Lee\", \"Sam\"], [\"Lee\", \"Omar\"])` returns `[[\"Lee\"], [\"Sam\"], [\"Omar\"]]`.",
+      "starterCode": "def guest_summary(list_a, list_b):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"Sam\", \"Lee\", \"Sam\"], [\"Lee\", \"Omar\"]]",
+          "expected": "[[\"Lee\"], [\"Sam\"], [\"Omar\"]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"Amir\", \"Bella\", \"Cleo\"], [\"Amir\", \"Bella\", \"Cleo\"]]",
+          "expected": "[[\"Amir\", \"Bella\", \"Cleo\"], [], []]",
+          "hidden": false,
+          "name": "identical lists"
+        },
+        {
+          "id": "t3",
+          "input": "[[], []]",
+          "expected": "[[], [], []]",
+          "hidden": true,
+          "name": "both empty"
+        },
+        {
+          "id": "t4",
+          "input": "[[], [\"Dana\", \"Farah\"]]",
+          "expected": "[[], [], [\"Dana\", \"Farah\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[\"Gus\", \"Huda\"], [\"Iris\", \"Jon\"]]",
+          "expected": "[[], [\"Gus\", \"Huda\"], [\"Iris\", \"Jon\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[\"Nora\", \"Omar\", \"Priya\", \"Nora\", \"Omar\"], [\"Priya\", \"Quinn\", \"Omar\"]]",
+          "expected": "[[\"Omar\", \"Priya\"], [\"Nora\"], [\"Quinn\"]]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def guest_summary(list_a, list_b):\n    set_a = set(list_a)\n    set_b = set(list_b)\n    both = sorted(set_a & set_b)\n    only_a = sorted(set_a - set_b)\n    only_b = sorted(set_b - set_a)\n    return [both, only_a, only_b]\n",
+      "tags": [
+        "sets",
+        "dedupe",
+        "sorting"
+      ]
+    },
+    {
+      "cloId": "INFS1201-1",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "aliasing",
+      "title": "Claiming Items From a List",
+      "prompt": "Two roommates keep one shared shopping list on the fridge. When someone heads to the store, they claim a few items to buy without erasing anyone else's view of the list.\n\nWrite `claim_items(shared_list, items_to_claim)`. Build a new list that starts as a copy of `shared_list` and removes the FIRST matching occurrence of each name in `items_to_claim` (skip a name that is not present, and process names in the order given). Return a list with two elements: the new list of remaining items, followed by `shared_list` itself, which must still hold every original item in its original order.\n\nExample: `claim_items([\"milk\", \"eggs\", \"bread\", \"eggs\"], [\"eggs\"])` returns `[[\"milk\", \"bread\", \"eggs\"], [\"milk\", \"eggs\", \"bread\", \"eggs\"]]`.",
+      "starterCode": "def claim_items(shared_list, items_to_claim):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"milk\", \"eggs\", \"bread\", \"eggs\"], [\"eggs\"]]",
+          "expected": "[[\"milk\", \"bread\", \"eggs\"], [\"milk\", \"eggs\", \"bread\", \"eggs\"]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"soap\", \"towels\"], [\"towels\", \"soap\"]]",
+          "expected": "[[], [\"soap\", \"towels\"]]",
+          "hidden": false,
+          "name": "claim everything"
+        },
+        {
+          "id": "t3",
+          "input": "[[], [\"rice\"]]",
+          "expected": "[[], []]",
+          "hidden": true,
+          "name": "empty shared list"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"pasta\", \"sauce\", \"cheese\"], []]",
+          "expected": "[[\"pasta\", \"sauce\", \"cheese\"], [\"pasta\", \"sauce\", \"cheese\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[\"apples\", \"bananas\"], [\"kiwi\"]]",
+          "expected": "[[\"apples\", \"bananas\"], [\"apples\", \"bananas\"]]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[\"tea\", \"tea\", \"coffee\", \"tea\"], [\"tea\", \"tea\"]]",
+          "expected": "[[\"coffee\", \"tea\"], [\"tea\", \"tea\", \"coffee\", \"tea\"]]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def claim_items(shared_list, items_to_claim):\n    remaining = list(shared_list)\n    for item in items_to_claim:\n        if item in remaining:\n            remaining.remove(item)\n    return [remaining, shared_list]\n",
+      "tags": [
+        "lists",
+        "copying",
+        "functions"
+      ]
+    },
+    {
+      "cloId": "INFS1201-1",
+      "language": "python",
+      "kind": "predict-output",
+      "difficulty": 2,
+      "pattern": "predict-output",
+      "title": "Character Sheet Mix-Up",
+      "prompt": "A small role-playing game stores each player's stats in a dictionary. Two friends are looking at what they believe are two separate character sheets before a session.\n\nWhat does this program print? Write the exact output, one line per `print` call.\n\nExample: if `a = {\"x\": 1}` and `b = a`, changing `b[\"x\"]` also changes what `a` shows, because `b` is just another name for the same dictionary; `a.copy()` instead makes a separate dictionary that can change independently.\n\n```python\np1 = {\"name\": \"Rex\", \"level\": 1}\np2 = p1\np2[\"level\"] = 2\np3 = p1.copy()\np3[\"level\"] = 3\nprint(p1)\nprint(p2)\nprint(p3)\n```",
+      "starterCode": "",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 3}",
+          "hidden": false,
+          "name": "output"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 3}",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 3}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 3}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 3}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 2}\n{'name': 'Rex', 'level': 3}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "p1 = {\"name\": \"Rex\", \"level\": 1}\np2 = p1\np2[\"level\"] = 2\np3 = p1.copy()\np3[\"level\"] = 3\nprint(p1)\nprint(p2)\nprint(p3)\n",
+      "tags": [
+        "dictionaries",
+        "copying",
+        "reading-code"
+      ]
+    },
+    {
+      "cloId": "INFS1201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "search",
+      "title": "Locate a crate on the dock",
+      "prompt": "A dock manager scans shipping crates as they come off the truck and needs to check whether a specific crate has already been logged, and where.\n\nWrite `find_crate(codes, target)` that looks through the list of crate codes in order and returns the position of the first crate whose code equals `target`. If the crate is not in the list, return `-1`.\n\nExample: `find_crate([\"A12\", \"B77\", \"C03\"], \"C03\")` returns `2`. `find_crate([\"A12\", \"B77\"], \"Z99\")` returns `-1`.",
+      "starterCode": "def find_crate(codes, target):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"A12\", \"B77\", \"C03\"], \"C03\"]",
+          "expected": "2",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"A12\", \"B77\"], \"Z99\"]",
+          "expected": "-1",
+          "hidden": false,
+          "name": "none present"
+        },
+        {
+          "id": "t3",
+          "input": "[[], \"A1\"]",
+          "expected": "-1",
+          "hidden": true,
+          "name": "empty list"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"X\"], \"X\"]",
+          "expected": "0",
+          "hidden": true,
+          "name": "single match"
+        },
+        {
+          "id": "t5",
+          "input": "[[\"A\", \"B\", \"A\"], \"A\"]",
+          "expected": "0",
+          "hidden": true,
+          "name": "duplicate returns first"
+        },
+        {
+          "id": "t6",
+          "input": "[[\"M1\", \"M2\", \"M3\", \"M4\"], \"M4\"]",
+          "expected": "3",
+          "hidden": true,
+          "name": "match at end"
+        }
+      ],
+      "referenceSolution": "def find_crate(codes, target):\n    for i in range(len(codes)):\n        if codes[i] == target:\n            return i\n    return -1\n",
+      "tags": [
+        "lists",
+        "lookup",
+        "loops"
+      ]
+    },
+    {
+      "cloId": "INFS1201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "early-return",
+      "title": "First alarm trigger",
+      "prompt": "A home security panel logs one motion-sensor reading per minute, each a number from `0` (no motion) upward. The app wants to know which minute first crossed the sensitivity threshold.\n\nWrite `first_alarm(readings, threshold)` that returns the 1-based position of the first reading strictly greater than `threshold`. If no reading crosses the threshold, return `-1`.\n\nExample: `first_alarm([0, 2, 5, 1], 4)` returns `3` (the third reading, 5, is the first above 4). `first_alarm([1, 1, 1], 9)` returns `-1`.",
+      "starterCode": "def first_alarm(readings, threshold):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[0, 2, 5, 1], 4]",
+          "expected": "3",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[1, 1, 1], 9]",
+          "expected": "-1",
+          "hidden": false,
+          "name": "nothing crosses"
+        },
+        {
+          "id": "t3",
+          "input": "[[], 0]",
+          "expected": "-1",
+          "hidden": true,
+          "name": "empty log"
+        },
+        {
+          "id": "t4",
+          "input": "[[10], 4]",
+          "expected": "1",
+          "hidden": true,
+          "name": "single reading triggers"
+        },
+        {
+          "id": "t5",
+          "input": "[[5, 5, 5, 9], 5]",
+          "expected": "4",
+          "hidden": true,
+          "name": "equal values do not count"
+        },
+        {
+          "id": "t6",
+          "input": "[[9, 1, 1], 9]",
+          "expected": "-1",
+          "hidden": true,
+          "name": "value equal to threshold never triggers"
+        }
+      ],
+      "referenceSolution": "def first_alarm(readings, threshold):\n    for i in range(len(readings)):\n        if readings[i] > threshold:\n            return i + 1\n    return -1\n",
+      "tags": [
+        "loops",
+        "monitoring",
+        "threshold"
+      ]
+    },
+    {
+      "cloId": "INFS1201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "nested-loop",
+      "title": "Sort racers by finish time",
+      "prompt": "A trail race records each runner's bib number and finish time in the order they crossed the line, but organizers want the official ranking ordered fastest to slowest.\n\nWrite `rank_by_time(bibs, times)` that returns a new list of bib numbers ordered from smallest to largest `times` value. Build the ranking by repeatedly scanning the list and swapping any adjacent pair that is out of order, continuing until no swap is needed. `bibs[i]` and `times[i]` always describe the same runner, and if two runners tie exactly, keep the one that appeared first in `bibs` ahead of the other.\n\nExample: `rank_by_time([101, 102, 103], [12.4, 9.9, 11.0])` returns `[102, 103, 101]`.",
+      "starterCode": "def rank_by_time(bibs, times):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[101, 102, 103], [12.4, 9.9, 11.0]]",
+          "expected": "[102, 103, 101]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[1, 2], [5.0, 5.0]]",
+          "expected": "[1, 2]",
+          "hidden": false,
+          "name": "exact tie keeps order"
+        },
+        {
+          "id": "t3",
+          "input": "[[], []]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "empty race"
+        },
+        {
+          "id": "t4",
+          "input": "[[7], [3.2]]",
+          "expected": "[7]",
+          "hidden": true,
+          "name": "single runner"
+        },
+        {
+          "id": "t5",
+          "input": "[[1, 2, 3, 4], [4.0, 3.0, 2.0, 1.0]]",
+          "expected": "[4, 3, 2, 1]",
+          "hidden": true,
+          "name": "fully reversed"
+        },
+        {
+          "id": "t6",
+          "input": "[[9, 8, 7], [2.0, 2.0, 1.0]]",
+          "expected": "[7, 9, 8]",
+          "hidden": true,
+          "name": "tie among later runners"
+        }
+      ],
+      "referenceSolution": "def rank_by_time(bibs, times):\n    bibs = list(bibs)\n    times = list(times)\n    n = len(times)\n    for i in range(n):\n        for j in range(0, n - i - 1):\n            if times[j] > times[j + 1]:\n                times[j], times[j + 1] = times[j + 1], times[j]\n                bibs[j], bibs[j + 1] = bibs[j + 1], bibs[j]\n    return bibs\n",
+      "tags": [
+        "sorting",
+        "loops",
+        "parallel-lists"
+      ]
+    },
+    {
+      "cloId": "INFS1201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "boundary",
+      "title": "Trim silence from a clip",
+      "prompt": "An audio app records a volume level for every sampled moment in a short clip, where `0` means silence. Before saving, it trims away any silence at the very start and the very end, but keeps quiet gaps that occur in the middle of the sound.\n\nWrite `trim_silence(levels)` that returns a new list with the leading and trailing zeros removed. If every sample is `0`, or the list is empty, return an empty list.\n\nExample: `trim_silence([0, 0, 3, 0, 5, 0, 0])` returns `[3, 0, 5]`. `trim_silence([2, 4])` returns `[2, 4]`.",
+      "starterCode": "def trim_silence(levels):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[0, 0, 3, 0, 5, 0, 0]]",
+          "expected": "[3, 0, 5]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[2, 4]]",
+          "expected": "[2, 4]",
+          "hidden": false,
+          "name": "no silence to trim"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "empty clip"
+        },
+        {
+          "id": "t4",
+          "input": "[[0, 0, 0]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "all silence"
+        },
+        {
+          "id": "t5",
+          "input": "[[5]]",
+          "expected": "[5]",
+          "hidden": true,
+          "name": "single loud sample"
+        },
+        {
+          "id": "t6",
+          "input": "[[0]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "single silent sample"
+        },
+        {
+          "id": "t7",
+          "input": "[[0, 7, 0, 0, 9, 0]]",
+          "expected": "[7, 0, 0, 9]",
+          "hidden": true,
+          "name": "keeps inner silence"
+        }
+      ],
+      "referenceSolution": "def trim_silence(levels):\n    start = 0\n    end = len(levels) - 1\n    while start <= end and levels[start] == 0:\n        start += 1\n    while end >= start and levels[end] == 0:\n        end -= 1\n    return levels[start:end + 1]\n",
+      "tags": [
+        "lists",
+        "edge-cases",
+        "slicing"
+      ]
+    },
+    {
+      "cloId": "INFS1201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "index-math",
+      "title": "Find the price cutoff",
+      "prompt": "A box office keeps every sold ticket price in one list, already sorted from cheapest to priciest, and duplicate prices are common. Staff want to know where a new price would land if it were inserted to keep the list sorted, so they can quote how many tickets already cost less than it.\n\nWrite `lower_bound(prices, target)` that returns the smallest position `i` for which `prices[i] >= target`. If every price is below `target`, return `len(prices)`. The list can be long, so narrow the range you check instead of comparing against every price from the start.\n\nExample: `lower_bound([10, 10, 20, 30, 30, 30, 50], 30)` returns `3`. `lower_bound([5, 8, 12], 20)` returns `3`.",
+      "starterCode": "def lower_bound(prices, target):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[10, 10, 20, 30, 30, 30, 50], 30]",
+          "expected": "3",
+          "hidden": false,
+          "name": "example with duplicates"
+        },
+        {
+          "id": "t2",
+          "input": "[[5, 8, 12], 20]",
+          "expected": "3",
+          "hidden": false,
+          "name": "target above everything"
+        },
+        {
+          "id": "t3",
+          "input": "[[], 5]",
+          "expected": "0",
+          "hidden": true,
+          "name": "empty price list"
+        },
+        {
+          "id": "t4",
+          "input": "[[4], 4]",
+          "expected": "0",
+          "hidden": true,
+          "name": "single price equal to target"
+        },
+        {
+          "id": "t5",
+          "input": "[[4], 5]",
+          "expected": "1",
+          "hidden": true,
+          "name": "single price below target"
+        },
+        {
+          "id": "t6",
+          "input": "[[1, 1, 1, 1], 1]",
+          "expected": "0",
+          "hidden": true,
+          "name": "all prices equal target"
+        },
+        {
+          "id": "t7",
+          "input": "[[2, 4, 4, 4, 6, 8], 4]",
+          "expected": "1",
+          "hidden": true,
+          "name": "target matches middle of a run"
+        }
+      ],
+      "referenceSolution": "def lower_bound(prices, target):\n    lo, hi = 0, len(prices)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if prices[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n",
+      "tags": [
+        "sorted-lists",
+        "midpoint",
+        "duplicates"
+      ]
+    },
+    {
+      "cloId": "INFS1201-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "sort-key",
+      "title": "Rank players on a leaderboard",
+      "prompt": "A retro arcade cabinet logs today's runs as a list of dictionaries, each with `name`, `score`, and `attempts` (how many tries it took to reach that score). The high-score screen should list players from best to worst using Python's sorting tools rather than a hand-written comparison loop.\n\nWrite `leaderboard(players)` that returns a list of names ordered by: highest `score` first; when scores tie, fewer `attempts` first; when that also ties, `name` in alphabetical order.\n\nExample: `leaderboard([{\"name\": \"Ana\", \"score\": 50, \"attempts\": 3}, {\"name\": \"Bo\", \"score\": 50, \"attempts\": 1}, {\"name\": \"Cy\", \"score\": 80, \"attempts\": 5}])` returns `[\"Cy\", \"Bo\", \"Ana\"]`.",
+      "starterCode": "def leaderboard(players):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[{\"name\": \"Ana\", \"score\": 50, \"attempts\": 3}, {\"name\": \"Bo\", \"score\": 50, \"attempts\": 1}, {\"name\": \"Cy\", \"score\": 80, \"attempts\": 5}]]",
+          "expected": "[\"Cy\", \"Bo\", \"Ana\"]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[{\"name\": \"Zed\", \"score\": 10, \"attempts\": 1}, {\"name\": \"Amy\", \"score\": 10, \"attempts\": 1}]]",
+          "expected": "[\"Amy\", \"Zed\"]",
+          "hidden": false,
+          "name": "full tie breaks alphabetically"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "empty cabinet log"
+        },
+        {
+          "id": "t4",
+          "input": "[[{\"name\": \"Solo\", \"score\": 5, \"attempts\": 2}]]",
+          "expected": "[\"Solo\"]",
+          "hidden": true,
+          "name": "single player"
+        },
+        {
+          "id": "t5",
+          "input": "[[{\"name\": \"A\", \"score\": 0, \"attempts\": 0}, {\"name\": \"B\", \"score\": 0, \"attempts\": 0}]]",
+          "expected": "[\"A\", \"B\"]",
+          "hidden": true,
+          "name": "zero score tie"
+        },
+        {
+          "id": "t6",
+          "input": "[[{\"name\": \"Lee\", \"score\": 20, \"attempts\": 9}, {\"name\": \"Kim\", \"score\": 20, \"attempts\": 2}, {\"name\": \"Sam\", \"score\": 20, \"attempts\": 9}]]",
+          "expected": "[\"Kim\", \"Lee\", \"Sam\"]",
+          "hidden": true,
+          "name": "partial tie ignores whole-row reversal"
+        },
+        {
+          "id": "t7",
+          "input": "[[{\"name\": \"Nia\", \"score\": 70, \"attempts\": 4}, {\"name\": \"Omar\", \"score\": 90, \"attempts\": 2}, {\"name\": \"Pia\", \"score\": 90, \"attempts\": 2}, {\"name\": \"Quin\", \"score\": 60, \"attempts\": 1}, {\"name\": \"Rex\", \"score\": 90, \"attempts\": 1}]]",
+          "expected": "[\"Rex\", \"Omar\", \"Pia\", \"Nia\", \"Quin\"]",
+          "hidden": true,
+          "name": "larger mixed field"
+        }
+      ],
+      "referenceSolution": "def leaderboard(players):\n    ranked = sorted(players, key=lambda p: (-p[\"score\"], p[\"attempts\"], p[\"name\"]))\n    return [p[\"name\"] for p in ranked]\n",
+      "tags": [
+        "sorting",
+        "records",
+        "tie-break"
+      ]
+    },
+    {
+      "cloId": "INFS1201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "composition",
+      "title": "Fuel stop summary",
+      "prompt": "A road trip app records every fuel stop as a pair of numbers: how many liters were pumped and the price paid per liter. Some stations charge a premium price above `1.50` per liter.\n\nWrite `trip_summary(stops)` where `stops` is a list of `(liters, price_per_liter)` pairs. For each stop, work out its cost (liters times price, rounded to 2 decimals) and whether it counts as premium (price strictly greater than `1.50`). Combine those results into one summary: return a tuple `(total_cost, premium_count)`, where `total_cost` is the rounded sum of every stop's cost and `premium_count` is how many stops were premium. A trip with no stops returns `(0, 0)`.\n\nA station charging exactly `1.50` does not count as premium.\n\nExample: `trip_summary([(10, 1.2), (5, 1.6)])` returns `(20.0, 1)`.",
+      "starterCode": "def trip_summary(stops):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[10, 1.2], [5, 1.6]]]",
+          "expected": "[20.0, 1]",
+          "hidden": false,
+          "name": "two stops"
+        },
+        {
+          "id": "t2",
+          "input": "[[[8, 1.10], [12, 1.05]]]",
+          "expected": "[21.4, 0]",
+          "hidden": false,
+          "name": "no premium stops"
+        },
+        {
+          "id": "t3",
+          "input": "[[[6, 1.5]]]",
+          "expected": "[9.0, 0]",
+          "hidden": true,
+          "name": "price exactly at threshold"
+        },
+        {
+          "id": "t4",
+          "input": "[[]]",
+          "expected": "[0.0, 0]",
+          "hidden": true,
+          "name": "no stops"
+        },
+        {
+          "id": "t5",
+          "input": "[[[4, 2.0]]]",
+          "expected": "[8.0, 1]",
+          "hidden": true,
+          "name": "single premium stop"
+        },
+        {
+          "id": "t6",
+          "input": "[[[10, 1.2], [5, 1.6], [6, 1.5], [2, 1.99], [20, 0.99], [1, 1.51]]]",
+          "expected": "[54.29, 3]",
+          "hidden": true,
+          "name": "six stops"
+        },
+        {
+          "id": "t7",
+          "input": "[[[7.5, 1.329]]]",
+          "expected": "[9.97, 0]",
+          "hidden": true,
+          "name": "fractional liters"
+        }
+      ],
+      "referenceSolution": "def trip_summary(stops):\n    def stop_cost(stop):\n        liters, price = stop\n        cost = round(liters * price, 2)\n        is_premium = price > 1.50\n        return (cost, is_premium)\n    total_cost = 0.0\n    premium_count = 0\n    for stop in stops:\n        cost, is_premium = stop_cost(stop)\n        total_cost += cost\n        if is_premium:\n            premium_count += 1\n    return (round(total_cost, 2), premium_count)\n",
+      "tags": [
+        "functions",
+        "tuples",
+        "rounding",
+        "records"
+      ]
+    },
+    {
+      "cloId": "INFS1201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "aggregate",
+      "title": "Weekly rainfall recap",
+      "prompt": "A small weather station logs each day's rainfall in millimetres for a week, alongside the day's name.\n\nWrite `rainfall_summary(readings)` where `readings` is a list of `(day_name, rainfall_mm)` pairs. Return a tuple `(total_mm, wettest_day)`: the total rainfall across every entry, and the name of the day with the single highest reading. When two or more days share the highest reading, use whichever one appears first in the list. An empty list of readings returns `(0, None)`.\n\nExample: `rainfall_summary([(\"Mon\", 5.0), (\"Tue\", 12.5), (\"Wed\", 0.0)])` returns `(17.5, \"Tue\")`.",
+      "starterCode": "def rainfall_summary(readings):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"Mon\", 5.0], [\"Tue\", 12.5], [\"Wed\", 0.0]]]",
+          "expected": "[17.5, \"Tue\"]",
+          "hidden": false,
+          "name": "week example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"Sat\", 3.2]]]",
+          "expected": "[3.2, \"Sat\"]",
+          "hidden": false,
+          "name": "single day"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[0, null]",
+          "hidden": true,
+          "name": "no readings"
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"Thu\", 4.0], [\"Fri\", 4.0]]]",
+          "expected": "[8.0, \"Thu\"]",
+          "hidden": true,
+          "name": "tie goes to first"
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"Sun\", 0.0], [\"Mon\", 0.0]]]",
+          "expected": "[0.0, \"Sun\"]",
+          "hidden": true,
+          "name": "dry week"
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"Mon\", 1.25], [\"Tue\", 3.75], [\"Wed\", 2.5], [\"Thu\", 3.75]]]",
+          "expected": "[11.2, \"Tue\"]",
+          "hidden": true,
+          "name": "fractional readings"
+        }
+      ],
+      "referenceSolution": "def rainfall_summary(readings):\n    if not readings:\n        return (0, None)\n    total = 0.0\n    wettest_day = readings[0][0]\n    wettest_amount = readings[0][1]\n    for day, mm in readings:\n        total += mm\n        if mm > wettest_amount:\n            wettest_amount = mm\n            wettest_day = day\n    return (round(total, 1), wettest_day)\n",
+      "tags": [
+        "functions",
+        "tuples",
+        "totals",
+        "records"
+      ]
+    },
+    {
+      "cloId": "INFS1201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "filter",
+      "title": "Low stock finder",
+      "prompt": "A small warehouse tracks each item's current quantity and its reorder level: the quantity at or below which it must be reordered.\n\nWrite `needs_restock(inventory)` where `inventory` is a list of `(item_name, quantity, reorder_level)` triples. Return a list of the item names whose quantity is strictly less than their reorder level, in the same order as the input. An item exactly at its reorder level does not need restocking yet. An empty inventory returns an empty list.\n\nExample: `needs_restock([(\"bolts\", 5, 10), (\"nails\", 20, 15), (\"screws\", 8, 8)])` returns `[\"bolts\"]`.",
+      "starterCode": "def needs_restock(inventory):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"bolts\", 5, 10], [\"nails\", 20, 15], [\"screws\", 8, 8]]]",
+          "expected": "[\"bolts\"]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"tape\", 0, 1]]]",
+          "expected": "[\"tape\"]",
+          "hidden": false,
+          "name": "single low item"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "empty inventory"
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"a\", 1, 5], [\"b\", 2, 5]]]",
+          "expected": "[\"a\", \"b\"]",
+          "hidden": true,
+          "name": "all need restock"
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"a\", 10, 5], [\"b\", 5, 5]]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "none need restock"
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"p1\", 3, 3], [\"p2\", 2, 3], [\"p3\", 10, 3], [\"p4\", 0, 1], [\"p5\", 4, 4]]]",
+          "expected": "[\"p2\", \"p4\"]",
+          "hidden": true,
+          "name": "five items"
+        }
+      ],
+      "referenceSolution": "def needs_restock(inventory):\n    result = []\n    for item_name, quantity, reorder_level in inventory:\n        if quantity < reorder_level:\n            result.append(item_name)\n    return result\n",
+      "tags": [
+        "functions",
+        "tuples",
+        "conditions",
+        "records"
+      ]
+    },
+    {
+      "cloId": "INFS1201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "transform",
+      "title": "Trail distance converter",
+      "prompt": "A hiking app stores each trail's length in miles and wants to show hikers the metric equivalent instead.\n\nWrite `to_kilometers(trails)` where `trails` is a list of `(trail_name, miles)` pairs. Return a new list of `(trail_name, kilometers)` pairs, in the same order, where each length is converted using `1 mile = 1.60934 km` and rounded to 1 decimal place. An empty list returns an empty list.\n\nExample: `to_kilometers([(\"Ridge Loop\", 5), (\"River Path\", 2)])` returns `[(\"Ridge Loop\", 8.0), (\"River Path\", 3.2)]`.",
+      "starterCode": "def to_kilometers(trails):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"Ridge Loop\", 5], [\"River Path\", 2]]]",
+          "expected": "[[\"Ridge Loop\", 8.0], [\"River Path\", 3.2]]",
+          "hidden": false,
+          "name": "two trails"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"Short Walk\", 0]]]",
+          "expected": "[[\"Short Walk\", 0.0]]",
+          "hidden": false,
+          "name": "zero miles"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "no trails"
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"Canyon Trail\", 3.5]]]",
+          "expected": "[[\"Canyon Trail\", 5.6]]",
+          "hidden": true,
+          "name": "fractional miles"
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"A\", 1], [\"B\", 2], [\"C\", 10], [\"D\", 0.25]]]",
+          "expected": "[[\"A\", 1.6], [\"B\", 3.2], [\"C\", 16.1], [\"D\", 0.4]]",
+          "hidden": true,
+          "name": "four trails"
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"Long Haul\", 26.2]]]",
+          "expected": "[[\"Long Haul\", 42.2]]",
+          "hidden": true,
+          "name": "marathon distance"
+        }
+      ],
+      "referenceSolution": "def to_kilometers(trails):\n    return [(name, round(miles * 1.60934, 1)) for name, miles in trails]\n",
+      "tags": [
+        "functions",
+        "tuples",
+        "conversion",
+        "records"
+      ]
+    },
+    {
+      "cloId": "INFS1201-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "dict-lookup",
+      "title": "Game night picker",
+      "prompt": "A group picks the next board game to play by shouting out votes. The host keeps a short list of games available tonight, in the order she'd prefer to break ties.\n\nWrite `pick_next_game(games, votes)` where `games` is a list of the available game names and `votes` is a list of shouted-out names (some might not be on the list at all, and should be ignored). Return a tuple `(chosen_game, vote_count)` for the game with the most valid votes. If two or more games tie for the most votes, pick whichever one appears earliest in `games`. If nobody voted, or every vote was invalid, return the first game in `games` with a count of `0`.\n\nExample: `pick_next_game([\"Chess\", \"Uno\", \"Catan\"], [\"Uno\", \"Uno\", \"Chess\", \"Catan\"])` returns `(\"Uno\", 2)`.",
+      "starterCode": "def pick_next_game(games, votes):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"Chess\", \"Uno\", \"Catan\"], [\"Uno\", \"Uno\", \"Chess\", \"Catan\"]]",
+          "expected": "[\"Uno\", 2]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"Chess\", \"Uno\"], [\"Chess\", \"Uno\", \"Chess\"]]",
+          "expected": "[\"Chess\", 2]",
+          "hidden": false,
+          "name": "clear winner"
+        },
+        {
+          "id": "t3",
+          "input": "[[\"Yahtzee\", \"Sorry\"], []]",
+          "expected": "[\"Yahtzee\", 0]",
+          "hidden": true,
+          "name": "no votes cast"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"Chess\", \"Uno\"], [\"Poker\", \"Poker\", \"Chess\"]]",
+          "expected": "[\"Chess\", 1]",
+          "hidden": true,
+          "name": "invalid votes ignored"
+        },
+        {
+          "id": "t5",
+          "input": "[[\"Catan\", \"Chess\", \"Uno\"], [\"Uno\", \"Uno\", \"Chess\", \"Chess\"]]",
+          "expected": "[\"Chess\", 2]",
+          "hidden": true,
+          "name": "tie broken by game order"
+        },
+        {
+          "id": "t6",
+          "input": "[[\"A\", \"B\", \"C\"], [\"X\", \"Y\", \"Z\"]]",
+          "expected": "[\"A\", 0]",
+          "hidden": true,
+          "name": "every vote invalid"
+        },
+        {
+          "id": "t7",
+          "input": "[[\"Chess\", \"Uno\", \"Catan\", \"Risk\"], [\"Risk\", \"Chess\", \"Uno\", \"Uno\", \"Catan\", \"Risk\", \"Risk\", \"Poker\"]]",
+          "expected": "[\"Risk\", 3]",
+          "hidden": true,
+          "name": "eight votes cast"
+        }
+      ],
+      "referenceSolution": "def pick_next_game(games, votes):\n    counts = {g: 0 for g in games}\n    for v in votes:\n        if v in counts:\n            counts[v] += 1\n    best_game = games[0]\n    best_count = counts[games[0]]\n    for g in games:\n        if counts[g] > best_count:\n            best_count = counts[g]\n            best_game = g\n    return (best_game, best_count)\n",
+      "tags": [
+        "functions",
+        "tuples",
+        "dictionaries",
+        "tie-breaking"
+      ]
+    },
+    {
+      "cloId": "INFS1201-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "string-parse",
+      "title": "Cash register line parser",
+      "prompt": "A cash register saves each sale as one line of plain text in the form `item,quantity,unit_price`. Lines sometimes end with a trailing newline character and sometimes have extra spaces around the commas.\n\nWrite `parse_sale_line(line)` that splits the line into its three fields, strips whitespace (including any trailing newline) from each one, converts the quantity to an `int` and the unit price to a `float`, and returns them as a list `[item, quantity, unit_price]`.\n\nExample: `parse_sale_line(\"Apples, 3 , 0.50\\n\")` returns `[\"Apples\", 3, 0.5]`.",
+      "starterCode": "def parse_sale_line(line):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[\"Apples, 3 , 0.50\\n\"]",
+          "expected": "[\"Apples\", 3, 0.5]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[\"Bread,10,1.25\"]",
+          "expected": "[\"Bread\", 10, 1.25]",
+          "hidden": false,
+          "name": "no spaces"
+        },
+        {
+          "id": "t3",
+          "input": "[\"  Milk  ,2,3.00\"]",
+          "expected": "[\"Milk\", 2, 3.0]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[\"Eggs,12,0\\n\"]",
+          "expected": "[\"Eggs\", 12, 0.0]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[\"Rice,1,2.5\"]",
+          "expected": "[\"Rice\", 1, 2.5]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[\"Salt,0,1.10\"]",
+          "expected": "[\"Salt\", 0, 1.1]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def parse_sale_line(line):\n    parts = line.strip().split(',')\n    item = parts[0].strip()\n    quantity = int(parts[1].strip())\n    unit_price = float(parts[2].strip())\n    return [item, quantity, unit_price]\n",
+      "tags": [
+        "strings",
+        "type-conversion",
+        "files"
+      ]
+    },
+    {
+      "cloId": "INFS1201-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "guard",
+      "title": "Attendance row cleanup",
+      "prompt": "A weekly attendance sheet is exported to a plain text file, one row per student split into three fields: name, status, and minutes late. Some cells come out blank, and a few minutes-late values get corrupted during export.\n\nWrite `clean_attendance_row(fields)` where `fields` is `[name, status, minutes_late]` (all strings). Return `None` when `name` is blank. Otherwise strip whitespace from every field, default a blank `status` to `\"present\"`, and turn `minutes_late` into an `int` that defaults to `0` whenever it is blank, not a whole number, or negative.\n\nExample: `clean_attendance_row([\"Sara\", \"late\", \"5\"])` returns `[\"Sara\", \"late\", 5]`. `clean_attendance_row([\"\", \"present\", \"0\"])` returns `None`.",
+      "starterCode": "def clean_attendance_row(fields):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"Sara\", \"late\", \"5\"]]",
+          "expected": "[\"Sara\", \"late\", 5]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"Omar\", \"\", \"\"]]",
+          "expected": "[\"Omar\", \"present\", 0]",
+          "hidden": false,
+          "name": "missing status and minutes"
+        },
+        {
+          "id": "t3",
+          "input": "[[\"\", \"present\", \"0\"]]",
+          "expected": "null",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[\"Huda\", \"absent\", \"-10\"]]",
+          "expected": "[\"Huda\", \"absent\", 0]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[\"Ali\", \"present\", \"abc\"]]",
+          "expected": "[\"Ali\", \"present\", 0]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[\"  Lina  \", \"  late \", \" 12 \"]]",
+          "expected": "[\"Lina\", \"late\", 12]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def clean_attendance_row(fields):\n    name = fields[0].strip()\n    if name == \"\":\n        return None\n    status = fields[1].strip()\n    if status == \"\":\n        status = \"present\"\n    raw_late = fields[2].strip()\n    try:\n        minutes_late = int(raw_late)\n    except ValueError:\n        minutes_late = 0\n    if minutes_late < 0:\n        minutes_late = 0\n    return [name, status, minutes_late]\n",
+      "tags": [
+        "validation",
+        "strings",
+        "defaults"
+      ]
+    },
+    {
+      "cloId": "INFS1201-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "aggregate",
+      "title": "Coffee order revenue totals",
+      "prompt": "A coffee shop exports its order log as rows with a drink name, size, and price, but a few price cells come back blank whenever the register's scanner missed a scan.\n\nWrite `total_revenue_by_drink(records)` where `records` is a list of dicts with keys `\"drink\"`, `\"size\"`, and `\"price\"` (all strings, as they would be straight out of a CSV reader). Sum the price for each drink, skipping any record whose price is blank instead of crashing. Leave out any drink whose every price was blank. Return a list of `[drink, total]` pairs sorted alphabetically by drink name, with each total rounded to 2 decimals.\n\nExample: two Latte orders priced `\"4.50\"` and `\"5.00\"` plus one Tea order priced `\"2.00\"` return `[[\"Latte\", 9.5], [\"Tea\", 2.0]]`.",
+      "starterCode": "def total_revenue_by_drink(records):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[{\"drink\": \"Latte\", \"size\": \"M\", \"price\": \"4.50\"}, {\"drink\": \"Latte\", \"size\": \"L\", \"price\": \"5.00\"}, {\"drink\": \"Tea\", \"size\": \"S\", \"price\": \"2.00\"}]]",
+          "expected": "[[\"Latte\", 9.5], [\"Tea\", 2.0]]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[{\"drink\": \"Mocha\", \"size\": \"M\", \"price\": \"\"}, {\"drink\": \"Latte\", \"size\": \"L\", \"price\": \"5.00\"}, {\"drink\": \"Mocha\", \"size\": \"L\", \"price\": \"5.50\"}]]",
+          "expected": "[[\"Latte\", 5.0], [\"Mocha\", 5.5]]",
+          "hidden": false,
+          "name": "one blank price still counts the drink"
+        },
+        {
+          "id": "t3",
+          "input": "[[{\"drink\": \"Espresso\", \"size\": \"S\", \"price\": \"\"}, {\"drink\": \"Tea\", \"size\": \"S\", \"price\": \"3.00\"}]]",
+          "expected": "[[\"Tea\", 3.0]]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[{\"drink\": \"Water\", \"size\": \"S\", \"price\": \"1.00\"}]]",
+          "expected": "[[\"Water\", 1.0]]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[{\"drink\": \"Latte\", \"size\": \"S\", \"price\": \"4.00\"}, {\"drink\": \"Latte\", \"size\": \"M\", \"price\": \"4.50\"}, {\"drink\": \"Latte\", \"size\": \"L\", \"price\": \"\"}, {\"drink\": \"Mocha\", \"size\": \"S\", \"price\": \"4.25\"}, {\"drink\": \"Mocha\", \"size\": \"M\", \"price\": \"4.75\"}, {\"drink\": \"Mocha\", \"size\": \"L\", \"price\": \"5.25\"}, {\"drink\": \"Tea\", \"size\": \"S\", \"price\": \"\"}, {\"drink\": \"Tea\", \"size\": \"M\", \"price\": \"2.50\"}]]",
+          "expected": "[[\"Latte\", 8.5], [\"Mocha\", 14.25], [\"Tea\", 2.5]]",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[[{\"drink\": \"Soda\", \"size\": \"S\", \"price\": \"\"}, {\"drink\": \"Soda\", \"size\": \"M\", \"price\": \"\"}]]",
+          "expected": "[]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def total_revenue_by_drink(records):\n    totals = {}\n    for rec in records:\n        price_str = rec[\"price\"].strip()\n        if price_str == \"\":\n            continue\n        drink = rec[\"drink\"]\n        totals[drink] = totals.get(drink, 0.0) + float(price_str)\n    result = [[drink, round(total, 2)] for drink, total in totals.items()]\n    result.sort(key=lambda pair: pair[0])\n    return result\n",
+      "tags": [
+        "dictionaries",
+        "totals",
+        "missing-data"
+      ]
+    },
+    {
+      "cloId": "INFS1201-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "data-pipeline",
+      "title": "Rack temperature averages",
+      "prompt": "A data center's monitoring system writes one CSV file per shift, one line per equipment rack, with a header row `station,temperature`. Rack names that contain a comma are wrapped in quotes, and a faulty sensor leaves its cell blank or writes `NA` instead of a number.\n\nWrite `average_temperature(csv_text)` that reads the whole file's text with the `csv` module, ignores rows whose temperature is blank or `NA`, and returns the mean of the remaining readings rounded to 1 decimal place. Return `None` when there are no valid readings at all.\n\nExample: a file with readings `21.5`, a blank, `19.0`, an `NA`, and `22.5` returns `21.0`.",
+      "starterCode": "import csv\nimport io\n\ndef average_temperature(csv_text):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[\"station,temperature\\n\\\"North Ridge, Sector 2\\\",21.5\\nHarbor View,\\nLakeside,19.0\\n\\\"Downtown, East\\\",NA\\nHilltop,22.5\"]",
+          "expected": "21.0",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[\"station,temperature\\nA,10.0\\nB,20.0\\nC,30.0\"]",
+          "expected": "20.0",
+          "hidden": false,
+          "name": "no missing values"
+        },
+        {
+          "id": "t3",
+          "input": "[\"station,temperature\\nA,\\nB,NA\"]",
+          "expected": "null",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[\"station,temperature\\nOnly,15.0\"]",
+          "expected": "15.0",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[\"station,temperature\\n\\\"Riverside, North\\\",18.0\\n\\\"Hill, Top\\\",22.0\"]",
+          "expected": "20.0",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[\"station,temperature\\n\\\"Bay Point, West\\\",12.0\\nRidge,NA\\nMeadow,18.0\\n\\\"Sunset, Cove\\\",\\nForest,20.0\\nDelta,14.0\"]",
+          "expected": "16.0",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[\"station,temperature\\nA,10.0\\nB,10.0\\nC,11.0\"]",
+          "expected": "10.3",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "import csv\nimport io\n\ndef average_temperature(csv_text):\n    reader = csv.DictReader(io.StringIO(csv_text))\n    total = 0.0\n    count = 0\n    for row in reader:\n        raw = row[\"temperature\"].strip()\n        if raw == \"\" or raw.upper() == \"NA\":\n            continue\n        total += float(raw)\n        count += 1\n    if count == 0:\n        return None\n    return round(total / count, 1)\n",
+      "tags": [
+        "csv",
+        "parsing",
+        "rounding"
+      ]
+    }
+  ]
+}

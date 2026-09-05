@@ -1,0 +1,1094 @@
+{
+  "exercises": [
+    {
+      "cloId": "INFS3102-1",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "refactor-to-class",
+      "title": "Thermostat command log",
+      "prompt": "A cheap thermostat controller used one shared variable and separate free functions for every action, something like a global `temp` changed by `up()`, `down()`, and `set(n)`. That style gets messy once more devices are added, so model the temperature as an object that owns its own state instead.\n\nWrite `Solution.run(String commands)`. `commands` holds one instruction per line: `SET n` sets the temperature to `n`, `UP` raises it by one degree, and `DOWN` lowers it by one degree. Every resulting temperature is clamped to the range 60 to 85 inclusive (a `SET` target is clamped too). After each instruction, record the temperature that results. Return every recorded value joined by newlines, in the order the instructions were given, with no leading or trailing blank line.\n\nExample: commands `SET 70`, `UP`, `UP`, `DOWN` return `70`, `71`, `72`, `71` (one value per line).",
+      "starterCode": "class Solution {\n    public static String run(String commands) {\n        return \"\";\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "SET 70\nUP\nUP\nDOWN",
+          "hidden": false,
+          "name": "example",
+          "expected": "70\n71\n72\n71"
+        },
+        {
+          "id": "t2",
+          "input": "SET 60\nDOWN\nDOWN",
+          "hidden": false,
+          "name": "clamped low",
+          "expected": "60\n60\n60"
+        },
+        {
+          "id": "t3",
+          "input": "SET 85\nUP\nUP",
+          "hidden": true,
+          "expected": "85\n85\n85"
+        },
+        {
+          "id": "t4",
+          "input": "SET 70",
+          "hidden": true,
+          "expected": "70"
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "hidden": true,
+          "expected": ""
+        },
+        {
+          "id": "t6",
+          "input": "SET 200\nDOWN",
+          "hidden": true,
+          "expected": "85\n84"
+        },
+        {
+          "id": "t7",
+          "input": "SET 0\nUP\nUP\nUP",
+          "hidden": true,
+          "expected": "60\n61\n62\n63"
+        }
+      ],
+      "referenceSolution": "class Thermostat {\n    private int temp;\n    Thermostat(int start) { temp = clamp(start); }\n    int set(int n) { temp = clamp(n); return temp; }\n    int up() { temp = clamp(temp + 1); return temp; }\n    int down() { temp = clamp(temp - 1); return temp; }\n    private int clamp(int n) { return Math.max(60, Math.min(85, n)); }\n}\n\nclass Solution {\n    public static String run(String commands) {\n        if (commands.isEmpty()) return \"\";\n        Thermostat t = new Thermostat(70);\n        String[] lines = commands.split(\"\\n\");\n        StringBuilder out = new StringBuilder();\n        for (int i = 0; i < lines.length; i++) {\n            String line = lines[i].trim();\n            int result;\n            if (line.startsWith(\"SET\")) {\n                result = t.set(Integer.parseInt(line.substring(4).trim()));\n            } else if (line.equals(\"UP\")) {\n                result = t.up();\n            } else {\n                result = t.down();\n            }\n            if (i > 0) out.append(\"\\n\");\n            out.append(result);\n        }\n        return out.toString();\n    }\n}\n",
+      "tags": [
+        "classes",
+        "encapsulation",
+        "state"
+      ],
+      "fixture": "import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        StringBuilder sb = new StringBuilder();\n        boolean first = true;\n        while (in.hasNextLine()) {\n            String line = in.nextLine();\n            if (!first) sb.append(\"\\n\");\n            sb.append(line);\n            first = false;\n        }\n        System.out.print(Solution.run(sb.toString()));\n    }\n}\n"
+    },
+    {
+      "cloId": "INFS3102-1",
+      "language": "java",
+      "kind": "predict-output",
+      "difficulty": 3,
+      "pattern": "predict-output",
+      "title": "Drone fleet fuel readout",
+      "prompt": "A small delivery-drone simulator models each drone as an object with its own fuel tank, while a separate shared counter tracks how many flights the whole fleet has completed.\n\nRead the program in the editor and determine exactly what it prints to standard output. Give one value per line, in the same order the program prints them, with no extra spaces and no blank lines.\n\nEvery flight burns whole liters of fuel per ten kilometers traveled (integer division truncates any remainder), and every completed flight adds one to the shared fleet counter, no matter which drone object performed it.",
+      "starterCode": "public class Main {\n    static int fleetTrips = 0;\n\n    static class Drone {\n        int fuel;\n        Drone(int fuel) { this.fuel = fuel; }\n        void fly(int distance) {\n            fuel -= distance / 10;\n            fleetTrips++;\n        }\n    }\n\n    public static void main(String[] args) {\n        Drone a = new Drone(100);\n        Drone b = a;\n        Drone c = new Drone(100);\n\n        a.fly(30);\n        b.fly(20);\n        c.fly(50);\n\n        System.out.println(a.fuel);\n        System.out.println(c.fuel);\n        System.out.println(fleetTrips);\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": false,
+          "name": "printed values"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": false,
+          "name": "printed values repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "public class Main {\n    static int fleetTrips = 0;\n\n    static class Drone {\n        int fuel;\n        Drone(int fuel) { this.fuel = fuel; }\n        void fly(int distance) {\n            fuel -= distance / 10;\n            fleetTrips++;\n        }\n    }\n\n    public static void main(String[] args) {\n        Drone a = new Drone(100);\n        Drone b = a;\n        Drone c = new Drone(100);\n\n        a.fly(30);\n        b.fly(20);\n        c.fly(50);\n\n        System.out.println(a.fuel);\n        System.out.println(c.fuel);\n        System.out.println(fleetTrips);\n    }\n}\n",
+      "tags": [
+        "objects",
+        "references",
+        "reading"
+      ]
+    },
+    {
+      "cloId": "INFS3102-1",
+      "language": "java",
+      "kind": "spot-the-bug",
+      "difficulty": 4,
+      "pattern": "spot-the-bug",
+      "title": "Weekly reading goal tracker",
+      "prompt": "A small class tracks how many pages a reader finished on each day of the week and is supposed to report how many days met or beat a daily goal.\n\nOne line in the program below does not match that description, so the day count comes out wrong even though the code compiles and runs without crashing.\n\nRead the class carefully and identify the single line responsible. Answer with that line's number, counting the very first line of the file as line 1.",
+      "starterCode": "public class WeeklyReading {\n    private int[] pages;\n\n    public WeeklyReading(int[] pages) {\n        this.pages = pages;\n    }\n\n    public int totalPages() {\n        int sum = 0;\n        for (int i = 0; i < pages.length; i++) {\n            sum += pages[i];\n        }\n        return sum;\n    }\n\n    public int daysMetGoal(int goal) {\n        int count = 0;\n        for (int i = 0; i < pages.length; i++) {\n            if (pages[i] > goal) {\n                count++;\n            }\n        }\n        return count;\n    }\n\n    public static void main(String[] args) {\n        WeeklyReading week = new WeeklyReading(new int[]{20, 30, 30, 15, 40, 30, 10});\n        System.out.println(\"Total: \" + week.totalPages());\n        System.out.println(\"Days met goal of 30: \" + week.daysMetGoal(30));\n    }\n}",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "[19]",
+          "hidden": false,
+          "name": "buggy line"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "[19]",
+          "hidden": false,
+          "name": "buggy line repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "[19]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "[19]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "[19]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "public class WeeklyReading {\n    private int[] pages;\n\n    public WeeklyReading(int[] pages) {\n        this.pages = pages;\n    }\n\n    public int totalPages() {\n        int sum = 0;\n        for (int i = 0; i < pages.length; i++) {\n            sum += pages[i];\n        }\n        return sum;\n    }\n\n    public int daysMetGoal(int goal) {\n        int count = 0;\n        for (int i = 0; i < pages.length; i++) {\n            if (pages[i] >= goal) {\n                count++;\n            }\n        }\n        return count;\n    }\n\n    public static void main(String[] args) {\n        WeeklyReading week = new WeeklyReading(new int[]{20, 30, 30, 15, 40, 30, 10});\n        System.out.println(\"Total: \" + week.totalPages());\n        System.out.println(\"Days met goal of 30: \" + week.daysMetGoal(30));\n    }\n}\n",
+      "tags": [
+        "classes",
+        "loops",
+        "debugging"
+      ]
+    },
+    {
+      "cloId": "INFS3102-2",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "schema-design",
+      "title": "Car rental total cost",
+      "prompt": "A car rental counter needs to price a single booking.\n\nDesign a `Vehicle` class that stores a `plate` (String) and a `dailyRate` (double), and a `Rental` class that associates a `Vehicle` with a `renter` (String) and a number of `days` (int); `Rental` computes the total price as `dailyRate * days`.\n\nWrite `Solution.rentalCost(String plate, double dailyRate, String renter, int days)` that builds the `Vehicle` and the `Rental` that references it, then returns the total price formatted to exactly 2 decimal places (no currency symbol). Assume `days` is never negative; zero days returns `\"0.00\"`.\n\nExample: `rentalCost(\"ABC-123\", 25.0, \"Amina\", 3)` returns `\"75.00\"`.",
+      "starterCode": "class Solution {\n    public static String rentalCost(String plate, double dailyRate, String renter, int days) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String plate = in.next();\n        double dailyRate = in.nextDouble();\n        String renter = in.next();\n        int days = in.nextInt();\n        System.out.print(Solution.rentalCost(plate, dailyRate, renter, days));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "ABC-123 25.0 Amina 3",
+          "expected": "75.00",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "XYZ-9 40.5 Sara 2",
+          "expected": "81.00",
+          "hidden": false,
+          "name": "two days"
+        },
+        {
+          "id": "t3",
+          "input": "CAR-1 15.0 Noor 0",
+          "expected": "0.00",
+          "hidden": true,
+          "name": "zero days boundary"
+        },
+        {
+          "id": "t4",
+          "input": "CAR-2 19.99 Huda 1",
+          "expected": "19.99",
+          "hidden": true,
+          "name": "single day"
+        },
+        {
+          "id": "t5",
+          "input": "CAR-3 12.5 Omar 4",
+          "expected": "50.00",
+          "hidden": true,
+          "name": "four days"
+        },
+        {
+          "id": "t6",
+          "input": "CAR-4 9.99 Lina 10",
+          "expected": "99.90",
+          "hidden": true,
+          "name": "longer rental"
+        }
+      ],
+      "referenceSolution": "class Vehicle {\n    String plate;\n    double dailyRate;\n    Vehicle(String plate, double dailyRate) {\n        this.plate = plate;\n        this.dailyRate = dailyRate;\n    }\n}\n\nclass Rental {\n    Vehicle vehicle;\n    String renter;\n    int days;\n    Rental(Vehicle vehicle, String renter, int days) {\n        this.vehicle = vehicle;\n        this.renter = renter;\n        this.days = days;\n    }\n    double total() {\n        return vehicle.dailyRate * days;\n    }\n}\n\nclass Solution {\n    public static String rentalCost(String plate, double dailyRate, String renter, int days) {\n        Vehicle vehicle = new Vehicle(plate, dailyRate);\n        Rental rental = new Rental(vehicle, renter, days);\n        return String.format(java.util.Locale.US, \"%.2f\", rental.total());\n    }\n}\n",
+      "tags": [
+        "classes",
+        "associations",
+        "formatting"
+      ]
+    },
+    {
+      "cloId": "INFS3102-2",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "composition",
+      "title": "Playlist total time",
+      "prompt": "A music app stores a playlist of songs, each with a title and a length in seconds.\n\nDesign a `Song` class that stores a title and its length, and a `Playlist` class that is composed of a list of `Song` objects and can add up their lengths.\n\nWrite `Solution.totalTime(String[] titles, int[] seconds)` that builds a playlist from the two arrays (matching index belongs to the same song) and returns the total playing time as `\"M:SS\"` — minutes with no leading zero, then a colon, then seconds padded to two digits. An empty playlist returns `\"0:00\"`.\n\nExample: `totalTime([\"Intro\", \"Drive\"], [50, 130])` returns `\"3:00\"` (50 + 130 = 180 seconds).",
+      "starterCode": "class Solution {\n    public static String totalTime(String[] titles, int[] seconds) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        String[] titles = new String[n];\n        int[] seconds = new int[n];\n        for (int i = 0; i < n; i++) {\n            String line = in.nextLine();\n            int sp = line.lastIndexOf(' ');\n            titles[i] = line.substring(0, sp);\n            seconds[i] = Integer.parseInt(line.substring(sp + 1).trim());\n        }\n        System.out.print(Solution.totalTime(titles, seconds));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "2\nIntro 50\nDrive 130",
+          "expected": "3:00",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "3\nA 10\nB 20\nC 35",
+          "expected": "1:05",
+          "hidden": false,
+          "name": "three songs"
+        },
+        {
+          "id": "t3",
+          "input": "0",
+          "expected": "0:00",
+          "hidden": true,
+          "name": "empty playlist boundary"
+        },
+        {
+          "id": "t4",
+          "input": "1\nSolo 60",
+          "expected": "1:00",
+          "hidden": true,
+          "name": "exact minute"
+        },
+        {
+          "id": "t5",
+          "input": "1\nQuick 5",
+          "expected": "0:05",
+          "hidden": true,
+          "name": "padded seconds"
+        },
+        {
+          "id": "t6",
+          "input": "2\nSong1 3600\nSong2 5",
+          "expected": "60:05",
+          "hidden": true,
+          "name": "double digit minutes"
+        }
+      ],
+      "referenceSolution": "class Song {\n    String title;\n    int seconds;\n    Song(String title, int seconds) {\n        this.title = title;\n        this.seconds = seconds;\n    }\n}\n\nclass Playlist {\n    private List<Song> songs = new ArrayList<>();\n    void add(Song s) {\n        songs.add(s);\n    }\n    int totalSeconds() {\n        int total = 0;\n        for (Song s : songs) total += s.seconds;\n        return total;\n    }\n}\n\nclass Solution {\n    public static String totalTime(String[] titles, int[] seconds) {\n        Playlist playlist = new Playlist();\n        for (int i = 0; i < titles.length; i++) {\n            playlist.add(new Song(titles[i], seconds[i]));\n        }\n        int total = playlist.totalSeconds();\n        int m = total / 60;\n        int s = total % 60;\n        return m + \":\" + String.format(\"%02d\", s);\n    }\n}\n",
+      "tags": [
+        "classes",
+        "aggregation",
+        "lists"
+      ]
+    },
+    {
+      "cloId": "INFS3102-2",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "inheritance-dispatch",
+      "title": "Payroll bonus total",
+      "prompt": "A small company pays a year-end bonus that depends on each employee's role.\n\nDesign an abstract `Employee` class holding a name and a base salary, with an abstract bonus calculation that each role overrides: a `Manager` bonus is 20% of base salary plus a flat 500; a `Developer` bonus is 10% of base salary plus 50 per completed project; an `Intern` bonus is always a flat 100, no matter the salary. Any other role earns no bonus.\n\nWrite `Solution.totalBonus(String[] roles, String[] names, double[] baseSalaries, int[] extra)` where `roles[i]` is `\"manager\"`, `\"developer\"` or `\"intern\"` (lowercase) and `extra[i]` is the completed-project count, meaningful only for developers. Build the matching employee for each row, read its bonus back through the base type, and return the sum of all bonuses formatted to 2 decimal places.\n\nExample: `totalBonus([\"manager\"], [\"Fahd\"], [1000.0], [0])` returns `\"700.00\"` (1000 * 0.20 + 500).",
+      "starterCode": "class Solution {\n    public static String totalBonus(String[] roles, String[] names, double[] baseSalaries, int[] extra) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        String[] roles = new String[n];\n        String[] names = new String[n];\n        double[] base = new double[n];\n        int[] extra = new int[n];\n        for (int i = 0; i < n; i++) {\n            String[] parts = in.nextLine().trim().split(\"\\\\s+\");\n            roles[i] = parts[0];\n            names[i] = parts[1];\n            base[i] = Double.parseDouble(parts[2]);\n            extra[i] = Integer.parseInt(parts[3]);\n        }\n        System.out.print(Solution.totalBonus(roles, names, base, extra));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "1\nmanager Fahd 1000 0",
+          "expected": "700.00",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "2\ndeveloper Huda 2000 3\nintern Omar 0 0",
+          "expected": "450.00",
+          "hidden": false,
+          "name": "developer and intern"
+        },
+        {
+          "id": "t3",
+          "input": "1\nmanager Sara 1000 5",
+          "expected": "700.00",
+          "hidden": true,
+          "name": "extra ignored for manager"
+        },
+        {
+          "id": "t4",
+          "input": "1\ncontractor Ali 5000 0",
+          "expected": "0.00",
+          "hidden": true,
+          "name": "unknown role"
+        },
+        {
+          "id": "t5",
+          "input": "0",
+          "expected": "0.00",
+          "hidden": true,
+          "name": "empty payroll boundary"
+        },
+        {
+          "id": "t6",
+          "input": "5\nmanager A 1000 0\ndeveloper B 1500 2\nintern C 0 0\ndeveloper D 3000 0\nmanager E 2000 10",
+          "expected": "2250.00",
+          "hidden": true,
+          "name": "larger payroll"
+        }
+      ],
+      "referenceSolution": "abstract class Employee {\n    String name;\n    double baseSalary;\n    Employee(String name, double baseSalary) {\n        this.name = name;\n        this.baseSalary = baseSalary;\n    }\n    abstract double bonus();\n}\n\nclass Manager extends Employee {\n    Manager(String name, double baseSalary) {\n        super(name, baseSalary);\n    }\n    double bonus() {\n        return baseSalary * 0.20 + 500;\n    }\n}\n\nclass Developer extends Employee {\n    int projects;\n    Developer(String name, double baseSalary, int projects) {\n        super(name, baseSalary);\n        this.projects = projects;\n    }\n    double bonus() {\n        return baseSalary * 0.10 + projects * 50;\n    }\n}\n\nclass Intern extends Employee {\n    Intern(String name, double baseSalary) {\n        super(name, baseSalary);\n    }\n    double bonus() {\n        return 100;\n    }\n}\n\nclass Solution {\n    public static String totalBonus(String[] roles, String[] names, double[] baseSalaries, int[] extra) {\n        double total = 0;\n        for (int i = 0; i < roles.length; i++) {\n            Employee e;\n            switch (roles[i]) {\n                case \"manager\": e = new Manager(names[i], baseSalaries[i]); break;\n                case \"developer\": e = new Developer(names[i], baseSalaries[i], extra[i]); break;\n                case \"intern\": e = new Intern(names[i], baseSalaries[i]); break;\n                default: e = null;\n            }\n            if (e != null) total += e.bonus();\n        }\n        return String.format(java.util.Locale.US, \"%.2f\", total);\n    }\n}\n",
+      "tags": [
+        "inheritance",
+        "abstract",
+        "polymorphism",
+        "loops"
+      ]
+    },
+    {
+      "cloId": "INFS3102-2",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "spec-to-steps",
+      "title": "Coffee order pricing",
+      "prompt": "A coffee stand prices an order using these steps, applied in exactly this order:\n\n1. Start from the drink's base price and add $0.75 for every extra shot.\n2. If the customer has a loyalty membership, take 10% off the running total.\n3. If the running total is still more than $6.00 after that, add a flat $0.30 large-order fee.\n4. Round to 2 decimal places and show it with a leading `$`.\n\nWrite `Solution.finalPrice(double basePrice, boolean memberDiscount, int extraShots)` that follows these steps in the given order and returns the price as a string.\n\nExample: `finalPrice(6.00, false, 1)` returns `\"$7.05\"` (6.00 + 0.75 = 6.75, no membership, 6.75 is over $6.00 so add 0.30 = 7.05).",
+      "starterCode": "class Solution {\n    public static String finalPrice(double basePrice, boolean memberDiscount, int extraShots) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        double basePrice = in.nextDouble();\n        boolean memberDiscount = in.nextBoolean();\n        int extraShots = in.nextInt();\n        System.out.print(Solution.finalPrice(basePrice, memberDiscount, extraShots));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "4.00 false 0",
+          "expected": "$4.00",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "6.00 false 1",
+          "expected": "$7.05",
+          "hidden": false,
+          "name": "surcharge applies"
+        },
+        {
+          "id": "t3",
+          "input": "6.00 false 0",
+          "expected": "$6.00",
+          "hidden": true,
+          "name": "exactly six boundary"
+        },
+        {
+          "id": "t4",
+          "input": "10.00 true 2",
+          "expected": "$10.65",
+          "hidden": true,
+          "name": "shots then discount order"
+        },
+        {
+          "id": "t5",
+          "input": "3.00 true 0",
+          "expected": "$2.70",
+          "hidden": true,
+          "name": "discount only"
+        },
+        {
+          "id": "t6",
+          "input": "5.50 false 1",
+          "expected": "$6.55",
+          "hidden": true,
+          "name": "crosses threshold"
+        }
+      ],
+      "referenceSolution": "class Solution {\n    public static String finalPrice(double basePrice, boolean memberDiscount, int extraShots) {\n        double total = basePrice + extraShots * 0.75;\n        if (memberDiscount) {\n            total = total * 0.90;\n        }\n        if (total > 6.00) {\n            total += 0.30;\n        }\n        return \"$\" + String.format(java.util.Locale.US, \"%.2f\", total);\n    }\n}\n",
+      "tags": [
+        "ordered-steps",
+        "conditionals",
+        "rounding"
+      ]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "inheritance-dispatch",
+      "title": "Battle Power Calculator",
+      "prompt": "A fantasy game computes battle power for each fighter before a match begins.\n\nWrite a class `Solution` with a static method `String battlePower(String type, int level)` that builds the matching fighter and returns its report.\n\nCreate an abstract class `Combatant` with an abstract method `int power()` and a concrete method `String report(String name)` that returns `name + \":\" + power()`. Two subclasses extend `Combatant`: `Warrior`, whose `power()` is `level * 5`, and `Mage`, whose `power()` is `level * 3 + 20`. Each subclass stores the level passed into its constructor. If `type` is neither `\"warrior\"` nor `\"mage\"`, return `unknown`.\n\nExample: `battlePower(\"warrior\", 4)` returns `warrior:20`. `battlePower(\"mage\", 4)` returns `mage:32`.",
+      "starterCode": "public class Solution {\n    public static String battlePower(String type, int level) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String type = in.next();\n        int level = in.nextInt();\n        System.out.print(Solution.battlePower(type, level));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "warrior 4",
+          "expected": "warrior:20",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "mage 4",
+          "expected": "mage:32",
+          "hidden": false,
+          "name": "mage"
+        },
+        {
+          "id": "t3",
+          "input": "warrior 1",
+          "expected": "warrior:5",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "mage 0",
+          "expected": "mage:20",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "rogue 5",
+          "expected": "unknown",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "warrior 10",
+          "expected": "warrior:50",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "abstract class Combatant {\n    abstract int power();\n    String report(String name) { return name + \":\" + power(); }\n}\nclass Warrior extends Combatant {\n    private final int level;\n    Warrior(int level) { this.level = level; }\n    int power() { return level * 5; }\n}\nclass Mage extends Combatant {\n    private final int level;\n    Mage(int level) { this.level = level; }\n    int power() { return level * 3 + 20; }\n}\npublic class Solution {\n    public static String battlePower(String type, int level) {\n        if (type.equals(\"warrior\")) return new Warrior(level).report(\"warrior\");\n        if (type.equals(\"mage\")) return new Mage(level).report(\"mage\");\n        return \"unknown\";\n    }\n}\n",
+      "tags": [
+        "inheritance",
+        "polymorphism",
+        "abstract-class"
+      ]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "interface-contract",
+      "title": "Checkout Fee Calculator",
+      "prompt": "An online store charges a different processing fee per payment method before totaling an order.\n\nWrite a class `Solution` with a static method `String checkoutTotal(String[] methods, double[] amounts)`. Each index pairs a payment method name with an amount charged through it. Define an interface `PaymentMethod` with a method `double fee(double amount)`, and three implementations: `CreditCard` charges `amount * 0.029 + 0.30`, `Wallet` charges `amount * 0.015`, and `Cash` charges nothing. Any other method name also charges nothing. For each pair, add `amount` plus its fee to a running total, then return the total formatted to exactly two decimal places.\n\nConstraints: `methods.length == amounts.length`; the arrays may be empty, in which case the total is `0.00`.\n\nExample: `checkoutTotal(new String[]{\"creditcard\", \"cash\"}, new double[]{100.0, 50.0})` returns `153.20`.",
+      "starterCode": "public class Solution {\n    public static String checkoutTotal(String[] methods, double[] amounts) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        String[] methods = new String[n];\n        double[] amounts = new double[n];\n        for (int i = 0; i < n; i++) {\n            String line = in.nextLine().trim();\n            String[] parts = line.split(\" \");\n            methods[i] = parts[0];\n            amounts[i] = Double.parseDouble(parts[1]);\n        }\n        System.out.print(Solution.checkoutTotal(methods, amounts));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "2\ncreditcard 100.0\ncash 50.0",
+          "expected": "153.20",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "1\nwallet 200.0",
+          "expected": "203.00",
+          "hidden": false,
+          "name": "wallet only"
+        },
+        {
+          "id": "t3",
+          "input": "0",
+          "expected": "0.00",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "1\nbitcoin 40.0",
+          "expected": "40.00",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "3\ncreditcard 10.0\nwallet 10.0\ncash 10.0",
+          "expected": "30.74",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "1\ncreditcard 1000.0",
+          "expected": "1029.30",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "interface PaymentMethod {\n    double fee(double amount);\n}\nclass CreditCard implements PaymentMethod {\n    public double fee(double amount) { return amount * 0.029 + 0.30; }\n}\nclass Wallet implements PaymentMethod {\n    public double fee(double amount) { return amount * 0.015; }\n}\nclass Cash implements PaymentMethod {\n    public double fee(double amount) { return 0.0; }\n}\npublic class Solution {\n    public static String checkoutTotal(String[] methods, double[] amounts) {\n        double total = 0.0;\n        for (int i = 0; i < methods.length; i++) {\n            PaymentMethod pm;\n            switch (methods[i]) {\n                case \"creditcard\": pm = new CreditCard(); break;\n                case \"wallet\": pm = new Wallet(); break;\n                default: pm = new Cash(); break;\n            }\n            total += amounts[i] + pm.fee(amounts[i]);\n        }\n        return String.format(java.util.Locale.US, \"%.2f\", total);\n    }\n}\n",
+      "tags": [
+        "interfaces",
+        "implementation",
+        "fees"
+      ]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "guard",
+      "title": "Library Checkout Rules",
+      "prompt": "A library checkout counter decides whether a member may borrow a book.\n\nWrite a class `Solution` with a static method `String checkout(boolean membershipActive, int copiesAvailable, int booksAlreadyOut)`.\n\nDefine three checked exceptions extending `Exception`: `InactiveMembershipException`, `OutOfStockException`, and `LimitReachedException`. Write a private helper method that throws, checking in this exact order: `InactiveMembershipException` when `membershipActive` is false, then `OutOfStockException` when `copiesAvailable` is 0 or less, then `LimitReachedException` when `booksAlreadyOut` is 3 or more (the borrowing limit). `checkout` must call the helper inside a `try` block and catch each exception type, returning its message; when nothing is thrown, return `approved`.\n\nException messages, exactly: `inactive membership`, `no copies available`, `limit reached`.\n\nExample: `checkout(true, 2, 1)` returns `approved`. `checkout(false, 2, 1)` returns `inactive membership`.",
+      "starterCode": "public class Solution {\n    public static String checkout(boolean membershipActive, int copiesAvailable, int booksAlreadyOut) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        boolean membershipActive = in.nextBoolean();\n        int copiesAvailable = in.nextInt();\n        int booksAlreadyOut = in.nextInt();\n        System.out.print(Solution.checkout(membershipActive, copiesAvailable, booksAlreadyOut));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "true 2 1",
+          "expected": "approved",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "false 2 1",
+          "expected": "inactive membership",
+          "hidden": false,
+          "name": "inactive"
+        },
+        {
+          "id": "t3",
+          "input": "true 0 1",
+          "expected": "no copies available",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "true 2 3",
+          "expected": "limit reached",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "false 0 5",
+          "expected": "inactive membership",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "true 5 0",
+          "expected": "approved",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "true 1 2",
+          "expected": "approved",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "class InactiveMembershipException extends Exception {\n    InactiveMembershipException(String message) { super(message); }\n}\nclass OutOfStockException extends Exception {\n    OutOfStockException(String message) { super(message); }\n}\nclass LimitReachedException extends Exception {\n    LimitReachedException(String message) { super(message); }\n}\npublic class Solution {\n    private static void validate(boolean membershipActive, int copiesAvailable, int booksAlreadyOut)\n            throws InactiveMembershipException, OutOfStockException, LimitReachedException {\n        if (!membershipActive) throw new InactiveMembershipException(\"inactive membership\");\n        if (copiesAvailable <= 0) throw new OutOfStockException(\"no copies available\");\n        if (booksAlreadyOut >= 3) throw new LimitReachedException(\"limit reached\");\n    }\n    public static String checkout(boolean membershipActive, int copiesAvailable, int booksAlreadyOut) {\n        try {\n            validate(membershipActive, copiesAvailable, booksAlreadyOut);\n            return \"approved\";\n        } catch (InactiveMembershipException | OutOfStockException | LimitReachedException e) {\n            return e.getMessage();\n        }\n    }\n}\n",
+      "tags": [
+        "exceptions",
+        "validation",
+        "custom-exceptions"
+      ]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "aggregate",
+      "title": "Average Temperature Log",
+      "prompt": "A weather station logs temperature readings throughout the day.\n\nWrite a class `Solution` with a static method `String averageTemperature(List<Double> readings)` that returns the average of all readings rounded to one decimal place, formatted as a plain number string. An empty list has no readings recorded, so return `0.0`.\n\nExample: `averageTemperature(List.of(20.0, 22.0, 23.0))` returns `21.7`.",
+      "starterCode": "import java.util.List;\n\npublic class Solution {\n    public static String averageTemperature(List<Double> readings) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = in.nextInt();\n        List<Double> readings = new ArrayList<>();\n        for (int i = 0; i < n; i++) readings.add(in.nextDouble());\n        System.out.print(Solution.averageTemperature(readings));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "3 20.0 22.0 23.0",
+          "expected": "21.7",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "1 15.0",
+          "expected": "15.0",
+          "hidden": false,
+          "name": "single reading"
+        },
+        {
+          "id": "t3",
+          "input": "0",
+          "expected": "0.0",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "4 10.0 10.0 10.0 10.0",
+          "expected": "10.0",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "2 -5.0 5.0",
+          "expected": "0.0",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "3 1.0 2.0 2.0",
+          "expected": "1.7",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "import java.util.List;\n\npublic class Solution {\n    public static String averageTemperature(List<Double> readings) {\n        if (readings.isEmpty()) return \"0.0\";\n        double sum = 0.0;\n        for (double r : readings) sum += r;\n        double avg = sum / readings.size();\n        return String.format(java.util.Locale.US, \"%.1f\", avg);\n    }\n}\n",
+      "tags": [
+        "collections",
+        "aggregation",
+        "lists"
+      ]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "transform",
+      "title": "Recipe Quantity Scaler",
+      "prompt": "A home cook wants to scale a recipe up or down before shopping for ingredients.\n\nWrite a class `Solution` with a static method `String scaleRecipe(List<Double> quantities, double factor)`. Multiply every quantity by `factor`, round each result to two decimal places, and join them with commas and no spaces. An empty ingredient list returns an empty string.\n\nConstraints: quantities are given in the same unit throughout; `factor` can be zero or greater.\n\nExample: `scaleRecipe(List.of(1.0, 2.5), 2.0)` returns `2.00,5.00`.",
+      "starterCode": "import java.util.List;\n\npublic class Solution {\n    public static String scaleRecipe(List<Double> quantities, double factor) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = in.nextInt();\n        List<Double> quantities = new ArrayList<>();\n        for (int i = 0; i < n; i++) quantities.add(in.nextDouble());\n        double factor = in.nextDouble();\n        System.out.print(Solution.scaleRecipe(quantities, factor));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "2 1.0 2.5 2.0",
+          "expected": "2.00,5.00",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "3 4.0 1.0 0.5 1.5",
+          "expected": "6.00,1.50,0.75",
+          "hidden": false,
+          "name": "three ingredients"
+        },
+        {
+          "id": "t3",
+          "input": "0 3.0",
+          "expected": "",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "1 10.0 0.0",
+          "expected": "0.00",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "4 1.0 1.0 1.0 1.0 1.0",
+          "expected": "1.00,1.00,1.00,1.00",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "2 2.0 3.0 2.5",
+          "expected": "5.00,7.50",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "import java.util.List;\nimport java.util.ArrayList;\n\npublic class Solution {\n    public static String scaleRecipe(List<Double> quantities, double factor) {\n        List<String> scaled = new ArrayList<>();\n        for (double q : quantities) {\n            scaled.add(String.format(java.util.Locale.US, \"%.2f\", q * factor));\n        }\n        return String.join(\",\", scaled);\n    }\n}\n",
+      "tags": [
+        "collections",
+        "lists",
+        "formatting"
+      ]
+    },
+    {
+      "cloId": "INFS3102-3",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "state-machine",
+      "title": "Music Player State Tracker",
+      "prompt": "A music player starts stopped and reacts to a sequence of button presses.\n\nWrite a class `Solution` with a static method `String finalState(String[] commands)` that starts in state `STOPPED` and applies each command in order, then returns the state reached after the last one.\n\nTransition rules:\n- In `STOPPED`, only `\"play\"` has an effect, moving to `PLAYING`.\n- In `PLAYING`, `\"pause\"` moves to `PAUSED` and `\"stop\"` moves to `STOPPED`; `\"play\"` has no effect.\n- In `PAUSED`, `\"play\"` moves to `PLAYING` and `\"stop\"` moves to `STOPPED`; `\"pause\"` has no effect.\n\nAny command not valid for the current state is ignored and the state does not change. `commands` may be empty, in which case the answer is `STOPPED`.\n\nExample: `finalState(new String[]{\"play\", \"pause\", \"play\"})` returns `PLAYING`.",
+      "starterCode": "public class Solution {\n    public static String finalState(String[] commands) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = in.nextInt();\n        String[] commands = new String[n];\n        for (int i = 0; i < n; i++) commands[i] = in.next();\n        System.out.print(Solution.finalState(commands));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "3 play pause play",
+          "expected": "PLAYING",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "2 play stop",
+          "expected": "STOPPED",
+          "hidden": false,
+          "name": "play then stop"
+        },
+        {
+          "id": "t3",
+          "input": "0",
+          "expected": "STOPPED",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "1 pause",
+          "expected": "STOPPED",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "4 play pause stop play",
+          "expected": "PLAYING",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "3 play play pause",
+          "expected": "PAUSED",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "5 play pause pause play stop",
+          "expected": "STOPPED",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "public class Solution {\n    public static String finalState(String[] commands) {\n        String state = \"STOPPED\";\n        for (String cmd : commands) {\n            switch (state) {\n                case \"STOPPED\":\n                    if (cmd.equals(\"play\")) state = \"PLAYING\";\n                    break;\n                case \"PLAYING\":\n                    if (cmd.equals(\"pause\")) state = \"PAUSED\";\n                    else if (cmd.equals(\"stop\")) state = \"STOPPED\";\n                    break;\n                case \"PAUSED\":\n                    if (cmd.equals(\"play\")) state = \"PLAYING\";\n                    else if (cmd.equals(\"stop\")) state = \"STOPPED\";\n                    break;\n            }\n        }\n        return state;\n    }\n}\n",
+      "tags": [
+        "state",
+        "control-flow",
+        "sequences"
+      ]
+    },
+    {
+      "cloId": "INFS3102-4",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "interface-contract",
+      "title": "Delivery fee calculator",
+      "prompt": "A parcel courier app quotes a delivery fee depending on which vehicle carries the package.\n\nWrite a class `Solution` with a static method `String quote(String mode, double distanceKm)`. Each vehicle has its own base fee and per-kilometre rate: `bike` costs 2.00 plus 0.50 per km, `van` costs 5.00 plus 1.20 per km, `drone` costs 8.00 plus 0.30 per km. Return `<mode>:<fee>` with the fee rounded to 2 decimal places. For any other mode, return `invalid`. Support each vehicle through its own class behind one shared contract, so a new vehicle can be added later without touching the pricing logic of the others.\n\nExample: `quote(\"bike\", 5)` returns `bike:4.50`. `quote(\"car\", 3)` returns `invalid`.",
+      "starterCode": "public class Solution {\n    public static String quote(String mode, double distanceKm) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String mode = in.next();\n        double distanceKm = in.nextDouble();\n        System.out.print(Solution.quote(mode, distanceKm));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "bike 5",
+          "expected": "bike:4.50",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "van 2",
+          "expected": "van:7.40",
+          "hidden": false,
+          "name": "van rate"
+        },
+        {
+          "id": "t3",
+          "input": "drone 10",
+          "expected": "drone:11.00",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "car 3",
+          "expected": "invalid",
+          "hidden": true,
+          "name": "unknown mode"
+        },
+        {
+          "id": "t5",
+          "input": "bike 0",
+          "expected": "bike:2.00",
+          "hidden": true,
+          "name": "zero distance"
+        },
+        {
+          "id": "t6",
+          "input": "drone 0.5",
+          "expected": "drone:8.15",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "van 12.5",
+          "expected": "van:20.00",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "interface FeeStrategy {\n    double fee(double distanceKm);\n}\nclass BikeFee implements FeeStrategy {\n    public double fee(double distanceKm) { return 2.00 + 0.50 * distanceKm; }\n}\nclass VanFee implements FeeStrategy {\n    public double fee(double distanceKm) { return 5.00 + 1.20 * distanceKm; }\n}\nclass DroneFee implements FeeStrategy {\n    public double fee(double distanceKm) { return 8.00 + 0.30 * distanceKm; }\n}\npublic class Solution {\n    public static String quote(String mode, double distanceKm) {\n        FeeStrategy strategy;\n        if (mode.equals(\"bike\")) strategy = new BikeFee();\n        else if (mode.equals(\"van\")) strategy = new VanFee();\n        else if (mode.equals(\"drone\")) strategy = new DroneFee();\n        else return \"invalid\";\n        return mode + \":\" + String.format(java.util.Locale.US, \"%.2f\", strategy.fee(distanceKm));\n    }\n}\n",
+      "tags": [
+        "interfaces",
+        "polymorphism",
+        "delivery",
+        "pricing"
+      ]
+    },
+    {
+      "cloId": "INFS3102-4",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "composition",
+      "title": "Coffee order pricing",
+      "prompt": "A cafe's till adds each extra to a drink one at a time, and the receipt must list them in the order they were rung up.\n\nWrite a class `Solution` with a static method `String order(String base, String[] addons)`. `base` is one of `espresso` (1.80), `latte` (3.20) or `tea` (2.00); each entry in `addons` is one of `milk` (+0.40), `syrup` (+0.60) or `shot` (+0.90), and the same extra can repeat. Apply the extras in the given order and return `<label>:<total>`, where `<label>` chains the names with a `+` in that order and `<total>` is the price rounded to 2 decimal places. Return `invalid` when the base or any extra is not recognised.\n\nExample: a `latte` with `milk` then `syrup` returns `latte+milk+syrup:4.20`. A `tea` with no extras returns `tea:2.00`.",
+      "starterCode": "public class Solution {\n    public static String order(String base, String[] addons) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String base = in.next();\n        int n = in.nextInt();\n        String[] addons = new String[n];\n        for (int i = 0; i < n; i++) addons[i] = in.next();\n        System.out.print(Solution.order(base, addons));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "latte 2 milk syrup",
+          "expected": "latte+milk+syrup:4.20",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "tea 0",
+          "expected": "tea:2.00",
+          "hidden": false,
+          "name": "no extras"
+        },
+        {
+          "id": "t3",
+          "input": "espresso 1 shot",
+          "expected": "espresso+shot:2.70",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "espresso 3 milk milk milk",
+          "expected": "espresso+milk+milk+milk:3.00",
+          "hidden": true,
+          "name": "repeated extra"
+        },
+        {
+          "id": "t5",
+          "input": "mocha 1 milk",
+          "expected": "invalid",
+          "hidden": true,
+          "name": "unknown base"
+        },
+        {
+          "id": "t6",
+          "input": "latte 1 whip",
+          "expected": "invalid",
+          "hidden": true,
+          "name": "unknown extra"
+        },
+        {
+          "id": "t7",
+          "input": "tea 3 milk shot syrup",
+          "expected": "tea+milk+shot+syrup:3.90",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "interface Drink {\n    String label();\n    double price();\n}\nclass Espresso implements Drink {\n    public String label() { return \"espresso\"; }\n    public double price() { return 1.80; }\n}\nclass Latte implements Drink {\n    public String label() { return \"latte\"; }\n    public double price() { return 3.20; }\n}\nclass Tea implements Drink {\n    public String label() { return \"tea\"; }\n    public double price() { return 2.00; }\n}\nabstract class AddonDecorator implements Drink {\n    protected final Drink wrapped;\n    AddonDecorator(Drink wrapped) { this.wrapped = wrapped; }\n    public String label() { return wrapped.label() + \"+\" + name(); }\n    public double price() { return wrapped.price() + extra(); }\n    abstract String name();\n    abstract double extra();\n}\nclass MilkAddon extends AddonDecorator {\n    MilkAddon(Drink wrapped) { super(wrapped); }\n    String name() { return \"milk\"; }\n    double extra() { return 0.40; }\n}\nclass SyrupAddon extends AddonDecorator {\n    SyrupAddon(Drink wrapped) { super(wrapped); }\n    String name() { return \"syrup\"; }\n    double extra() { return 0.60; }\n}\nclass ShotAddon extends AddonDecorator {\n    ShotAddon(Drink wrapped) { super(wrapped); }\n    String name() { return \"shot\"; }\n    double extra() { return 0.90; }\n}\npublic class Solution {\n    public static String order(String base, String[] addons) {\n        Drink drink;\n        if (base.equals(\"espresso\")) drink = new Espresso();\n        else if (base.equals(\"latte\")) drink = new Latte();\n        else if (base.equals(\"tea\")) drink = new Tea();\n        else return \"invalid\";\n        for (String a : addons) {\n            if (a.equals(\"milk\")) drink = new MilkAddon(drink);\n            else if (a.equals(\"syrup\")) drink = new SyrupAddon(drink);\n            else if (a.equals(\"shot\")) drink = new ShotAddon(drink);\n            else return \"invalid\";\n        }\n        return drink.label() + \":\" + String.format(java.util.Locale.US, \"%.2f\", drink.price());\n    }\n}\n",
+      "tags": [
+        "wrapping",
+        "decorators",
+        "pricing",
+        "cafe"
+      ]
+    },
+    {
+      "cloId": "INFS3102-4",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "refactor-to-pattern",
+      "title": "Shared ticket counter",
+      "prompt": "A help desk hands out ticket numbers to whichever staff member asks next, and every number must be used exactly once no matter which department is asking.\n\nWrite a class `Solution` with a static method `String process(String[] commands)`. Each entry in `commands` is either `NEW <department>`, which hands out the next ticket number (starting at 1, shared by every department) and reports `<department>:<number>`, or `COUNT`, which reports how many tickets have been handed out so far as `count:<n>` without using one up. Return one result per command, joined with commas, in the order the commands arrived. The same running total must be visible no matter which line of code asks for it.\n\nExample: commands `NEW support`, `NEW sales`, `NEW support` produce `support:1,sales:2,support:3`.",
+      "starterCode": "public class Solution {\n    public static String process(String[] commands) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        String[] commands = new String[n];\n        for (int i = 0; i < n; i++) commands[i] = in.nextLine();\n        System.out.print(Solution.process(commands));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "3\nNEW support\nNEW sales\nNEW support",
+          "expected": "support:1,sales:2,support:3",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "2\nNEW billing\nCOUNT",
+          "expected": "billing:1,count:1",
+          "hidden": false,
+          "name": "count after one"
+        },
+        {
+          "id": "t3",
+          "input": "1\nCOUNT",
+          "expected": "count:0",
+          "hidden": true,
+          "name": "no tickets yet"
+        },
+        {
+          "id": "t4",
+          "input": "6\nNEW a\nNEW b\nNEW c\nCOUNT\nNEW a\nCOUNT",
+          "expected": "a:1,b:2,c:3,count:3,a:4,count:4",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "5\nNEW support\nNEW support\nNEW sales\nNEW sales\nNEW sales",
+          "expected": "support:1,support:2,sales:3,sales:4,sales:5",
+          "hidden": true,
+          "name": "shared across departments"
+        },
+        {
+          "id": "t6",
+          "input": "10\nNEW x\nNEW y\nNEW x\nNEW y\nNEW x\nCOUNT\nNEW z\nNEW z\nCOUNT\nNEW y",
+          "expected": "x:1,y:2,x:3,y:4,x:5,count:5,z:6,z:7,count:7,y:8",
+          "hidden": true,
+          "name": "long mixed run"
+        },
+        {
+          "id": "t7",
+          "input": "1\nNEW only",
+          "expected": "only:1",
+          "hidden": true,
+          "name": "single ticket"
+        }
+      ],
+      "referenceSolution": "import java.util.*;\n\nclass TicketCounter {\n    private static TicketCounter instance;\n    private int issued = 0;\n    private TicketCounter() {}\n    static TicketCounter getInstance() {\n        if (instance == null) instance = new TicketCounter();\n        return instance;\n    }\n    int next() { issued += 1; return issued; }\n    int total() { return issued; }\n}\npublic class Solution {\n    public static String process(String[] commands) {\n        List<String> out = new ArrayList<>();\n        for (String line : commands) {\n            String[] parts = line.trim().split(\" \", 2);\n            String cmd = parts[0];\n            if (cmd.equals(\"NEW\")) {\n                String dept = parts[1];\n                int num = TicketCounter.getInstance().next();\n                out.add(dept + \":\" + num);\n            } else if (cmd.equals(\"COUNT\")) {\n                out.add(\"count:\" + TicketCounter.getInstance().total());\n            }\n        }\n        return String.join(\",\", out);\n    }\n}\n",
+      "tags": [
+        "singleton",
+        "shared-state",
+        "counters"
+      ]
+    },
+    {
+      "cloId": "INFS3102-4",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "inheritance-dispatch",
+      "title": "Enemy wave spawner",
+      "prompt": "A game wave spawner reads a list of enemy codes and must create the right enemy for each one, letting every enemy type decide its own strength.\n\nWrite a class `Solution` with a static method `String spawnWave(String[] codes, int level)`. Each code is `goblin` (base power 5) or `dragon` (base power 40); an enemy's power is its base power times `level`. For each code, in order, produce `<code>:<power>`, or `unknown` for any other code, then join the results with commas. An empty `codes` array returns an empty string. Structure the enemy types and how each is built as separate classes, so adding a new enemy later needs no changes to the existing ones.\n\nExample: codes `goblin`, `dragon` at level 1 produce `goblin:5,dragon:40`. A `dragon` at level 0 produces `dragon:0`.",
+      "starterCode": "public class Solution {\n    public static String spawnWave(String[] codes, int level) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int level = in.nextInt();\n        int n = in.nextInt();\n        String[] codes = new String[n];\n        for (int i = 0; i < n; i++) codes[i] = in.next();\n        System.out.print(Solution.spawnWave(codes, level));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "1 2 goblin dragon",
+          "expected": "goblin:5,dragon:40",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "3 1 goblin",
+          "expected": "goblin:15",
+          "hidden": false,
+          "name": "higher level"
+        },
+        {
+          "id": "t3",
+          "input": "2 2 dragon dragon",
+          "expected": "dragon:80,dragon:80",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "5 0",
+          "expected": "",
+          "hidden": true,
+          "name": "empty wave"
+        },
+        {
+          "id": "t5",
+          "input": "0 1 dragon",
+          "expected": "dragon:0",
+          "hidden": true,
+          "name": "zero level"
+        },
+        {
+          "id": "t6",
+          "input": "2 3 goblin troll dragon",
+          "expected": "goblin:10,unknown,dragon:80",
+          "hidden": true,
+          "name": "unknown code"
+        },
+        {
+          "id": "t7",
+          "input": "4 4 goblin goblin dragon goblin",
+          "expected": "goblin:20,goblin:20,dragon:160,goblin:20",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "abstract class Enemy {\n    abstract String kind();\n    abstract int basePower();\n    String describe(int level) { return kind() + \":\" + (basePower() * level); }\n}\nclass Goblin extends Enemy {\n    String kind() { return \"goblin\"; }\n    int basePower() { return 5; }\n}\nclass Dragon extends Enemy {\n    String kind() { return \"dragon\"; }\n    int basePower() { return 40; }\n}\nabstract class Spawner {\n    abstract Enemy create();\n    String spawn(int level) { return create().describe(level); }\n}\nclass GoblinSpawner extends Spawner {\n    Enemy create() { return new Goblin(); }\n}\nclass DragonSpawner extends Spawner {\n    Enemy create() { return new Dragon(); }\n}\npublic class Solution {\n    public static String spawnWave(String[] codes, int level) {\n        StringBuilder sb = new StringBuilder();\n        for (int i = 0; i < codes.length; i++) {\n            Spawner spawner;\n            if (codes[i].equals(\"goblin\")) spawner = new GoblinSpawner();\n            else if (codes[i].equals(\"dragon\")) spawner = new DragonSpawner();\n            else spawner = null;\n            if (i > 0) sb.append(\",\");\n            sb.append(spawner == null ? \"unknown\" : spawner.spawn(level));\n        }\n        return sb.toString();\n    }\n}\n",
+      "tags": [
+        "polymorphism",
+        "overriding",
+        "factory-method",
+        "games"
+      ]
+    },
+    {
+      "cloId": "INFS3102-2",
+      "language": "java",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "spec-to-steps",
+      "title": "Photo booth session pricing",
+      "prompt": "A mall photo booth prices a single session using these steps, applied in exactly this order:\n\n1. Start from the session's base price and add $0.75 for every extra photo shot taken.\n2. If the customer has a booth membership, take 10% off the running total.\n3. If the running total is still more than $6.00 after that, add a flat $0.30 printing fee.\n4. Round to 2 decimal places and show it with a leading `$`.\n\nWrite `Solution.finalPrice(double basePrice, boolean memberDiscount, int extraShots)` that follows these steps in the given order and returns the price as a string.\n\nExample: `finalPrice(6.00, false, 1)` returns `\"$7.05\"` (6.00 + 0.75 = 6.75, no membership, 6.75 is over $6.00 so add 0.30 = 7.05).",
+      "starterCode": "class Solution {\n    public static String finalPrice(double basePrice, boolean memberDiscount, int extraShots) {\n        return \"\";\n    }\n}\n",
+      "fixture": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        double basePrice = in.nextDouble();\n        boolean memberDiscount = in.nextBoolean();\n        int extraShots = in.nextInt();\n        System.out.print(Solution.finalPrice(basePrice, memberDiscount, extraShots));\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "4.00 false 0",
+          "expected": "$4.00",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "6.00 false 1",
+          "expected": "$7.05",
+          "hidden": false,
+          "name": "surcharge applies"
+        },
+        {
+          "id": "t3",
+          "input": "6.00 false 0",
+          "expected": "$6.00",
+          "hidden": true,
+          "name": "exactly six boundary"
+        },
+        {
+          "id": "t4",
+          "input": "10.00 true 2",
+          "expected": "$10.65",
+          "hidden": true,
+          "name": "shots then discount order"
+        },
+        {
+          "id": "t5",
+          "input": "3.00 true 0",
+          "expected": "$2.70",
+          "hidden": true,
+          "name": "discount only"
+        },
+        {
+          "id": "t6",
+          "input": "5.50 false 1",
+          "expected": "$6.55",
+          "hidden": true,
+          "name": "crosses threshold"
+        }
+      ],
+      "referenceSolution": "class Solution {\n    public static String finalPrice(double basePrice, boolean memberDiscount, int extraShots) {\n        double total = basePrice + extraShots * 0.75;\n        if (memberDiscount) {\n            total = total * 0.90;\n        }\n        if (total > 6.00) {\n            total += 0.30;\n        }\n        return \"$\" + String.format(java.util.Locale.US, \"%.2f\", total);\n    }\n}\n",
+      "tags": [
+        "ordered-steps",
+        "conditionals",
+        "rounding"
+      ]
+    }
+  ]
+}

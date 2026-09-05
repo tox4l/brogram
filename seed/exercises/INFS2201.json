@@ -1,0 +1,1100 @@
+{
+  "exercises": [
+    {
+      "cloId": "INFS2201-1",
+      "language": "sql",
+      "kind": "predict-output",
+      "difficulty": 2,
+      "pattern": "predict-output",
+      "title": "Counting pets per owner",
+      "prompt": "A small town's animal licensing office keeps two small tables instead of one big spreadsheet. `owners` has one row per registered pet owner: a unique `owner_id` and a `name`. `pets` has one row per licensed pet: its own `pet_id`, a `name`, and an `owner_id` that must match a real row in `owners` - that matching link is the whole point of splitting the data into two tables instead of retyping the owner's details on every pet row.\n\nowners\n\n| owner_id | name |\n|---|---|\n| 1 | Farah |\n| 2 | Bilal |\n| 3 | Mina |\n\npets\n\n| pet_id | name | owner_id |\n|---|---|---|\n| 10 | Milo | 1 |\n| 11 | Coco | 2 |\n| 12 | Rex | 1 |\n| 13 | Nala | 3 |\n| 14 | Simba | 2 |\n| 15 | Leo | 2 |\n\nExample: Farah's `owner_id` is 1, and two `pets` rows have `owner_id` 1 (Milo, Rex), so Farah owns 2 pets.\n\nHow many pets does Bilal own? Answer with a single number.",
+      "starterCode": "-- No query to write here. Read the two tables above, then type your numeric answer in the response box.\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "3",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "3",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "3",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "3",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "3",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "3",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "Bilal's owner_id is 2. Scanning the pets table for rows where owner_id equals 2 finds Coco, Simba, and Leo, so Bilal owns 3 pets. The link only works because every owner_id value in pets matches a real owner_id in owners - that is exactly what a foreign key guarantees, and it is why two small linked tables can stand in for one repetitive spreadsheet.",
+      "tags": [
+        "foreign-key",
+        "primary-key",
+        "relational-model"
+      ]
+    },
+    {
+      "cloId": "INFS2201-1",
+      "language": "sql",
+      "kind": "spot-the-bug",
+      "difficulty": 3,
+      "pattern": "spot-the-bug",
+      "title": "Two identical library loans",
+      "prompt": "A neighborhood library tracks every loan in a single spreadsheet called Loans, with columns book_title, borrower_name, borrower_email, and loan_date. Nothing in the sheet guarantees that any row is different from any other row.\n\nLoans\n\n| book_title | borrower_name | borrower_email | loan_date |\n|---|---|---|---|\n| The Hobbit | Amal Hassan | amal@example.com | 2026-01-03 |\n| Dune | Yousef Al-Sayed | yousef@example.com | 2026-01-04 |\n| The Hobbit | Amal Hassan | amal@example.com | 2026-01-03 |\n| 1984 | Reem Nasser | reem@example.com | 2026-01-05 |\n| Dune | Yousef Al-Sayed | yousef@example.com | 2026-01-06 |\n\nRows 1 and 3 are word-for-word identical - maybe the library owns two copies of The Hobbit and both went out that day - but the sheet cannot tell those two loans apart. The librarian wants to add exactly one new column so every row is guaranteed different from every other row, and any single row can be looked up or corrected without touching the rest.\n\nWhat is the two-word database term for that kind of column?",
+      "starterCode": "-- No query to write here. Study the sheet above, then type your answer in the response box.\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "primary key",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "primary key",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "primary key",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "primary key",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "primary key",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "primary key",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "Rows 1 and 3 have the exact same title, borrower, email, and loan date, so nothing in the sheet can tell them apart if the library ever needs to update or delete just one of them. Adding a primary key - a column such as loan_id that is unique for every row - fixes this: each loan gets its own id, so staff can act on one record without touching the other. A plain spreadsheet has no way to guarantee that on its own.",
+      "tags": [
+        "primary-key",
+        "data-integrity",
+        "duplicates"
+      ]
+    },
+    {
+      "cloId": "INFS2201-1",
+      "language": "sql",
+      "kind": "trace",
+      "difficulty": 4,
+      "pattern": "spec-to-steps",
+      "title": "Turning an order sheet into tables",
+      "prompt": "Sunrise Bakery keeps one spreadsheet called Order Sheet with columns sale_id, customer_name, customer_phone, item_name, item_price, quantity, and sale_date. Every sale retypes the customer's name, phone, and the item's price, even when the same customer or item already appears on ten other rows.\n\nThe owner wants to split this into linked tables and has written five steps, but mixed up the order:\n\nA. Add a foreign key column to the sales table for each table it must reference, so one sale points at one customer and one item.\nB. Look at the sheet and list the separate things hiding inside it: customers, items, and sales.\nC. Give each new table a primary key: a column guaranteed unique for every row in it.\nD. For each thing, keep only the columns that describe it, moving item_price into its own table.\nE. Create the tables, now that every table, key, and link between tables has been decided.\n\nAnswer with the five letters in the order the steps must happen, separated by a comma and a space, such as: A, B, C, D, E (a format example only, not the answer).",
+      "starterCode": "-- No query to write here. Read the five steps above, then type your ordering in the response box.\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "B, D, C, A, E",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "B, D, C, A, E",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "B, D, C, A, E",
+          "hidden": false,
+          "name": "answer check"
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "B, D, C, A, E",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "B, D, C, A, E",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "B, D, C, A, E",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "Start by finding the separate things hiding in the sheet - customers, items, and sales (B). Next, sort the columns so each of those things keeps only the columns that describe it, pulling item_price into its own items table (D). Only once a table's own columns are settled can it get a primary key that is guaranteed unique per row (C). A foreign key can only point at a primary key that already exists, so linking sales to customers and items comes next (A). Finally, with every table, key, and link decided, the tables themselves get created (E). Order: B, D, C, A, E.",
+      "tags": [
+        "entities",
+        "primary-key",
+        "foreign-key",
+        "database-design"
+      ]
+    },
+    {
+      "cloId": "INFS2201-2",
+      "language": "sql",
+      "kind": "schema",
+      "difficulty": 2,
+      "pattern": "schema-design",
+      "title": "Podcast shows and episodes",
+      "prompt": "A podcast network tracks shows and the episodes that belong to them. Each show can have many episodes, but every episode belongs to exactly one show.\n\nWrite the `CREATE TABLE` statements for `shows` and `episodes` so the relationship is modeled correctly.\n\nRequirements:\n- `shows`: `id` (integer, primary key), `title` (text, required).\n- `episodes`: `id` (integer, primary key), `show_id` (integer, required, references `shows.id`), `title` (text, required), `episode_number` (integer, required).\n- Every episode must point at a real show, and a show may have any number of episodes, including none.\n\nExample: after creating the tables, inserting show `(1, 'Night Shift')` and episode `(1, 1, 'Pilot', 1)`, selecting `show_id, title, episode_number` from `episodes` returns one row: `1, 'Pilot', 1`.",
+      "starterCode": "-- create the `shows` and `episodes` tables below\n-- shows: id, title\n-- episodes: id, show_id, title, episode_number\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "insert into shows values (1,'Night Shift');\ninsert into episodes values (1,1,'Pilot',1);\nselect show_id, title, episode_number from episodes;",
+          "expected": "{\"columns\":[\"show_id\",\"title\",\"episode_number\"],\"values\":[[1,\"Pilot\",1]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "insert into shows values (1,'Night Shift'),(2,'Quiet Room');\ninsert into episodes values (1,1,'Pilot',1),(2,2,'Intro',1);\nselect s.title as show_title, e.title as episode_title from shows s join episodes e on e.show_id = s.id order by s.id;",
+          "expected": "{\"columns\":[\"show_title\",\"episode_title\"],\"values\":[[\"Night Shift\",\"Pilot\"],[\"Quiet Room\",\"Intro\"]]}",
+          "hidden": false,
+          "name": "join across shows"
+        },
+        {
+          "id": "t3",
+          "input": "insert into shows values (1,'Night Shift');\ninsert into episodes values (1,1,'Pilot',1),(2,1,'Static',2),(3,1,'Echo',3);\nselect count(*) as episode_count from episodes where show_id = 1;",
+          "expected": "{\"columns\":[\"episode_count\"],\"values\":[[3]]}",
+          "hidden": true,
+          "name": "multiple episodes for one show"
+        },
+        {
+          "id": "t4",
+          "input": "insert into shows values (1,'Night Shift'),(2,'Quiet Room');\nselect count(*) as episode_count from episodes where show_id = 2;",
+          "expected": "{\"columns\":[\"episode_count\"],\"values\":[[0]]}",
+          "hidden": true,
+          "name": "boundary: show with no episodes"
+        },
+        {
+          "id": "t5",
+          "input": "insert into shows values (1,'Night Shift');\ninsert into episodes values (1,1,'Pilot',1);\ninsert or ignore into episodes values (1,1,'Duplicate',2);\nselect count(*) as episode_count from episodes;",
+          "expected": "{\"columns\":[\"episode_count\"],\"values\":[[1]]}",
+          "hidden": true,
+          "name": "boundary: duplicate episode id ignored"
+        },
+        {
+          "id": "t6",
+          "input": "insert into shows values (1,'Night Shift'),(2,'Quiet Room');\ninsert into episodes values (1,1,'Pilot',1),(2,1,'Static',2),(3,2,'Intro',1);\nselect title from episodes where show_id = 2 order by episode_number;",
+          "expected": "{\"columns\":[\"title\"],\"values\":[[\"Intro\"]]}",
+          "hidden": true,
+          "name": "episodes scoped to their own show"
+        }
+      ],
+      "referenceSolution": "create table shows (\n  id integer primary key,\n  title text not null\n);\ncreate table episodes (\n  id integer primary key,\n  show_id integer not null references shows(id),\n  title text not null,\n  episode_number integer not null\n);\n",
+      "tags": [
+        "foreign-key",
+        "one-to-many",
+        "keys"
+      ]
+    },
+    {
+      "cloId": "INFS2201-2",
+      "language": "sql",
+      "kind": "schema",
+      "difficulty": 3,
+      "pattern": "sql-ddl",
+      "title": "Owners and their pets",
+      "prompt": "A small animal clinic keeps records of pet owners and the pets they bring in. Every pet belongs to exactly one owner, and every pet gets a clinic tag number that must be unique across all pets.\n\nWrite the `CREATE TABLE` statements for `owners` and `pets`.\n\nRequirements:\n- `owners`: `id` (integer, primary key), `name` (text, required).\n- `pets`: `id` (integer, primary key), `owner_id` (integer, required, references `owners.id`), `tag_number` (text, required, unique), `species` (text, required), `status` (text, defaults to `'active'` when not supplied).\n\nExample: after `insert into pets (id, owner_id, tag_number, species) values (1, 1, 'T-001', 'cat')`, selecting `status` for that pet returns `active`.",
+      "starterCode": "-- create the `owners` and `pets` tables below\n-- pets.status defaults to 'active' when not provided\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "insert into owners values (1,'Huda');\ninsert into pets (id, owner_id, tag_number, species) values (1,1,'T-001','cat');\nselect tag_number, species, status from pets;",
+          "expected": "{\"columns\":[\"tag_number\",\"species\",\"status\"],\"values\":[[\"T-001\",\"cat\",\"active\"]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "insert into owners values (1,'Huda');\ninsert into pets (id, owner_id, tag_number, species, status) values (1,1,'T-001','cat','recovering');\nselect status from pets where id = 1;",
+          "expected": "{\"columns\":[\"status\"],\"values\":[[\"recovering\"]]}",
+          "hidden": false,
+          "name": "explicit status overrides default"
+        },
+        {
+          "id": "t3",
+          "input": "insert into owners values (1,'Huda');\ninsert into pets (id, owner_id, tag_number, species) values (1,1,'T-001','cat'),(2,1,'T-002','dog');\nselect count(*) as pet_count from pets where owner_id = 1;",
+          "expected": "{\"columns\":[\"pet_count\"],\"values\":[[2]]}",
+          "hidden": true,
+          "name": "multiple pets for one owner"
+        },
+        {
+          "id": "t4",
+          "input": "insert into owners values (1,'Huda'),(2,'Omar');\ninsert into pets (id, owner_id, tag_number, species) values (1,1,'T-001','cat');\ninsert or ignore into pets (id, owner_id, tag_number, species) values (2,2,'T-001','dog');\nselect count(*) as pet_count from pets;",
+          "expected": "{\"columns\":[\"pet_count\"],\"values\":[[1]]}",
+          "hidden": true,
+          "name": "boundary: duplicate tag number rejected"
+        },
+        {
+          "id": "t5",
+          "input": "insert into owners values (1,'Huda'),(2,'Omar');\ninsert into pets (id, owner_id, tag_number, species) values (1,1,'T-001','cat');\nselect count(*) as pet_count from pets where owner_id = 2;",
+          "expected": "{\"columns\":[\"pet_count\"],\"values\":[[0]]}",
+          "hidden": true,
+          "name": "boundary: owner with no pets"
+        },
+        {
+          "id": "t6",
+          "input": "insert into owners values (1,'Huda'),(2,'Omar');\ninsert into pets (id, owner_id, tag_number, species) values (1,1,'T-001','cat'),(2,2,'T-002','dog');\nselect o.name as owner_name, p.tag_number from owners o join pets p on p.owner_id = o.id order by o.id;",
+          "expected": "{\"columns\":[\"owner_name\",\"tag_number\"],\"values\":[[\"Huda\",\"T-001\"],[\"Omar\",\"T-002\"]]}",
+          "hidden": true,
+          "name": "pets joined back to their owner"
+        }
+      ],
+      "referenceSolution": "create table owners (\n  id integer primary key,\n  name text not null\n);\ncreate table pets (\n  id integer primary key,\n  owner_id integer not null references owners(id),\n  tag_number text not null unique,\n  species text not null,\n  status text not null default 'active'\n);\n",
+      "tags": [
+        "constraints",
+        "foreign-key",
+        "unique",
+        "not-null"
+      ]
+    },
+    {
+      "cloId": "INFS2201-2",
+      "language": "sql",
+      "kind": "spot-the-bug",
+      "difficulty": 4,
+      "pattern": "spot-the-bug",
+      "title": "Studio class bookings",
+      "prompt": "A fitness studio lets members book classes: one member can book many classes, and one class holds many members. The schema below is supposed to store those bookings, but one line quietly breaks that relationship.\n\nRead the script and find the line that stops a member from ever booking more than one class.\n\nExample: with this schema, booking Lina into Yoga works, but then booking that same Lina into Spin fails outright, even though the bookings table should hold one row per member-class pair.\n\nReply with the 1-based line number of the broken line, as a list, e.g. `[7]`.",
+      "starterCode": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+          "expected": "[11]",
+          "hidden": false,
+          "name": "find the broken line"
+        },
+        {
+          "id": "t2",
+          "input": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+          "expected": "[11]",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+          "expected": "[11]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+          "expected": "[11]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+          "expected": "[11]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer primary key references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null\n);\n",
+          "expected": "[11]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "create table members (\n  id integer primary key,\n  name text not null\n);\ncreate table classes (\n  id integer primary key,\n  title text not null,\n  capacity integer not null\n);\ncreate table bookings (\n  member_id integer not null references members(id),\n  class_id integer not null references classes(id),\n  booked_at text not null,\n  primary key (member_id, class_id)\n);\n",
+      "tags": [
+        "primary-key",
+        "cardinality",
+        "many-to-many"
+      ]
+    },
+    {
+      "cloId": "INFS2201-3",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "schema-design",
+      "title": "Untangling the car rental log",
+      "prompt": "A car rental agency keeps every booking in one wide table, so a car's model and category get typed in again on every single booking for that car.\n\nWrite one query against `rental_log(rental_id, car_plate, car_model, car_category, renter_name, rental_date)` that returns the rows a separate `cars` table should hold: one row per car, with columns `car_plate`, `car_model`, `car_category`, ordered by `car_plate` ascending.\n\nSample rows:\n\n| car_plate | car_model | car_category |\n|---|---|---|\n| QA-1001 | Corolla | Economy |\n| QA-2002 | Camry | Midsize |\n\nExample: `QA-1001` appears in five separate bookings, but it must still appear only once in your result, paired with `Corolla` and `Economy`.",
+      "starterCode": "-- expected columns: car_plate, car_model, car_category\n",
+      "fixture": "create table rental_log (\n  rental_id integer primary key,\n  car_plate text,\n  car_model text,\n  car_category text,\n  renter_name text,\n  rental_date text\n);\ninsert into rental_log values\n  (1,'QA-1001','Corolla','Economy','Huda Al-Sayed','2026-01-03'),\n  (2,'QA-2002','Camry','Midsize','Omar Nasser','2026-01-04'),\n  (3,'QA-1001','Corolla','Economy','Layla Fahad','2026-01-06'),\n  (4,'QA-3003','Hilux','Truck','Omar Nasser','2026-01-07'),\n  (5,'QA-2002','Camry','Midsize','Huda Al-Sayed','2026-01-09'),\n  (6,'QA-1001','Corolla','Economy','Omar Nasser','2026-01-10');",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select distinct car_plate, car_model, car_category\nfrom rental_log\norder by car_plate;",
+          "expected": "{\"columns\":[\"car_plate\",\"car_model\",\"car_category\"],\"values\":[[\"QA-1001\",\"Corolla\",\"Economy\"],[\"QA-2002\",\"Camry\",\"Midsize\"],[\"QA-3003\",\"Hilux\",\"Truck\"]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"car_plate\",\"car_model\",\"car_category\"],\"values\":[[\"QA-1001\",\"Corolla\",\"Economy\"],[\"QA-2002\",\"Camry\",\"Midsize\"],[\"QA-3003\",\"Hilux\",\"Truck\"]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: insert into rental_log values (7,'QA-4004','Yaris','Economy','Sara Ali','2026-01-11') */",
+          "expected": "{\"columns\":[\"car_plate\",\"car_model\",\"car_category\"],\"values\":[[\"QA-1001\",\"Corolla\",\"Economy\"],[\"QA-2002\",\"Camry\",\"Midsize\"],[\"QA-3003\",\"Hilux\",\"Truck\"],[\"QA-4004\",\"Yaris\",\"Economy\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: insert into rental_log values (8,'QA-2002','Camry','Midsize','Fahad Noor','2026-01-12') */",
+          "expected": "{\"columns\":[\"car_plate\",\"car_model\",\"car_category\"],\"values\":[[\"QA-1001\",\"Corolla\",\"Economy\"],[\"QA-2002\",\"Camry\",\"Midsize\"],[\"QA-3003\",\"Hilux\",\"Truck\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: delete from rental_log where rental_id <> 1 */",
+          "expected": "{\"columns\":[\"car_plate\",\"car_model\",\"car_category\"],\"values\":[[\"QA-1001\",\"Corolla\",\"Economy\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: insert into rental_log values (9,'QA-0001','Rav4','SUV','Noor Yasin','2026-01-02') */",
+          "expected": "{\"columns\":[\"car_plate\",\"car_model\",\"car_category\"],\"values\":[[\"QA-0001\",\"Rav4\",\"SUV\"],[\"QA-1001\",\"Corolla\",\"Economy\"],[\"QA-2002\",\"Camry\",\"Midsize\"],[\"QA-3003\",\"Hilux\",\"Truck\"]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select distinct car_plate, car_model, car_category\nfrom rental_log\norder by car_plate;",
+      "tags": [
+        "normalization",
+        "distinct",
+        "redundant-data"
+      ]
+    },
+    {
+      "cloId": "INFS2201-3",
+      "language": "sql",
+      "kind": "spot-the-bug",
+      "difficulty": 3,
+      "pattern": "spot-the-bug",
+      "title": "Redundant columns in a shipment table",
+      "prompt": "A building-supplies distributor tracks each shipment's contents in one table. Every line repeats the shipped SKU's name and category, so those two facts get typed in again for every shipment that includes that SKU.\n\nA few sample rows:\n\n| shipment_id | sku_id | sku_name | sku_category | quantity_shipped |\n|---|---|---|---|---|\n| 101 | 55 | Copper Wire | Electrical | 40 |\n| 102 | 55 | Copper Wire | Electrical | 12 |\n| 102 | 61 | Pine Board | Lumber | 30 |\n\nExample: SKU 55's name and category repeat on both of its shipment lines (rows 1 and 2 above); if SKU 55 gets renamed, someone has to find and fix it in every one of those rows, or the table ends up with two different names for the same SKU.\n\nHere is the table definition, one statement per line and numbered for reference:\n\n```\n1  create table shipment_items (\n2    shipment_id integer,\n3    sku_id integer,\n4    sku_name text,\n5    sku_category text,\n6    quantity_shipped integer,\n7    primary key (shipment_id, sku_id)\n8  );\n```\n\nName the line number(s) that hold a fact about the SKU rather than about the shipment, and so should move into their own table keyed on `sku_id` alone. Answer with the line number(s), smallest first.",
+      "starterCode": "create table shipment_items (\n  shipment_id integer,\n  sku_id integer,\n  sku_name text,\n  sku_category text,\n  quantity_shipped integer,\n  primary key (shipment_id, sku_id)\n);\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "[4,5]",
+          "hidden": false,
+          "name": "columns that depend on part of the key"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "[4,5]",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "[4,5]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "[4,5]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "[4,5]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "[4,5]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "create table skus (\n  sku_id integer primary key,\n  sku_name text,\n  sku_category text\n);\n\ncreate table shipment_items (\n  shipment_id integer,\n  sku_id integer,\n  quantity_shipped integer,\n  primary key (shipment_id, sku_id),\n  foreign key (sku_id) references skus(sku_id)\n);",
+      "tags": [
+        "normalization",
+        "2nf",
+        "composite-key"
+      ]
+    },
+    {
+      "cloId": "INFS2201-3",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "spec-to-steps",
+      "title": "Departments beating their own average",
+      "prompt": "A company's HR system already keeps two tables so a department's name and budget are never retyped for each employee: `departments(department_id, department_name, department_budget)` and `employees(employee_id, employee_name, department_id, salary)`.\n\nHR wants a report built in three steps:\n\n1. For each department, work out that department's own average salary.\n2. Count how many of its employees earn strictly more than that average.\n3. Keep only departments where that count is 2 or higher.\n\nWrite one query returning `department_name` and the count as `above_avg_count`, ordered by `above_avg_count` descending, then `department_name` ascending. A department with no employees never appears.\n\nExample: if Engineering's four salaries average to 7675 and two of them (9000 and 8200) beat that average, Engineering's row shows `above_avg_count = 2`.",
+      "starterCode": "-- expected columns: department_name, above_avg_count\n",
+      "fixture": "create table departments (\n  department_id integer primary key,\n  department_name text,\n  department_budget numeric\n);\ncreate table employees (\n  employee_id integer primary key,\n  employee_name text,\n  department_id integer,\n  salary numeric\n);\ninsert into departments values\n  (1,'Engineering',500000),\n  (2,'Sales',200000),\n  (3,'Support',150000),\n  (4,'Research',100000);\ninsert into employees values\n  (1,'Huda',1,9000),\n  (2,'Omar',1,8200),\n  (3,'Layla',1,7500),\n  (4,'Zain',1,6000),\n  (5,'Sara',2,6000),\n  (6,'Fahad',2,5900),\n  (7,'Reem',2,3000),\n  (8,'Noor',3,4000),\n  (9,'Kareem',3,3800);",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select d.department_name, count(*) as above_avg_count\nfrom employees e\njoin departments d on d.department_id = e.department_id\nwhere e.salary > (\n  select avg(e2.salary) from employees e2 where e2.department_id = e.department_id\n)\ngroup by d.department_name\nhaving count(*) >= 2\norder by above_avg_count desc, d.department_name asc;",
+          "expected": "{\"columns\":[\"department_name\",\"above_avg_count\"],\"values\":[[\"Engineering\",2],[\"Sales\",2]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"department_name\",\"above_avg_count\"],\"values\":[[\"Engineering\",2],[\"Sales\",2]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: insert into employees values (10,'Amina',3,1000) */",
+          "expected": "{\"columns\":[\"department_name\",\"above_avg_count\"],\"values\":[[\"Engineering\",2],[\"Sales\",2],[\"Support\",2]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: delete from employees where employee_id = 4 */",
+          "expected": "{\"columns\":[\"department_name\",\"above_avg_count\"],\"values\":[[\"Sales\",2]]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: update employees set salary = 4500 where department_id = 3 */",
+          "expected": "{\"columns\":[\"department_name\",\"above_avg_count\"],\"values\":[[\"Engineering\",2],[\"Sales\",2]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: insert into employees values (10,'Aziz',4,5000) */",
+          "expected": "{\"columns\":[\"department_name\",\"above_avg_count\"],\"values\":[[\"Engineering\",2],[\"Sales\",2]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select d.department_name, count(*) as above_avg_count\nfrom employees e\njoin departments d on d.department_id = e.department_id\nwhere e.salary > (\n  select avg(e2.salary) from employees e2 where e2.department_id = e.department_id\n)\ngroup by d.department_name\nhaving count(*) >= 2\norder by above_avg_count desc, d.department_name asc;",
+      "tags": [
+        "joins",
+        "subquery",
+        "group-by",
+        "aggregation"
+      ]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "sql-select",
+      "title": "Low Stock Lookup",
+      "prompt": "A hardware store keeps one table of stock items. Staff need a quick list of what is running low so they can reorder it.\n\nWrite one query that returns the `name` and `quantity` of every item with `quantity` less than 10, as columns `name` and `quantity`, ordered by `quantity` ascending and then `name` ascending.\n\nTable: `items(id, name, category, quantity, price)`.\n\nExample: an item with quantity 4 appears before one with quantity 7; an item with quantity exactly 10 does not appear in the result at all.",
+      "starterCode": "-- expected columns: name, quantity\n",
+      "fixture": "create table items(id integer primary key, name text, category text, quantity integer, price real);\ninsert into items values (1,'Hammer','Tools',7,12.5),(2,'Wrench','Tools',15,9.0),(3,'Bolt Pack','Fasteners',4,2.25),(4,'Nail Pack','Fasteners',4,1.75),(5,'Drill','Tools',10,45.0),(6,'Tape Measure','Tools',0,6.0);",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select name, quantity from items where quantity < 10 order by quantity asc, name asc",
+          "expected": "{\"columns\":[\"name\",\"quantity\"],\"values\":[[\"Tape Measure\",0],[\"Bolt Pack\",4],[\"Nail Pack\",4],[\"Hammer\",7]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"name\",\"quantity\"],\"values\":[[\"Tape Measure\",0],[\"Bolt Pack\",4],[\"Nail Pack\",4],[\"Hammer\",7]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: insert into items values (7,'Screws','Fasteners',2,0.99) */",
+          "expected": "{\"columns\":[\"name\",\"quantity\"],\"values\":[[\"Tape Measure\",0],[\"Screws\",2],[\"Bolt Pack\",4],[\"Nail Pack\",4],[\"Hammer\",7]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: delete from items where quantity < 10 */",
+          "expected": "{\"columns\":[],\"values\":[]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: update items set quantity = 3 where name = 'Wrench' */",
+          "expected": "{\"columns\":[\"name\",\"quantity\"],\"values\":[[\"Tape Measure\",0],[\"Wrench\",3],[\"Bolt Pack\",4],[\"Nail Pack\",4],[\"Hammer\",7]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: insert into items values (8,'Anchor Pack','Fasteners',4,1.10) */",
+          "expected": "{\"columns\":[\"name\",\"quantity\"],\"values\":[[\"Tape Measure\",0],[\"Anchor Pack\",4],[\"Bolt Pack\",4],[\"Nail Pack\",4],[\"Hammer\",7]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select name, quantity\nfrom items\nwhere quantity < 10\norder by quantity asc, name asc;\n",
+      "tags": [
+        "filtering",
+        "ordering",
+        "inventory"
+      ]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "sql-join",
+      "title": "Apartment Pet Roster",
+      "prompt": "An apartment complex keeps one table of residents and one table of the pets they've registered with building management. Some residents have no pet on file yet.\n\nWrite one query that returns every resident's name together with each pet's name and species, as columns `owner_name`, `pet_name`, `species`. Every resident must appear at least once, even one with no pets, using `null` for `pet_name` and `species` in that case. Order by `owner_name` ascending, then `pet_name` ascending.\n\nTables: `owners(id, name)` and `pets(id, owner_id, name, species)`.\n\nExample: a resident with two pets appears on two rows, one per pet; a resident with none appears on one row with blank pet fields.",
+      "starterCode": "-- expected columns: owner_name, pet_name, species\n",
+      "fixture": "create table owners(id integer primary key, name text);\ncreate table pets(id integer primary key, owner_id integer, name text, species text);\ninsert into owners values (1,'Amina'),(2,'Yusuf'),(3,'Chen'),(4,'Diego');\ninsert into pets values (1,1,'Milo','Cat'),(2,1,'Rex','Dog'),(3,2,'Bella','Dog'),(4,4,'Nibbles','Rabbit');",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select o.name as owner_name, p.name as pet_name, p.species as species from owners o left join pets p on p.owner_id = o.id order by o.name asc, p.name asc",
+          "expected": "{\"columns\":[\"owner_name\",\"pet_name\",\"species\"],\"values\":[[\"Amina\",\"Milo\",\"Cat\"],[\"Amina\",\"Rex\",\"Dog\"],[\"Chen\",null,null],[\"Diego\",\"Nibbles\",\"Rabbit\"],[\"Yusuf\",\"Bella\",\"Dog\"]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"owner_name\",\"pet_name\",\"species\"],\"values\":[[\"Amina\",\"Milo\",\"Cat\"],[\"Amina\",\"Rex\",\"Dog\"],[\"Chen\",null,null],[\"Diego\",\"Nibbles\",\"Rabbit\"],[\"Yusuf\",\"Bella\",\"Dog\"]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: insert into owners values (5,'Fatima') */",
+          "expected": "{\"columns\":[\"owner_name\",\"pet_name\",\"species\"],\"values\":[[\"Amina\",\"Milo\",\"Cat\"],[\"Amina\",\"Rex\",\"Dog\"],[\"Chen\",null,null],[\"Diego\",\"Nibbles\",\"Rabbit\"],[\"Fatima\",null,null],[\"Yusuf\",\"Bella\",\"Dog\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: delete from pets */",
+          "expected": "{\"columns\":[\"owner_name\",\"pet_name\",\"species\"],\"values\":[[\"Amina\",null,null],[\"Chen\",null,null],[\"Diego\",null,null],[\"Yusuf\",null,null]]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: insert into pets values (5,3,'Ash','Bird') */",
+          "expected": "{\"columns\":[\"owner_name\",\"pet_name\",\"species\"],\"values\":[[\"Amina\",\"Milo\",\"Cat\"],[\"Amina\",\"Rex\",\"Dog\"],[\"Chen\",\"Ash\",\"Bird\"],[\"Diego\",\"Nibbles\",\"Rabbit\"],[\"Yusuf\",\"Bella\",\"Dog\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: update owners set name = 'Aaron' where id = 2 */",
+          "expected": "{\"columns\":[\"owner_name\",\"pet_name\",\"species\"],\"values\":[[\"Aaron\",\"Bella\",\"Dog\"],[\"Amina\",\"Milo\",\"Cat\"],[\"Amina\",\"Rex\",\"Dog\"],[\"Chen\",null,null],[\"Diego\",\"Nibbles\",\"Rabbit\"]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select o.name as owner_name, p.name as pet_name, p.species as species\nfrom owners o\nleft join pets p on p.owner_id = o.id\norder by o.name asc, p.name asc;\n",
+      "tags": [
+        "joins",
+        "left-join",
+        "ordering"
+      ]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "sql-aggregate",
+      "title": "Top Drink Categories",
+      "prompt": "A small coffee shop logs every drink sold, along with the category each drink belongs to.\n\nWrite one query that returns each category's total quantity sold, only for categories whose total exceeds 4 units, as columns `category` and `total_quantity`. Order by `total_quantity` descending, then `category` ascending.\n\nTables: `drinks(id, name, category)` and `sales(id, drink_id, quantity)`. A drink can be sold many times; sum the `quantity` across every matching sale before comparing it to the cutoff.\n\nExample: if `Coffee` drinks sold 10 units in total and `Tea` drinks sold 5, the result lists `Coffee` first.",
+      "starterCode": "-- expected columns: category, total_quantity\n",
+      "fixture": "create table drinks(id integer primary key, name text, category text);\ncreate table sales(id integer primary key, drink_id integer, quantity integer);\ninsert into drinks values (1,'Latte','Coffee'),(2,'Espresso','Coffee'),(3,'Green Tea','Tea'),(4,'Chai','Tea'),(5,'Mango Smoothie','Smoothie'),(6,'Hot Chocolate','Coffee');\ninsert into sales values (1,1,5),(2,1,3),(3,2,2),(4,3,4),(5,4,1),(6,5,2);",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select d.category, sum(s.quantity) as total_quantity from drinks d join sales s on s.drink_id = d.id group by d.category having sum(s.quantity) > 4 order by total_quantity desc, d.category asc",
+          "expected": "{\"columns\":[\"category\",\"total_quantity\"],\"values\":[[\"Coffee\",10],[\"Tea\",5]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"category\",\"total_quantity\"],\"values\":[[\"Coffee\",10],[\"Tea\",5]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: insert into sales values (7,5,3) */",
+          "expected": "{\"columns\":[\"category\",\"total_quantity\"],\"values\":[[\"Coffee\",10],[\"Smoothie\",5],[\"Tea\",5]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: delete from sales */",
+          "expected": "{\"columns\":[],\"values\":[]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: insert into sales values (8,2,20) */",
+          "expected": "{\"columns\":[\"category\",\"total_quantity\"],\"values\":[[\"Coffee\",30],[\"Tea\",5]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: update sales set quantity = quantity + 10 where drink_id = 4 */",
+          "expected": "{\"columns\":[\"category\",\"total_quantity\"],\"values\":[[\"Tea\",15],[\"Coffee\",10]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select d.category, sum(s.quantity) as total_quantity\nfrom drinks d\njoin sales s on s.drink_id = d.id\ngroup by d.category\nhaving sum(s.quantity) > 4\norder by total_quantity desc, d.category asc;\n",
+      "tags": [
+        "group-by",
+        "having",
+        "aggregate"
+      ]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "sql-subquery",
+      "title": "Above Average Prices",
+      "prompt": "An online bookstore keeps one table of books and their prices.\n\nWrite one query that returns the `title` and `price` of every book priced above the average price of all books, as columns `title` and `price`. Order by `price` descending, then `title` ascending.\n\nTable: `books(id, title, price)`.\n\nExample: if the average price across all books is 20, a book priced 25 appears in the result and one priced 15 does not.",
+      "starterCode": "-- expected columns: title, price\n",
+      "fixture": "create table books(id integer primary key, title text, price real);\ninsert into books values (1,'Learn SQL Fast',18.00),(2,'The Long Novel',32.50),(3,'Cooking Basics',12.00),(4,'Space Atlas',45.00),(5,'Poetry Now',18.00),(6,'Short Stories',9.99);",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select title, price from books where price > (select avg(price) from books) order by price desc, title asc",
+          "expected": "{\"columns\":[\"title\",\"price\"],\"values\":[[\"Space Atlas\",45],[\"The Long Novel\",32.5]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"title\",\"price\"],\"values\":[[\"Space Atlas\",45],[\"The Long Novel\",32.5]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: delete from books where title = 'Space Atlas' */",
+          "expected": "{\"columns\":[\"title\",\"price\"],\"values\":[[\"The Long Novel\",32.5]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: delete from books */",
+          "expected": "{\"columns\":[],\"values\":[]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: insert into books values (8,'Atlas Companion',45.00) */",
+          "expected": "{\"columns\":[\"title\",\"price\"],\"values\":[[\"Atlas Companion\",45],[\"Space Atlas\",45],[\"The Long Novel\",32.5]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: update books set price = 99.99 where title = 'Cooking Basics' */",
+          "expected": "{\"columns\":[\"title\",\"price\"],\"values\":[[\"Cooking Basics\",99.99],[\"Space Atlas\",45]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select title, price\nfrom books\nwhere price > (select avg(price) from books)\norder by price desc, title asc;\n",
+      "tags": [
+        "subquery",
+        "aggregate",
+        "filtering"
+      ]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "sql-dml",
+      "title": "Coworking Roster Update",
+      "prompt": "A co-working space keeps one table of members with their membership plan and status.\n\nWrite SQL that (1) adds a new member with id `6`, name `'Farah'`, plan `'Silver'`, status `'active'`, and (2) changes the `status` of every member whose `plan` is `'Trial'` to `'expired'`. Finish with a `select` of `id`, `name`, `plan`, `status` for every member, ordered by `id` ascending, so the result can be checked.\n\nTable: `members(id, name, plan, status)`.\n\nExample: a member who had plan `'Trial'` now shows status `'expired'`; every other existing member is unchanged, and the new member appears too.",
+      "starterCode": "-- expected columns: id, name, plan, status\n",
+      "fixture": "create table members(id integer primary key, name text, plan text, status text);\ninsert into members values (1,'Noor','Gold','active'),(2,'Sam','Trial','active'),(3,'Priya','Silver','active'),(4,'Omar','Trial','active'),(5,'Lena','Gold','paused');",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "insert into members (id, name, plan, status) values (6,'Farah','Silver','active'); update members set status='expired' where plan='Trial'; select id, name, plan, status from members order by id asc",
+          "expected": "{\"columns\":[\"id\",\"name\",\"plan\",\"status\"],\"values\":[[1,\"Noor\",\"Gold\",\"active\"],[2,\"Sam\",\"Trial\",\"expired\"],[3,\"Priya\",\"Silver\",\"active\"],[4,\"Omar\",\"Trial\",\"expired\"],[5,\"Lena\",\"Gold\",\"paused\"],[6,\"Farah\",\"Silver\",\"active\"]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"id\",\"name\",\"plan\",\"status\"],\"values\":[[1,\"Noor\",\"Gold\",\"active\"],[2,\"Sam\",\"Trial\",\"expired\"],[3,\"Priya\",\"Silver\",\"active\"],[4,\"Omar\",\"Trial\",\"expired\"],[5,\"Lena\",\"Gold\",\"paused\"],[6,\"Farah\",\"Silver\",\"active\"]]}",
+          "hidden": false,
+          "name": "your statements"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: delete from members where plan = 'Trial' */",
+          "expected": "{\"columns\":[\"id\",\"name\",\"plan\",\"status\"],\"values\":[[1,\"Noor\",\"Gold\",\"active\"],[3,\"Priya\",\"Silver\",\"active\"],[5,\"Lena\",\"Gold\",\"paused\"],[6,\"Farah\",\"Silver\",\"active\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: insert into members (id, name, plan, status) values (7,'Iqbal','Trial','active') */",
+          "expected": "{\"columns\":[\"id\",\"name\",\"plan\",\"status\"],\"values\":[[1,\"Noor\",\"Gold\",\"active\"],[2,\"Sam\",\"Trial\",\"expired\"],[3,\"Priya\",\"Silver\",\"active\"],[4,\"Omar\",\"Trial\",\"expired\"],[5,\"Lena\",\"Gold\",\"paused\"],[6,\"Farah\",\"Silver\",\"active\"],[7,\"Iqbal\",\"Trial\",\"expired\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: update members set plan = 'Gold' where id = 2 */",
+          "expected": "{\"columns\":[\"id\",\"name\",\"plan\",\"status\"],\"values\":[[1,\"Noor\",\"Gold\",\"active\"],[2,\"Sam\",\"Gold\",\"active\"],[3,\"Priya\",\"Silver\",\"active\"],[4,\"Omar\",\"Trial\",\"expired\"],[5,\"Lena\",\"Gold\",\"paused\"],[6,\"Farah\",\"Silver\",\"active\"]]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: delete from members where id != 1 */",
+          "expected": "{\"columns\":[\"id\",\"name\",\"plan\",\"status\"],\"values\":[[1,\"Noor\",\"Gold\",\"active\"],[6,\"Farah\",\"Silver\",\"active\"]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "insert into members (id, name, plan, status) values (6, 'Farah', 'Silver', 'active');\nupdate members set status = 'expired' where plan = 'Trial';\nselect id, name, plan, status from members order by id asc;\n",
+      "tags": [
+        "insert",
+        "update",
+        "dml"
+      ]
+    },
+    {
+      "cloId": "INFS2201-4",
+      "language": "sql",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "boundary",
+      "title": "Runner-Up Bid Amounts",
+      "prompt": "An auction house logs every bid placed on items up for sale.\n\nWrite one query that returns the `item` and `amount` of every bid at the second-highest distinct bid amount overall (not the highest), as columns `item` and `amount`, ordered by `item` ascending. A tie at the top still counts as one amount: if two bids share the highest amount, the second-highest is the next lower distinct amount. If fewer than two distinct amounts exist, return no rows at all.\n\nTable: `bids(id, item, bidder, amount)`.\n\nExample: if the highest amount is 500 (placed by two different bidders) and the next distinct amount is 450, every bid of 450 appears in the result; bids of 500 do not.",
+      "starterCode": "-- expected columns: item, amount\n",
+      "fixture": "create table bids(id integer primary key, item text, bidder text, amount real);\ninsert into bids values (1,'Vase','Aiko',500),(2,'Painting','Ben',500),(3,'Sculpture','Chen',450),(4,'Vase','Dara',450),(5,'Painting','Elin',300),(6,'Rug','Farid',150);",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "select item, amount from bids where amount = (select distinct amount from bids order by amount desc limit 1 offset 1) order by item asc",
+          "expected": "{\"columns\":[\"item\",\"amount\"],\"values\":[[\"Sculpture\",450],[\"Vase\",450]]}",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "__STUDENT__",
+          "expected": "{\"columns\":[\"item\",\"amount\"],\"values\":[[\"Sculpture\",450],[\"Vase\",450]]}",
+          "hidden": false,
+          "name": "your query"
+        },
+        {
+          "id": "t3",
+          "input": "__STUDENT__ /* after: insert into bids values (7,'Rug','Gita',600) */",
+          "expected": "{\"columns\":[\"item\",\"amount\"],\"values\":[[\"Painting\",500],[\"Vase\",500]]}",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "__STUDENT__ /* after: update bids set amount = 500 */",
+          "expected": "{\"columns\":[],\"values\":[]}",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "__STUDENT__ /* after: delete from bids */",
+          "expected": "{\"columns\":[],\"values\":[]}",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "__STUDENT__ /* after: update bids set amount = 400 where id = 4 */",
+          "expected": "{\"columns\":[\"item\",\"amount\"],\"values\":[[\"Sculpture\",450]]}",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "select item, amount\nfrom bids\nwhere amount = (\n  select distinct amount from bids order by amount desc limit 1 offset 1\n)\norder by item asc;\n",
+      "tags": [
+        "distinct",
+        "ties",
+        "edge-cases"
+      ]
+    },
+    {
+      "cloId": "INFS2201-5",
+      "language": "mongo",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "mongo-find",
+      "title": "Boarding dogs over three",
+      "prompt": "A pet boarding facility keeps one document per animal currently checked in, in a `pets` collection. Each document has `name`, `species`, `age`, and `vaccinated`.\n\nWrite a query that returns every pet whose `species` is `\"dog\"` and whose `age` is strictly greater than `3`. A dog that is exactly `3` years old must not be included.\n\nExample: a 5-year-old dog is included in the result; a 3-year-old dog and a 5-year-old cat are both left out.",
+      "starterCode": "// collection: pets\n",
+      "fixture": "[{\"name\":\"Milo\",\"species\":\"cat\",\"age\":3,\"vaccinated\":true},{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Tweety\",\"species\":\"bird\",\"age\":1,\"vaccinated\":true},{\"name\":\"Simba\",\"species\":\"cat\",\"age\":7,\"vaccinated\":false},{\"name\":\"Buddy\",\"species\":\"dog\",\"age\":3,\"vaccinated\":true},{\"name\":\"Nala\",\"species\":\"dog\",\"age\":2,\"vaccinated\":true},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true},{\"name\":\"Glitch\",\"species\":\"dog\",\"age\":-1,\"vaccinated\":false}]",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "{\"op\":\"find\",\"args\":[{\"species\":\"dog\",\"age\":{\"$gt\":3}}]}",
+          "expected": "[{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true}]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "{\"op\":\"find\",\"args\":[{\"species\":\"dog\",\"age\":{\"$gt\":3}}]}",
+          "expected": "[{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true}]",
+          "hidden": false,
+          "name": "two qualifying dogs returned"
+        },
+        {
+          "id": "t3",
+          "input": "{\"op\":\"find\",\"args\":[{\"species\":\"dog\",\"age\":{\"$gt\":3}}]}",
+          "expected": "[{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true}]",
+          "hidden": true,
+          "name": "non-dog species excluded"
+        },
+        {
+          "id": "t4",
+          "input": "{\"op\":\"find\",\"args\":[{\"species\":\"dog\",\"age\":{\"$gt\":3}}]}",
+          "expected": "[{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true}]",
+          "hidden": true,
+          "name": "age exactly three excluded"
+        },
+        {
+          "id": "t5",
+          "input": "{\"op\":\"find\",\"args\":[{\"species\":\"dog\",\"age\":{\"$gt\":3}}]}",
+          "expected": "[{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true}]",
+          "hidden": true,
+          "name": "low age dog excluded"
+        },
+        {
+          "id": "t6",
+          "input": "{\"op\":\"find\",\"args\":[{\"species\":\"dog\",\"age\":{\"$gt\":3}}]}",
+          "expected": "[{\"name\":\"Rex\",\"species\":\"dog\",\"age\":5,\"vaccinated\":false},{\"name\":\"Ghost\",\"species\":\"dog\",\"age\":6,\"vaccinated\":true}]",
+          "hidden": true,
+          "name": "negative age excluded"
+        }
+      ],
+      "referenceSolution": "db.pets.find({ species: \"dog\", age: { $gt: 3 } })",
+      "tags": [
+        "mongodb",
+        "filters",
+        "comparison-operators",
+        "query"
+      ]
+    },
+    {
+      "cloId": "INFS2201-5",
+      "language": "mongo",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "mongo-update",
+      "title": "Mystery titles on clearance",
+      "prompt": "A regional book distributor keeps one document per title in a `books` collection, with fields `title`, `genre`, `stock`, and `price`.\n\nWrite an update that puts every `\"mystery\"` title on clearance: set `onSale` to `true` and reduce `price` by `2` for each one. Leave every other genre untouched, and never touch `stock`. A mystery title already priced at `2` should end up priced at `0`.\n\nExample: a mystery title priced at `12` becomes priced at `10` with `onSale: true`; a romance title is left exactly as it was.",
+      "starterCode": "// collection: books\n",
+      "fixture": "[{\"title\":\"The Silent Clue\",\"genre\":\"mystery\",\"stock\":4,\"price\":12},{\"title\":\"Sunset Vows\",\"genre\":\"romance\",\"stock\":10,\"price\":8},{\"title\":\"Cipher Bay\",\"genre\":\"mystery\",\"stock\":0,\"price\":2},{\"title\":\"Nebula Run\",\"genre\":\"sci-fi\",\"stock\":5,\"price\":15},{\"title\":\"Quiet Alibi\",\"genre\":\"mystery\",\"stock\":2,\"price\":9},{\"title\":\"Garden Paths\",\"genre\":\"romance\",\"stock\":6,\"price\":11}]",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "{\"op\":\"update\",\"args\":[{\"genre\":\"mystery\"},{\"$set\":{\"onSale\":true},\"$inc\":{\"price\":-2}}]}",
+          "expected": "[{\"title\":\"The Silent Clue\",\"genre\":\"mystery\",\"stock\":4,\"price\":10,\"onSale\":true},{\"title\":\"Sunset Vows\",\"genre\":\"romance\",\"stock\":10,\"price\":8},{\"title\":\"Cipher Bay\",\"genre\":\"mystery\",\"stock\":0,\"price\":0,\"onSale\":true},{\"title\":\"Nebula Run\",\"genre\":\"sci-fi\",\"stock\":5,\"price\":15},{\"title\":\"Quiet Alibi\",\"genre\":\"mystery\",\"stock\":2,\"price\":7,\"onSale\":true},{\"title\":\"Garden Paths\",\"genre\":\"romance\",\"stock\":6,\"price\":11}]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "{\"op\":\"update\",\"args\":[{\"genre\":\"mystery\"},{\"$set\":{\"onSale\":true},\"$inc\":{\"price\":-2}}]}",
+          "expected": "[{\"title\":\"The Silent Clue\",\"genre\":\"mystery\",\"stock\":4,\"price\":10,\"onSale\":true},{\"title\":\"Sunset Vows\",\"genre\":\"romance\",\"stock\":10,\"price\":8},{\"title\":\"Cipher Bay\",\"genre\":\"mystery\",\"stock\":0,\"price\":0,\"onSale\":true},{\"title\":\"Nebula Run\",\"genre\":\"sci-fi\",\"stock\":5,\"price\":15},{\"title\":\"Quiet Alibi\",\"genre\":\"mystery\",\"stock\":2,\"price\":7,\"onSale\":true},{\"title\":\"Garden Paths\",\"genre\":\"romance\",\"stock\":6,\"price\":11}]",
+          "hidden": false,
+          "name": "onSale flag added to every mystery"
+        },
+        {
+          "id": "t3",
+          "input": "{\"op\":\"update\",\"args\":[{\"genre\":\"mystery\"},{\"$set\":{\"onSale\":true},\"$inc\":{\"price\":-2}}]}",
+          "expected": "[{\"title\":\"The Silent Clue\",\"genre\":\"mystery\",\"stock\":4,\"price\":10,\"onSale\":true},{\"title\":\"Sunset Vows\",\"genre\":\"romance\",\"stock\":10,\"price\":8},{\"title\":\"Cipher Bay\",\"genre\":\"mystery\",\"stock\":0,\"price\":0,\"onSale\":true},{\"title\":\"Nebula Run\",\"genre\":\"sci-fi\",\"stock\":5,\"price\":15},{\"title\":\"Quiet Alibi\",\"genre\":\"mystery\",\"stock\":2,\"price\":7,\"onSale\":true},{\"title\":\"Garden Paths\",\"genre\":\"romance\",\"stock\":6,\"price\":11}]",
+          "hidden": true,
+          "name": "other genres untouched"
+        },
+        {
+          "id": "t4",
+          "input": "{\"op\":\"update\",\"args\":[{\"genre\":\"mystery\"},{\"$set\":{\"onSale\":true},\"$inc\":{\"price\":-2}}]}",
+          "expected": "[{\"title\":\"The Silent Clue\",\"genre\":\"mystery\",\"stock\":4,\"price\":10,\"onSale\":true},{\"title\":\"Sunset Vows\",\"genre\":\"romance\",\"stock\":10,\"price\":8},{\"title\":\"Cipher Bay\",\"genre\":\"mystery\",\"stock\":0,\"price\":0,\"onSale\":true},{\"title\":\"Nebula Run\",\"genre\":\"sci-fi\",\"stock\":5,\"price\":15},{\"title\":\"Quiet Alibi\",\"genre\":\"mystery\",\"stock\":2,\"price\":7,\"onSale\":true},{\"title\":\"Garden Paths\",\"genre\":\"romance\",\"stock\":6,\"price\":11}]",
+          "hidden": true,
+          "name": "price floor at zero"
+        },
+        {
+          "id": "t5",
+          "input": "{\"op\":\"update\",\"args\":[{\"genre\":\"mystery\"},{\"$set\":{\"onSale\":true},\"$inc\":{\"price\":-2}}]}",
+          "expected": "[{\"title\":\"The Silent Clue\",\"genre\":\"mystery\",\"stock\":4,\"price\":10,\"onSale\":true},{\"title\":\"Sunset Vows\",\"genre\":\"romance\",\"stock\":10,\"price\":8},{\"title\":\"Cipher Bay\",\"genre\":\"mystery\",\"stock\":0,\"price\":0,\"onSale\":true},{\"title\":\"Nebula Run\",\"genre\":\"sci-fi\",\"stock\":5,\"price\":15},{\"title\":\"Quiet Alibi\",\"genre\":\"mystery\",\"stock\":2,\"price\":7,\"onSale\":true},{\"title\":\"Garden Paths\",\"genre\":\"romance\",\"stock\":6,\"price\":11}]",
+          "hidden": true,
+          "name": "stock left unchanged"
+        }
+      ],
+      "referenceSolution": "db.books.updateMany({ genre: \"mystery\" }, { $set: { onSale: true }, $inc: { price: -2 } })",
+      "tags": [
+        "mongodb",
+        "updatemany",
+        "inventory",
+        "operators"
+      ]
+    },
+    {
+      "cloId": "INFS2201-5",
+      "language": "mongo",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "mongo-aggregate",
+      "title": "City trip totals",
+      "prompt": "A ride-sharing service logs every trip in a `trips` collection with fields `driver`, `city`, `fare`, and `completed`.\n\nWrite a query that reports, for each city, the total fare and the number of trips, counting only trips where `completed` is `true`. Sort the report by total fare from highest to lowest, and break ties by city name, A to Z. Each result document should have `_id` (the city), `totalFare`, and `trips`.\n\nExample: if Doha has three completed trips worth `20`, `15` and `5`, plus one cancelled trip worth `50`, Doha's `totalFare` is `40` and `trips` is `3` -- the cancelled trip does not count.",
+      "starterCode": "// collection: trips\n",
+      "fixture": "[{\"_id\":\"trip1\",\"driver\":\"Ali\",\"city\":\"Doha\",\"fare\":20,\"completed\":true},{\"_id\":\"trip2\",\"driver\":\"Sara\",\"city\":\"Doha\",\"fare\":15,\"completed\":true},{\"_id\":\"trip3\",\"driver\":\"Omar\",\"city\":\"Al Rayyan\",\"fare\":30,\"completed\":true},{\"_id\":\"trip4\",\"driver\":\"Huda\",\"city\":\"Doha\",\"fare\":50,\"completed\":false},{\"_id\":\"trip5\",\"driver\":\"Yusuf\",\"city\":\"Al Rayyan\",\"fare\":10,\"completed\":true},{\"_id\":\"trip6\",\"driver\":\"Lina\",\"city\":\"Al Wakrah\",\"fare\":25,\"completed\":true},{\"_id\":\"trip7\",\"driver\":\"Nasser\",\"city\":\"Doha\",\"fare\":5,\"completed\":true},{\"_id\":\"trip8\",\"driver\":\"Maha\",\"city\":\"Al Wakrah\",\"fare\":40,\"completed\":false},{\"_id\":\"trip9\",\"driver\":\"Tariq\",\"city\":\"Al Rayyan\",\"fare\":5,\"completed\":true},{\"_id\":\"trip10\",\"driver\":\"Aisha\",\"city\":\"Al Wakrah\",\"fare\":25,\"completed\":true},{\"_id\":\"trip11\",\"driver\":\"Rana\",\"city\":\"Lusail\",\"fare\":40,\"completed\":true},{\"_id\":\"trip12\",\"driver\":\"Fahad\",\"city\":\"Al Khor\",\"fare\":1000,\"completed\":false},{\"_id\":\"trip13\",\"driver\":\"Neg1\",\"city\":\"Al Rayyan\",\"fare\":-5,\"completed\":true}]",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "{\"op\":\"aggregate\",\"args\":[[{\"$match\":{\"completed\":true}},{\"$group\":{\"_id\":\"$city\",\"totalFare\":{\"$sum\":\"$fare\"},\"trips\":{\"$sum\":1}}},{\"$sort\":{\"totalFare\":-1,\"_id\":1}}]]}",
+          "expected": "[{\"_id\":\"Al Wakrah\",\"totalFare\":50,\"trips\":2},{\"_id\":\"Al Rayyan\",\"totalFare\":40,\"trips\":4},{\"_id\":\"Doha\",\"totalFare\":40,\"trips\":3},{\"_id\":\"Lusail\",\"totalFare\":40,\"trips\":1}]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "{\"op\":\"aggregate\",\"args\":[[{\"$match\":{\"completed\":true}},{\"$group\":{\"_id\":\"$city\",\"totalFare\":{\"$sum\":\"$fare\"},\"trips\":{\"$sum\":1}}},{\"$sort\":{\"totalFare\":-1,\"_id\":1}}]]}",
+          "expected": "[{\"_id\":\"Al Wakrah\",\"totalFare\":50,\"trips\":2},{\"_id\":\"Al Rayyan\",\"totalFare\":40,\"trips\":4},{\"_id\":\"Doha\",\"totalFare\":40,\"trips\":3},{\"_id\":\"Lusail\",\"totalFare\":40,\"trips\":1}]",
+          "hidden": false,
+          "name": "cities sorted by total fare"
+        },
+        {
+          "id": "t3",
+          "input": "{\"op\":\"aggregate\",\"args\":[[{\"$match\":{\"completed\":true}},{\"$group\":{\"_id\":\"$city\",\"totalFare\":{\"$sum\":\"$fare\"},\"trips\":{\"$sum\":1}}},{\"$sort\":{\"totalFare\":-1,\"_id\":1}}]]}",
+          "expected": "[{\"_id\":\"Al Wakrah\",\"totalFare\":50,\"trips\":2},{\"_id\":\"Al Rayyan\",\"totalFare\":40,\"trips\":4},{\"_id\":\"Doha\",\"totalFare\":40,\"trips\":3},{\"_id\":\"Lusail\",\"totalFare\":40,\"trips\":1}]",
+          "hidden": true,
+          "name": "city with only cancelled trips is dropped"
+        },
+        {
+          "id": "t4",
+          "input": "{\"op\":\"aggregate\",\"args\":[[{\"$match\":{\"completed\":true}},{\"$group\":{\"_id\":\"$city\",\"totalFare\":{\"$sum\":\"$fare\"},\"trips\":{\"$sum\":1}}},{\"$sort\":{\"totalFare\":-1,\"_id\":1}}]]}",
+          "expected": "[{\"_id\":\"Al Wakrah\",\"totalFare\":50,\"trips\":2},{\"_id\":\"Al Rayyan\",\"totalFare\":40,\"trips\":4},{\"_id\":\"Doha\",\"totalFare\":40,\"trips\":3},{\"_id\":\"Lusail\",\"totalFare\":40,\"trips\":1}]",
+          "hidden": true,
+          "name": "three-way tie broken by city name"
+        },
+        {
+          "id": "t5",
+          "input": "{\"op\":\"aggregate\",\"args\":[[{\"$match\":{\"completed\":true}},{\"$group\":{\"_id\":\"$city\",\"totalFare\":{\"$sum\":\"$fare\"},\"trips\":{\"$sum\":1}}},{\"$sort\":{\"totalFare\":-1,\"_id\":1}}]]}",
+          "expected": "[{\"_id\":\"Al Wakrah\",\"totalFare\":50,\"trips\":2},{\"_id\":\"Al Rayyan\",\"totalFare\":40,\"trips\":4},{\"_id\":\"Doha\",\"totalFare\":40,\"trips\":3},{\"_id\":\"Lusail\",\"totalFare\":40,\"trips\":1}]",
+          "hidden": true,
+          "name": "cancelled trip excluded from its city total"
+        },
+        {
+          "id": "t6",
+          "input": "{\"op\":\"aggregate\",\"args\":[[{\"$match\":{\"completed\":true}},{\"$group\":{\"_id\":\"$city\",\"totalFare\":{\"$sum\":\"$fare\"},\"trips\":{\"$sum\":1}}},{\"$sort\":{\"totalFare\":-1,\"_id\":1}}]]}",
+          "expected": "[{\"_id\":\"Al Wakrah\",\"totalFare\":50,\"trips\":2},{\"_id\":\"Al Rayyan\",\"totalFare\":40,\"trips\":4},{\"_id\":\"Doha\",\"totalFare\":40,\"trips\":3},{\"_id\":\"Lusail\",\"totalFare\":40,\"trips\":1}]",
+          "hidden": true,
+          "name": "negative fare lowers the total"
+        }
+      ],
+      "referenceSolution": "db.trips.aggregate([\n  { $match: { completed: true } },\n  { $group: { _id: \"$city\", totalFare: { $sum: \"$fare\" }, trips: { $sum: 1 } } },\n  { $sort: { totalFare: -1, _id: 1 } }\n])",
+      "tags": [
+        "mongodb",
+        "group-by",
+        "aggregation-pipeline",
+        "sorting"
+      ]
+    },
+    {
+      "cloId": "INFS2201-5",
+      "language": "mongo",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "schema-design",
+      "title": "Heavy ingredient recipes",
+      "prompt": "A recipe app stores one document per recipe in a `recipes` collection. Each document has `name`, `cuisine`, `servings`, and an `ingredients` array, where every item in the array has its own `name`, `qty`, and `unit`.\n\nWrite a query that returns every recipe with at least one ingredient measured in grams (`unit` is `\"g\"`) whose `qty` is strictly over `200`. The gram unit and the over-200 amount must belong to the SAME ingredient line -- a recipe with `30` g of garlic and `500` ml of broth does not qualify, even though one line has the right unit and a different line has a big enough number.\n\nExample: a recipe with a `600` g beef ingredient qualifies; a recipe with only a `200` g ingredient does not.",
+      "starterCode": "// collection: recipes\n",
+      "fixture": "[{\"name\":\"Garlic Soup\",\"cuisine\":\"french\",\"servings\":4,\"ingredients\":[{\"name\":\"garlic\",\"qty\":30,\"unit\":\"g\"},{\"name\":\"broth\",\"qty\":500,\"unit\":\"ml\"}]},{\"name\":\"Beef Stew\",\"cuisine\":\"irish\",\"servings\":6,\"ingredients\":[{\"name\":\"beef\",\"qty\":600,\"unit\":\"g\"},{\"name\":\"carrot\",\"qty\":150,\"unit\":\"g\"}]},{\"name\":\"Rice Pilaf\",\"cuisine\":\"turkish\",\"servings\":4,\"ingredients\":[{\"name\":\"rice\",\"qty\":300,\"unit\":\"g\"},{\"name\":\"butter\",\"qty\":40,\"unit\":\"g\"}]},{\"name\":\"Fruit Salad\",\"cuisine\":\"mixed\",\"servings\":2,\"ingredients\":[{\"name\":\"apple\",\"qty\":150,\"unit\":\"g\"},{\"name\":\"grape\",\"qty\":250,\"unit\":\"g\"}]},{\"name\":\"Herb Tea\",\"cuisine\":\"mixed\",\"servings\":1,\"ingredients\":[{\"name\":\"mint\",\"qty\":5,\"unit\":\"g\"},{\"name\":\"water\",\"qty\":300,\"unit\":\"ml\"}]},{\"name\":\"Plain Bread\",\"cuisine\":\"mixed\",\"servings\":4,\"ingredients\":[{\"name\":\"flour\",\"qty\":200,\"unit\":\"g\"}]},{\"name\":\"Feast Platter\",\"cuisine\":\"mixed\",\"servings\":10,\"ingredients\":[{\"name\":\"rice\",\"qty\":900,\"unit\":\"g\"},{\"name\":\"lentils\",\"qty\":300,\"unit\":\"g\"}]},{\"name\":\"Ice Water\",\"cuisine\":\"mixed\",\"servings\":1,\"ingredients\":[]}]",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "{\"op\":\"find\",\"args\":[{\"ingredients\":{\"$elemMatch\":{\"unit\":\"g\",\"qty\":{\"$gt\":200}}}}]}",
+          "expected": "[{\"name\":\"Beef Stew\",\"cuisine\":\"irish\",\"servings\":6,\"ingredients\":[{\"name\":\"beef\",\"qty\":600,\"unit\":\"g\"},{\"name\":\"carrot\",\"qty\":150,\"unit\":\"g\"}]},{\"name\":\"Rice Pilaf\",\"cuisine\":\"turkish\",\"servings\":4,\"ingredients\":[{\"name\":\"rice\",\"qty\":300,\"unit\":\"g\"},{\"name\":\"butter\",\"qty\":40,\"unit\":\"g\"}]},{\"name\":\"Fruit Salad\",\"cuisine\":\"mixed\",\"servings\":2,\"ingredients\":[{\"name\":\"apple\",\"qty\":150,\"unit\":\"g\"},{\"name\":\"grape\",\"qty\":250,\"unit\":\"g\"}]},{\"name\":\"Feast Platter\",\"cuisine\":\"mixed\",\"servings\":10,\"ingredients\":[{\"name\":\"rice\",\"qty\":900,\"unit\":\"g\"},{\"name\":\"lentils\",\"qty\":300,\"unit\":\"g\"}]}]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "{\"op\":\"find\",\"args\":[{\"ingredients\":{\"$elemMatch\":{\"unit\":\"g\",\"qty\":{\"$gt\":200}}}}]}",
+          "expected": "[{\"name\":\"Beef Stew\",\"cuisine\":\"irish\",\"servings\":6,\"ingredients\":[{\"name\":\"beef\",\"qty\":600,\"unit\":\"g\"},{\"name\":\"carrot\",\"qty\":150,\"unit\":\"g\"}]},{\"name\":\"Rice Pilaf\",\"cuisine\":\"turkish\",\"servings\":4,\"ingredients\":[{\"name\":\"rice\",\"qty\":300,\"unit\":\"g\"},{\"name\":\"butter\",\"qty\":40,\"unit\":\"g\"}]},{\"name\":\"Fruit Salad\",\"cuisine\":\"mixed\",\"servings\":2,\"ingredients\":[{\"name\":\"apple\",\"qty\":150,\"unit\":\"g\"},{\"name\":\"grape\",\"qty\":250,\"unit\":\"g\"}]},{\"name\":\"Feast Platter\",\"cuisine\":\"mixed\",\"servings\":10,\"ingredients\":[{\"name\":\"rice\",\"qty\":900,\"unit\":\"g\"},{\"name\":\"lentils\",\"qty\":300,\"unit\":\"g\"}]}]",
+          "hidden": false,
+          "name": "mismatched units still excluded"
+        },
+        {
+          "id": "t3",
+          "input": "{\"op\":\"find\",\"args\":[{\"ingredients\":{\"$elemMatch\":{\"unit\":\"g\",\"qty\":{\"$gt\":200}}}}]}",
+          "expected": "[{\"name\":\"Beef Stew\",\"cuisine\":\"irish\",\"servings\":6,\"ingredients\":[{\"name\":\"beef\",\"qty\":600,\"unit\":\"g\"},{\"name\":\"carrot\",\"qty\":150,\"unit\":\"g\"}]},{\"name\":\"Rice Pilaf\",\"cuisine\":\"turkish\",\"servings\":4,\"ingredients\":[{\"name\":\"rice\",\"qty\":300,\"unit\":\"g\"},{\"name\":\"butter\",\"qty\":40,\"unit\":\"g\"}]},{\"name\":\"Fruit Salad\",\"cuisine\":\"mixed\",\"servings\":2,\"ingredients\":[{\"name\":\"apple\",\"qty\":150,\"unit\":\"g\"},{\"name\":\"grape\",\"qty\":250,\"unit\":\"g\"}]},{\"name\":\"Feast Platter\",\"cuisine\":\"mixed\",\"servings\":10,\"ingredients\":[{\"name\":\"rice\",\"qty\":900,\"unit\":\"g\"},{\"name\":\"lentils\",\"qty\":300,\"unit\":\"g\"}]}]",
+          "hidden": true,
+          "name": "exactly 200g is not over the line"
+        },
+        {
+          "id": "t4",
+          "input": "{\"op\":\"find\",\"args\":[{\"ingredients\":{\"$elemMatch\":{\"unit\":\"g\",\"qty\":{\"$gt\":200}}}}]}",
+          "expected": "[{\"name\":\"Beef Stew\",\"cuisine\":\"irish\",\"servings\":6,\"ingredients\":[{\"name\":\"beef\",\"qty\":600,\"unit\":\"g\"},{\"name\":\"carrot\",\"qty\":150,\"unit\":\"g\"}]},{\"name\":\"Rice Pilaf\",\"cuisine\":\"turkish\",\"servings\":4,\"ingredients\":[{\"name\":\"rice\",\"qty\":300,\"unit\":\"g\"},{\"name\":\"butter\",\"qty\":40,\"unit\":\"g\"}]},{\"name\":\"Fruit Salad\",\"cuisine\":\"mixed\",\"servings\":2,\"ingredients\":[{\"name\":\"apple\",\"qty\":150,\"unit\":\"g\"},{\"name\":\"grape\",\"qty\":250,\"unit\":\"g\"}]},{\"name\":\"Feast Platter\",\"cuisine\":\"mixed\",\"servings\":10,\"ingredients\":[{\"name\":\"rice\",\"qty\":900,\"unit\":\"g\"},{\"name\":\"lentils\",\"qty\":300,\"unit\":\"g\"}]}]",
+          "hidden": true,
+          "name": "recipe counted once even with two qualifying lines"
+        },
+        {
+          "id": "t5",
+          "input": "{\"op\":\"find\",\"args\":[{\"ingredients\":{\"$elemMatch\":{\"unit\":\"g\",\"qty\":{\"$gt\":200}}}}]}",
+          "expected": "[{\"name\":\"Beef Stew\",\"cuisine\":\"irish\",\"servings\":6,\"ingredients\":[{\"name\":\"beef\",\"qty\":600,\"unit\":\"g\"},{\"name\":\"carrot\",\"qty\":150,\"unit\":\"g\"}]},{\"name\":\"Rice Pilaf\",\"cuisine\":\"turkish\",\"servings\":4,\"ingredients\":[{\"name\":\"rice\",\"qty\":300,\"unit\":\"g\"},{\"name\":\"butter\",\"qty\":40,\"unit\":\"g\"}]},{\"name\":\"Fruit Salad\",\"cuisine\":\"mixed\",\"servings\":2,\"ingredients\":[{\"name\":\"apple\",\"qty\":150,\"unit\":\"g\"},{\"name\":\"grape\",\"qty\":250,\"unit\":\"g\"}]},{\"name\":\"Feast Platter\",\"cuisine\":\"mixed\",\"servings\":10,\"ingredients\":[{\"name\":\"rice\",\"qty\":900,\"unit\":\"g\"},{\"name\":\"lentils\",\"qty\":300,\"unit\":\"g\"}]}]",
+          "hidden": true,
+          "name": "empty ingredient list"
+        }
+      ],
+      "referenceSolution": "db.recipes.find({ ingredients: { $elemMatch: { unit: \"g\", qty: { $gt: 200 } } } })",
+      "tags": [
+        "mongodb",
+        "embedded-arrays",
+        "elemmatch",
+        "data-modeling"
+      ]
+    }
+  ]
+}

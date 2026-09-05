@@ -1,0 +1,875 @@
+{
+  "exercises": [
+    {
+      "cloId": "INFS2101-1",
+      "language": "web",
+      "kind": "spot-the-bug",
+      "difficulty": 2,
+      "pattern": "spot-the-bug",
+      "title": "Unreadable notice badge",
+      "prompt": "A neighborhood library site posts short notices, with a small \"New!\" badge next to the newest one. Visitors say that on some laptop screens the badge is basically invisible, even though every other word on the page reads fine.\n\nRead the page below and find the one line that makes the badge fail a basic contrast rule: light text on a light background. A fix must keep the badge bold and keep it visually distinct from ordinary text - only its color value is wrong.\n\nExample: a fixed badge would show as bold, dark amber text that stands out clearly on the white page, instead of the current pale yellow that nearly disappears.\n\nReply with the 1-based line number of the broken line, as a list, e.g. `[5]`.",
+      "starterCode": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Library Notices</title>\n<style>\n  body {\n    background: #ffffff;\n    color: #222222;\n    font-family: sans-serif;\n  }\n  .badge-new {\n    color: #ffff66;\n    font-weight: bold;\n  }\n</style>\n</head>\n<body>\n  <header>\n    <h1>Library Notices</h1>\n  </header>\n  <main>\n    <p><span class=\"badge-new\">New!</span> The reading room now opens at 8am.</p>\n  </main>\n</body>\n</html>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "[13]",
+          "hidden": false,
+          "name": "find the broken line"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "[13]",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "[13]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "[13]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "[13]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "[13]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Library Notices</title>\n<style>\n  body {\n    background: #ffffff;\n    color: #222222;\n    font-family: sans-serif;\n  }\n  .badge-new {\n    color: #7a5c00;\n    font-weight: bold;\n  }\n</style>\n</head>\n<body>\n  <header>\n    <h1>Library Notices</h1>\n  </header>\n  <main>\n    <p><span class=\"badge-new\">New!</span> The reading room now opens at 8am.</p>\n  </main>\n</body>\n</html>",
+      "tags": [
+        "accessibility",
+        "contrast",
+        "css",
+        "debugging"
+      ]
+    },
+    {
+      "cloId": "INFS2101-1",
+      "language": "web",
+      "kind": "predict-output",
+      "difficulty": 3,
+      "pattern": "predict-output",
+      "title": "Poster alt text tally",
+      "prompt": "A movie ticket kiosk page lists several posters as `<img>` elements. Screen readers treat three cases differently: real description text such as `alt=\"Cat sitting on a mat\"` (described), an empty `alt=\"\"` used for a purely decorative image (decorative), and an `<img>` with no `alt` attribute at all (missing), which most screen readers announce as a bare filename.\n\nExample: `<img alt=\"Red bicycle\">` counts as described, `<img alt=\"\">` counts as decorative, and `<img src=\"logo.png\">` with no `alt` attribute at all counts as missing.\n\nRead the code in the editor without running it. Work out exactly what the three `console.log` calls print, one number per line, in the order they run: the count of described images, then decorative, then missing.\n\nReason through each `<img>` tag by hand before answering.",
+      "starterCode": "<!DOCTYPE html>\n<html>\n<body>\n  <img src=\"inception.jpg\" alt=\"Inception movie poster\">\n  <img src=\"divider.png\" alt=\"\">\n  <img src=\"matrix.jpg\">\n  <img src=\"up.jpg\" alt=\"Up movie poster\">\n  <img src=\"spacer.gif\" alt=\"\">\n\n  <script>\n    const imgs = document.querySelectorAll('img');\n    let described = 0;\n    let decorative = 0;\n    let missing = 0;\n    imgs.forEach(img => {\n      if (!img.hasAttribute('alt')) {\n        missing++;\n      } else if (img.getAttribute('alt') === '') {\n        decorative++;\n      } else {\n        described++;\n      }\n    });\n    console.log(described);\n    console.log(decorative);\n    console.log(missing);\n  </script>\n</body>\n</html>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "2\n2\n1",
+          "hidden": false,
+          "name": "predicted output"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "2\n2\n1",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "2\n2\n1",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "2\n2\n1",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "2\n2\n1",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "2\n2\n1",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "<!DOCTYPE html>\n<html>\n<body>\n  <img src=\"inception.jpg\" alt=\"Inception movie poster\">\n  <img src=\"divider.png\" alt=\"\">\n  <img src=\"matrix.jpg\">\n  <img src=\"up.jpg\" alt=\"Up movie poster\">\n  <img src=\"spacer.gif\" alt=\"\">\n\n  <script>\n    const imgs = document.querySelectorAll('img');\n    let described = 0;\n    let decorative = 0;\n    let missing = 0;\n    imgs.forEach(img => {\n      if (!img.hasAttribute('alt')) {\n        missing++;\n      } else if (img.getAttribute('alt') === '') {\n        decorative++;\n      } else {\n        described++;\n      }\n    });\n    console.log(described);\n    console.log(decorative);\n    console.log(missing);\n  </script>\n</body>\n</html>",
+      "tags": [
+        "accessibility",
+        "alt-text",
+        "dom",
+        "images"
+      ]
+    },
+    {
+      "cloId": "INFS2101-1",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "spec-to-steps",
+      "title": "Accessible sign-up rewrite",
+      "prompt": "A neighborhood blood drive posts a simple sign-up page, built without much thought for accessibility. Before it goes live, the markup must satisfy five rules:\n\n1. The page title sits inside a `<header>` landmark.\n2. The rest of the page content sits inside a `<main>` landmark.\n3. The hero photo's `alt` text actually describes what it shows, not a generic word like \"image\" or \"photo\".\n4. The name field has a real `<label>` connected to it, either by `for`/`id` or by wrapping the input.\n5. The sign-up control is a true `<button>`, not a styled `<div>`, so keyboard users can reach it.\n\nRewrite the markup in the editor so every rule holds, without changing any visible text or removing the existing element ids.\n\nExample: after a correct fix, `document.querySelector('header').contains(document.querySelector('h1'))` is `true`, and the sign-up control's tag name is `BUTTON`.",
+      "starterCode": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Riverside Blood Drive</title>\n</head>\n<body>\n  <div class=\"top\">\n    <h1>Riverside Blood Drive</h1>\n  </div>\n  <div class=\"content\">\n    <img id=\"hero-img\" src=\"drive-photo.jpg\" alt=\"image\">\n    <p>Sign up for a 20-minute donation slot this Saturday.</p>\n    <form>\n      <input id=\"volunteer-name\" type=\"text\">\n      <div id=\"submit-btn\">Sign up</div>\n    </form>\n  </div>\n</body>\n</html>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "const header=document.querySelector('header');const h1=document.querySelector('h1');return (header && h1 && header.contains(h1))?'ok':'expected a <header> landmark wrapping the page title'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "header landmark"
+        },
+        {
+          "id": "t2",
+          "input": "const main=document.querySelector('main');const form=document.querySelector('form');return (main && form && main.contains(form))?'ok':'expected a <main> landmark wrapping the page content'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "main landmark"
+        },
+        {
+          "id": "t3",
+          "input": "const img=document.getElementById('hero-img');if(!img)return 'the hero image is missing';const alt=(img.getAttribute('alt')||'').trim().toLowerCase();const banned=['image','photo','picture',''];return !banned.includes(alt)?'ok':'the alt text must describe the photo, not a generic word'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "descriptive alt text"
+        },
+        {
+          "id": "t4",
+          "input": "const input=document.getElementById('volunteer-name');if(!input)return 'the name input is missing';const byFor=document.querySelector('label[for=\"volunteer-name\"]');const wrapped=input.closest('label');return (byFor || wrapped)?'ok':'the name input needs a label linked to it'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "label linked to input"
+        },
+        {
+          "id": "t5",
+          "input": "const btn=document.getElementById('submit-btn');return (btn && btn.tagName.toLowerCase()==='button')?'ok':'the sign-up control must be a real <button> element'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "real button element"
+        },
+        {
+          "id": "t6",
+          "input": "const h1s=document.querySelectorAll('h1');return h1s.length===1?'ok':'expected exactly one <h1> on the page, found '+h1s.length",
+          "expected": "ok",
+          "hidden": true,
+          "name": "boundary: single heading"
+        },
+        {
+          "id": "t7",
+          "input": "const btn=document.getElementById('submit-btn');return (btn && btn.textContent.trim()==='Sign up')?'ok':'the sign-up button should still read Sign up'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "button text unchanged"
+        }
+      ],
+      "referenceSolution": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Riverside Blood Drive</title>\n</head>\n<body>\n  <header>\n    <h1>Riverside Blood Drive</h1>\n  </header>\n  <main>\n    <img id=\"hero-img\" src=\"drive-photo.jpg\" alt=\"Volunteers lined up to donate blood at last year's drive\">\n    <p>Sign up for a 20-minute donation slot this Saturday.</p>\n    <form>\n      <label for=\"volunteer-name\">Your name</label>\n      <input id=\"volunteer-name\" type=\"text\">\n      <button type=\"submit\" id=\"submit-btn\">Sign up</button>\n    </form>\n  </main>\n</body>\n</html>",
+      "tags": [
+        "accessibility",
+        "semantics",
+        "labels",
+        "landmarks"
+      ]
+    },
+    {
+      "cloId": "INFS2101-2",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "css-layout",
+      "title": "Chat contact row",
+      "prompt": "A messaging app shows each contact as one row: a small avatar on the left and a two-line info block (name, then last message) on the right.\n\nStyle the `.contact` row so `.avatar` and `.info` sit side by side, vertically centered against each other, with at least 8px of horizontal space between them. Do not change how `.name` and `.last-msg` stack inside `.info`.\n\nExample: with the avatar showing `JS` and the info block showing two lines, `.avatar` lines up with the vertical middle of `.info`, and the two never touch or overlap.\n\nEdit only the `<style>` block.",
+      "starterCode": "<style>\n  /* your CSS here */\n</style>\n",
+      "fixture": "<div class=\"contact\">\n  <div class=\"avatar\">JS</div>\n  <div class=\"info\">\n    <div class=\"name\">Jamie Smith</div>\n    <div class=\"last-msg\">See you at 5</div>\n  </div>\n</div>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "const cs=getComputedStyle(document.querySelector('.contact'));return cs.display==='flex'?'ok':'expected display: flex on .contact, got '+cs.display",
+          "expected": "ok",
+          "hidden": false,
+          "name": "flex container"
+        },
+        {
+          "id": "t2",
+          "input": "const cs=getComputedStyle(document.querySelector('.contact'));return cs.flexDirection==='row'?'ok':'expected the avatar to stay to the left of the info block (flex-direction: row), got '+cs.flexDirection",
+          "expected": "ok",
+          "hidden": false,
+          "name": "side by side"
+        },
+        {
+          "id": "t3",
+          "input": "const cs=getComputedStyle(document.querySelector('.contact'));return cs.alignItems==='center'?'ok':'expected align-items: center on .contact to vertically center the avatar against the info block, got '+cs.alignItems",
+          "expected": "ok",
+          "hidden": true,
+          "name": "vertical centering"
+        },
+        {
+          "id": "t4",
+          "input": "const cs=getComputedStyle(document.querySelector('.contact'));const avatar=getComputedStyle(document.querySelector('.avatar'));const info=getComputedStyle(document.querySelector('.info'));const candidates=[cs.gap,cs.columnGap,avatar.marginRight,info.marginLeft].map(v=>parseFloat(v)).filter(n=>!Number.isNaN(n));const gap=candidates.length?Math.max(...candidates):0;return gap>=8?'ok':'expected at least 8px between the avatar and the info block, got '+gap",
+          "expected": "ok",
+          "hidden": true,
+          "name": "gap applied"
+        },
+        {
+          "id": "t5",
+          "input": "document.querySelector('.last-msg').remove();const cs=getComputedStyle(document.querySelector('.contact'));return (cs.display==='flex'&&cs.alignItems==='center')?'ok':'avatar should stay centered even with a single line of info'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "boundary: single line of info"
+        },
+        {
+          "id": "t6",
+          "input": "const info=getComputedStyle(document.querySelector('.info'));const kids=[...document.querySelectorAll('.info > div')].map(d=>d.className);return (info.display==='block'&&kids[0]==='name'&&kids[1]==='last-msg')?'ok':'the name and message should still stack as two lines inside the info block, got .info display: '+info.display",
+          "expected": "ok",
+          "hidden": true,
+          "name": "info keeps its stack"
+        }
+      ],
+      "referenceSolution": "<style>\n  .contact {\n    display: flex;\n    align-items: center;\n    gap: 12px;\n  }\n</style>\n",
+      "tags": [
+        "flexbox",
+        "alignment",
+        "layout"
+      ]
+    },
+    {
+      "cloId": "INFS2101-2",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "responsive-rule",
+      "title": "Market stall layout",
+      "prompt": "A farmers market lists its stalls in a single strip. On a laptop the stalls should sit in one row; on a phone-sized screen there is not enough width, so they should stack into a column instead.\n\nStyle `.stalls` with flexbox so the stalls sit in a row by default. Then, on screens 600px wide or narrower, switch `.stalls` to a column layout instead, without losing the row layout on wider screens.\n\nConstraints: keep `display: flex` on `.stalls` at every width. The breakpoint must be exactly 600px, using `max-width`.\n\nExample: a screen 800px wide shows Bread, Honey and Cheese side by side in one row. A screen 400px wide shows them stacked, one per line.\n\nEdit only the `<style>` block.",
+      "starterCode": "<style>\n  .stalls {\n    /* your CSS here */\n  }\n\n  /* add a media query below for narrow screens */\n</style>\n",
+      "fixture": "<div class=\"stalls\">\n  <div class=\"stall\">Bread</div>\n  <div class=\"stall\">Honey</div>\n  <div class=\"stall\">Cheese</div>\n</div>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "const rules=[...document.styleSheets].flatMap(s=>[...s.cssRules]);const base=rules.find(r=>r.selectorText==='.stalls'&&!(r.parentRule instanceof CSSMediaRule));if(!base)return 'could not find a base .stalls rule';return base.style.flexDirection==='row'?'ok':'the wide-screen layout should set flex-direction: row, got '+base.style.flexDirection",
+          "expected": "ok",
+          "hidden": false,
+          "name": "row by default"
+        },
+        {
+          "id": "t2",
+          "input": "const rules=[...document.styleSheets].flatMap(s=>[...s.cssRules]);const media=rules.find(r=>r instanceof CSSMediaRule);if(!media)return 'no @media rule found for narrow screens';const stalls=[...media.cssRules].find(r=>r.selectorText==='.stalls');if(!stalls)return 'the media query does not restyle .stalls';return stalls.style.flexDirection==='column'?'ok':'narrow screens should set flex-direction: column, got '+stalls.style.flexDirection",
+          "expected": "ok",
+          "hidden": false,
+          "name": "column under media query"
+        },
+        {
+          "id": "t3",
+          "input": "const rules=[...document.styleSheets].flatMap(s=>[...s.cssRules]);const media=rules.find(r=>r instanceof CSSMediaRule);if(!media)return 'no @media rule found';const cond=(media.conditionText||media.media.mediaText||'').replace(/\\s+/g,'');return cond.includes('max-width:600px')?'ok':'the breakpoint should be exactly 600px, got '+cond",
+          "expected": "ok",
+          "hidden": true,
+          "name": "boundary: exact breakpoint"
+        },
+        {
+          "id": "t4",
+          "input": "const rules=[...document.styleSheets].flatMap(s=>[...s.cssRules]);const media=rules.find(r=>r instanceof CSSMediaRule);if(!media)return 'no @media rule found for narrow screens';const stalls=[...media.cssRules].find(r=>r.selectorText==='.stalls');if(!stalls)return 'the media query does not restyle .stalls';const d=stalls.style.display;return (d===''||d==='flex')?'ok':'expected .stalls to stay a flex container inside the media query too, got display: '+d",
+          "expected": "ok",
+          "hidden": true,
+          "name": "keeps flex display under the media query"
+        },
+        {
+          "id": "t5",
+          "input": "const stalls=document.querySelectorAll('.stall');for(let i=stalls.length-1;i>0;i--)stalls[i].remove();const cs=getComputedStyle(document.querySelector('.stalls'));return (cs.display==='flex'&&cs.flexDirection==='row')?'ok':'expected .stalls to stay a flex row with a single stall, got display: '+cs.display+', flex-direction: '+cs.flexDirection",
+          "expected": "ok",
+          "hidden": true,
+          "name": "boundary: single stall"
+        },
+        {
+          "id": "t6",
+          "input": "const stalls=document.querySelectorAll('.stall');if(stalls.length!==3)return 'expected 3 .stall elements, found '+stalls.length;for(const s of stalls){if(getComputedStyle(s).display==='none')return 'a stall got hidden'}return 'ok'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "stalls stay visible"
+        },
+        {
+          "id": "t7",
+          "input": "const rules=[...document.styleSheets].flatMap(s=>[...s.cssRules]);const base=rules.find(r=>r.selectorText==='.stalls'&&!(r.parentRule instanceof CSSMediaRule));if(!base)return 'could not find a base .stalls rule';return base.style.display==='flex'?'ok':'expected display: flex on the base .stalls rule'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "stays a flex container"
+        }
+      ],
+      "referenceSolution": "<style>\n  .stalls {\n    display: flex;\n    flex-direction: row;\n  }\n\n  @media (max-width: 600px) {\n    .stalls {\n      flex-direction: column;\n    }\n  }\n</style>\n",
+      "tags": [
+        "media-query",
+        "flexbox",
+        "responsive"
+      ]
+    },
+    {
+      "cloId": "INFS2101-2",
+      "language": "web",
+      "kind": "spot-the-bug",
+      "difficulty": 4,
+      "pattern": "spot-the-bug",
+      "title": "Conference schedule grid",
+      "prompt": "A small conference site uses flexbox for its top nav bar and a CSS grid for the session schedule underneath it. A media query is meant to collapse the schedule to one column on narrow screens.\n\nOn a wide screen the three sessions (Keynote, Workshop A, Workshop B) should sit side by side in three equal columns. Instead, they stack in a single column no matter how wide the window gets — the narrow-screen behaviour already works fine.\n\nRead the code below and find the one line that stops the wide layout from becoming three columns.\n\nExample: at 1000px wide the sessions should form one row of three equal boxes; at 400px wide they should stack, one per line, which they already do.\n\nReply with the 1-based line number of the broken line, as a list, e.g. `[5]`.",
+      "starterCode": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+          "expected": "[13]",
+          "hidden": false,
+          "name": "find the broken line"
+        },
+        {
+          "id": "t2",
+          "input": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+          "expected": "[13]",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+          "expected": "[13]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+          "expected": "[13]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+          "expected": "[13]",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-column: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+          "expected": "[13]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "<!DOCTYPE html>\n<html>\n<head>\n<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n  }\n\n  .schedule {\n    display: grid;\n    grid-template-columns: repeat(3, 1fr);\n    gap: 16px;\n  }\n\n  @media (max-width: 640px) {\n    .schedule {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n</head>\n<body>\n  <div class=\"nav\">\n    <span>Conf</span>\n    <span>Day 1</span>\n  </div>\n  <div class=\"schedule\">\n    <div class=\"session\">Keynote</div>\n    <div class=\"session\">Workshop A</div>\n    <div class=\"session\">Workshop B</div>\n  </div>\n</body>\n</html>",
+      "tags": [
+        "css-grid",
+        "debugging",
+        "media-query"
+      ]
+    },
+    {
+      "cloId": "INFS2101-3",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "dom-event",
+      "title": "Packing List Tracker",
+      "prompt": "A hiker's packing checklist has three checkboxes for gear: `tent`, `stove`, and `map`. Next to them, a paragraph with id `status` starts as `0 of 3 packed`.\n\nWrite the script so that whenever any checkbox is checked or unchecked, `status` updates to show how many of the three are currently checked, in the form `<n> of 3 packed`.\n\nExample: checking `tent` then `stove` updates `status` to `2 of 3 packed`. Unchecking `tent` afterward changes it to `1 of 3 packed`.",
+      "starterCode": "<script>\n  // your code\n</script>\n",
+      "fixture": "<input type='checkbox' id='tent'><input type='checkbox' id='stove'><input type='checkbox' id='map'><p id='status'>0 of 3 packed</p>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "document.getElementById('tent').click();\ndocument.getElementById('stove').click();\nreturn document.getElementById('status').textContent.trim() === '2 of 3 packed' ? 'ok' : 'expected 2 of 3 packed, got ' + document.getElementById('status').textContent",
+          "expected": "ok",
+          "hidden": false,
+          "name": "two checked"
+        },
+        {
+          "id": "t2",
+          "input": "return document.getElementById('status').textContent.trim() === '0 of 3 packed' ? 'ok' : 'should start at 0 of 3 packed'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "starts at zero"
+        },
+        {
+          "id": "t3",
+          "input": "const tent = document.getElementById('tent');\ntent.click();\ntent.click();\nreturn document.getElementById('status').textContent.trim() === '0 of 3 packed' ? 'ok' : 'expected 0 of 3 packed after toggling twice'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "toggle back off"
+        },
+        {
+          "id": "t4",
+          "input": "document.getElementById('tent').click();\ndocument.getElementById('stove').click();\ndocument.getElementById('map').click();\nreturn document.getElementById('status').textContent.trim() === '3 of 3 packed' ? 'ok' : 'expected 3 of 3 packed'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "all checked"
+        },
+        {
+          "id": "t5",
+          "input": "document.getElementById('map').click();\nreturn document.getElementById('status').textContent.trim() === '1 of 3 packed' ? 'ok' : 'expected 1 of 3 packed'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "single item"
+        },
+        {
+          "id": "t6",
+          "input": "return (document.getElementById('tent') && document.getElementById('stove') && document.getElementById('map')) ? 'ok' : 'a checkbox was removed'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "checkboxes intact"
+        }
+      ],
+      "referenceSolution": "<script>\n  const boxes = [document.getElementById('tent'), document.getElementById('stove'), document.getElementById('map')]\n  const status = document.getElementById('status')\n  function update() {\n    const n = boxes.filter(b => b.checked).length\n    status.textContent = n + ' of 3 packed'\n  }\n  boxes.forEach(b => b.addEventListener('change', update))\n</script>\n",
+      "tags": [
+        "checkboxes",
+        "dom",
+        "events"
+      ]
+    },
+    {
+      "cloId": "INFS2101-3",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "guard",
+      "title": "Warehouse PIN Gate",
+      "prompt": "A warehouse scanner asks a worker to type a PIN before it will log a shipment. The page has a form with id `pinForm` containing a text input `pin` and a submit button, plus two empty paragraphs, `error` and `result`.\n\nWrite the script so that submitting the form stops the normal page reload, then checks these problems in order and stops at the first one found:\n- `pin` is empty: set `error` to `Enter a PIN` and clear `result`.\n- `pin` is not exactly 4 characters: set `error` to `PIN must be 4 digits`.\n- `pin` contains anything other than digits: set `error` to `Digits only`.\n\nIf none of these apply, clear `error` and set `result` to `Logged: <pin>`.\n\nExample: submitting `77` shows `PIN must be 4 digits` in `error`. Submitting `4471` sets `result` to `Logged: 4471` and clears `error`.",
+      "starterCode": "<script>\n  // your code\n</script>\n",
+      "fixture": "<form id='pinForm'><input id='pin' type='text'><button id='submit' type='submit'>Confirm</button></form><p id='error'></p><p id='result'></p>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "document.getElementById('pin').value = '77';\ndocument.getElementById('submit').click();\nreturn document.getElementById('error').textContent.trim() === 'PIN must be 4 digits' ? 'ok' : 'expected PIN must be 4 digits, got ' + document.getElementById('error').textContent",
+          "expected": "ok",
+          "hidden": false,
+          "name": "too short"
+        },
+        {
+          "id": "t2",
+          "input": "document.getElementById('pin').value = '4471';\ndocument.getElementById('submit').click();\nconst okResult = document.getElementById('result').textContent.trim() === 'Logged: 4471';\nconst okError = document.getElementById('error').textContent.trim() === '';\nreturn (okResult && okError) ? 'ok' : 'expected Logged: 4471 with no error'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "valid pin"
+        },
+        {
+          "id": "t3",
+          "input": "document.getElementById('pin').value = '';\ndocument.getElementById('submit').click();\nreturn document.getElementById('error').textContent.trim() === 'Enter a PIN' ? 'ok' : 'expected Enter a PIN, got ' + document.getElementById('error').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "empty pin"
+        },
+        {
+          "id": "t4",
+          "input": "document.getElementById('pin').value = '12a4';\ndocument.getElementById('submit').click();\nreturn document.getElementById('error').textContent.trim() === 'Digits only' ? 'ok' : 'expected Digits only, got ' + document.getElementById('error').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "letters mixed in"
+        },
+        {
+          "id": "t5",
+          "input": "document.getElementById('pin').value = '99999';\ndocument.getElementById('submit').click();\nreturn document.getElementById('error').textContent.trim() === 'PIN must be 4 digits' ? 'ok' : 'expected PIN must be 4 digits for a 5 digit pin'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "too long"
+        },
+        {
+          "id": "t6",
+          "input": "document.getElementById('pin').value = '0000';\ndocument.getElementById('submit').click();\nreturn document.getElementById('result').textContent.trim() === 'Logged: 0000' ? 'ok' : 'expected Logged: 0000, got ' + document.getElementById('result').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "leading zeros"
+        },
+        {
+          "id": "t7",
+          "input": "document.getElementById('pin').value = '77';\ndocument.getElementById('submit').click();\ndocument.getElementById('pin').value = '1234';\ndocument.getElementById('submit').click();\nconst okResult = document.getElementById('result').textContent.trim() === 'Logged: 1234';\nconst okError = document.getElementById('error').textContent.trim() === '';\nreturn (okResult && okError) ? 'ok' : 'error was not cleared after fixing the pin'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "recovers after fix"
+        }
+      ],
+      "referenceSolution": "<script>\n  document.getElementById('pinForm').addEventListener('submit', (e) => {\n    e.preventDefault()\n    const pin = document.getElementById('pin').value\n    const error = document.getElementById('error')\n    const result = document.getElementById('result')\n    if (pin.length === 0) {\n      error.textContent = 'Enter a PIN'\n      result.textContent = ''\n      return\n    }\n    if (pin.length !== 4) {\n      error.textContent = 'PIN must be 4 digits'\n      result.textContent = ''\n      return\n    }\n    if (!/^[0-9]+$/.test(pin)) {\n      error.textContent = 'Digits only'\n      result.textContent = ''\n      return\n    }\n    error.textContent = ''\n    result.textContent = 'Logged: ' + pin\n  })\n</script>\n",
+      "tags": [
+        "forms",
+        "validation",
+        "events"
+      ]
+    },
+    {
+      "cloId": "INFS2101-3",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "string-parse",
+      "title": "Ingredient Line Cleanup",
+      "prompt": "A recipe app lets a cook paste one line of ingredients separated by semicolons, sometimes with extra spaces or repeated semicolons, such as `2 cups flour;; 1 tsp salt ;3 eggs `. The page has a text input `line`, a button `format`, and two empty paragraphs, `result` and `error`.\n\nWrite the script so that clicking `format`:\n- splits the text on `;`,\n- trims whitespace from each piece,\n- drops any piece that becomes empty,\n- if nothing is left, sets `error` to `No ingredients found` and clears `result`,\n- otherwise clears `error` and sets `result` to the remaining pieces rejoined with `, `.\n\nExample: `2 cups flour;; 1 tsp salt ;3 eggs ` becomes `2 cups flour, 1 tsp salt, 3 eggs` in `result`. An input of only `; ; ;` shows `No ingredients found`.",
+      "starterCode": "<script>\n  // your code\n</script>\n",
+      "fixture": "<input id='line' type='text'><button id='format'>Format</button><p id='result'></p><p id='error'></p>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "document.getElementById('line').value = '2 cups flour;; 1 tsp salt ;3 eggs ';\ndocument.getElementById('format').click();\nreturn document.getElementById('result').textContent.trim() === '2 cups flour, 1 tsp salt, 3 eggs' ? 'ok' : 'got ' + document.getElementById('result').textContent",
+          "expected": "ok",
+          "hidden": false,
+          "name": "messy line cleans up"
+        },
+        {
+          "id": "t2",
+          "input": "document.getElementById('line').value = '; ; ;';\ndocument.getElementById('format').click();\nconst okErr = document.getElementById('error').textContent.trim() === 'No ingredients found';\nconst okRes = document.getElementById('result').textContent.trim() === '';\nreturn (okErr && okRes) ? 'ok' : 'expected the error state'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "only separators"
+        },
+        {
+          "id": "t3",
+          "input": "document.getElementById('line').value = 'salt';\ndocument.getElementById('format').click();\nreturn document.getElementById('result').textContent.trim() === 'salt' ? 'ok' : 'expected salt, got ' + document.getElementById('result').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "single ingredient"
+        },
+        {
+          "id": "t4",
+          "input": "document.getElementById('line').value = ';  2 eggs ; milk;';\ndocument.getElementById('format').click();\nreturn document.getElementById('result').textContent.trim() === '2 eggs, milk' ? 'ok' : 'got ' + document.getElementById('result').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "leading and trailing separators"
+        },
+        {
+          "id": "t5",
+          "input": "document.getElementById('line').value = '';\ndocument.getElementById('format').click();\nreturn document.getElementById('error').textContent.trim() === 'No ingredients found' ? 'ok' : 'expected an error for empty input'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "empty input"
+        },
+        {
+          "id": "t6",
+          "input": "document.getElementById('line').value = 'a; b ;c;  d;e ; f';\ndocument.getElementById('format').click();\nreturn document.getElementById('result').textContent.trim() === 'a, b, c, d, e, f' ? 'ok' : 'got ' + document.getElementById('result').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "many ingredients"
+        },
+        {
+          "id": "t7",
+          "input": "document.getElementById('line').value = ';;;';\ndocument.getElementById('format').click();\ndocument.getElementById('line').value = 'flour; sugar';\ndocument.getElementById('format').click();\nconst okRes = document.getElementById('result').textContent.trim() === 'flour, sugar';\nconst okErr = document.getElementById('error').textContent.trim() === '';\nreturn (okRes && okErr) ? 'ok' : 'error was not cleared after a valid line'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "recovers after fix"
+        }
+      ],
+      "referenceSolution": "<script>\n  document.getElementById('format').addEventListener('click', () => {\n    const raw = document.getElementById('line').value\n    const pieces = raw.split(';').map(p => p.trim()).filter(p => p.length > 0)\n    const result = document.getElementById('result')\n    const error = document.getElementById('error')\n    if (pieces.length === 0) {\n      error.textContent = 'No ingredients found'\n      result.textContent = ''\n      return\n    }\n    error.textContent = ''\n    result.textContent = pieces.join(', ')\n  })\n</script>\n",
+      "tags": [
+        "strings",
+        "parsing",
+        "forms"
+      ]
+    },
+    {
+      "cloId": "INFS2101-3",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "state-machine",
+      "title": "Order Status Stepper",
+      "prompt": "A parcel tracker shows the order's current stage in a paragraph with id `state`, starting at `Placed`, next to a button with id `advance`.\n\nEach click on `advance` should move the stage forward through this fixed sequence: `Placed`, `Packed`, `Shipped`, `Delivered`. Once the stage reaches `Delivered`, further clicks must leave it at `Delivered`.\n\nExample: starting from `Placed`, three clicks show `Delivered`. A fourth click still shows `Delivered`.",
+      "starterCode": "<script>\n  // your code\n</script>\n",
+      "fixture": "<p id='state'>Placed</p><button id='advance'>Advance</button>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "const b = document.getElementById('advance');\nb.click();\nb.click();\nb.click();\nreturn document.getElementById('state').textContent.trim() === 'Delivered' ? 'ok' : 'expected Delivered, got ' + document.getElementById('state').textContent",
+          "expected": "ok",
+          "hidden": false,
+          "name": "three clicks reach delivered"
+        },
+        {
+          "id": "t2",
+          "input": "return document.getElementById('state').textContent.trim() === 'Placed' ? 'ok' : 'should start at Placed'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "starts at placed"
+        },
+        {
+          "id": "t3",
+          "input": "document.getElementById('advance').click();\nreturn document.getElementById('state').textContent.trim() === 'Packed' ? 'ok' : 'expected Packed, got ' + document.getElementById('state').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "one click"
+        },
+        {
+          "id": "t4",
+          "input": "document.getElementById('advance').click();\ndocument.getElementById('advance').click();\nreturn document.getElementById('state').textContent.trim() === 'Shipped' ? 'ok' : 'expected Shipped, got ' + document.getElementById('state').textContent",
+          "expected": "ok",
+          "hidden": true,
+          "name": "two clicks"
+        },
+        {
+          "id": "t5",
+          "input": "const b = document.getElementById('advance');\nfor (let i = 0; i < 4; i++) { b.click(); }\nreturn document.getElementById('state').textContent.trim() === 'Delivered' ? 'ok' : 'expected Delivered after 4 clicks'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "fourth click stays"
+        },
+        {
+          "id": "t6",
+          "input": "const b = document.getElementById('advance');\nfor (let i = 0; i < 10; i++) { b.click(); }\nreturn document.getElementById('state').textContent.trim() === 'Delivered' ? 'ok' : 'expected Delivered after many clicks'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "many extra clicks"
+        },
+        {
+          "id": "t7",
+          "input": "return (document.getElementById('state') && document.getElementById('advance')) ? 'ok' : 'an element is missing'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "elements intact"
+        }
+      ],
+      "referenceSolution": "<script>\n  const stages = ['Placed', 'Packed', 'Shipped', 'Delivered']\n  const state = document.getElementById('state')\n  document.getElementById('advance').addEventListener('click', () => {\n    const i = stages.indexOf(state.textContent.trim())\n    if (i < stages.length - 1) {\n      state.textContent = stages[i + 1]\n    }\n  })\n</script>\n",
+      "tags": [
+        "dom",
+        "events",
+        "sequence"
+      ]
+    },
+    {
+      "cloId": "INFS2101-4",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "dom-event",
+      "title": "Menu Item Save Toggle",
+      "prompt": "A restaurant's online menu shows each dish inside a card, with a button people click to save that dish for their next order.\n\nWrite the script so each click on `#save-btn` toggles two things together: its text between `Save` and `Saved`, and whether it carries the class `saved`. The button starts showing `Save` with no `saved` class, and every click must flip both the text and the class in sync with each other.\n\nExample: after one click the button reads `Saved` and has the `saved` class. After a second click it is back to `Save` with no `saved` class.",
+      "starterCode": "<script>\n  const btn = document.getElementById('save-btn')\n  btn.addEventListener('click', () => {\n\n  })\n</script>\n",
+      "fixture": "<article id='card'>\n  <h3>Lentil Soup</h3>\n  <button id='save-btn'>Save</button>\n</article>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "document.getElementById('save-btn').click();const b=document.getElementById('save-btn');return (b.textContent.trim()==='Saved' && b.classList.contains('saved'))?'ok':'expected Saved state after one click'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "one click saves"
+        },
+        {
+          "id": "t2",
+          "input": "const b=document.getElementById('save-btn');return (b.textContent.trim()==='Save' && !b.classList.contains('saved'))?'ok':'expected initial Save state'",
+          "expected": "ok",
+          "hidden": false,
+          "name": "starts unsaved"
+        },
+        {
+          "id": "t3",
+          "input": "const b=document.getElementById('save-btn');b.click();b.click();return (b.textContent.trim()==='Save' && !b.classList.contains('saved'))?'ok':'expected back to Save after two clicks'",
+          "expected": "ok",
+          "hidden": true,
+          "name": "two clicks reverts"
+        },
+        {
+          "id": "t4",
+          "input": "const b=document.getElementById('save-btn');b.click();b.click();b.click();return (b.textContent.trim()==='Saved' && b.classList.contains('saved'))?'ok':'expected Saved after three clicks'",
+          "expected": "ok",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "const b=document.getElementById('save-btn');for(let i=0;i<7;i++){b.click()}return (b.textContent.trim()==='Saved' && b.classList.contains('saved'))?'ok':'expected Saved after seven clicks'",
+          "expected": "ok",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "const b=document.getElementById('save-btn');for(let i=0;i<4;i++){b.click()}return document.getElementById('save-btn')?'ok':'button element missing after clicks'",
+          "expected": "ok",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "<script>\n  const btn = document.getElementById('save-btn')\n  btn.addEventListener('click', () => {\n    const saved = btn.classList.toggle('saved')\n    btn.textContent = saved ? 'Saved' : 'Save'\n  })\n</script>\n",
+      "tags": [
+        "dom",
+        "events",
+        "toggle",
+        "buttons"
+      ]
+    },
+    {
+      "cloId": "INFS2101-4",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "composition",
+      "title": "Bookstore Checkout Total",
+      "prompt": "An online bookstore charges a flat $12 per book. Shoppers enter a quantity and an optional promo code before totaling their order.\n\nFill in the three helper functions and wire them together inside the `#calc` click handler: `subtotal(qty)` returns the quantity times $12; `applyDiscount(amount, code)` takes 10% off when `code` is exactly `SAVE10` (any other code, including a blank one, leaves the amount unchanged); `formatCurrency(amount)` returns the amount as a dollar string with two decimal places. The click handler must read `#qty` and `#code`, pass the result through all three functions in order, and show the final string in `#total`.\n\nExample: quantity `2` with code `SAVE10` sets `#total` to `$21.60`. Quantity `2` with a blank code sets it to `$24.00`.",
+      "starterCode": "<script>\n  const PRICE = 12\n\n  function subtotal(qty) {\n\n  }\n\n  function applyDiscount(amount, code) {\n\n  }\n\n  function formatCurrency(amount) {\n\n  }\n\n  document.getElementById('calc').addEventListener('click', () => {\n\n  })\n</script>\n",
+      "fixture": "<section>\n  <input id='qty' type='number' value='1' />\n  <input id='code' type='text' placeholder='promo code' />\n  <button id='calc'>Calculate</button>\n  <p id='total'>$0.00</p>\n</section>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "document.getElementById('qty').value='2';document.getElementById('code').value='';document.getElementById('calc').click();const t=document.getElementById('total').textContent.trim();return t==='$24.00'?'ok':'expected $24.00, got '+t",
+          "expected": "ok",
+          "hidden": false,
+          "name": "no code"
+        },
+        {
+          "id": "t2",
+          "input": "document.getElementById('qty').value='2';document.getElementById('code').value='SAVE10';document.getElementById('calc').click();const t=document.getElementById('total').textContent.trim();return t==='$21.60'?'ok':'expected $21.60, got '+t",
+          "expected": "ok",
+          "hidden": false,
+          "name": "with discount"
+        },
+        {
+          "id": "t3",
+          "input": "document.getElementById('qty').value='0';document.getElementById('code').value='SAVE10';document.getElementById('calc').click();const t=document.getElementById('total').textContent.trim();return t==='$0.00'?'ok':'expected $0.00, got '+t",
+          "expected": "ok",
+          "hidden": true,
+          "name": "zero quantity"
+        },
+        {
+          "id": "t4",
+          "input": "document.getElementById('qty').value='5';document.getElementById('code').value='save10';document.getElementById('calc').click();const t=document.getElementById('total').textContent.trim();return t==='$60.00'?'ok':'expected $60.00, got '+t",
+          "expected": "ok",
+          "hidden": true,
+          "name": "case sensitive code"
+        },
+        {
+          "id": "t5",
+          "input": "document.getElementById('qty').value='1';document.getElementById('code').value='SAVE10';document.getElementById('calc').click();const t=document.getElementById('total').textContent.trim();return t==='$10.80'?'ok':'expected $10.80, got '+t",
+          "expected": "ok",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "document.getElementById('qty').value='3';document.getElementById('code').value='XYZ';document.getElementById('calc').click();const t=document.getElementById('total').textContent.trim();return t==='$36.00'?'ok':'expected $36.00, got '+t",
+          "expected": "ok",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "<script>\n  const PRICE = 12\n\n  function subtotal(qty) {\n    return PRICE * qty\n  }\n\n  function applyDiscount(amount, code) {\n    return code === 'SAVE10' ? amount * 0.9 : amount\n  }\n\n  function formatCurrency(amount) {\n    return '$' + amount.toFixed(2)\n  }\n\n  document.getElementById('calc').addEventListener('click', () => {\n    const qty = Number(document.getElementById('qty').value)\n    const code = document.getElementById('code').value\n    const amount = applyDiscount(subtotal(qty), code)\n    document.getElementById('total').textContent = formatCurrency(amount)\n  })\n</script>\n",
+      "tags": [
+        "functions",
+        "checkout",
+        "pricing"
+      ]
+    },
+    {
+      "cloId": "INFS2101-4",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "css-layout",
+      "title": "Plant Gallery Grid",
+      "prompt": "A nursery site lists five plants inside a container with id `gallery`, each one a `.plant` box holding its name.\n\nAdd CSS so `#gallery` becomes a two-column layout: exactly two equal-width columns, with a 16px gap between items in both directions, filling left-to-right and wrapping to a new row every two items. A leftover plant in the final row must keep the width of one column rather than stretching across the row.\n\nExample: with five plants the result is three rows — two full rows of two plants, then a final row holding one plant that lines up under the first column and is the same width as every other plant.",
+      "starterCode": "<style>\n#gallery {\n\n}\n</style>\n",
+      "fixture": "<section id='gallery' style='width:400px'>\n  <article class='plant'>Fern</article>\n  <article class='plant'>Cactus</article>\n  <article class='plant'>Basil</article>\n  <article class='plant'>Aloe</article>\n  <article class='plant'>Mint</article>\n</section>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "const cs=getComputedStyle(document.getElementById('gallery'));return cs.display==='grid'?'ok':'expected display: grid, got '+cs.display",
+          "expected": "ok",
+          "hidden": false,
+          "name": "uses grid"
+        },
+        {
+          "id": "t2",
+          "input": "const cs=getComputedStyle(document.getElementById('gallery'));const val=cs.gridTemplateColumns.trim();const m=val.match(/^repeat\\(\\s*(\\d+)\\s*,/);const count=m?parseInt(m[1],10):val.split(/\\s+/).length;return count===2?'ok':'expected 2 columns, got '+count",
+          "expected": "ok",
+          "hidden": false,
+          "name": "two columns"
+        },
+        {
+          "id": "t3",
+          "input": "const cs=getComputedStyle(document.getElementById('gallery'));return cs.gap==='16px'?'ok':'expected 16px gap, got '+cs.gap",
+          "expected": "ok",
+          "hidden": true,
+          "name": "gap size"
+        },
+        {
+          "id": "t4",
+          "input": "const items=document.querySelectorAll('#gallery .plant');const cs=getComputedStyle(items[items.length-1]);const gc=cs.gridColumn;return (gc===''||gc==='auto'||gc==='auto / auto')?'ok':'leftover item should not have a manual grid-column override, got '+gc",
+          "expected": "ok",
+          "hidden": true,
+          "name": "leftover item not manually placed"
+        },
+        {
+          "id": "t5",
+          "input": "const cs=getComputedStyle(document.getElementById('gallery'));return !cs.gridAutoFlow.startsWith('column')?'ok':'expected row-based auto-flow so items wrap into new rows, got '+cs.gridAutoFlow",
+          "expected": "ok",
+          "hidden": true,
+          "name": "wraps into new rows"
+        },
+        {
+          "id": "t6",
+          "input": "const cs=getComputedStyle(document.getElementById('gallery'));const val=cs.gridTemplateColumns.trim();const m=val.match(/^repeat\\(\\s*\\d+\\s*,\\s*([^)]+)\\)$/);const tracks=m?[m[1].trim()]:val.split(/\\s+/);const equal=tracks.every(function(t){return t===tracks[0]});return equal?'ok':'columns are not equal width, got '+val",
+          "expected": "ok",
+          "hidden": true,
+          "name": "equal column widths"
+        }
+      ],
+      "referenceSolution": "<style>\n#gallery {\n  display: grid;\n  grid-template-columns: repeat(2, 1fr);\n  gap: 16px;\n}\n</style>\n",
+      "tags": [
+        "css",
+        "grid",
+        "responsive-design"
+      ]
+    },
+    {
+      "cloId": "INFS2101-4",
+      "language": "web",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "state-machine",
+      "title": "Train Seat Booking Wizard",
+      "prompt": "A small booking widget walks a passenger through reserving a train seat in three steps: choose a seat, enter a name, then see the confirmation. Only one step should be visible at a time, and two buttons move between them.\n\nWrite the script so `#step-label` always reads `Step X of 3`, where `X` is whichever of `#step-1`, `#step-2`, `#step-3` is currently shown (the other two carry the `hidden` property). Clicking `#next` moves one step forward but must go no further once step 3 is reached; clicking `#back` moves one step backward but must go no further once step 1 is reached. Disable whichever button would go out of range, and re-enable it the moment it becomes valid again.\n\nExample: right after the page loads, `#step-label` reads `Step 1 of 3` and `#back` is disabled while `#next` is not. After one click on `#next`, it reads `Step 2 of 3` and both buttons are enabled.",
+      "starterCode": "<script>\n  let step = 1\n  const back = document.getElementById('back')\n  const next = document.getElementById('next')\n\n  function render() {\n\n  }\n\n  back.addEventListener('click', () => {\n\n  })\n\n  next.addEventListener('click', () => {\n\n  })\n\n  render()\n</script>\n",
+      "fixture": "<section class='step' id='step-1'>Seat 14B selected</section>\n<section class='step' id='step-2'>Name: Ahmed Ali</section>\n<section class='step' id='step-3'>Booking confirmed for Ahmed Ali, seat 14B</section>\n<p id='step-label'></p>\n<button id='back'>Back</button>\n<button id='next'>Next</button>",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "const s1=document.getElementById('step-1');const s2=document.getElementById('step-2');const s3=document.getElementById('step-3');const label=document.getElementById('step-label').textContent.trim();const backDisabled=document.getElementById('back').disabled;return (!s1.hidden && s2.hidden && s3.hidden && label==='Step 1 of 3' && backDisabled===true)?'ok':'wrong initial state, label='+label",
+          "expected": "ok",
+          "hidden": false,
+          "name": "starts on step 1"
+        },
+        {
+          "id": "t2",
+          "input": "document.getElementById('next').click();const s2=document.getElementById('step-2');const label=document.getElementById('step-label').textContent.trim();return (!s2.hidden && label==='Step 2 of 3')?'ok':'expected step 2 after one Next click, got '+label",
+          "expected": "ok",
+          "hidden": false,
+          "name": "next advances"
+        },
+        {
+          "id": "t3",
+          "input": "const next=document.getElementById('next');next.click();next.click();next.click();next.click();const label=document.getElementById('step-label').textContent.trim();const s3=document.getElementById('step-3');return (label==='Step 3 of 3' && !s3.hidden && next.disabled===true)?'ok':'expected to stop at step 3, got '+label",
+          "expected": "ok",
+          "hidden": true,
+          "name": "next stops at end"
+        },
+        {
+          "id": "t4",
+          "input": "const back=document.getElementById('back');back.click();back.click();back.click();const label=document.getElementById('step-label').textContent.trim();const s1=document.getElementById('step-1');return (label==='Step 1 of 3' && !s1.hidden && back.disabled===true)?'ok':'expected to stay at step 1, got '+label",
+          "expected": "ok",
+          "hidden": true,
+          "name": "back stops at start"
+        },
+        {
+          "id": "t5",
+          "input": "const next=document.getElementById('next');const back=document.getElementById('back');next.click();next.click();back.click();next.click();const label=document.getElementById('step-label').textContent.trim();const s3=document.getElementById('step-3');return (label==='Step 3 of 3' && !s3.hidden && next.disabled===true && back.disabled===false)?'ok':'expected step 3 again with Back enabled, got '+label",
+          "expected": "ok",
+          "hidden": true,
+          "name": "buttons re-enable"
+        },
+        {
+          "id": "t6",
+          "input": "document.getElementById('next').click();const s1=document.getElementById('step-1').hidden;const s2=document.getElementById('step-2').hidden;const s3=document.getElementById('step-3').hidden;return (s1===true && s2===false && s3===true)?'ok':'expected only step 2 visible'",
+          "expected": "ok",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "<script>\n  let step = 1\n  const back = document.getElementById('back')\n  const next = document.getElementById('next')\n\n  function render() {\n    document.getElementById('step-1').hidden = step !== 1\n    document.getElementById('step-2').hidden = step !== 2\n    document.getElementById('step-3').hidden = step !== 3\n    document.getElementById('step-label').textContent = 'Step ' + step + ' of 3'\n    back.disabled = step === 1\n    next.disabled = step === 3\n  }\n\n  back.addEventListener('click', () => {\n    if (step > 1) step -= 1\n    render()\n  })\n\n  next.addEventListener('click', () => {\n    if (step < 3) step += 1\n    render()\n  })\n\n  render()\n</script>\n",
+      "tags": [
+        "ui",
+        "wizard",
+        "steps"
+      ]
+    }
+  ]
+}

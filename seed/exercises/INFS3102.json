@@ -1,0 +1,104 @@
+{
+  "exercises": [
+    {
+      "cloId": "INFS3102-1",
+      "language": "java",
+      "kind": "predict-output",
+      "difficulty": 3,
+      "pattern": "predict-output",
+      "title": "Drone fleet fuel readout",
+      "prompt": "A small delivery-drone simulator models each drone as an object with its own fuel tank, while a separate shared counter tracks how many flights the whole fleet has completed.\n\nRead the program in the editor and determine exactly what it prints to standard output. Give one value per line, in the same order the program prints them, with no extra spaces and no blank lines.\n\nEvery flight burns whole liters of fuel per ten kilometers traveled (integer division truncates any remainder), and every completed flight adds one to the shared fleet counter, no matter which drone object performed it.\n\nExample: a separate drone starting with 100 liters that flies 25 kilometers burns 2 liters (25 / 10 = 2 once the remainder is truncated), leaving 98, and that flight still adds exactly one to the shared fleet counter no matter which drone triggered it.",
+      "starterCode": "public class Main {\n    static int fleetTrips = 0;\n\n    static class Drone {\n        int fuel;\n        Drone(int fuel) { this.fuel = fuel; }\n        void fly(int distance) {\n            fuel -= distance / 10;\n            fleetTrips++;\n        }\n    }\n\n    public static void main(String[] args) {\n        Drone a = new Drone(100);\n        Drone b = a;\n        Drone c = new Drone(100);\n\n        a.fly(30);\n        b.fly(20);\n        c.fly(50);\n\n        System.out.println(a.fuel);\n        System.out.println(c.fuel);\n        System.out.println(fleetTrips);\n    }\n}\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": false,
+          "name": "printed values"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": false,
+          "name": "printed values repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "95\n95\n3",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "public class Main {\n    static int fleetTrips = 0;\n\n    static class Drone {\n        int fuel;\n        Drone(int fuel) { this.fuel = fuel; }\n        void fly(int distance) {\n            fuel -= distance / 10;\n            fleetTrips++;\n        }\n    }\n\n    public static void main(String[] args) {\n        Drone a = new Drone(100);\n        Drone b = a;\n        Drone c = new Drone(100);\n\n        a.fly(30);\n        b.fly(20);\n        c.fly(50);\n\n        System.out.println(a.fuel);\n        System.out.println(c.fuel);\n        System.out.println(fleetTrips);\n    }\n}\n",
+      "tags": [
+        "objects",
+        "references",
+        "reading"
+      ]
+    },
+    {
+      "cloId": "INFS3102-1",
+      "language": "java",
+      "kind": "spot-the-bug",
+      "difficulty": 4,
+      "pattern": "spot-the-bug",
+      "title": "Weekly reading goal tracker",
+      "prompt": "A small class tracks how many pages a reader finished on each day of the week and is supposed to report how many days met or beat a daily goal.\n\nOne line in the program below does not match that description, so the day count comes out wrong even though the code compiles and runs without crashing.\n\nRead the class carefully and identify the single line responsible. Answer with that line's number, counting the very first line of the file as line 1.\n\nExample: with daily totals of 20, 25 and 30 pages and a goal of 25, two days meet or beat that goal, since a day exactly equal to the goal still counts.",
+      "starterCode": "public class WeeklyReading {\n    private int[] pages;\n\n    public WeeklyReading(int[] pages) {\n        this.pages = pages;\n    }\n\n    public int totalPages() {\n        int sum = 0;\n        for (int i = 0; i < pages.length; i++) {\n            sum += pages[i];\n        }\n        return sum;\n    }\n\n    public int daysMetGoal(int goal) {\n        int count = 0;\n        for (int i = 0; i < pages.length; i++) {\n            if (pages[i] > goal) {\n                count++;\n            }\n        }\n        return count;\n    }\n\n    public static void main(String[] args) {\n        WeeklyReading week = new WeeklyReading(new int[]{20, 30, 30, 15, 40, 30, 10});\n        System.out.println(\"Total: \" + week.totalPages());\n        System.out.println(\"Days met goal of 30: \" + week.daysMetGoal(30));\n    }\n}",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "[19]",
+          "hidden": false,
+          "name": "buggy line"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "[19]",
+          "hidden": false,
+          "name": "buggy line repeat"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "[19]",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "[19]",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "[19]",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "public class WeeklyReading {\n    private int[] pages;\n\n    public WeeklyReading(int[] pages) {\n        this.pages = pages;\n    }\n\n    public int totalPages() {\n        int sum = 0;\n        for (int i = 0; i < pages.length; i++) {\n            sum += pages[i];\n        }\n        return sum;\n    }\n\n    public int daysMetGoal(int goal) {\n        int count = 0;\n        for (int i = 0; i < pages.length; i++) {\n            if (pages[i] >= goal) {\n                count++;\n            }\n        }\n        return count;\n    }\n\n    public static void main(String[] args) {\n        WeeklyReading week = new WeeklyReading(new int[]{20, 30, 30, 15, 40, 30, 10});\n        System.out.println(\"Total: \" + week.totalPages());\n        System.out.println(\"Days met goal of 30: \" + week.daysMetGoal(30));\n    }\n}\n",
+      "tags": [
+        "classes",
+        "loops",
+        "debugging"
+      ]
+    }
+  ]
+}

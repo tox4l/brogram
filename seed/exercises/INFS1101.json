@@ -1,0 +1,1229 @@
+{
+  "exercises": [
+    {
+      "cloId": "INFS1101-1",
+      "language": "python",
+      "kind": "predict-output",
+      "difficulty": 2,
+      "pattern": "predict-output",
+      "title": "Arcade Token Total",
+      "prompt": "At Fun Zone Arcade, a token machine adds up the value of every token a player feeds in before it prints the total credit to the screen. Example: feeding in tokens worth 10 and 5 would print 15.\n\nRead the program below by hand and work out exactly what value it prints for the tokens actually listed; do not guess.\n\n```python\ntokens = [25, 10, 10, 5]\ntotal = 0\nfor value in tokens:\n    total += value\nprint(total)\n```\n\nType the number this program prints. Give only the digits, no extra words.",
+      "starterCode": "# Read-only: figure out what this prints, then answer.\ntokens = [25, 10, 10, 5]\ntotal = 0\nfor value in tokens:\n    total += value\nprint(total)\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "50",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "50",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "50",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "50",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "50",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "50",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "tokens = [25, 10, 10, 5]\ntotal = 0\nfor value in tokens:\n    total += value\nprint(total)\n",
+      "tags": [
+        "loops",
+        "accumulation",
+        "reading"
+      ]
+    },
+    {
+      "cloId": "INFS1101-1",
+      "language": "python",
+      "kind": "trace",
+      "difficulty": 3,
+      "pattern": "trace",
+      "title": "Drone Battery Checkpoint",
+      "prompt": "A delivery drone's battery starts a shift at 100 percent. After every stop it burns power for the distance flown, then tops up if that stop has a charging pad, but the reading can never rise above 100. Example: a battery at 90 drops to 75 after a stop that burns 15 with no charging pad; if that same stop burned 15 but did have a charging pad, the 30-point top-up would push the total to 105, which gets capped at 100.\n\nFollow the program below step by step and find the value stored in `checkpoint`, which is captured partway through the run and only shown after the loop ends.\n\n```python\nbattery = 100\nused = [10, 5, 30, 15]\npad = [True, True, False, True]\nfor i in range(len(used)):\n    battery -= used[i]\n    if pad[i]:\n        battery += 30\n    if battery > 100:\n        battery = 100\n    if i == 2:\n        checkpoint = battery\nprint(checkpoint)\n```\n\nType the single number this program prints.",
+      "starterCode": "# Read-only: follow the steps, then answer.\nbattery = 100\nused = [10, 5, 30, 15]\npad = [True, True, False, True]\nfor i in range(len(used)):\n    battery -= used[i]\n    if pad[i]:\n        battery += 30\n    if battery > 100:\n        battery = 100\n    if i == 2:\n        checkpoint = battery\nprint(checkpoint)\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "70",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "70",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "70",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "70",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "70",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "70",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "battery = 100\nused = [10, 5, 30, 15]\npad = [True, True, False, True]\nfor i in range(len(used)):\n    battery -= used[i]\n    if pad[i]:\n        battery += 30\n    if battery > 100:\n        battery = 100\n    if i == 2:\n        checkpoint = battery\nprint(checkpoint)\n",
+      "tags": [
+        "loops",
+        "conditionals",
+        "state-tracking"
+      ]
+    },
+    {
+      "cloId": "INFS1101-1",
+      "language": "python",
+      "kind": "spot-the-bug",
+      "difficulty": 4,
+      "pattern": "spec-to-steps",
+      "title": "Kiosk Pricing Mistake",
+      "prompt": "A print shop's photo kiosk should total each order the same way: multiply the quantity by $0.20 per print; if that order is for 50 prints or more, take 10% off the print cost; then add a flat $1.00 processing fee; finally round the result to the nearest cent. Example: an order of 12 prints costs 12 times $0.20, which is $2.40; since 12 is under 50 prints no discount applies, so the fee makes the final total $3.40.\n\nSomeone turned that rule into the four numbered steps below and ran them over today's orders, but one step does not match the rule.\n\n```python\norders = [12, 50, 80, 3]\ntotals = []\nfor quantity in orders:\n    # step 1\n    cost = quantity * 0.20\n    # step 2\n    if quantity > 50:\n        cost = cost * 0.90\n    # step 3\n    cost = cost + 1.00\n    # step 4\n    totals.append(round(cost, 2))\n```\n\nWhich step number contradicts the rule? Answer with just that one digit.",
+      "starterCode": "# Read-only: find the step that breaks the rule, then answer.\norders = [12, 50, 80, 3]\ntotals = []\nfor quantity in orders:\n    # step 1\n    cost = quantity * 0.20\n    # step 2\n    if quantity > 50:\n        cost = cost * 0.90\n    # step 3\n    cost = cost + 1.00\n    # step 4\n    totals.append(round(cost, 2))\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "",
+          "expected": "2",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "",
+          "expected": "2",
+          "hidden": false,
+          "name": "check"
+        },
+        {
+          "id": "t3",
+          "input": "",
+          "expected": "2",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "",
+          "expected": "2",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "",
+          "expected": "2",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "",
+          "expected": "2",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "orders = [12, 50, 80, 3]\n\ndef buggy_total(quantity):\n    cost = quantity * 0.20\n    if quantity > 50:\n        cost = cost * 0.90\n    cost = cost + 1.00\n    return round(cost, 2)\n\ndef correct_total(quantity):\n    cost = quantity * 0.20\n    if quantity >= 50:\n        cost = cost * 0.90\n    cost = cost + 1.00\n    return round(cost, 2)\n\nmismatch = any(buggy_total(q) != correct_total(q) for q in orders)\nprint(2 if mismatch else 0)\n",
+      "tags": [
+        "conditionals",
+        "off-by-one",
+        "pricing"
+      ]
+    },
+    {
+      "cloId": "INFS1101-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "accumulate",
+      "title": "Daily Step Total",
+      "prompt": "A fitness tracker records how many steps a walker took each day. Some days the sensor glitched and logged a negative number, and those days should not count.\n\nWrite `step_total(days)` that returns the sum of all values in `days` that are zero or greater. Negative values are ignored entirely.\n\nExample: `step_total([1200, 300, -1, 450])` returns `1950`. `step_total([-5, -10])` returns `0`.",
+      "starterCode": "def step_total(days):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[1200,300,-1,450]]",
+          "expected": "1950",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[-5,-10]]",
+          "expected": "0",
+          "hidden": false,
+          "name": "all glitched"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "0",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[[0,0,0]]",
+          "expected": "0",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[[100]]",
+          "expected": "100",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[[50,-20,30,-1,20]]",
+          "expected": "100",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[[-1,-1,-1,5]]",
+          "expected": "5",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def step_total(days):\n    total = 0\n    for d in days:\n        if d >= 0:\n            total += d\n    return total\n",
+      "tags": [
+        "loops",
+        "running-total",
+        "fitness"
+      ]
+    },
+    {
+      "cloId": "INFS1101-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "guard",
+      "title": "ATM Withdrawal Check",
+      "prompt": "A community bank's ATM checks every withdrawal request before releasing cash.\n\nWrite `atm_withdrawal(balance, amount, daily_limit)` that returns a status string. Check the request in this order and return the first problem found: `\"invalid amount\"` when `amount` is zero or negative, `\"exceeds daily limit\"` when `amount` is greater than `daily_limit`, `\"insufficient funds\"` when `amount` is greater than `balance`. If none of these apply, return `\"approved\"`.\n\nExample: `atm_withdrawal(200, 50, 300)` returns `\"approved\"`. `atm_withdrawal(200, 250, 300)` returns `\"insufficient funds\"`.",
+      "starterCode": "def atm_withdrawal(balance, amount, daily_limit):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[200,50,300]",
+          "expected": "\"approved\"",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[200,250,300]",
+          "expected": "\"insufficient funds\"",
+          "hidden": false,
+          "name": "over balance"
+        },
+        {
+          "id": "t3",
+          "input": "[200,-10,300]",
+          "expected": "\"invalid amount\"",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[200,0,300]",
+          "expected": "\"invalid amount\"",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[1000,400,300]",
+          "expected": "\"exceeds daily limit\"",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[100,150,300]",
+          "expected": "\"insufficient funds\"",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[300,300,300]",
+          "expected": "\"approved\"",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def atm_withdrawal(balance, amount, daily_limit):\n    if amount <= 0:\n        return \"invalid amount\"\n    if amount > daily_limit:\n        return \"exceeds daily limit\"\n    if amount > balance:\n        return \"insufficient funds\"\n    return \"approved\"\n",
+      "tags": [
+        "validation",
+        "conditionals",
+        "banking"
+      ]
+    },
+    {
+      "cloId": "INFS1101-2",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "spec-to-steps",
+      "title": "Parcel Delivery Fee",
+      "prompt": "A courier company calculates the delivery fee for a parcel using a fixed sequence of rules.\n\nWrite `parcel_fee(weight_kg, express)` that returns the fee in dollars, applying these rules in exactly this order:\n1. Start from a base fee of `5.0`.\n2. Add `2.0` for every kilogram above `1` (a parcel at or under 1kg pays no extra).\n3. If `express` is `True`, multiply the running total by `1.5`.\n4. If the total is above `50`, reduce it to exactly `50`.\n5. Round the final result to 2 decimal places.\n\nFollow the order given: applying step 3 before step 2, or step 4 after step 5, changes the answer.\n\nExample: `parcel_fee(5, True)` returns `19.5`. `parcel_fee(1, False)` returns `5.0`.",
+      "starterCode": "def parcel_fee(weight_kg, express):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[1,false]",
+          "expected": "5.0",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[5,true]",
+          "expected": "19.5",
+          "hidden": false,
+          "name": "express with weight"
+        },
+        {
+          "id": "t3",
+          "input": "[0.5,false]",
+          "expected": "5.0",
+          "hidden": true
+        },
+        {
+          "id": "t4",
+          "input": "[5,false]",
+          "expected": "13.0",
+          "hidden": true
+        },
+        {
+          "id": "t5",
+          "input": "[30,true]",
+          "expected": "50.0",
+          "hidden": true
+        },
+        {
+          "id": "t6",
+          "input": "[100,false]",
+          "expected": "50.0",
+          "hidden": true
+        },
+        {
+          "id": "t7",
+          "input": "[1,true]",
+          "expected": "7.5",
+          "hidden": true
+        }
+      ],
+      "referenceSolution": "def parcel_fee(weight_kg, express):\n    total = 5.0\n    extra = max(0, weight_kg - 1)\n    total += extra * 2.0\n    if express:\n        total *= 1.5\n    if total > 50:\n        total = 50.0\n    return round(total, 2)\n",
+      "tags": [
+        "multi-step",
+        "arithmetic",
+        "rounding"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "guard",
+      "title": "Airline Baggage Check",
+      "prompt": "An airline counter checks each bag before printing a tag. A passenger may bring between 1 and 3 bags, and every bag must weigh more than 0 kg and at most 23 kg.\n\nWrite `check_baggage(weight_kg, bag_count)` that returns one result, checking in this order:\n- `\"invalid bag count\"` if `bag_count` is less than 1 or more than 3\n- `\"invalid weight\"` if `weight_kg` is 0 or less\n- `\"overweight\"` if `weight_kg` is more than 23\n- `\"accepted\"` otherwise\n\nExample: `check_baggage(18, 2)` returns `\"accepted\"`. `check_baggage(30, 2)` returns `\"overweight\"`.",
+      "starterCode": "def check_baggage(weight_kg, bag_count):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[18, 2]",
+          "expected": "\"accepted\"",
+          "hidden": false,
+          "name": "accepted"
+        },
+        {
+          "id": "t2",
+          "input": "[30, 2]",
+          "expected": "\"overweight\"",
+          "hidden": false,
+          "name": "overweight"
+        },
+        {
+          "id": "t3",
+          "input": "[10, 0]",
+          "expected": "\"invalid bag count\"",
+          "hidden": true,
+          "name": "no bags"
+        },
+        {
+          "id": "t4",
+          "input": "[10, 4]",
+          "expected": "\"invalid bag count\"",
+          "hidden": true,
+          "name": "too many bags"
+        },
+        {
+          "id": "t5",
+          "input": "[-5, 1]",
+          "expected": "\"invalid weight\"",
+          "hidden": true,
+          "name": "negative weight"
+        },
+        {
+          "id": "t6",
+          "input": "[23, 3]",
+          "expected": "\"accepted\"",
+          "hidden": true,
+          "name": "exact limits"
+        },
+        {
+          "id": "t7",
+          "input": "[23.01, 1]",
+          "expected": "\"overweight\"",
+          "hidden": true,
+          "name": "just over limit"
+        }
+      ],
+      "referenceSolution": "def check_baggage(weight_kg, bag_count):\n    if bag_count < 1 or bag_count > 3:\n        return \"invalid bag count\"\n    if weight_kg <= 0:\n        return \"invalid weight\"\n    if weight_kg > 23:\n        return \"overweight\"\n    return \"accepted\"\n",
+      "tags": [
+        "validation",
+        "conditionals",
+        "input-checks"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "accumulate",
+      "title": "Trail Elevation Gain",
+      "prompt": "A hiking app records the elevation in meters at each trail marker, in the order a hiker passes them. The total ascent is the sum of every uphill step: whenever a marker is higher than the one before it, add the difference. Downhill steps and flat sections add nothing.\n\nWrite `total_ascent(elevations)` that returns the total ascent for the whole trail. A trail with fewer than two markers has no ascent.\n\nExample: `total_ascent([100, 120, 110, 130])` returns `40` (up 20, down 10, up 20). `total_ascent([50])` returns `0`.",
+      "starterCode": "def total_ascent(elevations):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[100, 120, 110, 130]]",
+          "expected": "40",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[50]]",
+          "expected": "0",
+          "hidden": false,
+          "name": "single checkpoint"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "0",
+          "hidden": true,
+          "name": "no checkpoints"
+        },
+        {
+          "id": "t4",
+          "input": "[[10, 10, 10]]",
+          "expected": "0",
+          "hidden": true,
+          "name": "flat trail"
+        },
+        {
+          "id": "t5",
+          "input": "[[5, 3, 1]]",
+          "expected": "0",
+          "hidden": true,
+          "name": "downhill only"
+        },
+        {
+          "id": "t6",
+          "input": "[[0, 50, 20, 80]]",
+          "expected": "110",
+          "hidden": true,
+          "name": "two climbs"
+        },
+        {
+          "id": "t7",
+          "input": "[[-10, -5, -20, 0]]",
+          "expected": "25",
+          "hidden": true,
+          "name": "below sea level"
+        }
+      ],
+      "referenceSolution": "def total_ascent(elevations):\n    total = 0\n    for i in range(1, len(elevations)):\n        diff = elevations[i] - elevations[i - 1]\n        if diff > 0:\n            total += diff\n    return total\n",
+      "tags": [
+        "loops",
+        "elevation",
+        "totals"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "filter",
+      "title": "Esports Finalist Picks",
+      "prompt": "A gaming tournament stores entries as `[name, score, checked_in]`, where `checked_in` is `true` once a player has confirmed at the front desk.\n\nWrite `select_finalists(entries, min_score)` that returns the names of every player who is checked in **and** whose score is at least `min_score`, in the same order they appear in `entries`. Skip anyone missing either condition, and do not change the order or add anyone twice.\n\nExample: `select_finalists([[\"Aisha\", 82, true], [\"Ben\", 55, true], [\"Cy\", 90, false]], 80)` returns `[\"Aisha\"]`, because Ben's score is too low and Cy never checked in.",
+      "starterCode": "def select_finalists(entries, min_score):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[\"Aisha\", 82, true], [\"Ben\", 55, true], [\"Cy\", 90, false]], 80]",
+          "expected": "[\"Aisha\"]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[\"Sam\", 70, true]], 70]",
+          "expected": "[\"Sam\"]",
+          "hidden": false,
+          "name": "exact cutoff"
+        },
+        {
+          "id": "t3",
+          "input": "[[], 50]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "no entries"
+        },
+        {
+          "id": "t4",
+          "input": "[[[\"Kay\", 95, false], [\"Lee\", 95, false]], 50]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "nobody checked in"
+        },
+        {
+          "id": "t5",
+          "input": "[[[\"Mo\", 40, true], [\"Nia\", 41, true]], 100]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "nobody meets score"
+        },
+        {
+          "id": "t6",
+          "input": "[[[\"A\", 10, true], [\"B\", 20, false], [\"C\", 30, true], [\"D\", 5, true], [\"E\", 30, true], [\"F\", 99, true], [\"G\", 30, false]], 30]",
+          "expected": "[\"C\", \"E\", \"F\"]",
+          "hidden": true,
+          "name": "larger bracket"
+        },
+        {
+          "id": "t7",
+          "input": "[[[\"Zed\", -5, true]], 0]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "negative score"
+        }
+      ],
+      "referenceSolution": "def select_finalists(entries, min_score):\n    result = []\n    for name, score, checked_in in entries:\n        if checked_in and score >= min_score:\n            result.append(name)\n    return result\n",
+      "tags": [
+        "lists",
+        "conditions",
+        "validation"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "nested-loop",
+      "title": "Greenhouse Moisture Check",
+      "prompt": "A greenhouse has a grid of soil moisture sensors: one row per bed, and several sensors spaced along each bed. Each reading is a percentage, and a spot counts as dry when its reading is strictly below a threshold.\n\nWrite `count_dry_cells(moisture, threshold)`, where `moisture` is a list of rows and each row is a list of readings. Return how many readings in the whole grid are below `threshold`.\n\nExample: `count_dry_cells([[30, 45, 10], [60, 5, 70]], 20)` returns `2` (the `10` and the `5`).",
+      "starterCode": "def count_dry_cells(moisture, threshold):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[[30, 45, 10], [60, 5, 70]], 20]",
+          "expected": "2",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[[50, 50], [50, 50]], 10]",
+          "expected": "0",
+          "hidden": false,
+          "name": "no dry spots"
+        },
+        {
+          "id": "t3",
+          "input": "[[], 5]",
+          "expected": "0",
+          "hidden": true,
+          "name": "empty grid"
+        },
+        {
+          "id": "t4",
+          "input": "[[[5]], 5]",
+          "expected": "0",
+          "hidden": true,
+          "name": "equals threshold"
+        },
+        {
+          "id": "t5",
+          "input": "[[[1, 2, 3], [4, 5, 6], [7, 8, 9]], 5]",
+          "expected": "4",
+          "hidden": true,
+          "name": "larger grid"
+        },
+        {
+          "id": "t6",
+          "input": "[[[-3, 10], [2, -1]], 0]",
+          "expected": "2",
+          "hidden": true,
+          "name": "negative readings"
+        },
+        {
+          "id": "t7",
+          "input": "[[[]], 5]",
+          "expected": "0",
+          "hidden": true,
+          "name": "row with no sensors"
+        }
+      ],
+      "referenceSolution": "def count_dry_cells(moisture, threshold):\n    count = 0\n    for row in moisture:\n        for value in row:\n            if value < threshold:\n                count += 1\n    return count\n",
+      "tags": [
+        "grids",
+        "iteration",
+        "counting"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "early-return",
+      "title": "First Unsafe pH Reading",
+      "prompt": "A water treatment plant logs pH readings from a tank in the order they were measured. A reading is unsafe if it falls below `low` or above `high`; the safe range is inclusive on both ends.\n\nWrite `first_out_of_range(readings, low, high)` that reports the first unsafe reading in the list. If every reading is within the safe range, or the list is empty, report that nothing was found using `None`.\n\nExample: `first_out_of_range([7.0, 7.2, 6.9, 9.5], 6.5, 8.0)` returns `9.5`. `first_out_of_range([6.5, 7.0, 8.0], 6.5, 8.0)` returns `None`.",
+      "starterCode": "def first_out_of_range(readings, low, high):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[7.0, 7.2, 6.9, 9.5], 6.5, 8.0]",
+          "expected": "9.5",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[6.5, 7.0, 8.0], 6.5, 8.0]",
+          "expected": "null",
+          "hidden": false,
+          "name": "all within range"
+        },
+        {
+          "id": "t3",
+          "input": "[[], 0, 10]",
+          "expected": "null",
+          "hidden": true,
+          "name": "no readings"
+        },
+        {
+          "id": "t4",
+          "input": "[[5.9], 6.0, 8.0]",
+          "expected": "5.9",
+          "hidden": true,
+          "name": "single reading, too low"
+        },
+        {
+          "id": "t5",
+          "input": "[[7.5, 7.5, 7.5], 6.0, 8.0]",
+          "expected": "null",
+          "hidden": true,
+          "name": "repeated safe value"
+        },
+        {
+          "id": "t6",
+          "input": "[[8.1, 7.9, 6.0], 6.0, 8.0]",
+          "expected": "8.1",
+          "hidden": true,
+          "name": "first reading too high"
+        },
+        {
+          "id": "t7",
+          "input": "[[6.0, 6.0, 5.99], 6.0, 8.0]",
+          "expected": "5.99",
+          "hidden": true,
+          "name": "just under the floor"
+        }
+      ],
+      "referenceSolution": "def first_out_of_range(readings, low, high):\n    for value in readings:\n        if value < low or value > high:\n            return value\n    return None\n",
+      "tags": [
+        "sensors",
+        "conditions",
+        "ranges"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "boundary",
+      "title": "Raffle Line Position",
+      "prompt": "A raffle keeps everyone in a single line, from the front to the back. Organizers sometimes need to find someone by counting from the back instead of the front: position `0` from the back is the very last person, position `1` is the person just ahead of them, and so on.\n\nWrite `nth_from_last(names, n)` that returns the name at position `n` counted from the back of `names`. If `n` is negative, or there is no one at that position (the line is too short, or empty), return `None`.\n\nExample: `nth_from_last([\"Ann\", \"Bo\", \"Cy\", \"Dee\"], 0)` returns `\"Dee\"`. `nth_from_last([\"Ann\", \"Bo\", \"Cy\", \"Dee\"], 1)` returns `\"Cy\"`.",
+      "starterCode": "def nth_from_last(names, n):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"Ann\", \"Bo\", \"Cy\", \"Dee\"], 0]",
+          "expected": "\"Dee\"",
+          "hidden": false,
+          "name": "last person"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"Ann\", \"Bo\", \"Cy\", \"Dee\"], 1]",
+          "expected": "\"Cy\"",
+          "hidden": false,
+          "name": "second to last"
+        },
+        {
+          "id": "t3",
+          "input": "[[\"Ann\", \"Bo\", \"Cy\", \"Dee\"], 3]",
+          "expected": "\"Ann\"",
+          "hidden": true,
+          "name": "first person"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"Ann\", \"Bo\", \"Cy\", \"Dee\"], 4]",
+          "expected": "null",
+          "hidden": true,
+          "name": "one past the front"
+        },
+        {
+          "id": "t5",
+          "input": "[[\"Ann\", \"Bo\", \"Cy\", \"Dee\"], -1]",
+          "expected": "null",
+          "hidden": true,
+          "name": "negative position"
+        },
+        {
+          "id": "t6",
+          "input": "[[], 0]",
+          "expected": "null",
+          "hidden": true,
+          "name": "empty line"
+        },
+        {
+          "id": "t7",
+          "input": "[[\"Solo\"], 0]",
+          "expected": "\"Solo\"",
+          "hidden": true,
+          "name": "single person line"
+        },
+        {
+          "id": "t8",
+          "input": "[[\"A\", \"B\", \"C\", \"D\", \"E\", \"F\"], 2]",
+          "expected": "\"D\"",
+          "hidden": true,
+          "name": "longer line"
+        }
+      ],
+      "referenceSolution": "def nth_from_last(names, n):\n    if n < 0 or n >= len(names):\n        return None\n    return names[len(names) - 1 - n]\n",
+      "tags": [
+        "indexing",
+        "lists",
+        "edge-cases"
+      ]
+    },
+    {
+      "cloId": "INFS1101-3",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "state-machine",
+      "title": "Media Player Controls",
+      "prompt": "A media player starts out `stopped` and reacts to one command at a time: `\"play\"`, `\"pause\"`, or `\"stop\"`. Only some commands do anything, depending on what the player is currently doing:\n\n- while `stopped`, only `\"play\"` has an effect, moving it to `playing`\n- while `playing`, `\"pause\"` moves it to `paused` and `\"stop\"` moves it to `stopped`\n- while `paused`, `\"play\"` moves it to `playing` and `\"stop\"` moves it to `stopped`\n\nAny command that does not apply to the current mode is ignored, and the player stays put.\n\nWrite `final_state(commands)` that applies a list of commands in order and returns the player's mode, as a string, once the list is used up.\n\nExample: `final_state([\"play\", \"pause\", \"play\", \"stop\"])` returns `\"stopped\"`.",
+      "starterCode": "def final_state(commands):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"play\", \"pause\", \"play\", \"stop\"]]",
+          "expected": "\"stopped\"",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"pause\", \"play\"]]",
+          "expected": "\"playing\"",
+          "hidden": false,
+          "name": "ignored then played"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "\"stopped\"",
+          "hidden": true,
+          "name": "no commands"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"play\", \"play\", \"play\"]]",
+          "expected": "\"playing\"",
+          "hidden": true,
+          "name": "repeated play"
+        },
+        {
+          "id": "t5",
+          "input": "[[\"stop\"]]",
+          "expected": "\"stopped\"",
+          "hidden": true,
+          "name": "stop while stopped"
+        },
+        {
+          "id": "t6",
+          "input": "[[\"play\", \"stop\", \"stop\", \"play\", \"pause\", \"pause\"]]",
+          "expected": "\"paused\"",
+          "hidden": true,
+          "name": "long sequence"
+        },
+        {
+          "id": "t7",
+          "input": "[[\"pause\"]]",
+          "expected": "\"stopped\"",
+          "hidden": true,
+          "name": "pause while stopped"
+        }
+      ],
+      "referenceSolution": "def final_state(commands):\n    state = \"stopped\"\n    for cmd in commands:\n        if state == \"stopped\":\n            if cmd == \"play\":\n                state = \"playing\"\n        elif state == \"playing\":\n            if cmd == \"pause\":\n                state = \"paused\"\n            elif cmd == \"stop\":\n                state = \"stopped\"\n        elif state == \"paused\":\n            if cmd == \"play\":\n                state = \"playing\"\n            elif cmd == \"stop\":\n                state = \"stopped\"\n    return state\n",
+      "tags": [
+        "modes",
+        "sequencing",
+        "conditionals"
+      ]
+    },
+    {
+      "cloId": "INFS1101-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "transform",
+      "title": "App ratings to percentages",
+      "prompt": "A review page stores each rating a user leaves for an app as a number of stars from `0` to `5`; half-star ratings such as `3.5` are allowed. To draw a percentage bar for each review, every rating needs to become a score out of 100.\n\nWrite `ratings_to_percentages(ratings)` that returns a new list where each rating is converted to a whole-number percentage (5 stars becomes `100`, 0 stars becomes `0`), rounded to the nearest whole number, in the same order as `ratings`.\n\nExample: `ratings_to_percentages([5, 3, 0])` returns `[100, 60, 0]`. `ratings_to_percentages([4.5])` returns `[90]`.",
+      "starterCode": "def ratings_to_percentages(ratings):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[5,3,0]]",
+          "expected": "[100, 60, 0]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[4.5]]",
+          "expected": "[90]",
+          "hidden": false,
+          "name": "half star"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "[]",
+          "hidden": true,
+          "name": "empty list"
+        },
+        {
+          "id": "t4",
+          "input": "[[2.5,1.5]]",
+          "expected": "[50, 30]",
+          "hidden": true,
+          "name": "two halves"
+        },
+        {
+          "id": "t5",
+          "input": "[[3.7]]",
+          "expected": "[74]",
+          "hidden": true,
+          "name": "needs rounding"
+        },
+        {
+          "id": "t6",
+          "input": "[[5,5,5]]",
+          "expected": "[100, 100, 100]",
+          "hidden": true,
+          "name": "all five stars"
+        },
+        {
+          "id": "t7",
+          "input": "[[0]]",
+          "expected": "[0]",
+          "hidden": true,
+          "name": "zero rating"
+        }
+      ],
+      "referenceSolution": "def ratings_to_percentages(ratings):\n    return [round(r * 20) for r in ratings]\n",
+      "tags": [
+        "lists",
+        "comprehension",
+        "rounding"
+      ]
+    },
+    {
+      "cloId": "INFS1101-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "string-parse",
+      "title": "Reading a server log line",
+      "prompt": "A tiny server writes one log line per event, formatted as `HH:MM:SS LEVEL message`, for example `12:45:07 ERROR disk full`. The message can contain any number of words, or be missing entirely when the level needed no extra detail.\n\nWrite `parse_log_line(line)` that returns a list `[hour, level, message]`, where `hour` is the hour part of the timestamp as an `int` (so `\"09\"` becomes `9`), `level` is the second field exactly as written, and `message` is everything after it, or an empty string `\"\"` when there is none.\n\nExample: `parse_log_line(\"12:45:07 ERROR disk full\")` returns `[12, \"ERROR\", \"disk full\"]`.",
+      "starterCode": "def parse_log_line(line):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[\"12:45:07 ERROR disk full\"]",
+          "expected": "[12, \"ERROR\", \"disk full\"]",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[\"09:15:00 INFO booted\"]",
+          "expected": "[9, \"INFO\", \"booted\"]",
+          "hidden": false,
+          "name": "info line"
+        },
+        {
+          "id": "t3",
+          "input": "[\"00:00:01 WARN\"]",
+          "expected": "[0, \"WARN\", \"\"]",
+          "hidden": true,
+          "name": "no message"
+        },
+        {
+          "id": "t4",
+          "input": "[\"23:59:59 DEBUG shutting down now\"]",
+          "expected": "[23, \"DEBUG\", \"shutting down now\"]",
+          "hidden": true,
+          "name": "long message"
+        },
+        {
+          "id": "t5",
+          "input": "[\"05:05:05 ERROR a b c d e\"]",
+          "expected": "[5, \"ERROR\", \"a b c d e\"]",
+          "hidden": true,
+          "name": "many words"
+        },
+        {
+          "id": "t6",
+          "input": "[\"01:02:03 CRIT disk   full\"]",
+          "expected": "[1, \"CRIT\", \"disk   full\"]",
+          "hidden": true,
+          "name": "extra spaces preserved"
+        }
+      ],
+      "referenceSolution": "def parse_log_line(line):\n    parts = line.split(None, 2)\n    hour = int(parts[0].split(':')[0])\n    level = parts[1]\n    message = parts[2] if len(parts) > 2 else ''\n    return [hour, level, message]\n",
+      "tags": [
+        "strings",
+        "parsing",
+        "split"
+      ]
+    },
+    {
+      "cloId": "INFS1101-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "search",
+      "title": "Leftmost finish time",
+      "prompt": "A race timing sensor records the finish time, in whole seconds, of every runner who crosses it. Organisers keep the list sorted from fastest to slowest, and because ties happen, the same time can appear several times in a row.\n\nWrite `first_index(times, target)` that returns the smallest index at which `target` appears in `times`, or `-1` if nobody recorded that exact time. `times` can hold tens of thousands of entries, so instead of checking every entry in order, repeatedly look at the middle of the remaining range and use the fact that `times` is sorted to decide which half can still contain `target`.\n\nExample: `first_index([10, 12, 12, 12, 15, 20], 12)` returns `1`. `first_index([1, 2, 3], 4)` returns `-1`.",
+      "starterCode": "def first_index(times, target):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[10,12,12,12,15,20],12]",
+          "expected": "1",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[[1,2,3],4]",
+          "expected": "-1",
+          "hidden": false,
+          "name": "not present"
+        },
+        {
+          "id": "t3",
+          "input": "[[],5]",
+          "expected": "-1",
+          "hidden": true,
+          "name": "empty list"
+        },
+        {
+          "id": "t4",
+          "input": "[[7],7]",
+          "expected": "0",
+          "hidden": true,
+          "name": "single match"
+        },
+        {
+          "id": "t5",
+          "input": "[[7],3]",
+          "expected": "-1",
+          "hidden": true,
+          "name": "single miss"
+        },
+        {
+          "id": "t6",
+          "input": "[[5,5,5,5],5]",
+          "expected": "0",
+          "hidden": true,
+          "name": "all tied"
+        },
+        {
+          "id": "t7",
+          "input": "[[1,2,2,2,2,8,8,9],2]",
+          "expected": "1",
+          "hidden": true,
+          "name": "tie in middle"
+        }
+      ],
+      "referenceSolution": "def first_index(times, target):\n    lo, hi = 0, len(times) - 1\n    result = -1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if times[mid] == target:\n            result = mid\n            hi = mid - 1\n        elif times[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return result\n",
+      "tags": [
+        "binary-search",
+        "sorted-lists",
+        "duplicates"
+      ]
+    },
+    {
+      "cloId": "INFS1101-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 2,
+      "pattern": "composition",
+      "title": "Discount then tax",
+      "prompt": "A small shop's till already has two helper functions: `apply_discount(price, percent_off)` reduces a price by a percentage, and `add_tax(price, tax_rate)` adds a percentage on top of a price. Neither one knows about the other.\n\nWrite `checkout_total(price, percent_off, tax_rate)` that charges a customer correctly: take the discount off the original price first, then add tax on what is left, calling the two functions below instead of repeating their math. Round the final amount to 2 decimal places before returning it.\n\nExample: `checkout_total(100, 10, 5)` returns `94.5` (10% off 100 is 90, then 5% tax on 90 is 94.5).",
+      "starterCode": "def checkout_total(price, percent_off, tax_rate):\n    pass\n\n\ndef apply_discount(price, percent_off):\n    return price * (1 - percent_off / 100)\n\n\ndef add_tax(price, tax_rate):\n    return price * (1 + tax_rate / 100)\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[100,10,5]",
+          "expected": "94.5",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[50,0,10]",
+          "expected": "55.0",
+          "hidden": false,
+          "name": "no discount"
+        },
+        {
+          "id": "t3",
+          "input": "[200,25,0]",
+          "expected": "150.0",
+          "hidden": true,
+          "name": "no tax"
+        },
+        {
+          "id": "t4",
+          "input": "[0,50,20]",
+          "expected": "0.0",
+          "hidden": true,
+          "name": "zero price"
+        },
+        {
+          "id": "t5",
+          "input": "[20,100,10]",
+          "expected": "0.0",
+          "hidden": true,
+          "name": "full discount"
+        },
+        {
+          "id": "t6",
+          "input": "[80,20,8]",
+          "expected": "69.12",
+          "hidden": true,
+          "name": "typical order"
+        },
+        {
+          "id": "t7",
+          "input": "[45.5,10,6]",
+          "expected": "43.41",
+          "hidden": true,
+          "name": "fractional price"
+        }
+      ],
+      "referenceSolution": "def checkout_total(price, percent_off, tax_rate):\n    discounted = apply_discount(price, percent_off)\n    return round(add_tax(discounted, tax_rate), 2)\n\n\ndef apply_discount(price, percent_off):\n    return price * (1 - percent_off / 100)\n\n\ndef add_tax(price, tax_rate):\n    return price * (1 + tax_rate / 100)\n",
+      "tags": [
+        "functions",
+        "reuse",
+        "rounding"
+      ]
+    },
+    {
+      "cloId": "INFS1101-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 3,
+      "pattern": "boundary",
+      "title": "Middle of the playlist",
+      "prompt": "A music app keeps a playlist as a list of track titles, in play order. For an odd number of tracks there is one obvious middle song; for an even number, treat the earlier of the two middle songs as \"the middle\" track. An empty playlist has no middle at all.\n\nWrite `middle_track(playlist)` that returns the title of the middle track using that rule, or `None` when the playlist is empty.\n\nExample: `middle_track([\"Riff\", \"Loop\", \"Bass\"])` returns `\"Loop\"`. `middle_track([\"A\", \"B\"])` returns `\"A\"`.",
+      "starterCode": "def middle_track(playlist):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[[\"Riff\",\"Loop\",\"Bass\"]]",
+          "expected": "\"Loop\"",
+          "hidden": false,
+          "name": "three tracks"
+        },
+        {
+          "id": "t2",
+          "input": "[[\"Intro\",\"Verse\",\"Chorus\",\"Verse\",\"Outro\"]]",
+          "expected": "\"Chorus\"",
+          "hidden": false,
+          "name": "five tracks"
+        },
+        {
+          "id": "t3",
+          "input": "[[]]",
+          "expected": "null",
+          "hidden": true,
+          "name": "empty playlist"
+        },
+        {
+          "id": "t4",
+          "input": "[[\"Solo\"]]",
+          "expected": "\"Solo\"",
+          "hidden": true,
+          "name": "single track"
+        },
+        {
+          "id": "t5",
+          "input": "[[\"A\",\"B\"]]",
+          "expected": "\"A\"",
+          "hidden": true,
+          "name": "two tracks"
+        },
+        {
+          "id": "t6",
+          "input": "[[\"A\",\"B\",\"C\",\"D\"]]",
+          "expected": "\"B\"",
+          "hidden": true,
+          "name": "four tracks"
+        },
+        {
+          "id": "t7",
+          "input": "[[\"A\",\"B\",\"C\",\"D\",\"E\",\"F\"]]",
+          "expected": "\"C\"",
+          "hidden": true,
+          "name": "six tracks"
+        }
+      ],
+      "referenceSolution": "def middle_track(playlist):\n    if not playlist:\n        return None\n    return playlist[(len(playlist) - 1) // 2]\n",
+      "tags": [
+        "lists",
+        "edge-cases",
+        "indexing"
+      ]
+    },
+    {
+      "cloId": "INFS1101-4",
+      "language": "python",
+      "kind": "code",
+      "difficulty": 4,
+      "pattern": "index-math",
+      "title": "Ferris wheel gondola",
+      "prompt": "A Ferris wheel has `n` gondolas numbered `0` to `n-1`, arranged in a circle so gondola `n-1` sits right next to gondola `0`. The wheel loads passengers only at a fixed platform position.\n\nWrite `gondola_after(n, start, moves)` that returns the number of the gondola sitting at the platform after the wheel turns, where `start` is the gondola at the platform right now. `moves` counts how many gondola-widths the wheel turns: positive means higher-numbered gondolas arrive next, negative means the opposite direction. `moves` can be far larger than `n` (many full turns) or negative enough to pass gondola `0` more than once. Assume `n >= 1`.\n\nExample: `gondola_after(8, 3, 2)` returns `5`. `gondola_after(8, 1, -3)` returns `6`.",
+      "starterCode": "def gondola_after(n, start, moves):\n    pass\n",
+      "tests": [
+        {
+          "id": "t1",
+          "input": "[8,3,2]",
+          "expected": "5",
+          "hidden": false,
+          "name": "example"
+        },
+        {
+          "id": "t2",
+          "input": "[8,1,-3]",
+          "expected": "6",
+          "hidden": false,
+          "name": "wraps backward"
+        },
+        {
+          "id": "t3",
+          "input": "[6,0,6]",
+          "expected": "0",
+          "hidden": true,
+          "name": "full loop"
+        },
+        {
+          "id": "t4",
+          "input": "[5,4,1]",
+          "expected": "0",
+          "hidden": true,
+          "name": "wraps forward"
+        },
+        {
+          "id": "t5",
+          "input": "[1,0,100]",
+          "expected": "0",
+          "hidden": true,
+          "name": "single gondola"
+        },
+        {
+          "id": "t6",
+          "input": "[10,2,-12]",
+          "expected": "0",
+          "hidden": true,
+          "name": "large negative"
+        },
+        {
+          "id": "t7",
+          "input": "[12,5,1000000]",
+          "expected": "9",
+          "hidden": true,
+          "name": "many turns"
+        }
+      ],
+      "referenceSolution": "def gondola_after(n, start, moves):\n    return (start + moves) % n\n",
+      "tags": [
+        "modulo",
+        "circular",
+        "arithmetic"
+      ]
+    }
+  ]
+}
