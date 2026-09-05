@@ -9,7 +9,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 ## Phase 1: Core
 - [ ] A1 Supabase schema, RLS, auth hook, seed loader, server helpers (Astra)
 - [x] A2 App shell, auth, dashboard skeleton (Astra) — local build and 415 tests green; live Supabase gates and preview pending for Musa; working tree ready for Claude to commit
-- [ ] C1 Agent modules, agent route, exercise-verify route (Claude)
+- [x] C1 Agent modules, agent route, exercise-verify route (Claude) — 5e717fb, 06c64d0, 0819a69, 80244f0; Opus review and Codex cross-review clean after three fix rounds; live DeepSeek call still unproven (no key)
 - [x] C2 Learner State, bank query, chain rule, scoring, ban math (Claude) — d3991d8, 039595c, 451b001; Opus review and Codex cross-review both clean after two fix rounds
 
 ## Phase 2: Exercise

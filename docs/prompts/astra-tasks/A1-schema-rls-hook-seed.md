@@ -14,7 +14,7 @@ The hook must be registered in the Supabase Dashboard under Authentication, Hook
 - With an invites row for test@udst.edu.qa, the same call for that email returns {} and marks the invite redeemed.
 - exercises_public omits reference_solution and keeps every test's expected value (verify with a select). Running `set role authenticated; select reference_solution from public.exercises limit 1;` in the SQL editor errors with permission denied; `set role anon; select count(*) from public.exercises_public;` also errors.
 - An authenticated update of profiles.restricted_until or account_status is rejected (test with a throwaway user and `set role authenticated` plus a request.jwt.claim.sub setting, or through the app after A2).
-- node scripts/seed-load.mjs prints counts for courses (6), clos (26), patterns (42), and exercises and drills (0 if those seed folders do not exist yet; the loader must not fail on a missing folder).
+- node scripts/seed-load.mjs prints counts for courses (6), clos (26), patterns (42), and exercises (95) and drills (144); the loader must not fail on a missing folder.
 - Tables drills and agent_usage exist with RLS enabled; drills readable by non-banned users; agent_usage has no client policy.
 </end_state>
 
