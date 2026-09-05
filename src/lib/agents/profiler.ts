@@ -81,13 +81,13 @@ function styleFromAnswers(answers: ProfilerRequest['answers']) {
   return { styleVector, learningStyle }
 }
 
-/** Phase-2 answers map by exact option text; only the keys those answers decided are sent. */
+/** Phase-2 answers map by question id and exact option text; only the keys those answers decided are sent. */
 function motivationFromAnswers(answers: ProfilerRequest['answers']) {
   const delta: ProfilerReply['profileDelta'] = {}
   const motivation: NonNullable<ProfilerReply['profileDelta']['motivation']> = {}
-  answers.forEach((a, i) => {
+  for (const a of answers) {
     const index = PHASE2.findIndex(q => q.id === a.questionId)
-    switch (index === -1 ? i : index) {
+    switch (index) {
       case 0: motivation.why = a.answer; break
       case 1: motivation.beyondCourses = a.answer === 'Yes'; break
       case 2: motivation.depth = a.answer.toLowerCase() as 'pass' | 'understand' | 'master'; break
@@ -95,10 +95,17 @@ function motivationFromAnswers(answers: ProfilerRequest['answers']) {
       case 4: delta.tone = TONE_BY_OPTION[a.answer] ?? 'direct'; break
       case 5: delta.verbosity = a.answer === 'Detailed' ? 'verbose' : 'short'; break
     }
-  })
+  }
   if (Object.keys(motivation).length) delta.motivation = motivation
   return delta
 }
+
+/** `answers` is cumulative across both phases, so each phase is positioned by its own ids. */
+const answeredIn = (answers: ProfilerRequest['answers'], ids: Set<string>) =>
+  answers.filter(a => ids.has(a.questionId)).length
+
+const PHASE1_IDS = new Set(PHASE1.map(q => q.id))
+const PHASE2_IDS = new Set(PHASE2.map(q => q.id))
 
 export const profiler: AgentModule<ProfilerRequest, ProfilerReply> = {
   name: 'profiler',
@@ -110,12 +117,12 @@ export const profiler: AgentModule<ProfilerRequest, ProfilerReply> = {
     if (req.phase === 1) {
       const { styleVector, learningStyle } = styleFromAnswers(req.answers)
       const profileDelta = { styleVector, learningStyle }
-      const next = PHASE1[req.answers.length]
+      const next = PHASE1[answeredIn(req.answers, PHASE1_IDS)]
       if (next) return { nextQuestion: { id: next.id, text: next.text, options: next.options.map(o => o.text) }, profileDelta, done: false }
       return { nextQuestion: PHASE2[0], profileDelta, done: false }
     }
     const profileDelta = motivationFromAnswers(req.answers)
-    const next = PHASE2[req.answers.length]
+    const next = PHASE2[answeredIn(req.answers, PHASE2_IDS)]
     if (next) return { nextQuestion: next, profileDelta, done: false }
     return { nextQuestion: null, profileDelta: { ...profileDelta, onboardingComplete: true }, done: true }
   },

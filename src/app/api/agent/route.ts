@@ -40,6 +40,8 @@ export async function POST(req: Request) {
     const { data } = await svc.from('exercises').select('*').in('id', ids)
     hydrated.examples = (data ?? []).filter(r => author.exampleIds.includes(r.id))
     hydrated.parent = (data ?? []).find(r => r.id === author.parentExerciseId) ?? null
+    // without the parent row the variant check cannot run, so the request is refused rather than waved through
+    if (author.parentExerciseId && !hydrated.parent) return err(mod.name, 'invalid-request', 'unknown parent exercise', 400)
     // the variant route check compares against the parent the server loaded, never one the client sent
     author.parent = hydrated.parent
   }
@@ -74,6 +76,9 @@ export async function POST(req: Request) {
   if (wantsStream) {
     // streaming agents never retry; the terminal frame carries the validated object or the fallback
     const result = streamObject({ model: MODEL, schema: mod.schema, messages, temperature: mod.temperature, maxOutputTokens: mod.maxTokens })
+    // a partial stream that throws leaves these two unobserved; the catch below is what answers the client
+    result.object.catch(() => {})
+    result.usage.catch(() => {})
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {

@@ -57,7 +57,8 @@ export async function checkRate(userId: string, agent: RateName, trigger?: Agent
       .eq('exercise_id', exerciseId)
       .order('created_at', { ascending: false })
       .limit(1)
-    const spent = Math.max(data?.[0]?.hint_count ?? 0, hintsGiven.get(hintKey) ?? 0)
+    // the stored count is what the last attempt recorded; the memory counter is the hints given since
+    const spent = (data?.[0]?.hint_count ?? 0) + (hintsGiven.get(hintKey) ?? 0)
     if (spent >= LOCKDOWN.maxHintsPerExercise) {
       release()
       return { ok: false, message: `you have used all ${LOCKDOWN.maxHintsPerExercise} hints for this exercise` }

@@ -63,7 +63,7 @@ describe('buddy module', () => {
       version: 12,
       profile: { displayName: 'Sam', tone: 'playful' } as never,
       mastery: {
-        'C-1': mastery('C-1', 90, true),
+        'C-1': mastery('C-1', 5, true),
         'C-2': mastery('C-2', 30, false),
         'C-3': mastery('C-3', 10, false),
         'C-4': mastery('C-4', 55, false),
@@ -83,10 +83,11 @@ describe('buddy module', () => {
     expect(Object.keys(slice).sort()).toEqual([
       'accountStatus', 'integrityScore', 'mastery', 'nextExerciseIds', 'profile', 'recentMistakes', 'streak',
     ])
+    // the lowest three are the lowest three, closed or not: the student may still ask about a closed CLO
     expect(slice.mastery).toEqual({
       closed: 1,
       open: 4,
-      lowest: [{ cloId: 'C-3', score: 10 }, { cloId: 'C-5', score: 20 }, { cloId: 'C-2', score: 30 }],
+      lowest: [{ cloId: 'C-1', score: 5 }, { cloId: 'C-3', score: 10 }, { cloId: 'C-5', score: 20 }],
     })
     expect(slice.recentMistakes).toEqual([
       { label: 'off by one', count: 2 },

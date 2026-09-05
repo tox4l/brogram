@@ -97,7 +97,8 @@ export const plannerRequest = z.object({
     currentCourse: z.string().nullable().optional(),
   }),
   course: z.string().min(1),
-  clos: z.array(clo),
+  // the reply must name every CLO of the course, so an empty course has no answer worth asking for
+  clos: z.array(clo).min(1),
   candidates: z.array(z.object({
     id: z.string().min(1),
     cloId: z.string().min(1),

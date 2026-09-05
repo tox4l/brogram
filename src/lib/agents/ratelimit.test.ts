@@ -141,6 +141,19 @@ describe('checkRate', () => {
     expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_1')).ok).toBe(true)
   })
 
+  it('adds the hints it hands out to the count the last attempt recorded', async () => {
+    const { checkRate } = await load()
+    stub.state.hintCount = 3
+    await checkRate('u1', 'diagnoser', 'attempt-failed', 'ex_1')
+    expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_1')).ok).toBe(true)
+    vi.advanceTimersByTime(61_000)
+    expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_1')).ok).toBe(true)
+    vi.advanceTimersByTime(61_000)
+    const third = await checkRate('u1', 'coach', 'hint-requested', 'ex_1')
+    expect(third.ok).toBe(false)
+    expect(third.message).toMatch(/5 hints/)
+  })
+
   it('keeps the stored hint count as a floor that a failed attempt cannot clear', async () => {
     const { checkRate } = await load()
     stub.state.hintCount = 5

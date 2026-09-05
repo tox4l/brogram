@@ -42,7 +42,7 @@ export const buddy: AgentModule<BuddyRequest, BuddyReply> = {
       mastery: {
         closed: rows.filter(m => m.closed).length,
         open: rows.filter(m => !m.closed).length,
-        lowest: rows.filter(m => !m.closed).sort((a, b) => a.score - b.score).slice(0, 3).map(m => ({ cloId: m.cloId, score: m.score })),
+        lowest: [...rows].sort((a, b) => a.score - b.score).slice(0, 3).map(m => ({ cloId: m.cloId, score: m.score })),
       },
       recentMistakes: [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count })),
       streak: state.streak,

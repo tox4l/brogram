@@ -103,6 +103,25 @@ describe('profiler module', () => {
     expect(() => profiler.schema.parse(reply)).not.toThrow()
   })
 
+  it('counts each phase on its own when the answers of both are in the list', () => {
+    const answers = [
+      ...Array.from({ length: 5 }, (_, i) => ({ questionId: `p1f${i + 1}`, answer: 'x' })),
+      { questionId: 'p2q1', answer: 'To build something' },
+    ]
+    const reply = profiler.fallback!(req(2, answers))
+    expect(reply.nextQuestion?.id).toBe('p2q2')
+    expect(reply.done).toBe(false)
+    expect(reply.profileDelta.motivation).toEqual({ why: 'To build something' })
+    expect(reply.profileDelta.onboardingComplete).toBeUndefined()
+  })
+
+  it('never reads a phase-1 answer as a motivation answer', () => {
+    const answers = Array.from({ length: 5 }, (_, i) => ({ questionId: `p1f${i + 1}`, answer: 'Yes' }))
+    const reply = profiler.fallback!(req(2, answers))
+    expect(reply.profileDelta.motivation).toBeUndefined()
+    expect(reply.nextQuestion?.id).toBe('p2q1')
+  })
+
   it('serves the fixed motivation questions in order', () => {
     const reply = profiler.fallback!(req(2, [{ questionId: 'p2q1', answer: 'To pass my courses' }]))
     expect(reply.nextQuestion?.id).toBe('p2q2')

@@ -62,6 +62,10 @@ describe('request schemas', () => {
     expect(over('author', { exampleIds: ['a', 'b', 'c'] })).toBe(false)
   })
 
+  it('needs at least one CLO for the planner, whose reply must name every one of them', () => {
+    expect(requestSchemas.planner.safeParse({ ...request('planner'), clos: [] }).success).toBe(false)
+  })
+
   it('rejects a trigger that does not belong to the agent', () => {
     expect(requestSchemas.coach.safeParse({ ...request('coach'), trigger: 'attempt-failed' }).success).toBe(false)
   })
