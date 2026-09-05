@@ -1,0 +1,22 @@
+{
+  "exercise": {
+    "cloId": "WEB1101-2",
+    "language": "web",
+    "kind": "code",
+    "difficulty": 2,
+    "pattern": "single-listener-on-parent",
+    "title": "One badge counter",
+    "prompt": "The page holds a list `#tags` with several `button` children and a counter `#count` that starts at 0.\n\nAttach exactly one click listener to `#tags` so that clicking any button, including buttons added to the list later, raises the number inside `#count` by one. Do not attach a listener to each button.\n\nExample: three clicks on any mix of buttons leaves `#count` showing `3`.",
+    "starterCode": "<script>\n  // your code here\n</script>\n",
+    "tests": [
+      { "id": "t1", "input": "document.querySelectorAll('#tags button')[0].click(); return document.querySelector('#count').textContent === '1' ? 'ok' : 'count did not move';", "expected": "ok", "hidden": false, "name": "one click" },
+      { "id": "t2", "input": "const b = document.querySelectorAll('#tags button'); b[0].click(); b[1].click(); return document.querySelector('#count').textContent === '2' ? 'ok' : 'two clicks failed';", "expected": "ok", "hidden": false, "name": "two clicks" },
+      { "id": "t3", "input": "const nb = document.createElement('button'); document.querySelector('#tags').appendChild(nb); nb.click(); return document.querySelector('#count').textContent === '1' ? 'ok' : 'new button ignored';", "expected": "ok", "hidden": true },
+      { "id": "t4", "input": "document.querySelector('#tags').click(); return document.querySelector('#count').textContent === '0' ? 'ok' : 'container click counted';", "expected": "ok", "hidden": true },
+      { "id": "t5", "input": "return document.querySelector('#count').textContent === '0' ? 'ok' : 'counter did not start at zero';", "expected": "ok", "hidden": true }
+    ],
+    "referenceSolution": "<script>\n  const list = document.querySelector('#tags');\n  const out = document.querySelector('#count');\n  list.addEventListener('click', function (e) {\n    if (e.target.tagName === 'BUTTON') out.textContent = String(Number(out.textContent) + 1);\n  });\n</script>\n",
+    "tags": ["dom", "events"],
+    "fixture": "<div id=\"tags\"><button>a</button><button>b</button></div><span id=\"count\">0</span>"
+  }
+}

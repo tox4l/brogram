@@ -1,0 +1,21 @@
+{
+  "exercise": {
+    "cloId": "INFS1101-3",
+    "language": "python",
+    "kind": "code",
+    "difficulty": 3,
+    "pattern": "early-return",
+    "title": "First late train",
+    "prompt": "A station board lists how many minutes late each train arrived, in order.\n\nWrite `first_late(times, limit)` that returns the first delay strictly greater than `limit`, or `-1` when every train was on time enough.\n\nConstraints: `times` holds 0 to 1000 whole numbers and `limit` is a whole number.\n\nExample: `first_late([3, 5, 9], 6)` returns `9`. `first_late([1, 2], 6)` returns `-1`.",
+    "starterCode": "def first_late(times, limit):\n    pass\n",
+    "tests": [
+      { "id": "t1", "input": "[[3,5,9],6]", "expected": "9", "hidden": false, "name": "example" },
+      { "id": "t2", "input": "[[1,2],6]", "expected": "-1", "hidden": false, "name": "nothing late" },
+      { "id": "t3", "input": "[[],4]", "expected": "-1", "hidden": true, "name": "empty board" },
+      { "id": "t4", "input": "[[7,7,7],7]", "expected": "-1", "hidden": true },
+      { "id": "t5", "input": "[[-2,0,4],-1]", "expected": "0", "hidden": true }
+    ],
+    "referenceSolution": "def first_late(times, limit):\n    for t in times:\n        if t > limit:\n            return t\n    return -1\n",
+    "tags": ["loops", "lists"]
+  }
+}

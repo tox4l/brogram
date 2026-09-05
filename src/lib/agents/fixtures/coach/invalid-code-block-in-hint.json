@@ -1,0 +1,4 @@
+{
+  "hint": "Look at where the loop ends:\n```python\nreturn -1\n```\nand ask when that line runs.",
+  "planStep": 2
+}

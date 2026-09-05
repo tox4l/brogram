@@ -1,0 +1,4 @@
+{
+  "hint": "Good move on the loop. Now look at `return -1` and ask whether it runs before the loop has seen every element.",
+  "planStep": 2
+}

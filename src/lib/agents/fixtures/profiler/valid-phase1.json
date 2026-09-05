@@ -1,0 +1,12 @@
+{
+  "nextQuestion": {
+    "id": "p1q3",
+    "text": "Which would help you more when a list is being filtered?",
+    "options": ["A diagram of items falling into two buckets", "A sentence describing which items are kept"]
+  },
+  "profileDelta": {
+    "learningStyle": "mixed",
+    "styleVector": { "visual": 0.6, "verbal": 0.4, "example": 0.7, "theory": 0.3 }
+  },
+  "done": false
+}

@@ -1,0 +1,26 @@
+{
+  "agent": "planner",
+  "trigger": "plan-refresh",
+  "state": {
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "version": 4,
+    "currentCourse": "INFS1101",
+    "profile": { "learningStyle": "mixed", "motivation": { "depth": "understand" } },
+    "mastery": {
+      "INFS1101-1": { "cloId": "INFS1101-1", "score": 55, "chain": 1, "patternsPassed": ["accumulate"], "closed": false }
+    },
+    "recentMistakes": [
+      { "exerciseId": "ex_1", "cloId": "INFS1101-1", "pattern": "early-return", "label": "off by one in range", "at": "2026-09-05T10:00:00.000Z" }
+    ]
+  },
+  "course": "INFS1101",
+  "clos": [
+    { "id": "INFS1101-1", "course": "INFS1101", "ordinal": 1, "outcome": "Read and write simple loops over a list", "topics": ["loops"], "prerequisites": [], "patterns": ["accumulate", "early-return"], "assessableInCode": true },
+    { "id": "INFS1101-2", "course": "INFS1101", "ordinal": 2, "outcome": "Stop a scan as soon as the answer is known", "topics": ["loops"], "prerequisites": ["INFS1101-1"], "patterns": ["early-return"], "assessableInCode": true }
+  ],
+  "candidates": [
+    { "id": "ex_10", "cloId": "INFS1101-1", "pattern": "early-return", "difficulty": 3, "title": "First negative" },
+    { "id": "ex_11", "cloId": "INFS1101-1", "pattern": "count", "difficulty": 2, "title": "Count the empties" },
+    { "id": "ex_12", "cloId": "INFS1101-2", "pattern": "early-return", "difficulty": 3, "title": "First late train" }
+  ]
+}

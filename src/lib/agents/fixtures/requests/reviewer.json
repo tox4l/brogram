@@ -1,0 +1,16 @@
+{
+  "agent": "reviewer",
+  "trigger": "attempt-passed",
+  "state": {
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "version": 10,
+    "profile": { "tone": "direct", "verbosity": "short" },
+    "mastery": {
+      "INFS1101-3": { "cloId": "INFS1101-3", "score": 64, "chain": 2, "patternsPassed": ["early-return"], "closed": false }
+    }
+  },
+  "exercise": { "id": "ex_1", "cloId": "INFS1101-3", "pattern": "early-return", "prompt": "Return the first delay above the limit.", "language": "python" },
+  "code": "def first_late(times, limit):\n    for t in times:\n        if t > limit:\n            return t\n    return -1\n",
+  "hintCount": 0,
+  "durationMs": 412000
+}

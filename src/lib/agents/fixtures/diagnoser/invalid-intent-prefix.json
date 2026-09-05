@@ -1,0 +1,11 @@
+{
+  "intent": "It looks like you wanted a loop that stops at the first late train and reports it.",
+  "rootCause": "The loop returns `-1` inside the loop body, so it exits on the first element that is not late.",
+  "mistakeLabel": "return inside loop body",
+  "fixPlan": [
+    "Trace the loop by hand with the first visible example and note exactly when the return runs.",
+    "Move the not-found return so it only runs after the loop has finished every element.",
+    "Check the empty-list example and decide what the function should give back when there is nothing to check.",
+    "Run the visible examples before you submit again."
+  ]
+}

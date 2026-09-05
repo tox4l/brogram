@@ -1,0 +1,19 @@
+{
+  "agent": "coach",
+  "trigger": "hint-requested",
+  "state": {
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "version": 9,
+    "profile": { "tone": "direct", "verbosity": "short" }
+  },
+  "exercise": { "id": "ex_1", "cloId": "INFS1101-3", "pattern": "early-return", "prompt": "Return the first delay above the limit.", "language": "python" },
+  "diffSinceLastHint": "@@ -2,2 +2,3 @@\n+    for t in times:",
+  "currentCode": "def first_late(times, limit):\n    for t in times:\n        return -1\n",
+  "fixPlan": [
+    "Trace the loop by hand with the first visible example.",
+    "Move the not-found return so it runs after the loop.",
+    "Check what the function should give back for an empty list.",
+    "Run the visible examples before you submit again."
+  ],
+  "hintsSoFar": ["Look at where the loop ends."]
+}

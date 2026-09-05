@@ -1,0 +1,13 @@
+{
+  "agent": "profiler",
+  "trigger": "onboarding-answer",
+  "state": {
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "version": 3,
+    "profile": { "displayName": "Sam", "onboardingComplete": false }
+  },
+  "phase": 1,
+  "answers": [
+    { "questionId": "p1f1", "answer": "A diagram showing how the loop moves through the list" }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "agent": "author",
+  "trigger": "bank-miss",
+  "state": {
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "version": 6,
+    "profile": { "learningStyle": "visual", "verbosity": "short" },
+    "recentMistakes": [
+      { "exerciseId": "ex_1", "cloId": "INFS1101-3", "pattern": "early-return", "label": "return inside loop body", "at": "2026-09-05T10:00:00.000Z" }
+    ]
+  },
+  "clo": { "id": "INFS1101-3", "course": "INFS1101", "ordinal": 3, "outcome": "Stop a scan as soon as the answer is known", "topics": ["loops"], "prerequisites": ["INFS1101-2"], "patterns": ["early-return"], "assessableInCode": true },
+  "language": "python",
+  "kind": "code",
+  "difficulty": 3,
+  "pattern": "early-return",
+  "exampleIds": ["bank_1", "bank_2"]
+}

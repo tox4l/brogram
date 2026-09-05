@@ -1,0 +1,5 @@
+{
+  "hint": "Your condition compares the wrong pair of values; look again at what `t` holds on each pass.",
+  "planStep": 3,
+  "codeLine": "for t in times:\n    if t > limit:"
+}

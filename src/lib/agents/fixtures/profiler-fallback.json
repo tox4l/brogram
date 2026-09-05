@@ -1,0 +1,44 @@
+{
+  "questions": [
+    {
+      "id": "p1f1",
+      "text": "A loop walks through a list of prices. Which would land first for you?",
+      "options": [
+        { "text": "A diagram showing how the loop moves through the list", "axis": "visual" },
+        { "text": "A paragraph explaining what the loop does", "axis": "verbal" }
+      ]
+    },
+    {
+      "id": "p1f2",
+      "text": "You meet a new idea called a dictionary. What do you want first?",
+      "options": [
+        { "text": "A small program that uses one, with its output", "axis": "example" },
+        { "text": "The rule for what a dictionary can and cannot hold", "axis": "theory" }
+      ]
+    },
+    {
+      "id": "p1f3",
+      "text": "Your code crashes on the last item of a list. What helps you most?",
+      "options": [
+        { "text": "A picture of the list with the index arrow past the end", "axis": "visual" },
+        { "text": "A worked fix on a shorter list you can copy the reasoning from", "axis": "example" }
+      ]
+    },
+    {
+      "id": "p1f4",
+      "text": "Two functions do the same job at different speeds. How do you want that explained?",
+      "options": [
+        { "text": "The rule that says why one grows faster than the other", "axis": "theory" },
+        { "text": "A description in ordinary sentences of what each one does", "axis": "verbal" }
+      ]
+    },
+    {
+      "id": "p1f5",
+      "text": "You are learning how a function returns a value. Which do you read first?",
+      "options": [
+        { "text": "Three short functions with their return values written next to them", "axis": "example" },
+        { "text": "A sentence that says what returning a value means", "axis": "verbal" }
+      ]
+    }
+  ]
+}

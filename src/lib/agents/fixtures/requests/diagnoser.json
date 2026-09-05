@@ -1,0 +1,17 @@
+{
+  "agent": "diagnoser",
+  "trigger": "attempt-failed",
+  "state": {
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "version": 8,
+    "profile": { "tone": "supportive", "verbosity": "short" },
+    "recentMistakes": [
+      { "exerciseId": "ex_1", "cloId": "INFS1101-3", "pattern": "early-return", "label": "off by one in range", "at": "2026-09-05T10:00:00.000Z" }
+    ]
+  },
+  "exercise": { "id": "ex_1", "cloId": "INFS1101-3", "pattern": "early-return", "prompt": "Return the first delay above the limit.", "language": "python", "kind": "code" },
+  "code": "def first_late(times, limit):\n    for t in times:\n        return -1\n",
+  "results": [
+    { "testId": "t1", "passed": false, "actual": "-1", "expected": "9", "stdout": "", "stderr": "", "durationMs": 3, "failureKind": "wrong-answer" }
+  ]
+}

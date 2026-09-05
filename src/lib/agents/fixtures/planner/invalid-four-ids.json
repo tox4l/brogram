@@ -1,0 +1,5 @@
+{
+  "path": ["INFS1101-1", "INFS1101-2", "INFS1101-3"],
+  "nextExerciseIds": ["ex_1", "ex_2", "ex_3", "ex_4"],
+  "focus": "Loops that stop early, because your last three failures were all missing a break."
+}

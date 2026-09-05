@@ -1,0 +1,9 @@
+{
+  "nextQuestion": {
+    "id": "p1q2",
+    "text": "Which explanation would you rather read first?",
+    "options": ["A diagram", "A worked example", "A rule", "A story", "A table"]
+  },
+  "profileDelta": {},
+  "done": false
+}

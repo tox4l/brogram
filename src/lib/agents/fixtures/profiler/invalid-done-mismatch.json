@@ -1,0 +1,9 @@
+{
+  "nextQuestion": {
+    "id": "p2q6",
+    "text": "Short answers or detailed ones?",
+    "options": ["Short", "Detailed"]
+  },
+  "profileDelta": {},
+  "done": true
+}

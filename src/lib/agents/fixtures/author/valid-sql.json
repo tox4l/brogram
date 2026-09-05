@@ -1,0 +1,22 @@
+{
+  "exercise": {
+    "cloId": "INFS2201-4",
+    "language": "sql",
+    "kind": "code",
+    "difficulty": 3,
+    "pattern": "group-then-filter",
+    "title": "Busy delivery drivers",
+    "prompt": "A courier company keeps one row per delivery in the table `deliveries(driver, parcels)`.\n\nWrite a query returning the columns `driver` and `total`, where `total` is the sum of `parcels` for that driver, for drivers whose total is above 10. Order by `total` descending, then `driver` ascending.\n\nExample: with rows ('ana', 6), ('ana', 6), ('bo', 2) the result is one row, `ana` with `12`.",
+    "starterCode": "-- expected result columns: driver, total\n",
+    "tests": [
+      { "id": "t1", "input": "__STUDENT__", "expected": "{\"columns\":[\"driver\",\"total\"],\"values\":[[\"ana\",12]]}", "hidden": false, "name": "example" },
+      { "id": "t2", "input": "__STUDENT__ /* after: insert into deliveries values ('bo', 9) */", "expected": "{\"columns\":[\"driver\",\"total\"],\"values\":[[\"ana\",12],[\"bo\",11]]}", "hidden": false, "name": "second driver crosses" },
+      { "id": "t3", "input": "__STUDENT__ /* after: delete from deliveries */", "expected": "{\"columns\":[\"driver\",\"total\"],\"values\":[]}", "hidden": true },
+      { "id": "t4", "input": "__STUDENT__ /* after: insert into deliveries values ('cy', 11) */", "expected": "{\"columns\":[\"driver\",\"total\"],\"values\":[[\"ana\",12],[\"cy\",11]]}", "hidden": true },
+      { "id": "t5", "input": "__STUDENT__ /* after: insert into deliveries values ('ana', 0) */", "expected": "{\"columns\":[\"driver\",\"total\"],\"values\":[[\"ana\",12]]}", "hidden": true }
+    ],
+    "referenceSolution": "select driver, sum(parcels) as total from deliveries group by driver having sum(parcels) > 10 order by total desc, driver asc;",
+    "tags": ["sql", "aggregation"],
+    "fixture": "create table deliveries (driver text, parcels integer);\ninsert into deliveries values ('ana', 6), ('ana', 6), ('bo', 2);"
+  }
+}

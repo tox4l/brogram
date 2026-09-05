@@ -1,0 +1,4 @@
+{
+  "hint": "Simply move the last return outside the loop and the failing example will line up with what the prompt asks for.",
+  "planStep": 2
+}

@@ -1,0 +1,21 @@
+{
+  "exercise": {
+    "cloId": "INFS1101-3",
+    "language": "python",
+    "kind": "code",
+    "difficulty": 3,
+    "pattern": "early-return",
+    "title": "First cold morning",
+    "prompt": "A weather log lists the temperature recorded at dawn on each day of a month.\n\nWrite `first_cold(temps, floor)` that returns the first temperature strictly below `floor`, or `None` when every morning was warm enough.\n\nExample: `first_cold([12, 9, 4], 10)` returns `9`.",
+    "starterCode": "def first_cold(temps, floor):\n    pass\n",
+    "tests": [
+      { "id": "t1", "input": "[[12,9,4],10]", "expected": "9", "hidden": false },
+      { "id": "t2", "input": "[[15,16],10]", "expected": "null", "hidden": false },
+      { "id": "t3", "input": "[[],10]", "expected": "null", "hidden": true },
+      { "id": "t4", "input": "[[10,10],10]", "expected": "null", "hidden": true },
+      { "id": "t5", "input": "[[-1,5],0]", "expected": "-1", "hidden": true }
+    ],
+    "referenceSolution": "def first_cold(temps, floor):\n    for t in temps:\n        if t < floor:\n            return t\n    return None\n",
+    "tags": ["loops", "lists"]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "onTopic": true,
+  "reply": "You have failed 'off-by-one in range' four times this week, all of them on loops that walk an index instead of the values. Pick one of those exercises, trace the first and last pass by hand, and write down the index each time.",
+  "suggestion": { "kind": "derot", "ref": "trace" }
+}
