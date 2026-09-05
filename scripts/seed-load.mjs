@@ -110,7 +110,10 @@ async function credentials(root, env) {
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
-  const values = { ...local, ...env }
+  const values = { ...local }
+  for (const [name, value] of Object.entries(env)) {
+    if (value?.trim()) values[name] = value
+  }
   for (const name of ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
     if (!values[name]?.trim()) throw new Error(`Missing required variable ${name}. Set it in .env.local or the environment.`)
   }

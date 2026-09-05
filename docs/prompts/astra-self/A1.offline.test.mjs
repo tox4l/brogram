@@ -87,6 +87,8 @@ test('live loader names each missing credential before any connection', async (t
   const { loadSeed } = await import(loaderUrl)
   await assert.rejects(loadSeed({ root, env: {} }), /NEXT_PUBLIC_SUPABASE_URL/)
   await assert.rejects(loadSeed({ root, env: { NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid' } }), /SUPABASE_SERVICE_ROLE_KEY/)
+  await assert.rejects(loadSeed({ root, env: { NEXT_PUBLIC_SUPABASE_URL: ' \t' } }), /NEXT_PUBLIC_SUPABASE_URL/)
+  await assert.rejects(loadSeed({ root, env: { NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid', SUPABASE_SERVICE_ROLE_KEY: ' \t' } }), /SUPABASE_SERVICE_ROLE_KEY/)
 })
 
 test('live loader uses env over .env.local and sends ordered upserts with conflict keys', async (t) => {
@@ -100,11 +102,12 @@ test('live loader uses env over .env.local and sends ordered upserts with confli
     return new Response(null, { status: 201 })
   }
   t.after(() => { globalThis.fetch = previous })
-  await loadSeed({ root, env: { SUPABASE_SERVICE_ROLE_KEY: 'environment-test-key' } })
+  await loadSeed({ root, env: { NEXT_PUBLIC_SUPABASE_URL: 'https://environment.invalid', SUPABASE_SERVICE_ROLE_KEY: 'environment-test-key' } })
   assert.deepEqual(requests.map(r => [r.url.pathname, r.url.searchParams.get('on_conflict')]), [
     ['/rest/v1/patterns', 'id'], ['/rest/v1/courses', 'code'], ['/rest/v1/clos', 'id'],
   ])
-  for (const { options } of requests) {
+  for (const { url, options } of requests) {
+    assert.equal(url.origin, 'https://environment.invalid')
     const headers = new Headers(options.headers)
     assert.equal(headers.get('apikey'), 'environment-test-key')
     assert.equal(options.method, 'POST')
@@ -112,6 +115,27 @@ test('live loader uses env over .env.local and sends ordered upserts with confli
   }
   assert.equal(JSON.parse(requests[2].options.body)[0].draft, false)
 })
+
+for (const [label, value] of [['empty', ''], ['spaces', '   '], ['mixed whitespace', '\t\r\n '], ['undefined', undefined]]) {
+  test(`live loader falls back to .env.local for ${label} environment credentials`, async (t) => {
+    const { root } = await fixture(t)
+    await writeFile(join(root, '.env.local'), 'NEXT_PUBLIC_SUPABASE_URL="https://local.invalid"\nSUPABASE_SERVICE_ROLE_KEY="local-test-key"\n')
+    const { loadSeed } = await import(loaderUrl)
+    const previous = globalThis.fetch
+    const requests = []
+    globalThis.fetch = async (url, options) => {
+      requests.push({ url: new URL(url), options })
+      return new Response(null, { status: 201 })
+    }
+    t.after(() => { globalThis.fetch = previous })
+    await loadSeed({ root, env: { NEXT_PUBLIC_SUPABASE_URL: value, SUPABASE_SERVICE_ROLE_KEY: value } })
+    assert.equal(requests.length, 3)
+    for (const { url, options } of requests) {
+      assert.equal(url.origin, 'https://local.invalid')
+      assert.equal(new Headers(options.headers).get('apikey'), 'local-test-key')
+    }
+  })
+}
 
 test('a failed table upsert stops before dependent tables', async (t) => {
   const { root } = await fixture(t)

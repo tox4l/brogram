@@ -85,10 +85,10 @@ create table public.agent_usage (
 create index on public.agent_usage (user_id, created_at desc);
 
 -- helper predicates (stable, per-statement)
-create function public.is_not_banned() returns boolean language sql stable security definer as $$
+create function public.is_not_banned() returns boolean language sql stable security definer set search_path = public, pg_temp as $$
   select coalesce((select account_status <> 'banned' from public.profiles where id = (select auth.uid())), false)
 $$;
-create function public.can_attempt() returns boolean language sql stable security definer as $$
+create function public.can_attempt() returns boolean language sql stable security definer set search_path = public, pg_temp as $$
   select coalesce((select account_status in ('active','warned') or (account_status = 'restricted' and restricted_until < now())
     from public.profiles where id = (select auth.uid())), false)
 $$;
@@ -100,8 +100,9 @@ from public.exercises
 where public.is_not_banned() and (origin = 'seed' or author_user_id = (select auth.uid()));
 -- owner rights on purpose: the base table is not readable by clients
 revoke all on public.exercises from anon, authenticated;
-revoke all on public.exercises_public from anon, public;
+revoke all on public.exercises_public from anon, authenticated, public;
 grant select on public.exercises_public to authenticated;
+alter view public.exercises_public set (security_barrier = true);
 
 -- learner_state version guard
 create function public.learner_state_version_guard() returns trigger language plpgsql as $$
@@ -112,7 +113,7 @@ end $$;
 create trigger learner_state_version_guard before update on public.learner_state for each row execute function public.learner_state_version_guard();
 
 -- profile bootstrap and invite redemption on first sign-in (user row exists here)
-create function public.handle_new_user() returns trigger language plpgsql security definer as $$
+create function public.handle_new_user() returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   insert into public.profiles (id) values (new.id) on conflict do nothing;
   insert into public.wellness (user_id) values (new.id) on conflict do nothing;
@@ -135,7 +136,7 @@ end $$;
 create trigger profile_guard before update on public.profiles for each row execute function public.profile_guard();
 
 -- restriction expiry is explicit: called by the app layout on load
-create function public.lift_expired_restriction() returns void language sql security definer as $$
+create function public.lift_expired_restriction() returns void language sql security definer set search_path = public, pg_temp as $$
   update public.profiles set account_status = 'warned'
   where id = (select auth.uid()) and account_status = 'restricted' and restricted_until < now()
 $$;

@@ -1,20 +1,18 @@
 # A1 offline handoff
 
-The offline implementation and verification are complete. No network, database connection, real credentials, branch switch, CLI installation, or remote mutation was used. Git metadata permissions prevented exclude cleanup and commit; files remain in the shared workspace.
+A1 landed as `6fc5e6e`; A2 subsequently landed as `e118855`. The seven-file A1 hardening delta is applied and remains unstaged and uncommitted for the Claude lane. No network, database connection, real credentials, branch change, CLI installation, or Git metadata write was used for this delta. All SQL remains unexecuted; there is no local Postgres.
 
-## Files
+## Files changed by this hardening delta
 
 - `supabase/migrations/0001_init.sql`
 - `supabase/migrations/0002_auth_hook.sql`
 - `supabase/migrations/0003_integrity.sql`
-- `supabase/config.toml`
 - `scripts/seed-load.mjs`
-- `src/lib/supabase/server.ts` (real implementation replaces the excluded placeholder)
 - `docs/prompts/astra-self/A1.md`
 - `docs/prompts/astra-self/A1.offline.test.mjs`
 - `docs/prompts/astra-self/A1-handoff.md`
 
-The three migrations were extracted directly from Task A1's SQL fences and checked for exact string equality. The only addition is the specifically requested final line of 0002: `alter database postgres set app.invites_required = 'true';`. Config contains only `project_id = "brogram"` plus a final newline.
+The unpushed migrations are hardened in place: authenticated holds only SELECT on the exercise view, the view has a security barrier, all six SECURITY DEFINER functions fix search_path to public then pg_temp, the auth hook role has schema usage, and integrity escalation tolerates whitespace around admin-ID commas without extending an existing future restriction. The database-level invite setting is now a manual SQL-editor step below. Earlier fixes to the profile guard and banned-user read policies are preserved.
 
 ## Verification evidence
 
@@ -34,16 +32,20 @@ The current top-level exercise files total 95: DSAI2201 16, INFS1101 19, INFS120
 `node --test docs/prompts/astra-self/A1.offline.test.mjs` (exit 0):
 
 ```text
-tests 11
+tests 15
 suites 0
-pass 11
+pass 15
 fail 0
 cancelled 0
 skipped 0
 todo 0
 ```
 
-Tests cover the standard UUIDv5 vector, deterministic exercise IDs, metadata and column filtering, preservation of hidden expected values and drill payload keys, missing optional folders, no-fetch dry run, required variables, .env.local/environment precedence, upsert ordering/conflicts, failure propagation, verified user/profile filtering, cookie writes, readonly cookies, and service-role isolation. The initial run failed on the absent loader and on placeholder auth/error behavior; the final run passed. A separate local fetch interception using the actual seed bank verified all five ordered POST payloads, conflict keys, and unique IDs without network.
+Tests cover the standard UUIDv5 vector, deterministic exercise IDs, metadata and column filtering, preservation of hidden expected values and drill payload keys, missing optional folders, no-fetch dry run, required variables, .env.local/environment precedence, upsert ordering/conflicts, failure propagation, verified user/profile filtering, cookie writes, readonly cookies, and service-role isolation. Four new regressions exercise empty, spaces-only, mixed-whitespace, and undefined environment credentials against synthetic .env.local values through the actual client with fetch intercepted locally. All four failed before the merge fix (11 pass, 4 fail), then passed after it (15 pass, 0 fail). Nonblank URL/key overrides and rejection of missing or blank credentials without a local fallback also pass.
+
+All three migrations were re-read in full for SQL/PLpgSQL syntax, with an independent static review of the hardening changes. No syntax concerns were found. This is a source review, not a database execution or proof of deployed privileges; all SQL and the post-push probes below remain unexecuted.
+
+## Historical original A1 verification (not rerun for this delta)
 
 `npm.cmd test` (exit 0):
 
@@ -71,7 +73,7 @@ Route (app)
 
 Existing tooling notices remain: Next ignores an ancestor package-lock.json outside this repository; Vitest recommends native Vite tsconfig paths instead of the configured plugin. Neither check failed. Configuration belongs to other task paths and was not changed.
 
-## Local API evidence for Claude's build log
+## Original A1 local API evidence for Claude's build log
 
 - Installed versions: Next 16.3.4, `@supabase/ssr` 0.12.6, `@supabase/supabase-js` 2.115.0.
 - `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/cookies.md`: cookies() is asynchronous; set(name, value, options) is supported in Route Handlers/Server Functions and unavailable during Server Component rendering.
@@ -79,33 +81,18 @@ Existing tooling notices remain: Next ignores an ancestor package-lock.json outs
 - `node_modules/@supabase/auth-js/src/GoTrueClient.ts`: getUser returns UserResponse. The helper denies identity when its error is non-null and never calls getSession.
 - `node_modules/@supabase/postgrest-js/src/PostgrestTransformBuilder.ts`: maybeSingle permits a missing profile; actual query errors are surfaced instead of returning stale data.
 - `node_modules/@supabase/postgrest-js/src/PostgrestQueryBuilder.ts`: upsert supports onConflict and defaultToNull; false sends missing=default, avoiding null in heterogeneous seed rows. Explicit SQL defaults are also mapped.
-- `node_modules/@types/node/util.d.ts`: parseEnv parses dotenv content without a dependency or changing process.env. Environment values override .env.local values; dry run does not read .env.local or construct a client.
+- `node_modules/@types/node/util.d.ts`: parseEnv parses dotenv content without a dependency or changing process.env. With this hardening delta, only environment values that remain nonblank after trim override .env.local values; dry run does not read .env.local or construct a client.
 - Exercise namespace is the fixed DNS UUID namespace `6ba7b810-9dad-11d1-80b4-00c04fd430c8`; IDs hash the UTF-8 string `cloId + '|' + title`. Keep this namespace stable across future seed runs.
 
-## Pending Git steps for Musa or the Claude lane
+## Git status for Musa and the Claude lane
 
-The sandbox permits reading Git metadata but denied its writes. Removing the exact exclude entry failed with `Access to the path '.../.git/info/exclude' is denied.` The required path-scoped git add failed twice, with a five-second wait between attempts:
+The earlier Git steps are complete:
 
-```text
-fatal: Unable to create 'C:/Users/musal/OneDrive/Desktop/V/Brogram/.git/index.lock': Permission denied
-```
+- A1: `6fc5e6e` — `feat(db): schema, rls, auth hook, integrity, seed loader, server helpers`.
+- A2 followed as `e118855` — `feat(app): shell, magic link auth, dashboard skeleton`.
+- `src/lib/supabase/server.ts` is tracked and its exclude entry is absent. No .git/info/exclude edit is outstanding.
 
-No index lock was removed, permissions changed, branch switched, or commit claimed. Run from an authorized PowerShell in the repository:
-
-```powershell
-$env:GIT_CONFIG_COUNT = '1'
-$env:GIT_CONFIG_KEY_0 = 'safe.directory'
-$env:GIT_CONFIG_VALUE_0 = 'C:/Users/musal/OneDrive/Desktop/V/Brogram'
-$excludePath = Join-Path (Get-Location).Path '.git/info/exclude'
-$excludeText = [System.IO.File]::ReadAllText($excludePath)
-$updatedExclude = [regex]::Replace($excludeText, '(?m)^/?src/lib/supabase/server\.ts\r?\n?', '')
-[System.IO.File]::WriteAllText($excludePath, $updatedExclude, [System.Text.UTF8Encoding]::new($false))
-git add supabase scripts/seed-load.mjs src/lib/supabase/server.ts docs/prompts/astra-self
-git diff --cached --name-only
-git commit --only -m "feat(db): schema, rls, auth hook, integrity, seed loader, server helpers" -- supabase scripts/seed-load.mjs src/lib/supabase/server.ts docs/prompts/astra-self
-```
-
-The path-scoped commit preserves any separately staged Claude changes. Retry an index.lock collision after five seconds; an access-denied error needs a shell authorized to write Git metadata.
+Read-only Git inspection confirmed this record. Only the seven-file hardening delta listed above awaits the Claude lane's review and commit. This run did not stage, commit, edit Git metadata, create a branch, or switch branches.
 
 ## Pending Supabase steps for Musa
 
@@ -127,6 +114,14 @@ node scripts/seed-load.mjs
 
 Register **public.hook_gate_signup** in Supabase Dashboard → Authentication → Hooks → Before User Created → Postgres function.
 
+After applying the migrations, run this owner-only statement manually in the Supabase SQL editor; it is deliberately outside the migration because the migration role may not own the database:
+
+```sql
+alter database postgres set app.invites_required = 'true';
+```
+
+The hook's coalesce default already requires invites when the setting is absent. Database-level settings only reach new GoTrue database connections; existing pooled connections keep their prior setting until they reconnect. The same timing applies when manually changing this to `'false'` after beta.
+
 After applying the migrations, run these SQL editor checks. The invite test is rolled back so it leaves no test invite:
 
 ```sql
@@ -143,6 +138,16 @@ select redeemed_at, redeemed_by from public.invites where email = 'test@udst.edu
 -- Expected: both null; actual user creation performs redemption.
 rollback;
 
+select grantee, privilege_type from information_schema.role_table_grants where table_name = 'exercises_public';
+-- Expected: exactly authenticated SELECT, plus postgres and service_role grants.
+-- No other authenticated privileges and no anon or PUBLIC grants.
+
+set role authenticated;
+delete from public.exercises_public where false;
+-- Must return permission denied, even though no rows would be deleted.
+-- Run RESET separately after the error.
+reset role;
+
 set role authenticated;
 select reference_solution from public.exercises limit 1;
 -- Expected: permission denied. Run RESET separately after the error.
@@ -158,8 +163,6 @@ With a real active throwaway user, verify exercises_public omits reference_solut
 
 ## Delta requests and residual risks
 
-1. **Claude: correct the SQL profile guard in a reviewed follow-up before live rollout.** In the verbatim plan, profile_guard checks auth.role(), the JWT role, while apply_integrity_escalation and lift_expired_restriction are SECURITY DEFINER. A request from an authenticated user retains its JWT role inside those functions, so their status updates are expected to hit the guard and roll back. This is a static review finding, not a live database result. Preserve ordinary users' inability to update status when correcting it.
-2. **Claude: reconcile the spec's banned-user read rule.** The verbatim `own attempts` and `own state` policies test ownership without is_not_banned, although spec section 2 says banned users cannot read attempts or learner_state. The exercise view's ban filter is present as required. No SQL was changed beyond the exact requested blocks.
-3. **Claude: record local A1 progress and API notes in the shared ledger/build log.** Both already contained concurrent Claude edits and are outside the user's staging allowlist. Keep full A1 pending until Git and live Supabase steps finish. The task file's hook-redemption expectation should be corrected to match the read-only hook in the plan.
-4. Seed upserts are idempotent per table, not a cross-table transaction; a failure can leave earlier tables updated, and rerunning resumes by upsert. Current95 versus expected110 reflects the actual approved top-level files, not a loader omission.
-5. A2 must supply proxy/middleware cookie refresh for Server Component use. Database permissions, deployed auth behavior, and real uploads remain unverified until Musa performs the pending steps.
+1. **Claude: review and commit this seven-file hardening delta.** No additional implementation delta is requested. Shared ledger/build-log files remain under the Claude lane's control and were not touched.
+2. Database permissions, restriction timing, deployed auth behavior, and real uploads remain unverified until the pending Supabase steps run. All SQL is unexecuted; no local Postgres is available.
+3. Seed upserts are idempotent per table, not a cross-table transaction; a failure can leave earlier tables updated, and rerunning resumes by upsert. The current 95 exercises reflect the approved top-level files, not a loader omission.

@@ -1,4 +1,4 @@
-create function public.hook_gate_signup(event jsonb) returns jsonb language plpgsql security definer as $$
+create function public.hook_gate_signup(event jsonb) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   em text := lower(event->'user'->>'email');
   invites_required boolean := coalesce(current_setting('app.invites_required', true), 'true') = 'true';
@@ -12,6 +12,6 @@ begin
   return '{}'::jsonb;
 end $$;
 grant execute on function public.hook_gate_signup to supabase_auth_admin;
+grant usage on schema public to supabase_auth_admin;
 revoke execute on function public.hook_gate_signup from authenticated, anon, public;
 grant select on public.invites to supabase_auth_admin;
-alter database postgres set app.invites_required = 'true';
