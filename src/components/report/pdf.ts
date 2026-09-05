@@ -25,6 +25,10 @@ export async function downloadReportPdf(root: HTMLElement, fileName: string): Pr
     unit: 'px',
     format: [REPORT_PAGE_WIDTH_PX, REPORT_PAGE_HEIGHT_PX],
     compress: true,
+    // Without this, jsPDF scales "px" units by 96/72 instead of 1:1, turning our
+    // 794x1123 CSS-pixel page into a ~373x528mm page. See jsPDF's own unit-scaling
+    // comment (dist/jspdf.es.js, "px" case): hotfixes must include 'px_scaling'.
+    hotfixes: ['px_scaling'],
   })
 
   for (let i = 0; i < pages.length; i++) {

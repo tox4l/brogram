@@ -219,6 +219,24 @@ describe('deriveMistakeTrend', () => {
     expect(data.weeks[10].count).toBe(1)
   })
 
+  it('counts a diagnosed failure once when a failed attempt and its recentMistakes entry share an exercise and minute', () => {
+    const state = makeState({
+      // Same exercise, same minute as the attempt below (different second: 45s vs 00s), so it must dedupe.
+      recentMistakes: [makeMistake({ exerciseId: 'e1', at: '2026-09-01T10:00:45.000Z' })],
+    })
+    const attempts: Attempt[] = [makeAttempt({ exerciseId: 'e1', passed: false, createdAt: '2026-09-01T10:00:00.000Z' })]
+    const data = deriveMistakeTrend(state, attempts, '2026-09-05T00:00:00.000Z')
+    expect(data.totalMistakes).toBe(1)
+    expect(data.weeks[11].count).toBe(1)
+  })
+
+  it('still counts a recentMistakes entry with no matching failed attempt', () => {
+    const state = makeState({ recentMistakes: [makeMistake({ exerciseId: 'e2', at: '2026-09-01T10:00:00.000Z' })] })
+    const data = deriveMistakeTrend(state, [], '2026-09-05T00:00:00.000Z')
+    expect(data.totalMistakes).toBe(1)
+    expect(data.weeks[11].count).toBe(1)
+  })
+
   it('drops events older than the twelve-week window', () => {
     const state = makeState({ recentMistakes: [makeMistake({ at: '2020-01-01T00:00:00.000Z' })] })
     const data = deriveMistakeTrend(state, [], '2026-09-05T00:00:00.000Z')

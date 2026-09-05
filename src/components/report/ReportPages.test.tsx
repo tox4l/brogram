@@ -151,10 +151,15 @@ describe('downloadReportPdf', () => {
       expect(options).toMatchObject({ scale: 2 })
     })
 
-    // jsPDF: constructed once, in px units, at the A4-ratio page size.
+    // jsPDF: constructed once, in px units, at the A4-ratio page size, with the px_scaling
+    // hotfix enabled (without it jsPDF scales "px" by 96/72 instead of 1:1).
     expect(mocks.jsPDFCtor).toHaveBeenCalledTimes(1)
     expect(mocks.jsPDFCtor).toHaveBeenCalledWith(
-      expect.objectContaining({ unit: 'px', format: [REPORT_PAGE_WIDTH_PX, REPORT_PAGE_HEIGHT_PX] })
+      expect.objectContaining({
+        unit: 'px',
+        format: [REPORT_PAGE_WIDTH_PX, REPORT_PAGE_HEIGHT_PX],
+        hotfixes: ['px_scaling'],
+      })
     )
 
     // addImage once per page, fed the canvas from that same page's html2canvas call, in order.

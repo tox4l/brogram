@@ -58,6 +58,13 @@ function weekKey(date: Date): string {
   return mondayOfWeekUtc(date).toISOString().slice(0, 10)
 }
 
+/** Minute-truncated ISO instant ('YYYY-MM-DDTHH:MM'), used to match a mistake record to the attempt it was diagnosed from. */
+function minuteKey(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toISOString().slice(0, 16)
+}
+
 // ---------------------------------------------------------------------------
 // Mastery per CLO
 // ---------------------------------------------------------------------------
@@ -156,9 +163,17 @@ export interface MistakeTrendData {
 }
 
 /**
- * state.recentMistakes plus any failed attempts, bucketed by the UTC ISO week
- * (Monday start) they occurred in, over a trailing MISTAKE_TREND_WEEKS window
- * anchored on generatedAt so the trend is deterministic.
+ * Failed attempts plus any recentMistakes entries, bucketed by the UTC ISO
+ * week (Monday start) they occurred in, over a trailing MISTAKE_TREND_WEEKS
+ * window anchored on generatedAt so the trend is deterministic.
+ *
+ * compileLearnerState derives recentMistakes from failed attempts, so a
+ * diagnosed failure the caller still has in `attempts` would otherwise be
+ * counted twice: once as the failed attempt, once as its mistake record.
+ * Failed attempts are the base set, keyed by exerciseId plus the
+ * minute-truncated timestamp; a recentMistakes entry is added only when no
+ * attempt shares that key (e.g. it fell outside the attempts the caller
+ * passed in, or predates them).
  */
 export function deriveMistakeTrend(state: LearnerState, attempts: Attempt[], generatedAt: string): MistakeTrendData {
   const anchor = new Date(generatedAt)
@@ -172,9 +187,14 @@ export function deriveMistakeTrend(state: LearnerState, attempts: Attempt[], gen
   }
   const bucketByKey = new Map(weeks.map(w => [w.weekKey, w]))
 
+  const failedAttempts = attempts.filter(a => a.passed === false)
+  const diagnosedKeys = new Set(failedAttempts.map(a => `${a.exerciseId}|${minuteKey(a.createdAt)}`))
+
   const dates: string[] = [
-    ...state.recentMistakes.map(m => m.at),
-    ...attempts.filter(a => a.passed === false).map(a => a.createdAt),
+    ...failedAttempts.map(a => a.createdAt),
+    ...state.recentMistakes
+      .filter(m => !diagnosedKeys.has(`${m.exerciseId}|${minuteKey(m.at)}`))
+      .map(m => m.at),
   ]
 
   for (const iso of dates) {
