@@ -24,21 +24,31 @@ const LIMITS: Record<RateName, { max: number; windowMs: number }> = {
 }
 
 const buckets = new Map<string, { count: number; startedAt: number }>()
+/** Hints handed out since the last failed attempt, keyed `${userId}:${exerciseId}`; the stored count is the floor. */
+const hintsGiven = new Map<string, number>()
 
 /** In-memory buckets, backstopped by agent_usage so a redeploy does not hand out a fresh allowance. */
 export async function checkRate(userId: string, agent: RateName, trigger?: AgentTrigger, exerciseId?: string): Promise<RateDecision> {
-  // a fresh failure reopens the hint window; the per-exercise cap still applies
-  if (trigger === 'attempt-failed') buckets.delete(`${userId}:coach`)
+  // a fresh failure reopens the hint window and the hints given since the last attempt row
+  if (trigger === 'attempt-failed') {
+    buckets.delete(`${userId}:coach`)
+    if (exerciseId) hintsGiven.delete(`${userId}:${exerciseId}`)
+  }
 
   const limit = LIMITS[agent]
   const key = `${userId}:${agent}`
   const now = Date.now()
   const previous = buckets.get(key)
   const bucket = previous && now - previous.startedAt < limit.windowMs ? previous : { count: 0, startedAt: now }
+  buckets.set(key, bucket)
   const window = limit.windowMs === HOUR ? 'hour' : `${limit.windowMs / 1000} seconds`
   if (bucket.count >= limit.max) return { ok: false, message: `${agent} is limited to ${limit.max} per ${window}` }
+  // spend the token before the first await, or a burst of parallel requests all pass the same check
+  bucket.count += 1
+  const release = () => { bucket.count -= 1 }
 
   const svc = serviceClient()
+  const hintKey = `${userId}:${exerciseId}`
   if (agent === 'coach' && exerciseId) {
     const { data } = await svc
       .from('attempts')
@@ -47,8 +57,9 @@ export async function checkRate(userId: string, agent: RateName, trigger?: Agent
       .eq('exercise_id', exerciseId)
       .order('created_at', { ascending: false })
       .limit(1)
-    const spent = data?.[0]?.hint_count ?? 0
+    const spent = Math.max(data?.[0]?.hint_count ?? 0, hintsGiven.get(hintKey) ?? 0)
     if (spent >= LOCKDOWN.maxHintsPerExercise) {
+      release()
       return { ok: false, message: `you have used all ${LOCKDOWN.maxHintsPerExercise} hints for this exercise` }
     }
   }
@@ -60,9 +71,11 @@ export async function checkRate(userId: string, agent: RateName, trigger?: Agent
     .eq('user_id', userId)
     .eq('agent', agent)
     .gt('created_at', new Date(now - HOUR).toISOString())
-  if ((count ?? 0) >= hourlyMax) return { ok: false, message: `${agent} is limited to ${hourlyMax} per hour` }
+  if ((count ?? 0) >= hourlyMax) {
+    release()
+    return { ok: false, message: `${agent} is limited to ${hourlyMax} per hour` }
+  }
 
-  bucket.count += 1
-  buckets.set(key, bucket)
+  if (agent === 'coach' && exerciseId) hintsGiven.set(hintKey, (hintsGiven.get(hintKey) ?? 0) + 1)
   return { ok: true, message: '' }
 }

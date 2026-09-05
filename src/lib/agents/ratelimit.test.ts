@@ -105,6 +105,52 @@ describe('checkRate', () => {
     expect(decision.message).toMatch(/hour/)
   })
 
+  it('reserves capacity before the database checks, so a burst cannot overshoot', async () => {
+    const { checkRate } = await load()
+    const decisions = await Promise.all(Array.from({ length: 25 }, () => checkRate('u1', 'author', 'bank-miss')))
+    expect(decisions.filter(d => d.ok)).toHaveLength(10)
+  })
+
+  it('gives the reservation back when the backstop refuses', async () => {
+    const { checkRate } = await load()
+    stub.state.usageCount = 20
+    expect((await checkRate('u1', 'buddy', 'buddy-message')).ok).toBe(false)
+    stub.state.usageCount = 0
+    for (let i = 0; i < 20; i++) expect((await checkRate('u1', 'buddy', 'buddy-message')).ok).toBe(true)
+  })
+
+  it('counts the hints it hands out, so a slow student cannot pass the per-exercise cap', async () => {
+    const { checkRate } = await load()
+    for (let i = 0; i < 5; i++) {
+      expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_1')).ok, `hint ${i + 1}`).toBe(true)
+      vi.advanceTimersByTime(61_000)
+    }
+    const sixth = await checkRate('u1', 'coach', 'hint-requested', 'ex_1')
+    expect(sixth.ok).toBe(false)
+    expect(sixth.message).toMatch(/5 hints/)
+  })
+
+  it('counts hints per exercise and clears them when that exercise fails again', async () => {
+    const { checkRate } = await load()
+    for (let i = 0; i < 5; i++) {
+      await checkRate('u1', 'coach', 'hint-requested', 'ex_1')
+      vi.advanceTimersByTime(61_000)
+    }
+    expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_2')).ok).toBe(true)
+    await checkRate('u1', 'diagnoser', 'attempt-failed', 'ex_1')
+    expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_1')).ok).toBe(true)
+  })
+
+  it('keeps the stored hint count as a floor that a failed attempt cannot clear', async () => {
+    const { checkRate } = await load()
+    stub.state.hintCount = 5
+    expect((await checkRate('u1', 'coach', 'hint-requested', 'ex_1')).ok).toBe(false)
+    await checkRate('u1', 'diagnoser', 'attempt-failed', 'ex_1')
+    const afterFailure = await checkRate('u1', 'coach', 'hint-requested', 'ex_1')
+    expect(afterFailure.ok).toBe(false)
+    expect(afterFailure.message).toMatch(/5 hints/)
+  })
+
   it('backstops the coach at sixty recorded calls an hour', async () => {
     const { checkRate } = await load()
     stub.state.usageCount = 60

@@ -55,6 +55,14 @@ describe('coach module', () => {
     expect(coach.repair!(req({ hintsSoFar: ['a', 'b', 'c', 'd', 'e'] }), reply).planStep).toBe(4)
   })
 
+  it('repairs a half-streamed reply without inventing a plan step', () => {
+    const partial = { hint: 'Look again at the loop', codeLine: 't > limit' } as never
+    const repaired = coach.repair!(req({ hintsSoFar: [] }), partial)
+    expect(repaired.codeLine).toBeUndefined()
+    expect(repaired.planStep).toBeUndefined()
+    expect(coach.repair!(req(), {} as never)).toEqual({})
+  })
+
   it('leaves the caller reply untouched when repairing', () => {
     const reply = coach.schema.parse(fixture('valid-with-fragment'))
     coach.repair!(req(), reply)

@@ -46,13 +46,22 @@ export const planner: AgentModule<PlannerRequest, PlannerReply> = {
   name: 'planner',
   system,
   schema: plannerReply,
+  // the 2,000 token budget is tight, so mastery is cut to the current course and to the four fields the rules use
   slice: state => ({
     profile: { motivation: state.profile?.motivation, learningStyle: state.profile?.learningStyle },
-    mastery: state.mastery,
+    mastery: Object.fromEntries(
+      Object.entries(state.mastery ?? {})
+        .filter(([cloId]) => !state.currentCourse || cloId.startsWith(`${state.currentCourse}-`))
+        .map(([cloId, m]) => [cloId, { score: m.score, chain: m.chain, closed: m.closed, patternsPassed: m.patternsPassed }]),
+    ),
     recentMistakes: (state.recentMistakes ?? []).map(m => m.label),
     currentCourse: state.currentCourse ?? null,
   }),
-  payload: req => ({ course: req.course, clos: req.clos, candidates: req.candidates }),
+  payload: req => ({
+    course: req.course,
+    clos: req.clos.map(c => ({ id: c.id, ordinal: c.ordinal, prerequisites: c.prerequisites, patterns: c.patterns, outcome: c.outcome.slice(0, 120) })),
+    candidates: req.candidates.map(c => ({ id: c.id, cloId: c.cloId, pattern: c.pattern, difficulty: c.difficulty, title: c.title.slice(0, 40) })),
+  }),
   fallback(req) {
     const mastery = req.state.mastery ?? {}
     const path = orderClos(req.clos, mastery)

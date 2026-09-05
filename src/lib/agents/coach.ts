@@ -42,10 +42,11 @@ export const coach: AgentModule<CoachRequest, CoachReply> = {
     hint: 'Pick the first visible example, run your code on it in your head, and write down the value of every variable at each step until it disagrees with the expected output.',
     planStep: 1,
   }),
+  // also runs on half-streamed replies, so every field is treated as possibly absent
   repair(req, reply) {
     const out = { ...reply }
     if (req.hintsSoFar.length < 2) delete out.codeLine
-    out.planStep = Math.max(1, Math.min(out.planStep, req.hintsSoFar.length + 1, req.fixPlan.length))
+    if (typeof out.planStep === 'number') out.planStep = Math.max(1, Math.min(out.planStep, req.hintsSoFar.length + 1, req.fixPlan.length))
     return out
   },
   temperature: 0.6,

@@ -51,6 +51,8 @@ export function buildMessages(mod: AgentModule<AgentRequest, unknown>, req: Agen
     () => { if (payload.parent) { delete payload.parent; return true } return false },
     () => { const ex = payload.examples; if (Array.isArray(ex) && ex.length > 1) { ex.pop(); return true } return false },
     () => { const d = payload.diffSinceLastHint; if (typeof d === 'string' && d.length > 2000) { payload.diffSinceLastHint = d.slice(0, 2000); return true } return false },
+    () => { const c = payload.candidates; if (Array.isArray(c) && c.length > 12) { c.pop(); return true } return false },
+    () => { const m = slice.mastery; if (m && typeof m === 'object') { const closed = Object.entries(m).find(([, row]) => (row as { closed?: boolean })?.closed); if (closed) { delete (m as Record<string, unknown>)[closed[0]]; return true } } return false },
   ]
   let msgs = render()
   let used = approxTokens(msgs.map(m => m.content).join('\n'))

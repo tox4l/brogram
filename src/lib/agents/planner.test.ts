@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import type { Clo, Mastery, PlannerRequest } from '@/lib/contracts'
+import { buildMessages } from './shared'
 import { planner } from './planner'
 
 const fixture = (name: string) =>
@@ -93,6 +94,59 @@ describe('planner module', () => {
     expect(Object.keys(slice).sort()).toEqual(['currentCourse', 'mastery', 'profile', 'recentMistakes'])
     expect(slice.recentMistakes).toEqual(['off by one'])
     expect(Object.keys(slice.profile as object).sort()).toEqual(['learningStyle', 'motivation'])
+    expect(slice.mastery).toEqual({ 'INFS1101-1': { score: 90, chain: 3, closed: true, patternsPassed: [] } })
+  })
+
+  it('drops mastery for courses the student is not on', () => {
+    const slice = planner.slice({
+      userId: 'u1',
+      version: 2,
+      currentCourse: 'INFS1101',
+      mastery: { 'INFS1101-1': mastery('INFS1101-1', false), 'DSAI2201-1': mastery('DSAI2201-1', true) },
+    })
+    expect(Object.keys(slice.mastery as object)).toEqual(['INFS1101-1'])
+  })
+
+  it('shortens the outcomes and titles it sends', () => {
+    const long = clo(1, [])
+    long.outcome = 'o'.repeat(300)
+    const payload = planner.payload(
+      req({ clos: [long], candidates: [{ id: 'ex_1', cloId: 'INFS1101-1', pattern: 'p', difficulty: 3, title: 't'.repeat(90) }] }),
+      {},
+    )
+    expect((payload.clos as { outcome: string }[])[0].outcome).toHaveLength(120)
+    expect((payload.candidates as { title: string }[])[0].title).toHaveLength(40)
+    expect(Object.keys((payload.clos as object[])[0]).sort()).toEqual(['id', 'ordinal', 'outcome', 'patterns', 'prerequisites'])
+  })
+
+  it('fits a real course inside the two thousand token budget', () => {
+    const uuid = (n: number) => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`
+    const clos = Array.from({ length: 5 }, (_, i) => clo(i + 1, i ? [`INFS1101-${i}`] : []))
+    const masteryRows = Object.fromEntries(
+      Array.from({ length: 26 }, (_, i) => [`INFS1101-${i + 1}`, mastery(`INFS1101-${i + 1}`, i % 2 === 0)]),
+    )
+    const candidates = Array.from({ length: 30 }, (_, i) => ({
+      id: uuid(i),
+      cloId: `INFS1101-${(i % 5) + 1}`,
+      pattern: 'accumulate-then-compare',
+      difficulty: 3 as const,
+      title: `A realistic exercise title number ${i}`,
+    }))
+    const r = req({
+      state: {
+        userId: 'u1',
+        version: 2,
+        currentCourse: 'INFS1101',
+        mastery: masteryRows,
+        recentMistakes: Array.from({ length: 10 }, (_, i) => ({ exerciseId: `e${i}`, cloId: 'INFS1101-1', pattern: 'p', label: 'off by one in range', at: 'now' })),
+      },
+      clos,
+      candidates,
+    })
+    const { messages, promptTokens } = buildMessages(planner, r, {})
+    expect(promptTokens).toBeLessThanOrEqual(2000)
+    const sent = JSON.parse(messages[1].content.split('Input (json):\n')[1])
+    expect(sent.candidates.length).toBeGreaterThanOrEqual(12)
   })
 
   it('falls back to a topological path with closed CLOs pushed last', () => {

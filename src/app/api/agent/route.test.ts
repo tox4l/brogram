@@ -16,6 +16,9 @@ const db = vi.hoisted(() => {
     ],
     calls: [] as string[],
     inserts: [] as { table: string; row: Record<string, unknown> }[],
+    /** Only rows whose builder was actually awaited land here; a `void`-ed builder never runs. */
+    executed: [] as { table: string; op: string }[],
+    insertError: null as { message: string } | null,
   }
 
   const client = {
@@ -26,6 +29,7 @@ const db = vi.hoisted(() => {
         {
           get(_target, prop: string) {
             if (prop === 'then') {
+              state.executed.push({ table, op: ctx.op || 'select' })
               return (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
                 Promise.resolve(result()).then(resolve, reject)
             }
@@ -45,7 +49,7 @@ const db = vi.hoisted(() => {
       const result = () => {
         if (table === 'attempts') return { data: [{ hint_count: state.hintCount }] }
         if (table === 'agent_usage') return ctx.head ? { count: state.usageCount } : { data: null, error: null }
-        if (ctx.op === 'insert-single') return { data: { id: 'generated_1' } }
+        if (ctx.op === 'insert-single') return state.insertError ? { data: null, error: state.insertError } : { data: { id: 'generated_1' }, error: null }
         if (ctx.op === 'single') return { data: state.exercise }
         return { data: state.exerciseRows }
       }
@@ -54,6 +58,27 @@ const db = vi.hoisted(() => {
   }
   return { state, client }
 })
+
+const ai = vi.hoisted(() => ({
+  partials: [] as unknown[],
+  object: null as unknown,
+  usage: { outputTokens: 12 },
+  throws: false,
+}))
+
+vi.mock('ai', () => ({
+  generateObject: async () => {
+    if (ai.throws) throw new Error('bad json')
+    return { object: ai.object, usage: ai.usage }
+  },
+  streamObject: () => ({
+    partialObjectStream: (async function* () {
+      for (const partial of ai.partials) yield partial
+    })(),
+    object: Promise.resolve(ai.object),
+    usage: Promise.resolve(ai.usage),
+  }),
+}))
 
 vi.mock('@/lib/supabase/server', () => ({
   getUserAndProfile: async () => ({ user: db.state.user, profile: db.state.profile }),
@@ -82,6 +107,12 @@ beforeEach(() => {
   db.state.usageCount = 0
   db.state.calls = []
   db.state.inserts = []
+  db.state.executed = []
+  db.state.insertError = null
+  db.state.exercise = { reference_solution: 'the real reference', tests: [{ id: 't1', input: '[]', expected: '0', hidden: true }] }
+  ai.partials = []
+  ai.object = null
+  ai.throws = false
 })
 
 describe('POST /api/agent', () => {
@@ -192,5 +223,74 @@ describe('POST /api/agent', () => {
 
   it('runs on the node runtime, because it streams', async () => {
     expect((await route()).runtime).toBe('nodejs')
+  })
+})
+
+describe('POST /api/agent against the model', () => {
+  const authorReply = () => ({ exercise: JSON.parse(readFileSync('src/lib/agents/fixtures/author/valid-python.json', 'utf8')).exercise })
+
+  beforeEach(() => vi.stubEnv('AGENT_DRY_RUN', 'false'))
+
+  it('waits for the usage row to be written before it answers', async () => {
+    ai.object = { improvements: ['one that is long enough', 'two that is long enough'], quality: 81, praise: 'You kept it short and clear.' }
+    const { POST } = await route()
+    const res = await POST(post(request('reviewer')))
+    expect(res.status).toBe(200)
+    expect(db.state.executed).toContainEqual({ table: 'agent_usage', op: 'insert' })
+    expect(db.state.inserts.find(i => i.table === 'agent_usage')?.row).toMatchObject({
+      user_id: 'u1',
+      agent: 'reviewer',
+      trigger: 'attempt-passed',
+      completion_tokens: 12,
+      fallback: false,
+    })
+  })
+
+  it('never streams a code line the repair would have removed', async () => {
+    const hint = 'Look again at where the loop ends and ask what runs before it finishes.'
+    ai.partials = [{ hint: 'Look again' }, { hint, planStep: 3, codeLine: 't > limit' }]
+    ai.object = { hint, planStep: 3, codeLine: 't > limit' }
+    const { POST } = await route()
+    const res = await POST(post(request('coach'), { Accept: 'text/event-stream' }))
+    const text = await res.text()
+    expect(text).not.toContain('codeLine')
+    const frames = text.split('\n\n').filter(Boolean).map(f => JSON.parse(f.replace('data: ', '')))
+    expect(frames.at(-1).envelope).toMatchObject({ ok: true, agent: 'coach', fallback: false })
+    expect(frames.at(-1).envelope.reply.codeLine).toBeUndefined()
+    expect(db.state.executed).toContainEqual({ table: 'agent_usage', op: 'insert' })
+  })
+
+  it('stores the generated exercise and returns its new id', async () => {
+    ai.object = authorReply()
+    const { POST } = await route()
+    const res = await POST(post(request('author')))
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body.reply.exercise.id).toBe('generated_1')
+    expect(db.state.inserts.find(i => i.table === 'exercises')?.row).toMatchObject({
+      origin: 'generated',
+      author_user_id: 'u1',
+      verified: false,
+      clo_id: 'INFS1101-3',
+    })
+  })
+
+  it('refuses when the generated exercise cannot be stored', async () => {
+    ai.object = authorReply()
+    db.state.insertError = { message: 'duplicate key value violates unique constraint' }
+    const { POST } = await route()
+    const res = await POST(post(request('author')))
+    expect(res.status).toBe(502)
+    await expect(res.json()).resolves.toMatchObject({ ok: false, agent: 'author', error: 'upstream' })
+    expect(db.state.inserts.find(i => i.table === 'agent_usage')?.row).toMatchObject({ fallback: true })
+    expect(db.state.executed).toContainEqual({ table: 'agent_usage', op: 'insert' })
+  })
+
+  it('records the usage row even when it falls back after two invalid replies', async () => {
+    ai.throws = true
+    const { POST } = await route()
+    const res = await POST(post(request('planner')))
+    await expect(res.json()).resolves.toMatchObject({ ok: true, fallback: true })
+    expect(db.state.executed).toContainEqual({ table: 'agent_usage', op: 'insert' })
   })
 })

@@ -49,18 +49,24 @@ export async function POST(req: Request) {
   catch (e) { if (e instanceof BudgetExceeded) return err(mod.name, 'budget-exceeded', e.message, 413); throw e }
   const { messages, promptTokens } = built
   const usage = { promptTokens, completionTokens: 0, cacheHitTokens: 0 }
-  const record = (fallback: boolean) => void svc.from('agent_usage').insert({ user_id: user.id, agent: mod.name, trigger: body.trigger, prompt_tokens: usage.promptTokens, completion_tokens: usage.completionTokens, cache_hit_tokens: usage.cacheHitTokens, fallback })
+  // supabase builders are lazy: the row only reaches the table when the builder is awaited
+  const record = async (fallback: boolean) => {
+    try { await svc.from('agent_usage').insert({ user_id: user.id, agent: mod.name, trigger: body.trigger, prompt_tokens: usage.promptTokens, completion_tokens: usage.completionTokens, cache_hit_tokens: usage.cacheHitTokens, fallback }) }
+    catch { /* a usage row that will not write must never cost the student their reply */ }
+  }
   const finish = (reply: unknown, fallback: boolean) => ({ ok: true as const, agent: mod.name, reply, usage, fallback })
+
+  const repair = (object: unknown) => (mod.repair ? mod.repair(body, object) : object)
 
   const wantsStream = mod.streams && (req.headers.get('accept') ?? '').includes('text/event-stream')
   if (process.env.AGENT_DRY_RUN === 'true') {
     if (!mod.fallback) return err(mod.name, 'upstream', 'dry run: no fallback for this agent', 502)
     const env = finish(mod.fallback(body), true)
-    return wantsStream ? sse([{ partial: env.reply }, { envelope: env }]) : NextResponse.json(env)
+    return wantsStream ? sse([{ partial: repair(env.reply) }, { envelope: env }]) : NextResponse.json(env)
   }
 
   const finalize = (object: unknown) => {
-    const reply = mod.repair ? mod.repair(body, object) : object
+    const reply = repair(object)
     const rc = mod.routeCheck ? mod.routeCheck(body, reply) : null
     return { reply, error: rc }
   }
@@ -73,14 +79,15 @@ export async function POST(req: Request) {
       async start(controller) {
         const send = (frame: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`))
         try {
-          for await (const partial of result.partialObjectStream) send({ partial })
+          // repair first: a partial must never show the student something the final reply would strip
+          for await (const partial of result.partialObjectStream) send({ partial: repair(partial) })
           const object = await result.object
           const u = await result.usage; usage.completionTokens = u.outputTokens ?? 0
           const { reply, error } = finalize(object)
           const env = error ? finish(mod.fallback!(body), true) : finish(reply, false)
-          record(env.fallback); send({ envelope: env })
+          await record(env.fallback); send({ envelope: env })
         } catch {
-          const env = finish(mod.fallback!(body), true); record(true); send({ envelope: env })
+          const env = finish(mod.fallback!(body), true); await record(true); send({ envelope: env })
         } finally { controller.close() }
       },
     })
@@ -99,17 +106,19 @@ export async function POST(req: Request) {
     } catch (e) { lastError = (e as Error)?.message ?? 'invalid json' }
   }
   if (obj === null) {
-    if (!mod.fallback) { record(true); return err(mod.name, 'upstream', lastError, 502) }
-    const env = finish(mod.fallback(body), true); record(true); return NextResponse.json(env)
+    if (!mod.fallback) { await record(true); return err(mod.name, 'upstream', lastError, 502) }
+    const env = finish(mod.fallback(body), true); await record(true); return NextResponse.json(env)
   }
   if (mod.name === 'author') {
     // the route, not the client, writes the bank
     const e = (obj as { exercise: Record<string, unknown> }).exercise
     const parentExerciseId = (body as unknown as { parentExerciseId?: string }).parentExerciseId
-    const { data } = await svc.from('exercises').insert({ clo_id: e.cloId, language: e.language, kind: e.kind, difficulty: e.difficulty, pattern: e.pattern, title: e.title, prompt: e.prompt, starter_code: e.starterCode, tests: e.tests, reference_solution: e.referenceSolution, origin: 'generated', parent_exercise_id: parentExerciseId ?? null, author_user_id: user.id, verified: false, tags: e.tags, fixture: e.fixture ?? null }).select('id').single()
-    obj = { exercise: { ...e, id: data?.id } }
+    const { data, error } = await svc.from('exercises').insert({ clo_id: e.cloId, language: e.language, kind: e.kind, difficulty: e.difficulty, pattern: e.pattern, title: e.title, prompt: e.prompt, starter_code: e.starterCode, tests: e.tests, reference_solution: e.referenceSolution, origin: 'generated', parent_exercise_id: parentExerciseId ?? null, author_user_id: user.id, verified: false, tags: e.tags, fixture: e.fixture ?? null }).select('id').single()
+    // an exercise the client cannot verify by id is worse than none: it would run tests against a row that is not there
+    if (error || !data?.id) { await record(true); return err(mod.name, 'upstream', error?.message ?? 'the generated exercise could not be stored', 502) }
+    obj = { exercise: { ...e, id: data.id } }
   }
-  const env = finish(obj, false); record(false); return NextResponse.json(env)
+  const env = finish(obj, false); await record(false); return NextResponse.json(env)
 }
 
 function sse(frames: unknown[]) {
