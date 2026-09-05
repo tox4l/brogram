@@ -124,7 +124,7 @@ create trigger on_auth_user_created after insert on auth.users for each row exec
 -- students may never change their own status columns, even if a grant slips later
 create function public.profile_guard() returns trigger language plpgsql as $$
 begin
-  if coalesce(auth.role(), '') in ('authenticated','anon') and (
+  if current_user in ('authenticated','anon') and (
      new.account_status is distinct from old.account_status
      or new.restricted_until is distinct from old.restricted_until
      or new.invite_code is distinct from old.invite_code) then
@@ -166,10 +166,10 @@ create policy "read clos" on public.clos for select using (public.is_not_banned(
 create policy "read patterns" on public.patterns for select using (public.is_not_banned());
 create policy "read drills" on public.drills for select using (public.is_not_banned());
 -- exercises: no client policy at all; service role bypasses RLS
-create policy "own attempts" on public.attempts for select using (user_id = (select auth.uid()));
+create policy "own attempts" on public.attempts for select using (user_id = (select auth.uid()) and public.is_not_banned());
 create policy "insert attempts" on public.attempts for insert with check (user_id = (select auth.uid()) and public.can_attempt());
 create policy "own mastery" on public.mastery for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-create policy "own state" on public.learner_state for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "own state" on public.learner_state for all using (user_id = (select auth.uid()) and public.is_not_banned()) with check (user_id = (select auth.uid()) and public.is_not_banned());
 create policy "insert integrity" on public.integrity_events for insert with check (user_id = (select auth.uid()));
 create policy "own wellness" on public.wellness for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy "own buddy" on public.buddy_messages for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
