@@ -15,32 +15,24 @@ const db = vi.hoisted(() => {
       { id: 'bank_2', pattern: 'count', title: 'Two', prompt: 'p', starter_code: 's', tests: [], reference_solution: 'r' },
     ],
     calls: [] as string[],
-    inserts: [] as { table: string; row: Record<string, unknown> }[],
-    /** Only rows whose builder was actually awaited land here; a `void`-ed builder never runs. */
-    executed: [] as { table: string; op: string }[],
-    insertError: null as { message: string } | null,
   }
 
+  // a dry run never reaches the model or the bank writes; the writing paths live in route.live.test.ts
   const client = {
     from(table: string) {
-      const ctx = { op: '', head: false }
+      const ctx = { single: false, head: false }
       const chain: unknown = new Proxy(
         {},
         {
           get(_target, prop: string) {
             if (prop === 'then') {
-              state.executed.push({ table, op: ctx.op || 'select' })
               return (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
                 Promise.resolve(result()).then(resolve, reject)
             }
             return (...args: unknown[]) => {
               state.calls.push(`${table}.${prop}`)
-              if (prop === 'insert') {
-                ctx.op = 'insert'
-                state.inserts.push({ table, row: args[0] as Record<string, unknown> })
-              }
               if (prop === 'select' && (args[1] as { head?: boolean } | undefined)?.head) ctx.head = true
-              if (prop === 'single') ctx.op = ctx.op === 'insert' ? 'insert-single' : 'single'
+              if (prop === 'single') ctx.single = true
               return chain
             }
           },
@@ -49,8 +41,7 @@ const db = vi.hoisted(() => {
       const result = () => {
         if (table === 'attempts') return { data: [{ hint_count: state.hintCount }] }
         if (table === 'agent_usage') return ctx.head ? { count: state.usageCount } : { data: null, error: null }
-        if (ctx.op === 'insert-single') return state.insertError ? { data: null, error: state.insertError } : { data: { id: 'generated_1' }, error: null }
-        if (ctx.op === 'single') return { data: state.exercise }
+        if (ctx.single) return { data: state.exercise }
         return { data: state.exerciseRows }
       }
       return chain
@@ -85,10 +76,7 @@ beforeEach(() => {
   db.state.hintCount = 0
   db.state.usageCount = 0
   db.state.calls = []
-  db.state.inserts = []
-  db.state.executed = []
-  db.state.insertError = null
-  db.state.exercise = { reference_solution: 'the real reference', tests: [{ id: 't1', input: '[]', expected: '0', hidden: true }] }
+  db.state.exercise ={ reference_solution: 'the real reference', tests: [{ id: 't1', input: '[]', expected: '0', hidden: true }] }
 })
 
 describe('POST /api/agent', () => {

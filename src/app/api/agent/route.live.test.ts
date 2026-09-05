@@ -15,6 +15,7 @@ const db = vi.hoisted(() => {
     ],
     inserts: [] as { table: string; row: Record<string, unknown> }[],
     executed: [] as { table: string; op: string }[],
+    insertError: null as { message: string } | null,
   }
   const client = {
     from(table: string) {
@@ -43,7 +44,7 @@ const db = vi.hoisted(() => {
       const result = () => {
         if (table === 'attempts') return { data: [{ hint_count: 0 }] }
         if (table === 'agent_usage') return ctx.head ? { count: 0 } : { data: null, error: null }
-        if (ctx.op === 'insert-single') return { data: { id: 'generated_1' }, error: null }
+        if (ctx.op === 'insert-single') return state.insertError ? { data: null, error: state.insertError } : { data: { id: 'generated_1' }, error: null }
         if (ctx.op === 'single') return { data: { reference_solution: 'the real reference', tests: [] } }
         return { data: state.exerciseRows }
       }
@@ -125,6 +126,7 @@ beforeEach(() => {
   ai.partials = []
   db.state.inserts = []
   db.state.executed = []
+  db.state.insertError = null
 })
 
 describe('POST /api/agent with a mocked provider', () => {
@@ -192,6 +194,32 @@ describe('POST /api/agent with a mocked provider', () => {
       author_user_id: 'u1',
       verified: false,
     })
+  })
+
+  it('refuses when the generated exercise cannot be stored', async () => {
+    ai.replies = [{ object: authorReply() }]
+    db.state.insertError = { message: 'duplicate key value violates unique constraint' }
+    const { POST } = await route()
+    const res = await POST(post(request('author')))
+    expect(res.status).toBe(502)
+    await expect(res.json()).resolves.toMatchObject({ ok: false, agent: 'author', error: 'upstream' })
+    expect(db.state.inserts.find(i => i.table === 'agent_usage')?.row).toMatchObject({ fallback: true })
+    expect(db.state.executed.filter(e => e.table === 'agent_usage' && e.op === 'insert')).toHaveLength(1)
+  })
+
+  it('never puts a code line on the wire that the repair would have removed', async () => {
+    const hint = 'Look again at where the loop ends and ask what runs before it finishes.'
+    ai.partials = [{ hint: 'Look again', codeLine: 't > limit' }, { hint, planStep: 3, codeLine: 't > limit' }]
+    ai.replies = [{ object: { hint, planStep: 3, codeLine: 't > limit' } }]
+    const { POST } = await route()
+    const res = await POST(post({ ...request('coach'), hintsSoFar: [] }, { Accept: 'text/event-stream' }))
+    const text = await res.text()
+
+    expect(text).not.toContain('codeLine')
+    expect(text).not.toContain('t > limit')
+    const frames = text.split('\n\n').filter(Boolean).map(f => JSON.parse(f.replace('data: ', '')))
+    expect(frames.at(-1).envelope).toMatchObject({ ok: true, agent: 'coach', fallback: false })
+    expect(frames.at(-1).envelope.reply.codeLine).toBeUndefined()
   })
 
   it('streams every partial and then exactly one envelope', async () => {

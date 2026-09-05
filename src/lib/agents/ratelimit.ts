@@ -47,36 +47,42 @@ export async function checkRate(userId: string, agent: RateName, trigger?: Agent
   bucket.count += 1
   const release = () => { bucket.count -= 1 }
 
-  const svc = serviceClient()
   const hintKey = `${userId}:${exerciseId}`
-  if (agent === 'coach' && exerciseId) {
-    const { data } = await svc
-      .from('attempts')
-      .select('hint_count')
-      .eq('user_id', userId)
-      .eq('exercise_id', exerciseId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    // the stored count is what the last attempt recorded; the memory counter is the hints given since
-    const spent = (data?.[0]?.hint_count ?? 0) + (hintsGiven.get(hintKey) ?? 0)
-    if (spent >= LOCKDOWN.maxHintsPerExercise) {
-      release()
-      return { ok: false, message: `you have used all ${LOCKDOWN.maxHintsPerExercise} hints for this exercise` }
+  try {
+    const svc = serviceClient()
+    if (agent === 'coach' && exerciseId) {
+      const { data } = await svc
+        .from('attempts')
+        .select('hint_count')
+        .eq('user_id', userId)
+        .eq('exercise_id', exerciseId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      // the stored count is what the last attempt recorded; the memory counter is the hints given since
+      const spent = (data?.[0]?.hint_count ?? 0) + (hintsGiven.get(hintKey) ?? 0)
+      if (spent >= LOCKDOWN.maxHintsPerExercise) {
+        release()
+        return { ok: false, message: `you have used all ${LOCKDOWN.maxHintsPerExercise} hints for this exercise` }
+      }
     }
-  }
 
-  const hourlyMax = Math.ceil((limit.max * HOUR) / limit.windowMs)
-  const { count } = await svc
-    .from('agent_usage')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('agent', agent)
-    .gt('created_at', new Date(now - HOUR).toISOString())
-  if ((count ?? 0) >= hourlyMax) {
+    const hourlyMax = Math.ceil((limit.max * HOUR) / limit.windowMs)
+    const { count } = await svc
+      .from('agent_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('agent', agent)
+      .gt('created_at', new Date(now - HOUR).toISOString())
+    if ((count ?? 0) >= hourlyMax) {
+      release()
+      return { ok: false, message: `${agent} is limited to ${hourlyMax} per hour` }
+    }
+
+    if (agent === 'coach' && exerciseId) hintsGiven.set(hintKey, (hintsGiven.get(hintKey) ?? 0) + 1)
+    return { ok: true, message: '' }
+  } catch (e) {
+    // a database that is down must not also cost the student their allowance for the window
     release()
-    return { ok: false, message: `${agent} is limited to ${hourlyMax} per hour` }
+    throw e
   }
-
-  if (agent === 'coach' && exerciseId) hintsGiven.set(hintKey, (hintsGiven.get(hintKey) ?? 0) + 1)
-  return { ok: true, message: '' }
 }

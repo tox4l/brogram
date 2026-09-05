@@ -2,9 +2,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const stub = vi.hoisted(() => {
-  const state = { hintCount: 0, usageCount: 0 }
+  const state = { hintCount: 0, usageCount: 0, fail: false }
   const client = {
     from(table: string) {
+      if (state.fail) throw new Error('the database is unreachable')
       const result = table === 'attempts' ? { data: [{ hint_count: state.hintCount }] } : { count: state.usageCount }
       const chain: unknown = new Proxy(
         {},
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.resetModules()
   stub.state.hintCount = 0
   stub.state.usageCount = 0
+  stub.state.fail = false
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-09-05T12:00:00.000Z'))
 })
@@ -109,6 +111,15 @@ describe('checkRate', () => {
     const { checkRate } = await load()
     const decisions = await Promise.all(Array.from({ length: 25 }, () => checkRate('u1', 'author', 'bank-miss')))
     expect(decisions.filter(d => d.ok)).toHaveLength(10)
+  })
+
+  it('gives the reservation back when the backstop throws', async () => {
+    const { checkRate } = await load()
+    stub.state.fail = true
+    await expect(checkRate('u1', 'author', 'bank-miss')).rejects.toThrow('the database is unreachable')
+    stub.state.fail = false
+    for (let i = 0; i < 10; i++) expect((await checkRate('u1', 'author', 'bank-miss')).ok, `call ${i + 1}`).toBe(true)
+    expect((await checkRate('u1', 'author', 'bank-miss')).ok).toBe(false)
   })
 
   it('gives the reservation back when the backstop refuses', async () => {
