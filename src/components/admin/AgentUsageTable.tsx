@@ -16,7 +16,7 @@ function compactNumber(value: number): string {
 function formatDayLabel(day: string): string {
   const parsed = new Date(day)
   if (Number.isNaN(parsed.getTime())) return day
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(parsed)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(parsed)
 }
 
 interface DayTotal {

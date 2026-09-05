@@ -50,4 +50,5 @@ export interface CloRef {
   id: CloId
   ordinal: number
   course: string
+  patterns: PatternId[]
 }

@@ -50,7 +50,7 @@ function formatEventCounts(counts: Partial<Record<IntegrityEventType, number>>):
 function formatDate(iso: string): string {
   const parsed = new Date(iso)
   if (Number.isNaN(parsed.getTime())) return iso
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(parsed)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(parsed)
 }
 
 export function UsersTable({ rows, onLift, onRestrict, onBan }: UsersTableProps) {

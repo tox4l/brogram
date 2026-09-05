@@ -72,6 +72,20 @@ describe('UsersTable', () => {
     expect(names).toEqual(['High', 'Mid', 'Low'])
   })
 
+  it('formats last-seen in UTC so server and Doha (UTC+3) renders agree', () => {
+    // 23:30 UTC on Jan 1 must still read as Jan 1, never Jan 2, regardless of the
+    // runtime's local timezone.
+    render(
+      <UsersTable
+        rows={[makeUser({ last_seen_at: '2026-01-01T23:30:00Z' })]}
+        onLift={vi.fn()}
+        onRestrict={vi.fn()}
+        onBan={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Jan 1')).toBeTruthy()
+  })
+
   it('asks for confirmation before calling onBan', async () => {
     const onBan = vi.fn()
     render(<UsersTable rows={[makeUser({ id: 'u9', account_status: 'active' })]} onLift={vi.fn()} onRestrict={vi.fn()} onBan={onBan} />)

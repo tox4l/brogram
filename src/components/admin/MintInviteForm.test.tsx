@@ -16,6 +16,17 @@ describe('MintInviteForm', () => {
     expect(screen.getByText(/\.edu\.qa/)).toBeTruthy()
   })
 
+  it('rejects a bare domain string with no local part before the @', () => {
+    const onMint = vi.fn()
+    render(<MintInviteForm onMint={onMint} />)
+
+    fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: '.edu.qa' } })
+    fireEvent.click(screen.getByRole('button', { name: /mint/i }))
+
+    expect(onMint).not.toHaveBeenCalled()
+    expect(screen.getByText(/\.edu\.qa/)).toBeTruthy()
+  })
+
   it('accepts a .edu.qa email, trimmed and lowercased', () => {
     const onMint = vi.fn()
     render(<MintInviteForm onMint={onMint} />)

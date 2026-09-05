@@ -19,7 +19,7 @@ export function MintInviteForm({ onMint, busy = false }: MintInviteFormProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const normalized = value.trim().toLowerCase()
-    if (!normalized.endsWith(INVITE_DOMAIN_SUFFIX)) {
+    if (!normalized.includes('@') || !normalized.endsWith(INVITE_DOMAIN_SUFFIX)) {
       setError(INVALID_DOMAIN_MESSAGE)
       return
     }
@@ -28,7 +28,7 @@ export function MintInviteForm({ onMint, busy = false }: MintInviteFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-start gap-2">
+    <form onSubmit={handleSubmit} noValidate className="flex items-start gap-2">
       <div className="flex flex-col gap-1">
         <Input
           type="email"

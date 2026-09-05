@@ -6,8 +6,8 @@ import type { BankStatRow, CloRef } from './types'
 afterEach(cleanup)
 
 const clos: CloRef[] = [
-  { id: 'INFS1101-1', ordinal: 1, course: 'INFS1101' },
-  { id: 'INFS1101-2', ordinal: 2, course: 'INFS1101' },
+  { id: 'INFS1101-1', ordinal: 1, course: 'INFS1101', patterns: ['accumulate', 'filter', 'guard'] },
+  { id: 'INFS1101-2', ordinal: 2, course: 'INFS1101', patterns: ['accumulate'] },
 ]
 
 // INFS1101-1 total: seed 3+2+0=5, verified 1+2+0=3, generated 4+2+0=6 -> unverified 3 -> "5 / 3 / 3"
@@ -56,5 +56,19 @@ describe('BankStatsTable', () => {
   it('groups rows by course', () => {
     render(<BankStatsTable rows={rows} clos={clos} />)
     expect(screen.getByText('INFS1101')).toBeTruthy()
+  })
+
+  it('flags a relevant pattern that has no row at all as a coverage gap', () => {
+    const soloClos: CloRef[] = [{ id: 'C-1', ordinal: 1, course: 'COURSE', patterns: ['a', 'b'] }]
+    const soloRows: BankStatRow[] = [{ clo_id: 'C-1', pattern: 'a', seed_count: 4, generated_count: 1, verified_count: 1 }]
+    render(<BankStatsTable rows={soloRows} clos={soloClos} />)
+
+    const missingCell = cell('C-1', 'b')
+    expect(missingCell?.getAttribute('data-flagged')).toBe('true')
+    expect(missingCell?.textContent?.trim()).toBe('0 / 0 / 0')
+
+    const presentCell = cell('C-1', 'a')
+    expect(presentCell?.getAttribute('data-flagged')).toBeFalsy()
+    expect(presentCell?.textContent?.trim()).toBe('4 / 1 / 0')
   })
 })

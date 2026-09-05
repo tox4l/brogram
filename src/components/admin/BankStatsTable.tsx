@@ -22,7 +22,14 @@ export function BankStatsTable({ rows, clos }: BankStatsTableProps) {
     )
   }
 
-  const patterns = Array.from(new Set(rows.map((row) => row.pattern))).sort()
+  // Columns are every pattern any CLO declares as relevant, plus any extra pattern
+  // that only shows up in the rows (defensive: never hide data we were given).
+  const columnPatterns = new Set<string>()
+  for (const clo of clos) {
+    for (const pattern of clo.patterns) columnPatterns.add(pattern)
+  }
+  for (const row of rows) columnPatterns.add(row.pattern)
+  const patterns = Array.from(columnPatterns).sort()
 
   const byClo = new Map<string, Map<string, BankStatRow>>()
   for (const row of rows) {
@@ -73,13 +80,30 @@ export function BankStatsTable({ rows, clos }: BankStatsTableProps) {
                       <td className="px-3 py-2 font-medium">{clo.id}</td>
                       {patterns.map((pattern) => {
                         const cell = patternMap?.get(pattern)
+                        const isRelevant = clo.patterns.includes(pattern)
+
                         if (!cell) {
+                          if (!isRelevant) {
+                            // Pattern belongs to a different CLO; not applicable here.
+                            return (
+                              <td key={pattern} data-pattern={pattern} className="px-3 py-2 text-muted-foreground">
+                                —
+                              </td>
+                            )
+                          }
+                          // Relevant pattern with no exercises at all: a real coverage gap.
                           return (
-                            <td key={pattern} data-pattern={pattern} className="px-3 py-2 text-muted-foreground">
-                              —
+                            <td
+                              key={pattern}
+                              data-pattern={pattern}
+                              data-flagged="true"
+                              className={cn('px-3 py-2', 'bg-destructive/10 text-destructive')}
+                            >
+                              {cellLabel(0, 0, 0)}
                             </td>
                           )
                         }
+
                         const flagged = cell.seed_count === 0
                         return (
                           <td

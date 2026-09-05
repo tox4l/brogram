@@ -29,6 +29,17 @@ describe('InvitesTable', () => {
     expect(screen.getByText(/Redeemed/)).toBeTruthy()
   })
 
+  it('formats the created date in UTC so server and Doha (UTC+3) renders agree', () => {
+    // 23:30 UTC on Jan 1 must still read as Jan 1, never Jan 2, regardless of the
+    // runtime's local timezone (this is what would flip to Jan 2 in Doha if the
+    // formatter used the local zone instead of pinning UTC).
+    const lateUtcRow: InviteRow[] = [
+      { code: 'LATE-UTC', email: 'z@x.edu.qa', created_at: '2026-01-01T23:30:00Z', redeemed_at: null, redeemed_by: null },
+    ]
+    render(<InvitesTable rows={lateUtcRow} />)
+    expect(screen.getByText('Jan 1, 2026')).toBeTruthy()
+  })
+
   it('calls onRevoke with the code of an open invite only', () => {
     const onRevoke = vi.fn()
     render(<InvitesTable rows={rows} onRevoke={onRevoke} />)
