@@ -17,7 +17,7 @@ Rules:
 Reply format (json):
 { "onTopic": true, "reply": "You have failed 'off-by-one in range' four times this week, all on loops. ...", "suggestion": { "kind": "derot", "ref": "trace" } }`
 
-const REFUSAL = 'I only talk about coding and how you get better at it. Ask me anything in that lane.'
+export const REFUSAL = 'I only talk about coding and how you get better at it. Ask me anything in that lane.'
 
 export const buddyReply = z.object({
   onTopic: z.boolean(),
