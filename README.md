@@ -1,40 +1,55 @@
 # BroGram
 
-A coding tutor by Velocity. Built by Velocity.
+BroGram is a coding tutor. A student signs in, picks a course, and works
+through exercises that are graded where they are written: in the browser. A
+small set of DeepSeek-backed agents adapt the plan, the hints, and the pacing
+to how that student learns, while a de-rot module keeps a second kind of
+practice — reading and reasoning about code rather than writing it — on the
+same streak. Progress, mastery per learning outcome, and a downloadable
+report all come from the same durable state, so nothing shown to a student is
+computed twice in two different ways.
 
-BroGram uses Next.js App Router, TypeScript, and Tailwind CSS. The browser will
-run exercises, grade submissions, and render progress reports. The A0 scaffold
-currently displays the BroGram placeholder and shared footer.
+The app is a client-heavy Next.js 16 project deployed on Vercel. Supabase
+provides authentication and a Postgres database locked down with row-level
+security, so a browser can read and write its own learner state directly
+without a server in the middle for the common path. Seven learner-state
+agents — Profiler, Planner, Author, Diagnoser, Coach, Reviewer, and Buddy —
+sit behind a single route and share one frozen request and reply contract.
+Code, HTML/CSS/JS, and SQL/Mongo exercises run and grade in the browser's own
+runtimes (Pyodide, a sandboxed iframe, sql.js, and mingo); Java is the one
+language that leaves the browser, graded through Judge0. The shapes every
+part of the app agrees on — learner state, exercises, agent messages, runtime
+requests — are frozen in `src/lib/contracts.ts` and
+`src/lib/agents/requests.ts`, and no other file redefines them.
 
-The planned backend uses Supabase for authentication and persistence, with
-Next.js route handlers for DeepSeek agents and the Java judge. The design,
-contracts, and task ownership are documented in `docs/`; curriculum is in `seed/`.
+## Running locally
 
-## Local development
+Requires Node.js 22 or later and npm.
 
-Use Node.js 22 or later and npm. In Windows PowerShell:
-
-```powershell
-npm.cmd install
-npm.cmd run dev
+```bash
+npm install
+cp .env.example .env.local   # fill in Supabase, DeepSeek, and Judge0 credentials
+supabase db push             # apply migrations to your Supabase project
+node scripts/seed-load.mjs   # load courses, CLOs, patterns, exercises, and drills
+npm run dev
 ```
 
-Installation copies the sql.js WASM binary into `public/`. The scaffold page
-needs no credentials. `.env.example` documents the variables for later tasks;
-never commit secrets.
+Run the test suites:
 
-```powershell
-npm.cmd run build
-npm.cmd run lint
-node seed/validate.mjs
+```bash
+npm test                     # vitest, unit and component tests
+npx playwright test          # end-to-end flows; see e2e/README.md for setup
 ```
 
-`npm.cmd test` and `npm.cmd run test:e2e` run the suites added by the Claude
-lane. `npm.cmd run seed:load` is wired for the seed loader delivered in A1.
+## Repository layout
 
-## Build status
+- `docs/` — design notes, frozen contracts reference, and the build log
+- `seed/` — course, CLO, pattern, exercise, and drill content plus its loader/validator
+- `supabase/` — database migrations (schema, RLS policies, functions)
+- `src/` — the Next.js app: routes under `src/app/`, agents under
+  `src/lib/agents/`, browser runtimes under `src/lib/runtimes/`, and shared
+  contracts under `src/lib/contracts.ts`
 
-A0 completion requires a clean build and a local scaffold commit on `astra/A0`.
-Dependency installation and verification results are recorded in
-`docs/build-log.md`. GitHub publishing and Vercel deployment are manual follow-up
-steps for Musa under the current A0 ruling.
+## Built by Velocity
+
+Licensed under the MIT License. See `LICENSE`.
