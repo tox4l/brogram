@@ -38,7 +38,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T0.6 Themes: four palettes, tokens, provider, no flash (31e2e30, ae72325)
 - [x] T0.7 Shell recomposition (Group C) (9e36834, 5789e7d)
 - [ ] T1.1 Lesson generation workflow, verifier, and the first batch
-- [ ] T1.2 Lesson grading and progress (pure)
+- [x] T1.2 Lesson grading and progress (pure) (96663ee, f15b63e)
 - [ ] T1.3 The walkthrough screen (Group B)
 - [ ] T1.4 Course home and the path map
 - [ ] T1.5 Onboarding once: six local questions
