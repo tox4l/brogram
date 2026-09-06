@@ -18,7 +18,7 @@ interface Program {
   answer?(stdin: string): { stdout?: string; stderr?: string; status?: string }
 }
 
-interface Stub { host: CheerpJHost; compiles: number; runs: number; files: Map<string, string>; classDirs: string[] }
+interface Stub { host: CheerpJHost; compiles: number; runs: number; files: Map<string, string>; classDirs: string[]; bootCalls: string[][] }
 
 const sleep = (ms?: number) => (ms ? new Promise<void>(resolve => setTimeout(resolve, ms)) : Promise.resolve())
 
@@ -28,12 +28,12 @@ const sleep = (ms?: number) => (ms ? new Promise<void>(resolve => setTimeout(res
  */
 function createStub(program: Program): Stub {
   const files = new Map<string, string>()
-  const stub: Stub = { compiles: 0, runs: 0, files, classDirs: [], host: undefined as unknown as CheerpJHost }
+  const stub: Stub = { compiles: 0, runs: 0, files, classDirs: [], bootCalls: [], host: undefined as unknown as CheerpJHost }
   stub.host = {
     addStringFile: (path, contents) => { files.set(path, contents) },
     async runMain(className, _classPath, args) {
       // The boot class is named per session and makes the session directory.
-      if (className.startsWith('Boot')) { files.set(args[1], args[2]); return 0 }
+      if (className.startsWith('Boot')) { stub.bootCalls.push(args); files.set(args[1], args[2]); return 0 }
       if (className !== 'Runner') return 0
       const [mode] = args
       if (mode === 'ready') { files.set(args[1], args[2]); return 0 }
@@ -146,6 +146,18 @@ describe('java source assembly', () => {
     }
   })
 
+  it('leads every session id with a fixed-width creation timestamp a later id sorts after', async () => {
+    const earlier = javaSessionPaths()
+    await new Promise(resolve => setTimeout(resolve, 5))
+    const later = javaSessionPaths()
+    // The boot class's stale-directory sweep compares this prefix as a plain
+    // string; both ids must be the same width and the later one must compare
+    // greater, with no timestamp parsing needed on the Java side.
+    expect(earlier.id.slice(0, 9)).toHaveLength(9)
+    expect(later.id.slice(0, 9)).toHaveLength(9)
+    expect(later.id.slice(0, 9) >= earlier.id.slice(0, 9)).toBe(true)
+  })
+
   it('needs the compiler unless every test is structural', () => {
     expect(needsCompiler([structuralTest])).toBe(false)
     expect(needsCompiler([])).toBe(true)
@@ -166,6 +178,23 @@ describe('java engine', () => {
       loadStructureChecker: async () => checker,
     })
     await expect(broken.warmup([], () => {})).rejects.toThrow(/tools\.jar/)
+  })
+
+  it('gives the boot class the shared /files root and a sweep cutoff for stale sessions', async () => {
+    const stub = createStub({})
+    const engine = createJavaEngine({ loadCheerpJ: async () => stub.host, loadStructureChecker: async () => checker })
+    await engine.warmup([], () => {})
+    expect(stub.bootCalls).toHaveLength(1)
+    const [session, ready, token, bootClassFile, filesRoot, cutoff] = stub.bootCalls[0]
+    expect(session).toBe(engine.paths.session)
+    expect(ready).toBe(engine.paths.ready)
+    expect(token).toBeTruthy()
+    expect(bootClassFile).toBe(engine.paths.bootClassFile)
+    expect(filesRoot).toBe('/files')
+    // A fixed-width, string-comparable cutoff in the past: strictly less than
+    // this engine's own (later) session id, so the boot never sweeps itself.
+    expect(cutoff).toHaveLength(9)
+    expect(cutoff < engine.paths.id.slice(0, 9)).toBe(true)
   })
 
   it('compiles once for a whole submission and grades trimmed stdout', async () => {

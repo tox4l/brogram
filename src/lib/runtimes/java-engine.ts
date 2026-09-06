@@ -49,10 +49,18 @@ export const JAVA_PROGRESS = {
   ready: 'Compiler ready',
 } as const
 
-/** A Java-identifier-safe random id; one per engine, so one per Worker. */
+// Base36, zero-padded to a fixed width so two ids' timestamps compare
+// correctly as plain strings (equal length, and base36's digit alphabet
+// '0'-'9a'-'z' already sorts in numeric order). 9 digits covers dates past
+// the year 5000; this is what lets a fresh worker's boot sweep tell a stale
+// session directory from a live one without keeping a separate index.
+const STAMP_WIDTH = 9
+
+/** A Java-identifier-safe id, its own creation time (base36) followed by randomness; one per engine, so one per Worker. */
 export function createSessionId(): string {
-  const source = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
-  return source.replace(/[^a-zA-Z0-9]/g, '')
+  const stamp = Date.now().toString(36).padStart(STAMP_WIDTH, '0').slice(-STAMP_WIDTH)
+  const random = globalThis.crypto?.randomUUID?.() ?? `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+  return `${stamp}${random}`.replace(/[^a-zA-Z0-9]/g, '')
 }
 
 export interface JavaSessionPaths {
@@ -97,7 +105,14 @@ export function javaSessionPaths(id = createSessionId()): JavaSessionPaths {
   }
 }
 
-/** Makes the session directory, proves it can run compiled code, then removes itself. */
+// A page that keeps one Java exercise open for less than this never has its
+// own session directory swept out from under it by another tab's fresh
+// worker; a session older than this is treated as abandoned. Generous on
+// purpose - the risk this trades away is a rare, self-healing one (see
+// sweep's caller), not a correctness guarantee.
+const SESSION_SWEEP_AGE_MS = 60 * 60 * 1000
+
+/** Makes the session directory, proves it can run compiled code, sweeps stale ones, then removes itself. */
 function bootSource(className: string): string {
   return `import java.io.*;
 
@@ -107,6 +122,36 @@ public class ${className} {
         Writer w = new OutputStreamWriter(new FileOutputStream(args[1]), "UTF-8");
         try { w.write(args[2]); } finally { w.close(); }
         new File(args[3]).delete();
+        // Best effort only: a page that has been open for a semester leaves
+        // behind one directory per warmup, otherwise forever. Never allowed
+        // to fail the boot that a student is waiting on.
+        try { sweep(args[4], args[5]); } catch (Throwable ignored) { }
+    }
+
+    // Every session directory and every orphaned Boot*.class file starts
+    // with the same fixed-width, base36 creation timestamp this class's own
+    // name and directory just used, so plain string comparison against the
+    // cutoff tells old from new without reading anything.
+    private static void sweep(String root, String cutoff) {
+        File[] entries = new File(root).listFiles();
+        if (entries == null) return;
+        for (File entry : entries) {
+            String name = entry.getName();
+            String stamp = null;
+            if (entry.isDirectory() && name.length() >= 9) {
+                stamp = name.substring(0, 9);
+            } else if (name.startsWith("Boot") && name.endsWith(".class") && name.length() >= 13) {
+                stamp = name.substring(4, 13);
+            }
+            if (stamp == null || stamp.compareTo(cutoff) >= 0) continue;
+            wipe(entry);
+        }
+    }
+
+    private static void wipe(File target) {
+        File[] kids = target.listFiles();
+        if (kids != null) for (int i = 0; i < kids.length; i++) wipe(kids[i]);
+        target.delete();
     }
 }
 `
@@ -134,6 +179,8 @@ public class Runner {
     // Only Runner may change the security manager, and only from install().
     // Student code lives in a child class loader that cannot see this class.
     private static boolean managerChangeAllowed = false;
+    // Set only around invoking the student's main - see NoExit.checkPermission.
+    private static ClassLoader studentLoader = null;
 
     static class ExitTrap extends SecurityException {
         final int code;
@@ -141,9 +188,48 @@ public class Runner {
     }
     static class NoExit extends SecurityManager {
         public void checkPermission(Permission p) {
-            if (!managerChangeAllowed && p instanceof RuntimePermission && "setSecurityManager".equals(p.getName())) {
-                throw new SecurityException("Replacing the security manager is not allowed in an exercise.");
+            if (p instanceof RuntimePermission) {
+                String name = p.getName();
+                if (!managerChangeAllowed && "setSecurityManager".equals(name)) {
+                    throw new SecurityException("Replacing the security manager is not allowed in an exercise.");
+                }
+                // createSecurityManager is only checked when a manager is already
+                // installed, which install() never triggers (System.getSecurityManager()
+                // is null every time Runner builds its own) - so denying it always
+                // costs nothing legitimate and closes one more way to interfere
+                // with this guard.
+                if ("createSecurityManager".equals(name)) {
+                    throw new SecurityException("Creating a security manager is not allowed in an exercise.");
+                }
+                if (name != null && (name.startsWith("loadLibrary.") || name.startsWith("exitVM"))) {
+                    throw new SecurityException("This operation is not allowed in an exercise.");
+                }
+            } else if (p instanceof ReflectPermission && "suppressAccessChecks".equals(p.getName()) && calledByStudent()) {
+                // Without this, reflection can null out System.security (a
+                // private, non-final field in JDK 8: Field.setAccessible(true)
+                // then Field.set(null, null)) and walk straight past checkExit.
+                // Scoped to the student's own reflective calls only - the JDK
+                // itself uses this same permission constantly for its own
+                // purposes (java.util.ResourceBundle loading locale data behind
+                // String.format, for one), and those must keep working.
+                throw new SecurityException("Reflection cannot bypass access checks in an exercise.");
             }
+        }
+
+        // getClassContext()[0] is this method's own class (NoExit);
+        // [1] is java.lang.reflect.AccessibleObject.setAccessible, the only
+        // caller of this specific permission check; [2] is whoever actually
+        // called .setAccessible(true). JDK-internal reflection (ResourceBundle,
+        // serialization, ...) is many more frames of java.*/sun.* code away
+        // from the student's own classes, so a narrow window around index 2
+        // catches a direct student call without ever reaching that deep.
+        private boolean calledByStudent() {
+            if (studentLoader == null) return false;
+            Class<?>[] stack = getClassContext();
+            for (int i = 2; i < stack.length && i <= 4; i++) {
+                if (stack[i].getClassLoader() == studentLoader) return true;
+            }
+            return false;
         }
         public void checkPermission(Permission p, Object context) { checkPermission(p); }
         public void checkExit(int status) { throw new ExitTrap(status); }
@@ -228,6 +314,7 @@ public class Runner {
             ClassLoader parent = Runner.class.getClassLoader().getParent();
             URLClassLoader loader = new URLClassLoader(new URL[] { new File(classDir).toURI().toURL() }, parent);
             Class<?> entry = Class.forName("Main", true, loader);
+            studentLoader = loader;
             entry.getMethod("main", String[].class).invoke(null, (Object) new String[0]);
         } catch (Throwable thrown) {
             Throwable cause = thrown;
@@ -246,6 +333,7 @@ public class Runner {
             System.setErr(err0);
             if (stdin != null) { try { stdin.close(); } catch (IOException ignored) { } }
             if (guarded) install(manager);
+            studentLoader = null;
         }
         // A failure here must not swallow the status file: its absence is read
         // as "this JVM died", which costs the student their warm worker.
@@ -393,7 +481,11 @@ export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine & { 
       const bootToken = token()
       host.addStringFile(paths.bootSource, bootSource(paths.bootClass))
       await host.runMain('com.sun.tools.javac.Main', paths.classPath, [paths.bootSource, '-d', FILES_ROOT])
-      await host.runMain(paths.bootClass, `${TOOLS_JAR}:${FILES_ROOT}`, [paths.session, paths.ready, bootToken, paths.bootClassFile])
+      // A session directory older than the sweep window belongs to a page
+      // load that is gone; the boot class removes it (and any orphaned
+      // Boot*.class) while it already has FILES_ROOT open for its own setup.
+      const sweepCutoff = (Date.now() - SESSION_SWEEP_AGE_MS).toString(36).padStart(STAMP_WIDTH, '0').slice(-STAMP_WIDTH)
+      await host.runMain(paths.bootClass, `${TOOLS_JAR}:${FILES_ROOT}`, [paths.session, paths.ready, bootToken, paths.bootClassFile, FILES_ROOT, sweepCutoff])
       if ((await host.readTextFile(paths.ready))?.trim() !== bootToken) {
         throw new Error('The Java compiler could not start. Check that /java/tools.jar is available on this origin.')
       }
