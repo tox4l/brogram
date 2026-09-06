@@ -1,9 +1,19 @@
 // Exercises scripts/verify-lesson.mjs's success and failure paths end to end,
-// via a real subprocess (the script is a CLI, not a library: it runs main()
+// via real subprocesses (the script is a CLI, not a library: it runs main()
 // at import time against process.argv, so importing it directly here would
-// steal vitest's own argv and process.exit). Fixtures are inline JS objects,
-// materialized to a temp file per test -- nothing is written under seed/.
-import { describe, it, expect, afterEach } from 'vitest'
+// steal vitest's own argv and process.exit).
+//
+// Runtime-executing fixtures (anything the verifier hands to pyodide) are
+// batched into ONE subprocess call each and shared across many assertions
+// via beforeAll, instead of one spawn per assertion. pyodide's cold start is
+// the expensive part of each spawn; under the full suite's parallel load
+// (`npx vitest run` across 1250+ tests, or a concurrent `npm run build`
+// contending for CPU) a dozen separate cold starts is what previously timed
+// out three of these tests, even though the file passed in isolation. The
+// Java-only fixture never touches pyodide at all, so it stays in its own
+// fast, separately-timed hook rather than paying for the heavy fixtures'
+// startup cost.
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -11,24 +21,34 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const scriptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'verify-lesson.mjs')
-const tmpFiles = []
+
+// Generous on purpose: pyodide's cold start alone can run several seconds,
+// and a parallel `npm run build` or a large full-suite run can stretch that
+// well past a default ~5s test timeout without the process having hung.
+const HEAVY_HOOK_TIMEOUT_MS = 150_000
+const HEAVY_SPAWN_TIMEOUT_MS = 55_000
+// The Java fixture never starts a runtime, so it stays fast even under load.
+const FAST_HOOK_TIMEOUT_MS = 20_000
+const FAST_SPAWN_TIMEOUT_MS = 15_000
+
+let tmpDir
 
 function writeFixture(name, data) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-lesson-test-'))
-  const file = path.join(dir, name)
+  const file = path.join(tmpDir, name)
   fs.writeFileSync(file, JSON.stringify(data))
-  tmpFiles.push(dir)
   return file
 }
 
-function run(...args) {
-  const result = spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8' })
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+// spawnSync's own `timeout` matters independently of vitest's hook/test
+// timeout: spawnSync blocks the calling thread synchronously, so if the
+// child genuinely hung, a timer-based test timeout could never get a chance
+// to fire until spawnSync itself returns. Passing `timeout` here makes Node
+// kill the child directly, which is what turns a hang into a clean,
+// diagnosable assertion failure instead of a wedged worker.
+function run(args, spawnTimeoutMs) {
+  const result = spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8', timeout: spawnTimeoutMs })
+  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', signal: result.signal }
 }
-
-afterEach(() => {
-  for (const dir of tmpFiles.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
-})
 
 const validLesson = {
   id: 'TEST-VALID-1',
@@ -104,72 +124,96 @@ const invalidJavaLesson = {
 }
 
 describe('verify-lesson.mjs', () => {
-  it('exits 0 and reports ok for a lesson that passes every rule', () => {
-    const file = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson] })
-    const { status, stdout } = run(file)
-    expect(status).toBe(0)
-    expect(stdout).toContain('ok: TEST-VALID-1')
+  // One subprocess covers the golden lesson (regression guard) and a
+  // synthetic all-passing lesson together, in --json mode, so every
+  // "passing" assertion below reads the same already-captured result
+  // instead of spawning again.
+  let passingRun
+  // One subprocess covers every failure kind in a single lesson.
+  let invalidRun
+  // Runs in its own hook: no pyodide involved, so it stays fast on its own.
+  let invalidJavaRun
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-lesson-test-'))
+    const validFile = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson] })
+    const invalidFile = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
+
+    passingRun = run(['seed/lessons/INFS1101.json', validFile, '--json'], HEAVY_SPAWN_TIMEOUT_MS)
+    invalidRun = run([invalidFile], HEAVY_SPAWN_TIMEOUT_MS)
+  }, HEAVY_HOOK_TIMEOUT_MS)
+
+  beforeAll(() => {
+    const invalidJavaFile = writeFixture('invalid-java.json', { course: 'TEST', lessons: [invalidJavaLesson] })
+    invalidJavaRun = run([invalidJavaFile], FAST_SPAWN_TIMEOUT_MS)
+  }, FAST_HOOK_TIMEOUT_MS)
+
+  afterAll(() => {
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('verifies the real golden lesson unchanged (regression guard)', () => {
-    const { status } = run('seed/lessons/INFS1101.json')
-    expect(status).toBe(0)
+  describe('lessons that pass every rule (one shared subprocess, --json)', () => {
+    it('exits 0', () => {
+      expect(passingRun.status).toBe(0)
+    })
+
+    it('verifies the real golden lesson unchanged (regression guard)', () => {
+      const report = JSON.parse(passingRun.stdout)
+      const golden = report.files.find((f) => f.file === 'seed/lessons/INFS1101.json')
+      expect(golden.lessons[0]).toEqual({ id: 'INFS1101-3', unverified: false, failures: [] })
+    })
+
+    it('verifies a synthetic lesson exercising every check kind', () => {
+      const report = JSON.parse(passingRun.stdout)
+      const synthetic = report.files.find((f) => f.file.endsWith('valid.json'))
+      expect(synthetic.lessons[0]).toEqual({ id: 'TEST-VALID-1', unverified: false, failures: [] })
+    })
+
+    it('totals passed:2, failed:0, unverified:0 across both files', () => {
+      const report = JSON.parse(passingRun.stdout)
+      expect(report.passed).toBe(2)
+      expect(report.failed).toBe(0)
+      expect(report.unverified).toBe(0)
+    })
   })
 
-  it('exits non-zero and names the lesson and check id for a bad snippet stdout', () => {
-    const file = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
-    const { status, stdout } = run(file)
-    expect(status).not.toBe(0)
-    expect(stdout).toContain('FAIL: TEST-INVALID-1 snippet-bad')
+  describe('a lesson that fails every rule (one shared subprocess)', () => {
+    it('exits non-zero', () => {
+      expect(invalidRun.status).not.toBe(0)
+    })
+
+    it('fails the snippet whose stdout does not match expectedStdout', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 snippet-bad')
+    })
+
+    it('fails the predict-output check whose stdout does not match expected', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 check-predict-bad')
+    })
+
+    it('fails the spot-the-bug check whose bugLines fall outside the code', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 check-bug-bad')
+      expect(invalidRun.stdout).toContain('outside the code')
+    })
+
+    it('fails the fill-blank check whose template markers do not match its blank ids', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 check-blank-bad')
+      expect(invalidRun.stdout).toContain('do not match blank ids')
+    })
+
+    it('fails the choose check whose correctIndex is out of range', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 check-choose-bad')
+    })
+
+    it('fails the micro-code check whose referenceSolution does not pass its tests', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 check-micro-bad')
+    })
   })
 
-  it('fails a predict-output check whose stdout does not match expected', () => {
-    const file = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
-    const { stdout } = run(file)
-    expect(stdout).toContain('FAIL: TEST-INVALID-1 check-predict-bad')
-  })
-
-  it('fails a spot-the-bug check whose bugLines fall outside the code', () => {
-    const file = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
-    const { stdout } = run(file)
-    expect(stdout).toContain('FAIL: TEST-INVALID-1 check-bug-bad')
-    expect(stdout).toContain('outside the code')
-  })
-
-  it('fails a fill-blank check whose template markers do not match its blank ids', () => {
-    const file = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
-    const { stdout } = run(file)
-    expect(stdout).toContain('FAIL: TEST-INVALID-1 check-blank-bad')
-    expect(stdout).toContain('do not match blank ids')
-  })
-
-  it('fails a choose check whose correctIndex is out of range', () => {
-    const file = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
-    const { stdout } = run(file)
-    expect(stdout).toContain('FAIL: TEST-INVALID-1 check-choose-bad')
-  })
-
-  it('fails a micro-code check whose referenceSolution does not pass its tests', () => {
-    const file = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
-    const { stdout } = run(file)
-    expect(stdout).toContain('FAIL: TEST-INVALID-1 check-micro-bad')
-  })
-
-  it('reports unverified for a Java lesson and still fails a Java snippet marked runnable', () => {
-    const file = writeFixture('invalid-java.json', { course: 'TEST', lessons: [invalidJavaLesson] })
-    const { status, stdout } = run(file)
-    expect(status).not.toBe(0)
-    expect(stdout).toContain('FAIL: TEST-INVALID-JAVA-1 snippet-java-bad')
-    expect(stdout).toContain('runnable: false')
-  })
-
-  it('emits parseable json with --json', () => {
-    const file = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson] })
-    const { status, stdout } = run(file, '--json')
-    expect(status).toBe(0)
-    const report = JSON.parse(stdout)
-    expect(report.passed).toBe(1)
-    expect(report.failed).toBe(0)
-    expect(report.files[0].lessons[0].id).toBe('TEST-VALID-1')
+  describe('Java lessons (fast: no runtime is ever invoked)', () => {
+    it('reports unverified and still fails a Java snippet incorrectly marked runnable', () => {
+      expect(invalidJavaRun.status).not.toBe(0)
+      expect(invalidJavaRun.stdout).toContain('FAIL: TEST-INVALID-JAVA-1 snippet-java-bad')
+      expect(invalidJavaRun.stdout).toContain('runnable: false')
+    })
   })
 })
