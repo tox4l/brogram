@@ -5,6 +5,12 @@ export interface ExecutionOutput {
   stdout: string
   stderr: string
   failureKind?: TestResult['failureKind']
+  /**
+   * The runtime instance is no longer trustworthy (its JVM died mid-test, say).
+   * The adapter replaces it with the warm standby before the next run. Never
+   * part of a TestResult: makeTestResult drops it.
+   */
+  fatal?: boolean
 }
 
 function equal(a: unknown, b: unknown): boolean {
@@ -19,8 +25,10 @@ export function compareOutput(actual: string, expected: string): boolean {
   try { return equal(JSON.parse(actual), JSON.parse(expected)) } catch { return false }
 }
 export function makeTestResult(test: TestCase, output: ExecutionOutput, durationMs: number): TestResult {
+  // `fatal` steers the adapter, not the grade, and TestResults are stored.
+  const { fatal: _fatal, ...graded } = output
   const passed = !output.failureKind && compareOutput(output.actual, test.expected)
-  return { testId: test.id, expected: test.expected, ...output, durationMs, passed, ...(passed ? {} : { failureKind: output.failureKind ?? 'wrong-answer' }) }
+  return { testId: test.id, expected: test.expected, ...graded, durationMs, passed, ...(passed ? {} : { failureKind: output.failureKind ?? 'wrong-answer' }) }
 }
 export function summarizeResults(results: TestResult[], runtime: Runtime = 'browser'): RunResult {
   const passedCount = results.filter(r => r.passed).length

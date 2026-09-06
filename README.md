@@ -54,6 +54,17 @@ npx playwright test          # end-to-end flows; see e2e/README.md for setup
   `src/lib/agents/`, browser runtimes under `src/lib/runtimes/`, and shared
   contracts under `src/lib/contracts.ts`
 
+## Credits
+
+Java runs in the browser on [CheerpJ](https://cheerpj.com) by
+[Leaning Technologies](https://leaningtech.com), loaded from the vendor's CDN
+under its free Community License, and compiles with OpenJDK 8's `javac`
+(GPLv2 with the Classpath Exception, fetched at install time). Anyone forking
+this project and redeploying it is distributing their own application and takes
+their own position on the CheerpJ licence — the Community License is granted to
+a project, not inherited with the source. See `public/java/README.md` and
+`public/java/TOOLS-JAR-LICENSE.md`.
+
 ## Built by Velocity
 
-Licensed under the MIT License. See `LICENSE`.
+BroGram's own source is licensed under the MIT License. See `LICENSE`.

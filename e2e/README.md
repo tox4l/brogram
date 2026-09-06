@@ -35,6 +35,30 @@ and `integrity_events` before and after it runs, so order between them doesn't m
    npx playwright test
    ```
 
+## Java specs (opt-in)
+
+The two specs under `e2e/java/` are excluded from the default suite: both need
+`public/java/tools.jar` (gitignored, produced by `npm run prepare:java`) and both
+load the CheerpJ runtime from its vendor CDN, so the normal suite must not depend
+on them. Neither needs Supabase.
+
+```
+RUN_JAVA_E2E=1 npx playwright test e2e/java/java-runtime.spec.ts --project=chromium
+RUN_JAVA_BANK=1 npx playwright test e2e/java/verify-java-bank.spec.ts --project=chromium
+```
+
+- `java-runtime.spec.ts` grades smoke.json's "Shapes report" through the real
+  adapter (5/5) and asserts that broken source comes back as `compile-error`.
+- `verify-java-bank.spec.ts` certifies every code exercise in
+  `seed/exercises/INFS3102.json` plus the smoke exercise, prints the table, and
+  fails if any reference solution stops passing its own tests. Run it after any
+  change to the Java engine or to a Java exercise.
+
+Both drive the development-only page `/preview/java-verify` and inject the
+exercises with `page.addInitScript`; reference solutions are read in Node and
+never bundled into the app. Add `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000` to
+reuse a dev server you already have.
+
 ## Run against a preview deploy
 
 Point `PLAYWRIGHT_BASE_URL` at the deploy (A6 does this without changing anything else); the config skips

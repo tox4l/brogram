@@ -71,6 +71,39 @@ describe('worker runtime lifecycle', () => {
     expect((await pending).results.map(r => r.failureKind ?? 'passed')).toEqual(['passed', 'timeout'])
   })
 
+  it('cuts a warmup that never finishes instead of hanging the run forever', async () => {
+    vi.useFakeTimers()
+    const workers: ControlledWorker[] = []
+    const adapter = new WorkerAdapter('python', () => { const w = new ControlledWorker(); w.prepare = false; workers.push(w); return w })
+    const run = adapter.run(request)
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(workers[0].terminated).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect((await run).results.map(r => r.failureKind)).toEqual(['timeout', 'timeout'])
+    expect(workers[0].terminated).toBe(true)
+  })
+
+  it('releases both workers on dispose and spawns fresh ones on the next run', async () => {
+    const workers: ControlledWorker[] = []
+    const adapter = new WorkerAdapter('python', () => { const w = new ControlledWorker(); workers.push(w); return w })
+    await adapter.warmup()
+    expect(workers).toHaveLength(2)
+    adapter.dispose()
+    expect(workers.every(w => w.terminated)).toBe(true)
+    expect((await adapter.run(request)).ok).toBe(true)
+    expect(workers.length).toBeGreaterThan(2)
+    expect(workers.slice(2).some(w => w.commands.some(c => c.type === 'run'))).toBe(true)
+  })
+
+  it('announces each warmup step once even though both workers report it', async () => {
+    const events: string[] = []
+    const unsubscribe = subscribeRuntimeProgress(e => { if (e.phase === 'loading') events.push(e.packageName) })
+    const adapter = new WorkerAdapter('python', () => new ControlledWorker())
+    await adapter.warmup()
+    expect(events).toEqual(['python'])
+    unsubscribe()
+  })
+
   it('settles abort during package preparation and emits package names', async () => {
     const workers: ControlledWorker[] = []
     const events: string[] = []

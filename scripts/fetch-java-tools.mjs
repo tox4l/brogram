@@ -31,7 +31,10 @@ const TOOLS_JAR = join(OUT_DIR, 'tools.jar')
 // tarball is chosen because a tar stream can be parsed entry by entry without
 // buffering the archive, which a zip's trailing central directory cannot.
 const ARCHIVE_URL = 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jdk_x64_linux_hotspot_8u504b01.tar.gz'
-const ARCHIVE_SHA256 = '9c70e102f527ac674ac2fe9c7d47b9a04e2d19842ba5ab8e9b33f368bbadfaea'
+// The archive's own published sha256 is recorded in public/java/TOOLS-JAR-LICENSE.md
+// as provenance but is deliberately not checked here: this reads the tar stream
+// and stops at the entry it wants, so it never sees the whole archive. The check
+// that matters is on the extracted file - the exact bytes this app serves.
 const TOOLS_JAR_BYTES = 18_361_919
 const TOOLS_JAR_SHA256 = 'f2599fc78dcbfadefc1cb6b79e05d281e090217ac0139d50b792d72bf1130af4'
 
@@ -139,7 +142,7 @@ async function fetchToolsJar() {
   }
 
   const temporary = `${TOOLS_JAR}.download`
-  console.log(`prepare:java: downloading ${ARCHIVE_URL} (103 MB, once; expected sha256 ${ARCHIVE_SHA256})`)
+  console.log(`prepare:java: downloading ${ARCHIVE_URL} (103 MB, once; the extracted tools.jar is verified against sha256 ${TOOLS_JAR_SHA256})`)
   try {
     await extractFromTarGz(ARCHIVE_URL, '/lib/tools.jar', temporary)
     const size = statSync(temporary).size

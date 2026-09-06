@@ -99,10 +99,17 @@ function simpleTypeName(text: string): string {
   return parts[parts.length - 1].trim()
 }
 
+/**
+ * Modifiers come from the parse tree, never from the node's text: an annotation
+ * argument is part of that text, so `@SuppressWarnings(" final ") private int x`
+ * would otherwise forge `final`. Keywords are anonymous children whose `type` is
+ * the keyword itself; annotations are named children and are ignored here.
+ */
 function modifiersOf(node: Node): Set<string> {
   const holder = node.children.find(child => child?.type === 'modifiers')
   if (!holder) return new Set()
-  return new Set(holder.text.split(/\s+/).filter(word => MODIFIER_KEYWORDS.has(word)))
+  const keywords = holder.children.filter((child): child is Node => Boolean(child) && !child!.isNamed && MODIFIER_KEYWORDS.has(child!.type))
+  return new Set(keywords.map(child => child.type))
 }
 
 function parameterCount(node: Node): number {
@@ -198,7 +205,8 @@ function checkType(types: Map<string, TypeInfo>, assertion: TypeAssertion, failu
   }
   if (assertion.kind && info.kind !== assertion.kind) failures.push(`${assertion.name} must be declared as ${assertion.kind}, not ${info.kind}.`)
   if (assertion.abstract === true && !(info.modifiers.has('abstract') || info.kind === 'interface')) failures.push(`${assertion.name} must be abstract.`)
-  if (assertion.abstract === false && info.modifiers.has('abstract')) failures.push(`${assertion.name} must not be abstract.`)
+  // An interface is abstract whether or not it says so.
+  if (assertion.abstract === false && (info.modifiers.has('abstract') || info.kind === 'interface')) failures.push(`${assertion.name} must not be abstract.`)
   if (assertion.final === true && !info.modifiers.has('final')) failures.push(`${assertion.name} must be final.`)
   if (assertion.final === false && info.modifiers.has('final')) failures.push(`${assertion.name} must not be final.`)
   if (assertion.extends && info.superclass !== assertion.extends) failures.push(`${assertion.name} must extend ${assertion.extends}.`)
@@ -243,16 +251,38 @@ function checkType(types: Map<string, TypeInfo>, assertion: TypeAssertion, failu
   }
 }
 
-/** Reads the structural-test convention off a TestCase input; null means "run the program". */
-export function parseStructureAssertions(input: string): StructureAssertions | null {
+export type StructureTest =
+  /** Run the program against this input as stdin. */
+  | { kind: 'program' }
+  | { kind: 'structure'; assertions: StructureAssertions }
+  /** Meant as a structural test, but unusable. Never silently graded as stdin. */
+  | { kind: 'invalid'; message: string }
+
+/** A test that carries a "structure" key but cannot be read is a bug in the test, not a wrong answer. */
+const LOOKS_STRUCTURAL = /"structure"\s*:/
+
+function invalid(detail: string): StructureTest {
+  return { kind: 'invalid', message: `This test is written as a structural check but ${detail}. Report it: the exercise is broken, not your code.` }
+}
+
+/**
+ * Reads the structural-test convention off a TestCase input. A malformed
+ * structural test fails loudly rather than degrading into a stdin test, which
+ * would grade a student against a broken test and call it a wrong answer.
+ */
+export function readStructureTest(input: string): StructureTest {
   let parsed: unknown
-  try { parsed = JSON.parse(input) } catch { return null }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
-  const structure = (parsed as { structure?: unknown }).structure
-  if (!structure || typeof structure !== 'object' || Array.isArray(structure)) return null
+  try { parsed = JSON.parse(input) } catch { return LOOKS_STRUCTURAL.test(input) ? invalid('its input is not valid JSON') : { kind: 'program' } }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { kind: 'program' }
+  if (!Object.hasOwn(parsed, 'structure')) return { kind: 'program' }
+  const structure = (parsed as { structure: unknown }).structure
+  if (!structure || typeof structure !== 'object' || Array.isArray(structure)) return invalid('its "structure" value is not an object')
   const types = (structure as { types?: unknown }).types
-  if (!Array.isArray(types)) return null
-  return { types: types as TypeAssertion[] }
+  if (!Array.isArray(types) || !types.length) return invalid('its "structure.types" is not a non-empty array')
+  if (!types.every(entry => entry && typeof entry === 'object' && typeof (entry as { name?: unknown }).name === 'string' && (entry as { name: string }).name)) {
+    return invalid('one of its types has no "name"')
+  }
+  return { kind: 'structure', assertions: { types: types as TypeAssertion[] } }
 }
 
 export interface JavaStructureSources {
@@ -272,11 +302,15 @@ export async function createJavaStructureChecker(sources: JavaStructureSources):
     check(source, assertions) {
       const tree = parser.parse(source)
       if (!tree?.rootNode) return { ok: false, failures: ['Your Java source could not be parsed.'] }
-      const types = collectTypes(tree.rootNode)
-      const failures: string[] = []
-      for (const assertion of assertions.types ?? []) checkType(types, assertion, failures)
-      tree.delete()
-      return { ok: failures.length === 0, failures }
+      try {
+        const types = collectTypes(tree.rootNode)
+        const failures: string[] = []
+        for (const assertion of assertions.types ?? []) checkType(types, assertion, failures)
+        return { ok: failures.length === 0, failures }
+      } finally {
+        // A thrown check must not leak the parse tree's wasm memory.
+        tree.delete()
+      }
     },
   }
 }

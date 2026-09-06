@@ -4,41 +4,38 @@ import { useEffect, useState } from 'react'
 import type { RunRequest, TestCase } from '@/lib/contracts'
 import { JavaAdapter } from '@/lib/runtimes/java'
 import { subscribeRuntimeProgress } from '@/lib/runtimes/progress'
-import smoke from '../../../../seed/exercises/smoke.json'
-import unverified from '../../../../seed/exercises/unverified/INFS3102.json'
 
 /**
  * Development-only harness (the preview layout 404s outside development): runs
- * every Java exercise's reference solution through the real CheerpJ adapter and
+ * Java exercises' reference solutions through the real CheerpJ adapter and
  * publishes the outcome on window.__javaVerify for e2e/java/*.spec.ts. This is
  * the only way to certify the Java bank - scripts/verify-exercise.mjs runs in
  * Node, where there is no CheerpJ and therefore no javac.
+ *
+ * The exercises are injected by the spec (page.addInitScript sets
+ * window.__javaBank), never imported here: reference solutions are answers, and
+ * importing the seed would bundle them into a client component.
  */
 
 interface Failure { testId: string; expected: string; actual: string; stderr: string; failureKind?: string }
 interface Row { file: string; title: string; cloId: string; pattern: string; passed: number; total: number; ms: number; failures: Failure[] }
 interface Verify { rows: Row[]; compileError: { failureKind?: string; stderr: string } | null; done: boolean; error: string | null; status: string }
 
-interface SeedExercise {
+interface BankExercise {
   cloId: string
   language: string
   kind: string
   pattern: string
   title: string
-  starterCode: string
   fixture?: string
   tests: { id: string; input: string; expected: string; hidden: boolean; name?: string }[]
   referenceSolution: string
 }
-
-const BANK: { file: string; exercise: SeedExercise }[] = [
-  ...(smoke.exercises as SeedExercise[]).filter(item => item.language === 'java').map(exercise => ({ file: 'smoke.json', exercise })),
-  ...(unverified.exercises as SeedExercise[]).filter(item => item.language === 'java' && item.kind === 'code').map(exercise => ({ file: 'unverified/INFS3102.json', exercise })),
-]
+interface BankEntry { file: string; exercise: BankExercise }
 
 const BROKEN_SOLUTION = 'class Solution {\n    public static String describe(String kind, double a) {\n        return missing(kind)\n    }\n}\n'
 
-function toRequest(exercise: SeedExercise, code: string): RunRequest {
+function toRequest(exercise: BankExercise, code: string): RunRequest {
   return { language: 'java', code, fixture: exercise.fixture, tests: exercise.tests as TestCase[], timeoutMs: 5000 }
 }
 
@@ -57,19 +54,26 @@ function startVerification(): Verify {
   if (state) return state
   const verify: Verify = { rows: [], compileError: null, done: false, error: null, status: 'starting' }
   state = verify
-  // e2e/java/support.ts owns the Window declaration for this key.
-  ;(window as unknown as { __javaVerify: Verify }).__javaVerify = verify
+  const scope = window as unknown as { __javaVerify: Verify; __javaBank?: BankEntry[] }
+  scope.__javaVerify = verify
   subscribeRuntimeProgress(event => { verify.status = `${event.phase}: ${event.packageName}` })
-  const adapter = new JavaAdapter()
+  const bank = scope.__javaBank ?? []
+  let adapter = new JavaAdapter()
 
-  // ?only=smoke keeps the default e2e suite to one exercise plus the
-  // compile-error case; the full bank run is the tagged spec's job.
-  const only = new URLSearchParams(window.location.search).get('only')
-  const bank = only ? BANK.filter(entry => entry.file.includes(only)) : BANK
+  /**
+   * A student meets one exercise per page load. This harness runs seventeen in
+   * a row, and a JVM that has served a hundred-odd runs slows down badly enough
+   * to blow the 5 s per-test budget on the last one - measured: the seventeenth
+   * exercise timed out where it had taken 600 ms per test. Recycling between
+   * exercises keeps every measurement independent and matches real usage.
+   */
+  const recycle = () => { adapter.dispose(); adapter = new JavaAdapter() }
 
   void (async () => {
     try {
-      for (const { file, exercise } of bank) {
+      if (!bank.length) throw new Error('No exercises were injected. Open this page through e2e/java/*.spec.ts, which sets window.__javaBank.')
+      for (const [index, { file, exercise }] of bank.entries()) {
+        if (index) recycle()
         verify.status = `running ${exercise.title}`
         console.log(`[java-verify] start ${exercise.title}`)
         const startedAt = performance.now()
@@ -83,11 +87,13 @@ function startVerification(): Verify {
           })),
         }
         verify.rows.push(row)
-        console.log(`[java-verify] ${row.title}: ${row.passed}/${row.total} in ${row.ms} ms${row.failures[0] ? ` | ${row.failures[0].testId} expected ${JSON.stringify(row.failures[0].expected)} got ${JSON.stringify(row.failures[0].actual)}` : ''}`)
+        const first = row.failures[0]
+        console.log(`[java-verify] ${row.title}: ${row.passed}/${row.total} in ${row.ms} ms${first ? ` | ${first.testId} [${first.failureKind}] expected ${JSON.stringify(first.expected)} got ${JSON.stringify(first.actual)} stderr ${JSON.stringify(first.stderr)}` : ''}`)
       }
 
       verify.status = 'checking the compile-error path'
-      const broken = await adapter.run(toRequest(BANK[0].exercise, BROKEN_SOLUTION))
+      recycle()
+      const broken = await adapter.run(toRequest(bank[0].exercise, BROKEN_SOLUTION))
       verify.compileError = { failureKind: broken.results[0]?.failureKind, stderr: broken.results[0]?.stderr ?? '' }
     } catch (error) {
       verify.error = error instanceof Error ? error.message : String(error)

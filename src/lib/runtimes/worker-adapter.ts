@@ -25,6 +25,10 @@ export class WorkerAdapter implements RuntimeAdapter {
   private current?: Run
   private sequence = 0
   private packages = new Set<string>()
+  /** Warmup steps already announced; both workers report the same ones. */
+  private announced = new Set<string>()
+  /** Set when a worker reports itself unusable; its standby takes over before the next run. */
+  private unhealthy = false
 
   constructor(public readonly language: Language, private readonly factory: () => RuntimeWorker) {}
 
@@ -33,6 +37,10 @@ export class WorkerAdapter implements RuntimeAdapter {
     slot.worker.onmessage = ({ data }) => {
       if (slot.dead) return
       if (data.type === 'progress') {
+        // The active worker and its standby warm up together and report the
+        // same steps; a student should see each step once.
+        if (this.announced.has(data.packageName)) return
+        this.announced.add(data.packageName)
         publishRuntimeProgress({ language: this.language, phase: 'loading', packageName: data.packageName })
         return
       }
@@ -118,8 +126,26 @@ export class WorkerAdapter implements RuntimeAdapter {
     this.promote()
   }
 
+  /**
+   * Releases both workers. A later warmup() or run() spawns fresh ones. A
+   * runtime this heavy (CheerpJ holds an 18 MB JVM per worker) needs a way to
+   * be let go when a page is done with it; nothing else frees a Worker.
+   */
+  dispose(): void {
+    this.abort()
+    if (this.active) this.terminate(this.active)
+    if (this.standby) this.terminate(this.standby)
+    this.active = undefined
+    this.standby = undefined
+    this.announced.clear()
+    this.unhealthy = false
+  }
+
   run(request: RunRequest): Promise<RunResult> {
     this.abort()
+    // A worker that reported itself unusable is replaced between runs, not
+    // mid-run: the fresh one has to compile before it can answer anything.
+    if (this.unhealthy) { this.unhealthy = false; this.promote() }
     if (this.active?.dead && this.standby && !this.standby.dead) this.promote()
     const priorPackages = [...this.packages].join('\0')
     request.packages?.forEach(p => this.packages.add(p))
@@ -133,8 +159,13 @@ export class WorkerAdapter implements RuntimeAdapter {
 
   private async execute(run: Run, needsBoth: boolean): Promise<void> {
     try {
+      // Loading a runtime is a network operation: a stalled CDN or a missing
+      // asset would otherwise hang run() forever, with no timer armed yet.
+      const prepareBudget = this.phaseBudgetMs('compile', run.request) ?? browserTimeout(run.request.timeoutMs)
+      run.timer = setTimeout(() => { if (this.current === run) this.abort() }, prepareBudget)
       if (needsBoth) await this.warmup()
       else await this.prepare(this.active!)
+      clearTimeout(run.timer)
       if (run.done) return
       const compileBudget = this.phaseBudgetMs('compile', run.request)
       if (compileBudget !== null) {
@@ -151,6 +182,7 @@ export class WorkerAdapter implements RuntimeAdapter {
         clearTimeout(run.timer)
         if (run.done) return
         if (!output) throw new Error('Runtime worker returned no output.')
+        if (output.fatal) this.unhealthy = true
         if (test) run.results.push(makeTestResult(test, output, performance.now() - start))
         else {
           this.finish(run, { ...summarizeResults([]), ok: !output.failureKind, stdout: output.stdout, stderr: output.stderr })

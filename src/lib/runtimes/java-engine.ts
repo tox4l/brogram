@@ -2,7 +2,7 @@ import type { RunRequest, TestCase } from '@/lib/contracts'
 import type { RuntimeEngine } from './worker-host'
 import type { ExecutionOutput } from './shared'
 import { normalizeJavaSolution } from './java-normalize'
-import { parseStructureAssertions, STRUCTURE_OK, type JavaStructureChecker } from './java-structure'
+import { readStructureTest, STRUCTURE_OK, type JavaStructureChecker } from './java-structure'
 
 /**
  * The CheerpJ surface this engine needs, kept as a plain interface so unit
@@ -26,27 +26,91 @@ export interface JavaEngineOptions {
 // our web root at /app/. The runtime itself is loaded from the vendor CDN by the
 // worker, which the CheerpJ Community License requires.
 const TOOLS_JAR = '/app/java/tools.jar'
-// /str is the flat, JavaScript-writable mount; /files is the writable mount Java
-// reads and writes and cjFileBlob can read back. cheerpOSAddStringFile cannot
-// create directories, so every JS-written path here is a direct child of /str.
+// /str is the flat, JavaScript-writable mount CheerpJ builds from strings, and
+// it belongs to one JVM instance. cheerpOSAddStringFile cannot create
+// directories, so every path here is a direct child of /str - and Main.java has
+// to keep that exact name, because javac requires the file holding `public class
+// Main` to match it.
 const SOURCE_DIR = '/str'
-const RUNNER_SOURCE = `${SOURCE_DIR}/Runner.java`
 const MAIN_SOURCE = `${SOURCE_DIR}/Main.java`
+const RUNNER_SOURCE = `${SOURCE_DIR}/Runner.java`
 const STDIN_FILE = `${SOURCE_DIR}/stdin.txt`
-const RUNNER_DIR = '/files'
-// Java's own mkdirs makes this one; the compiled student classes are wiped and
-// rebuilt per submission so a previous exercise's classes can never be loaded.
-const CLASS_DIR = '/files/classes'
-const DIAGNOSTICS_FILE = '/files/javac.txt'
-const STDOUT_FILE = '/files/stdout.txt'
-const READY_FILE = '/files/ready.txt'
-const CLASS_PATH = `${TOOLS_JAR}:${RUNNER_DIR}`
+// /files is IndexedDB-backed: persistent, writable, and shared by every tab and
+// every worker on this origin. Nothing may live at a fixed path there - see
+// javaSessionPaths.
+const FILES_ROOT = '/files'
 
 export const JAVA_PROGRESS = {
-  engine: 'Waking up the Java engine',
-  compiler: 'Fetching the compiler (18 MB, once)',
+  // The 18 MB is the CheerpJ runtime itself, downloaded during cheerpjInit.
+  engine: 'Waking up the Java engine (18 MB, once)',
+  // javac only pulls the compiler classes it touches out of tools.jar, by range
+  // request: about 6 MB of the 18 MB file.
+  compiler: 'Fetching the compiler (6 MB, once)',
   ready: 'Compiler ready',
 } as const
+
+/** A Java-identifier-safe random id; one per engine, so one per Worker. */
+export function createSessionId(): string {
+  const source = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+  return source.replace(/[^a-zA-Z0-9]/g, '')
+}
+
+export interface JavaSessionPaths {
+  id: string
+  /** Everything this engine writes lives under here. */
+  session: string
+  classDir: string
+  diagnostics: string
+  stdout: string
+  ready: string
+  bootClass: string
+  bootSource: string
+  bootClassFile: string
+  classPath: string
+}
+
+/**
+ * Two JVMs are always live (active plus warm standby) and a second tab can run
+ * at the same time, all sharing one persistent /files. Fixed paths there let one
+ * run read another's ready token, compiled classes or captured stdout as if they
+ * were its own, so every writable path is namespaced by a per-engine id.
+ *
+ * The bootstrap class file is the one thing that cannot live in the session
+ * directory - JDK 8's javac refuses to create a missing `-d` directory
+ * ("directory not found"), verified in Chromium - so it is written to the /files
+ * root under a name unique to this session and deletes itself once it has made
+ * the directory the rest of the run uses.
+ */
+export function javaSessionPaths(id = createSessionId()): JavaSessionPaths {
+  const session = `${FILES_ROOT}/${id}`
+  return {
+    id,
+    session,
+    classDir: `${session}/classes`,
+    diagnostics: `${session}/javac.txt`,
+    stdout: `${session}/stdout.txt`,
+    ready: `${session}/ready.txt`,
+    bootClass: `Boot${id}`,
+    bootSource: `${SOURCE_DIR}/Boot${id}.java`,
+    bootClassFile: `${FILES_ROOT}/Boot${id}.class`,
+    classPath: `${TOOLS_JAR}:${session}`,
+  }
+}
+
+/** Makes the session directory, proves it can run compiled code, then removes itself. */
+function bootSource(className: string): string {
+  return `import java.io.*;
+
+public class ${className} {
+    public static void main(String[] args) throws Exception {
+        new File(args[0]).mkdirs();
+        Writer w = new OutputStreamWriter(new FileOutputStream(args[1]), "UTF-8");
+        try { w.write(args[2]); } finally { w.close(); }
+        new File(args[3]).delete();
+    }
+}
+`
+}
 
 /**
  * The in-JVM bootstrap. It exists because a Worker has no DOM for CheerpJ to
@@ -58,7 +122,8 @@ export const JAVA_PROGRESS = {
  *
  * Each test loads the student's classes through a fresh URLClassLoader whose
  * parent is the extension loader, so static fields start empty every time
- * rather than leaking across the tests of one submission.
+ * rather than leaking across the tests of one submission. That loader also never
+ * sees Runner itself, which is why Runner's own guard flag is out of reach.
  */
 const RUNNER_JAVA = `import java.io.*;
 import java.lang.reflect.*;
@@ -66,14 +131,29 @@ import java.net.*;
 import java.security.Permission;
 
 public class Runner {
+    // Only Runner may change the security manager, and only from install().
+    // Student code lives in a child class loader that cannot see this class.
+    private static boolean managerChangeAllowed = false;
+
     static class ExitTrap extends SecurityException {
         final int code;
         ExitTrap(int code) { super("System.exit was called with status " + code + "."); this.code = code; }
     }
     static class NoExit extends SecurityManager {
-        public void checkPermission(Permission p) { }
-        public void checkPermission(Permission p, Object context) { }
+        public void checkPermission(Permission p) {
+            if (!managerChangeAllowed && p instanceof RuntimePermission && "setSecurityManager".equals(p.getName())) {
+                throw new SecurityException("Replacing the security manager is not allowed in an exercise.");
+            }
+        }
+        public void checkPermission(Permission p, Object context) { checkPermission(p); }
         public void checkExit(int status) { throw new ExitTrap(status); }
+    }
+
+    private static boolean install(SecurityManager manager) {
+        managerChangeAllowed = true;
+        try { System.setSecurityManager(manager); return true; }
+        catch (Throwable ignored) { return false; }
+        finally { managerChangeAllowed = false; }
     }
 
     public static void main(String[] args) throws Exception {
@@ -136,11 +216,13 @@ public class Runner {
         ByteArrayOutputStream errBuffer = new ByteArrayOutputStream();
         PrintStream errStream = new PrintStream(errBuffer, true, "UTF-8");
         SecurityManager manager = System.getSecurityManager();
+        FileInputStream stdin = null;
         boolean guarded = false;
         int status = 0;
         try {
-            try { System.setSecurityManager(new NoExit()); guarded = true; } catch (Throwable ignored) { }
-            System.setIn(new FileInputStream(stdinPath));
+            guarded = install(new NoExit());
+            stdin = new FileInputStream(stdinPath);
+            System.setIn(stdin);
             System.setOut(new PrintStream(outBuffer, true, "UTF-8"));
             System.setErr(errStream);
             ClassLoader parent = Runner.class.getClassLoader().getParent();
@@ -162,10 +244,17 @@ public class Runner {
             System.setIn(in0);
             System.setOut(out0);
             System.setErr(err0);
-            if (guarded) { try { System.setSecurityManager(manager); } catch (Throwable ignored) { } }
+            if (stdin != null) { try { stdin.close(); } catch (IOException ignored) { } }
+            if (guarded) install(manager);
         }
-        write(stdoutPath, outBuffer.toString("UTF-8"));
-        write(stdoutPath + ".err", errBuffer.toString("UTF-8"));
+        // A failure here must not swallow the status file: its absence is read
+        // as "this JVM died", which costs the student their warm worker.
+        try {
+            write(stdoutPath, outBuffer.toString("UTF-8"));
+            write(stdoutPath + ".err", errBuffer.toString("UTF-8"));
+        } catch (Throwable failure) {
+            status = 1;
+        }
         write(stdoutPath + ".status", String.valueOf(status));
     }
 }
@@ -176,6 +265,8 @@ export interface JavaProgram {
   /** 1-based line range the student's own code occupies in `source`. */
   codeStart: number
   codeEnd: number
+  /** Where each hoisted import line (source lines 1..n) came from. */
+  importOrigins: { file: 'Solution.java' | 'Main.java'; line: number }[]
 }
 
 const IMPORT_LINE = /^[ \t]*import[ \t]+[^;]+;[ \t]*$/
@@ -191,58 +282,70 @@ const IMPORT_LINE = /^[ \t]*import[ \t]+[^;]+;[ \t]*$/
  * Imports from both halves are hoisted, because Java forbids an import after a
  * type declaration, and are blanked where they stood so the student's own line
  * numbering survives. The student's code comes first so a compile error lands
- * near the line they actually wrote; remapDiagnostics finishes the job.
+ * near the line they actually wrote; remapDiagnostics finishes the job, hoisted
+ * imports included.
  */
 export function javaProgram(request: RunRequest): JavaProgram {
   const code = normalizeJavaSolution(request.code)
   if (!request.fixture) {
-    const lines = code.split('\n')
-    return { source: code, codeStart: 1, codeEnd: lines.length }
+    return { source: code, codeStart: 1, codeEnd: code.split('\n').length, importOrigins: [] }
   }
   const imports: string[] = []
-  const strip = (text: string) => text.split('\n').map(line => {
+  const importOrigins: JavaProgram['importOrigins'] = []
+  const strip = (text: string, file: 'Solution.java' | 'Main.java') => text.split('\n').map((line, index) => {
     if (!IMPORT_LINE.test(line)) return line
     const statement = line.trim()
-    if (!imports.includes(statement)) imports.push(statement)
+    if (!imports.includes(statement)) {
+      imports.push(statement)
+      importOrigins.push({ file, line: index + 1 })
+    }
     return ''
   })
-  const body = strip(code)
-  const fixture = strip(request.fixture)
+  const body = strip(code, 'Solution.java')
+  const fixture = strip(request.fixture, 'Main.java')
   return {
     source: [...imports, ...body, ...fixture].join('\n'),
     codeStart: imports.length + 1,
     codeEnd: imports.length + body.length,
+    importOrigins,
   }
 }
 
+const MAIN_SOURCE_PATTERN = MAIN_SOURCE.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+
 /**
  * javac reports lines in the combined file. Students see their own line numbers
- * under a filename that matches the class they are editing.
+ * under a filename that matches the class they are editing - including for an
+ * error on an import, which was hoisted away from where they typed it.
  */
 export function remapDiagnostics(text: string, program: JavaProgram): string {
-  return text.replace(new RegExp(`${MAIN_SOURCE.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}:(\\d+):`, 'g'), (_whole, digits: string) => {
-    const line = Number(digits)
-    if (line >= program.codeStart && line <= program.codeEnd) return `Solution.java:${line - program.codeStart + 1}:`
-    if (line > program.codeEnd) return `Main.java:${line - program.codeEnd}:`
-    return `Main.java:${line}:`
-  })
+  return text
+    .replace(new RegExp(`${MAIN_SOURCE_PATTERN}:(\\d+):`, 'g'), (_whole, digits: string) => {
+      const line = Number(digits)
+      if (line <= program.importOrigins.length) {
+        const origin = program.importOrigins[line - 1]
+        return `${origin.file}:${origin.line}:`
+      }
+      if (line <= program.codeEnd) return `Solution.java:${line - program.codeStart + 1}:`
+      return `Main.java:${line - program.codeEnd}:`
+    })
+    // Notes ("uses unchecked or unsafe operations") carry no line number.
+    .replace(new RegExp(MAIN_SOURCE_PATTERN, 'g'), 'Solution.java')
 }
 
 /** Structural tests never compile or run; a run made only of them skips javac entirely. */
 export function needsCompiler(tests: TestCase[]): boolean {
-  return tests.length === 0 || tests.some(test => !parseStructureAssertions(test.input))
+  return tests.length === 0 || tests.some(test => readStructureTest(test.input).kind === 'program')
 }
 
-function compileFailure(stderr: string): ExecutionOutput {
-  return { actual: '', stdout: '', stderr, failureKind: 'compile-error' }
-}
-
-export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine {
+export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine & { readonly paths: JavaSessionPaths } {
+  const paths = javaSessionPaths()
   let host: CheerpJHost | undefined
   let checker: Promise<JavaStructureChecker> | undefined
   let compiled: { key: string; error: string | null } | undefined
 
   const structure = (): Promise<JavaStructureChecker> => (checker ??= options.loadStructureChecker())
+  const token = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 
   async function compileSources(request: RunRequest): Promise<void> {
     if (!host) throw new Error('The Java engine is not ready.')
@@ -250,9 +353,9 @@ export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine {
     if (compiled?.key === program.source) return
     compiled = undefined
     host.addStringFile(MAIN_SOURCE, program.source)
-    await host.runMain('Runner', CLASS_PATH, ['compile', CLASS_DIR, DIAGNOSTICS_FILE, MAIN_SOURCE])
-    const status = await host.readTextFile(`${DIAGNOSTICS_FILE}.status`)
-    const diagnostics = remapDiagnostics((await host.readTextFile(DIAGNOSTICS_FILE))?.trim() ?? '', program)
+    await host.runMain('Runner', paths.classPath, ['compile', paths.classDir, paths.diagnostics, MAIN_SOURCE])
+    const status = await host.readTextFile(`${paths.diagnostics}.status`)
+    const diagnostics = remapDiagnostics((await host.readTextFile(paths.diagnostics))?.trim() ?? '', program)
     const key = program.source
     if (status === null) {
       compiled = { key, error: diagnostics || 'The Java compiler stopped before it reported a result.' }
@@ -264,33 +367,43 @@ export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine {
   async function runOne(input: string): Promise<{ stdout: string; stderr: string; status: string | null }> {
     if (!host) throw new Error('The Java engine is not ready.')
     host.addStringFile(STDIN_FILE, input)
-    await host.runMain('Runner', CLASS_PATH, ['run', CLASS_DIR, STDIN_FILE, STDOUT_FILE])
+    await host.runMain('Runner', paths.classPath, ['run', paths.classDir, STDIN_FILE, paths.stdout])
     // The status file is written last and deleted first, so its absence means
     // the JVM never finished - never that the program printed nothing.
-    const status = await host.readTextFile(`${STDOUT_FILE}.status`)
+    const status = await host.readTextFile(`${paths.stdout}.status`)
     return {
-      stdout: (await host.readTextFile(STDOUT_FILE)) ?? '',
-      stderr: ((await host.readTextFile(`${STDOUT_FILE}.err`)) ?? '').trim(),
+      stdout: (await host.readTextFile(paths.stdout)) ?? '',
+      stderr: ((await host.readTextFile(`${paths.stdout}.err`)) ?? '').trim(),
       status,
     }
   }
 
   return {
+    paths,
+
     async warmup(_packages, progress) {
       if (!host) {
         progress(JAVA_PROGRESS.engine)
         host = await options.loadCheerpJ()
       }
       progress(JAVA_PROGRESS.compiler)
-      host.addStringFile(RUNNER_SOURCE, RUNNER_JAVA)
-      // Compiling the bootstrap is what pulls tools.jar over the wire (CheerpJ
-      // range-requests only the compiler classes javac touches) and leaves javac
-      // warm, so the first submission does not pay the cold compile.
-      await host.runMain('com.sun.tools.javac.Main', CLASS_PATH, [RUNNER_SOURCE, '-d', RUNNER_DIR])
-      const token = `ready-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      await host.runMain('Runner', CLASS_PATH, ['ready', READY_FILE, token])
-      if ((await host.readTextFile(READY_FILE))?.trim() !== token) {
+      // Stage one: a uniquely named bootstrap makes this session's directory,
+      // which javac will not create for itself. Compiling it is also what pulls
+      // the compiler classes out of tools.jar, so it pays for the cold start.
+      const bootToken = token()
+      host.addStringFile(paths.bootSource, bootSource(paths.bootClass))
+      await host.runMain('com.sun.tools.javac.Main', paths.classPath, [paths.bootSource, '-d', FILES_ROOT])
+      await host.runMain(paths.bootClass, `${TOOLS_JAR}:${FILES_ROOT}`, [paths.session, paths.ready, bootToken, paths.bootClassFile])
+      if ((await host.readTextFile(paths.ready))?.trim() !== bootToken) {
         throw new Error('The Java compiler could not start. Check that /java/tools.jar is available on this origin.')
+      }
+      // Stage two: the real bootstrap, compiled into this session's directory.
+      const readyToken = token()
+      host.addStringFile(RUNNER_SOURCE, RUNNER_JAVA)
+      await host.runMain('com.sun.tools.javac.Main', paths.classPath, [RUNNER_SOURCE, '-d', paths.session])
+      await host.runMain('Runner', paths.classPath, ['ready', paths.ready, readyToken])
+      if ((await host.readTextFile(paths.ready))?.trim() !== readyToken) {
+        throw new Error('The Java runtime could not start. Check that /java/tools.jar is available on this origin.')
       }
       compiled = undefined
       progress(JAVA_PROGRESS.ready)
@@ -302,17 +415,27 @@ export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine {
     },
 
     async execute(request, test): Promise<ExecutionOutput> {
-      const assertions = test ? parseStructureAssertions(test.input) : null
-      if (assertions) {
-        const result = (await structure()).check(request.code, assertions)
+      const structural = test ? readStructureTest(test.input) : { kind: 'program' as const }
+      if (structural.kind === 'invalid') {
+        // Silently running this as a stdin test would grade the student against
+        // a broken test and call it a wrong answer.
+        return { actual: '', stdout: '', stderr: structural.message, failureKind: 'runtime-error' }
+      }
+      if (structural.kind === 'structure') {
+        const result = (await structure()).check(request.code, structural.assertions)
         return { actual: result.ok ? STRUCTURE_OK : result.failures.join(' '), stdout: '', stderr: result.ok ? '' : result.failures.join('\n') }
       }
 
       await compileSources(request)
-      if (compiled?.error) return compileFailure(compiled.error)
+      if (compiled?.error) return { actual: '', stdout: '', stderr: compiled.error, failureKind: 'compile-error' }
 
       const { stdout, stderr, status } = await runOne(test?.input ?? '')
-      if (status === null) return { actual: '', stdout, stderr: stderr || 'Java stopped before the program finished.', failureKind: 'runtime-error' }
+      if (status === null) {
+        // The JVM died mid-test (a blocked System.exit escape, an internal
+        // crash). This instance cannot be trusted again: `fatal` tells the
+        // adapter to promote its standby before the next run.
+        return { actual: '', stdout, stderr: stderr || 'Java stopped before the program finished.', failureKind: 'runtime-error', fatal: true }
+      }
       if (status.trim() !== '0') return { actual: '', stdout, stderr: stderr || 'The program threw an exception.', failureKind: 'runtime-error' }
       if (!test) return { actual: '', stdout, stderr }
       // Java exercises grade trimmed stdout against trimmed expected stdout; the

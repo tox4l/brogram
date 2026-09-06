@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RunRequest } from '@/lib/contracts'
-import { createJavaEngine, javaProgram, needsCompiler, remapDiagnostics, JAVA_PROGRESS, type CheerpJHost } from './java-engine'
+import { createJavaEngine, javaProgram, javaSessionPaths, needsCompiler, remapDiagnostics, JAVA_PROGRESS, type CheerpJHost } from './java-engine'
 import { JavaAdapter, JAVA_COMPILE_BUDGET_MS } from './java'
 import { createEngineWorker } from './engine-worker.test-support'
 import type { JavaStructureChecker } from './java-structure'
@@ -13,10 +13,12 @@ interface Program {
   compileError?: string
   compileDelayMs?: number
   runDelayMs?: number
+  /** The JVM dies before writing its status file. */
+  noStatus?: boolean
   answer?(stdin: string): { stdout?: string; stderr?: string; status?: string }
 }
 
-interface Stub { host: CheerpJHost; compiles: number; runs: number; files: Map<string, string> }
+interface Stub { host: CheerpJHost; compiles: number; runs: number; files: Map<string, string>; classDirs: string[] }
 
 const sleep = (ms?: number) => (ms ? new Promise<void>(resolve => setTimeout(resolve, ms)) : Promise.resolve())
 
@@ -26,23 +28,28 @@ const sleep = (ms?: number) => (ms ? new Promise<void>(resolve => setTimeout(res
  */
 function createStub(program: Program): Stub {
   const files = new Map<string, string>()
-  const stub: Stub = { compiles: 0, runs: 0, files, host: undefined as unknown as CheerpJHost }
+  const stub: Stub = { compiles: 0, runs: 0, files, classDirs: [], host: undefined as unknown as CheerpJHost }
   stub.host = {
     addStringFile: (path, contents) => { files.set(path, contents) },
     async runMain(className, _classPath, args) {
+      // The boot class is named per session and makes the session directory.
+      if (className.startsWith('Boot')) { files.set(args[1], args[2]); return 0 }
       if (className !== 'Runner') return 0
       const [mode] = args
       if (mode === 'ready') { files.set(args[1], args[2]); return 0 }
       if (mode === 'compile') {
         stub.compiles++
+        stub.classDirs.push(args[1])
         await sleep(program.compileDelayMs)
         files.set(args[2], program.compileError ?? '')
         files.set(`${args[2]}.status`, program.compileError ? '1' : '0')
         return 0
       }
       stub.runs++
+      stub.classDirs.push(args[1])
       await sleep(program.runDelayMs)
       const answer = program.answer?.(files.get(args[2]) ?? '') ?? {}
+      if (program.noStatus) { files.set(args[3], answer.stdout ?? ''); return 0 }
       files.set(args[3], answer.stdout ?? '')
       files.set(`${args[3]}.err`, answer.stderr ?? '')
       files.set(`${args[3]}.status`, answer.status ?? '0')
@@ -100,13 +107,43 @@ describe('java source assembly', () => {
   })
 
   it('rewrites compiler line numbers onto the file the student is editing', () => {
-    const program = { source: '', codeStart: 2, codeEnd: 5 }
+    const program = { source: '', codeStart: 2, codeEnd: 5, importOrigins: [{ file: 'Solution.java' as const, line: 3 }] }
     expect(remapDiagnostics('/str/Main.java:4: error: \';\' expected', program)).toBe("Solution.java:3: error: ';' expected")
     expect(remapDiagnostics('/str/Main.java:7: error: bad', program)).toBe('Main.java:2: error: bad')
+    // A hoisted import maps back to the line the student actually typed it on.
+    expect(remapDiagnostics('/str/Main.java:1: error: package nope does not exist', program)).toBe('Solution.java:3: error: package nope does not exist')
+    // Notes carry no line number and must not leak the internal path.
+    expect(remapDiagnostics('Note: /str/Main.java uses unchecked or unsafe operations.', program)).toBe('Note: Solution.java uses unchecked or unsafe operations.')
+  })
+
+  it('points a bad import back at the student half or the fixture half', () => {
+    const program = javaProgram(request({
+      code: 'import nope.Missing;\nclass Solution { }\n',
+      fixture: 'import java.util.*;\npublic class Main { public static void main(String[] a) { } }\n',
+    }))
+    expect(program.importOrigins).toEqual([{ file: 'Solution.java', line: 1 }, { file: 'Main.java', line: 1 }])
+    expect(remapDiagnostics('/str/Main.java:1: error: package nope does not exist', program)).toBe('Solution.java:1: error: package nope does not exist')
+    expect(remapDiagnostics('/str/Main.java:2: error: broken', program)).toBe('Main.java:1: error: broken')
   })
 
   it('treats a fixtureless submission as the whole program', () => {
     expect(javaProgram(request({ fixture: undefined, code: 'public class Main {}' }))).toMatchObject({ source: 'public class Main {}', codeStart: 1, codeEnd: 1 })
+  })
+
+  it('gives every engine its own directory under the shared, persistent /files', () => {
+    const one = javaSessionPaths()
+    const two = javaSessionPaths()
+    expect(one.session).not.toBe(two.session)
+    for (const paths of [one, two]) {
+      expect(paths.id).toMatch(/^[a-zA-Z0-9]+$/)
+      for (const path of [paths.classDir, paths.diagnostics, paths.stdout, paths.ready]) {
+        expect(path.startsWith(`${paths.session}/`)).toBe(true)
+      }
+      // The bootstrap class file is the one thing outside the session directory
+      // (javac will not create a missing -d directory), so its name is unique.
+      expect(paths.bootClassFile).toBe(`/files/Boot${paths.id}.class`)
+      expect(paths.classPath.endsWith(paths.session)).toBe(true)
+    }
   })
 
   it('needs the compiler unless every test is structural', () => {
@@ -168,6 +205,27 @@ describe('java engine', () => {
   it('returns free-run stdout without manufacturing a graded test', async () => {
     const { adapter } = createHarness({ answer: () => ({ stdout: 'hello\n' }) })
     expect(await adapter.run(request({ tests: [] }))).toMatchObject({ ok: true, totalCount: 0, stdout: 'hello\n' })
+  })
+
+  it('fails loudly on a malformed structural test instead of grading it as stdin', async () => {
+    const harness = createHarness({ answer: () => ({ stdout: 'anything' }) })
+    const broken = { id: 's1', input: '{"structure": {"types": []}}', expected: 'ok', hidden: false }
+    const result = await harness.adapter.run(request({ tests: [broken] }))
+    expect(result.results[0]).toMatchObject({ passed: false, failureKind: 'runtime-error' })
+    expect(result.results[0].stderr).toContain('structural check')
+    expect(harness.runs()).toBe(0)
+  })
+
+  it('reports a JVM that died mid-test and replaces the worker before the next run', async () => {
+    const dying: Program = { noStatus: true }
+    const healthy: Program = { answer: () => ({ stdout: 'ok' }) }
+    const harness = createHarness(dying, healthy)
+    const tests = [{ id: 't1', input: '', expected: 'ok', hidden: false }]
+    const first = await harness.adapter.run(request({ tests }))
+    expect(first.results[0]).toMatchObject({ passed: false, failureKind: 'runtime-error' })
+    // `fatal` steers the adapter; it must never be stored on the graded result.
+    expect(Object.hasOwn(first.results[0], 'fatal')).toBe(false)
+    expect((await harness.adapter.run(request({ tests }))).passedCount).toBe(1)
   })
 
   it('routes a structural test to the checker instead of the compiler', async () => {

@@ -62,7 +62,7 @@
       "topics": ["paradigms", "java-syntax", "classes-objects", "encapsulation", "static", "inheritance", "polymorphism", "interfaces", "associations", "collections", "exceptions", "streams", "uml", "design-patterns"],
       "clo_ids": ["INFS3102-1", "INFS3102-2", "INFS3102-3", "INFS3102-4"],
       "status": "live",
-      "note": "Java compiles and runs in the browser on CheerpJ. All 18 exercises are certified by e2e/java/verify-java-bank.spec.ts: every reference solution passes every one of its tests through a real javac."
+      "note": "Java compiles and runs in the browser on CheerpJ. 16 code exercises were certified in a real browser by RUN_JAVA_BANK=1 npx playwright test e2e/java/verify-java-bank.spec.ts (every reference solution passes every one of its tests through a real javac); the other 2 are answer-form rows that need no runtime."
     },
     {
       "code": "DSAI2201",

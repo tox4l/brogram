@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeAll, describe, expect, it } from 'vitest'
-import { createJavaStructureChecker, parseStructureAssertions, type JavaStructureChecker, type StructureAssertions } from './java-structure'
+import { createJavaStructureChecker, readStructureTest, type JavaStructureChecker, type StructureAssertions } from './java-structure'
 import smoke from '../../../seed/exercises/smoke.json'
 
 let checker: JavaStructureChecker
@@ -35,10 +35,25 @@ const check = (source: string, types: StructureAssertions['types']) => checker.c
 
 describe('java structural checks', () => {
   it('reads the structural-test convention off a TestCase input', () => {
-    expect(parseStructureAssertions('{"structure":{"types":[{"name":"Solution"}]}}')).toEqual({ types: [{ name: 'Solution' }] })
-    expect(parseStructureAssertions('square 2')).toBeNull()
-    expect(parseStructureAssertions('[1, 2]')).toBeNull()
-    expect(parseStructureAssertions('{"other":1}')).toBeNull()
+    expect(readStructureTest('{"structure":{"types":[{"name":"Solution"}]}}')).toEqual({ kind: 'structure', assertions: { types: [{ name: 'Solution' }] } })
+    for (const stdin of ['square 2', '[1, 2]', '{"other":1}', '2\nIntro 50']) {
+      expect(readStructureTest(stdin), stdin).toEqual({ kind: 'program' })
+    }
+  })
+
+  it('refuses to grade a malformed structural test as a stdin test', () => {
+    // Each of these is a broken exercise, not a wrong answer: silently running
+    // the program against them would fail the student for someone else's typo.
+    for (const [input, detail] of [
+      ['{"structure": {"types": []}', 'not valid JSON'],
+      ['{"structure": "Shape"}', 'not an object'],
+      ['{"structure": {"types": []}}', 'non-empty array'],
+      ['{"structure": {"types": [{"kind": "class"}]}}', 'no "name"'],
+    ] as const) {
+      const read = readStructureTest(input)
+      expect(read.kind, input).toBe('invalid')
+      expect(read.kind === 'invalid' && read.message, input).toContain(detail)
+    }
   })
 
   it('verifies class presence and reports a missing one by name', () => {
@@ -78,6 +93,22 @@ describe('java structural checks', () => {
     expect(check(SOURCE, [{ name: 'Account', fields: [{ name: 'owner', modifiers: ['public'] }] }]).failures).toEqual(['Account.owner must be public.'])
     expect(check(SOURCE, [{ name: 'Account', fields: [{ name: 'nickname' }] }]).failures).toEqual(['Account must declare a field nickname.'])
     expect(check(SOURCE, [{ name: 'Savings', constructors: [{ params: 3 }] }]).failures).toEqual(['Savings must declare a constructor taking 3 parameters.'])
+  })
+
+  it('reads modifiers from the parse tree, so an annotation string cannot forge one', () => {
+    const forged = `class Vault {
+    @SuppressWarnings(" final static ") private int balance;
+    @Deprecated public void open() { }
+}
+`
+    expect(check(forged, [{ name: 'Vault', fields: [{ name: 'balance', modifiers: ['private'] }] }]).ok).toBe(true)
+    expect(check(forged, [{ name: 'Vault', fields: [{ name: 'balance', modifiers: ['final'] }] }]).failures).toEqual(['Vault.balance must be final.'])
+    expect(check(forged, [{ name: 'Vault', methods: [{ name: 'open', params: 0, visibility: 'public' }] }]).ok).toBe(true)
+  })
+
+  it('treats an interface as abstract on both sides of the assertion', () => {
+    expect(check(SOURCE, [{ name: 'Fee', abstract: true }]).ok).toBe(true)
+    expect(check(SOURCE, [{ name: 'Fee', abstract: false }]).failures).toEqual(['Fee must not be abstract.'])
   })
 
   it('accepts the Shapes reference solution and rejects a flattened one', () => {
