@@ -179,7 +179,10 @@ public class Runner {
     // Only Runner may change the security manager, and only from install().
     // Student code lives in a child class loader that cannot see this class.
     private static boolean managerChangeAllowed = false;
-    // Set only around invoking the student's main - see NoExit.checkPermission.
+    // Only Runner may redirect stdio, and only around the entry/restore calls
+    // in run() - see NoExit.checkPermission's "setIO" branch.
+    private static boolean ioChangeAllowed = false;
+    // Set only around invoking the student's main - see calledByStudent().
     private static ClassLoader studentLoader = null;
 
     static class ExitTrap extends SecurityException {
@@ -188,48 +191,83 @@ public class Runner {
     }
     static class NoExit extends SecurityManager {
         public void checkPermission(Permission p) {
-            if (p instanceof RuntimePermission) {
-                String name = p.getName();
-                if (!managerChangeAllowed && "setSecurityManager".equals(name)) {
-                    throw new SecurityException("Replacing the security manager is not allowed in an exercise.");
-                }
-                // createSecurityManager is only checked when a manager is already
-                // installed, which install() never triggers (System.getSecurityManager()
-                // is null every time Runner builds its own) - so denying it always
-                // costs nothing legitimate and closes one more way to interfere
-                // with this guard.
-                if ("createSecurityManager".equals(name)) {
-                    throw new SecurityException("Creating a security manager is not allowed in an exercise.");
-                }
-                if (name != null && (name.startsWith("loadLibrary.") || name.startsWith("exitVM"))) {
-                    throw new SecurityException("This operation is not allowed in an exercise.");
-                }
-            } else if (p instanceof ReflectPermission && "suppressAccessChecks".equals(p.getName()) && calledByStudent()) {
-                // Without this, reflection can null out System.security (a
-                // private, non-final field in JDK 8: Field.setAccessible(true)
-                // then Field.set(null, null)) and walk straight past checkExit.
-                // Scoped to the student's own reflective calls only - the JDK
-                // itself uses this same permission constantly for its own
-                // purposes (java.util.ResourceBundle loading locale data behind
-                // String.format, for one), and those must keep working.
+            if (!(p instanceof RuntimePermission)) return;
+            String name = p.getName();
+            if (!managerChangeAllowed && "setSecurityManager".equals(name)) {
+                throw new SecurityException("Replacing the security manager is not allowed in an exercise.");
+            }
+            // createSecurityManager is only checked when a manager is already
+            // installed, which install() never triggers (System.getSecurityManager()
+            // is null every time Runner builds its own) - so denying it always
+            // costs nothing legitimate and closes one more way to interfere
+            // with this guard.
+            if ("createSecurityManager".equals(name)) {
+                throw new SecurityException("Creating a security manager is not allowed in an exercise.");
+            }
+            if (!ioChangeAllowed && "setIO".equals(name)) {
+                throw new SecurityException("Redirecting standard input or output is not allowed in an exercise.");
+            }
+            if ("shutdownHooks".equals(name)) {
+                throw new SecurityException("Registering a shutdown hook is not allowed in an exercise.");
+            }
+            if ("accessDeclaredMembers".equals(name) && calledByStudent()) {
+                // Class.checkMemberAccess (OpenJDK 8) only calls this check when the
+                // caller's class loader differs from the target class's loader - it
+                // is the gate behind Class.getDeclaredField(s)/getDeclaredMethod(s)/
+                // getDeclaredConstructor(s). JDK-internal reflection is
+                // bootstrap-to-bootstrap and never reaches here at all (String.format's
+                // ResourceBundle lookups, Class.newInstance's own setAccessible - both
+                // sides of those calls share the null/bootstrap loader), so this scoped
+                // denial costs nothing legitimate against that path.
+                //
+                // One CheerpJ-specific wrinkle calledByStudent() exists for: linking an
+                // invokedynamic call site (creating a lambda, including a plain
+                // Runnable or Comparator with no reflection in it at all) also reaches
+                // this exact permission on CheerpJ, several java.lang.invoke.* frames
+                // deep, with the student's own frame still further down the stack
+                // (it triggered the call site). Denying unconditionally broke lambda
+                // creation itself - found by running the full legitimate-case battery
+                // in e2e/java/java-runtime.spec.ts, not by inspection. calledByStudent()
+                // tells these apart.
                 throw new SecurityException("Reflection cannot bypass access checks in an exercise.");
+            }
+            if (name != null && (name.startsWith("loadLibrary.") || name.startsWith("exitVM"))) {
+                throw new SecurityException("This operation is not allowed in an exercise.");
             }
         }
 
-        // getClassContext()[0] is this method's own class (NoExit);
-        // [1] is java.lang.reflect.AccessibleObject.setAccessible, the only
-        // caller of this specific permission check; [2] is whoever actually
-        // called .setAccessible(true). JDK-internal reflection (ResourceBundle,
-        // serialization, ...) is many more frames of java.*/sun.* code away
-        // from the student's own classes, so a narrow window around index 2
-        // catches a direct student call without ever reaching that deep.
+        // getClassContext() runs inside this method, one frame below
+        // checkPermission, so [0]/[1] are this method's own class and
+        // checkPermission (both NoExit); [2] is Class.checkMemberAccess, the
+        // only caller of this specific permission check; [3] is always
+        // java.lang.Class itself - whichever getDeclaredField(s)/
+        // getDeclaredMethod(s)/getDeclaredConstructor(s) overload was entered,
+        // it calls the same private checkMemberAccess helper directly, so this
+        // shape never varies; [4] is the actual, immediate caller of that
+        // getDeclaredXxx call. (Round 2's own off-by-one - documented in the
+        // round-2 review - was exactly this: assuming getClassContext() ran
+        // directly inside checkPermission instead of one helper-method frame
+        // deeper. Fixed here by testing the real value against CheerpJ's own
+        // stack traces rather than counting frames by inspection - see the
+        // report.) Unlike setAccessible (round 2's target, checked with no
+        // caller/loader awareness at all, so any wrapper could be interposed
+        // ahead of it), Class.checkMemberAccess is always exactly two hops from
+        // this override: a direct student call has the student's class at
+        // index 4; linking a lambda's call site (JDK-internal, legitimate) has
+        // several java.lang.invoke.* frames at that same index, with the
+        // student's frame not appearing until much deeper (it neither reflects
+        // nor is the direct caller, it just triggered the linkage); a lambda
+        // BODY that itself calls getDeclaredField gets its own, fresh two-hop
+        // stack when that call executes, with its synthetic class - loaded by
+        // the same loader as the class that declared the lambda - at index 4,
+        // correctly denied. Left open by design and confirmed unreachable from
+        // here: wrapping the getDeclaredXxx call itself through Method.invoke
+        // does not go through this override at all on CheerpJ (its
+        // checkMemberAccess never fires for that shape) - see the report.
         private boolean calledByStudent() {
             if (studentLoader == null) return false;
             Class<?>[] stack = getClassContext();
-            for (int i = 2; i < stack.length && i <= 4; i++) {
-                if (stack[i].getClassLoader() == studentLoader) return true;
-            }
-            return false;
+            return stack.length > 4 && stack[4].getClassLoader() == studentLoader;
         }
         public void checkPermission(Permission p, Object context) { checkPermission(p); }
         public void checkExit(int status) { throw new ExitTrap(status); }
@@ -240,6 +278,12 @@ public class Runner {
         try { System.setSecurityManager(manager); return true; }
         catch (Throwable ignored) { return false; }
         finally { managerChangeAllowed = false; }
+    }
+
+    private static void redirectIo(InputStream in, PrintStream out, PrintStream err) {
+        ioChangeAllowed = true;
+        try { System.setIn(in); System.setOut(out); System.setErr(err); }
+        finally { ioChangeAllowed = false; }
     }
 
     public static void main(String[] args) throws Exception {
@@ -308,13 +352,14 @@ public class Runner {
         try {
             guarded = install(new NoExit());
             stdin = new FileInputStream(stdinPath);
-            System.setIn(stdin);
-            System.setOut(new PrintStream(outBuffer, true, "UTF-8"));
-            System.setErr(errStream);
+            redirectIo(stdin, new PrintStream(outBuffer, true, "UTF-8"), errStream);
             ClassLoader parent = Runner.class.getClassLoader().getParent();
             URLClassLoader loader = new URLClassLoader(new URL[] { new File(classDir).toURI().toURL() }, parent);
-            Class<?> entry = Class.forName("Main", true, loader);
+            // Set before forcing Main's own initialization (not after), so a
+            // malicious static initializer on Main itself - not just on some
+            // other class the student only touches later - is covered too.
             studentLoader = loader;
+            Class<?> entry = Class.forName("Main", true, loader);
             entry.getMethod("main", String[].class).invoke(null, (Object) new String[0]);
         } catch (Throwable thrown) {
             Throwable cause = thrown;
@@ -328,9 +373,7 @@ public class Runner {
         } finally {
             System.out.flush();
             System.err.flush();
-            System.setIn(in0);
-            System.setOut(out0);
-            System.setErr(err0);
+            redirectIo(in0, out0, err0);
             if (stdin != null) { try { stdin.close(); } catch (IOException ignored) { } }
             if (guarded) install(manager);
             studentLoader = null;

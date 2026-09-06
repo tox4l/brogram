@@ -48,7 +48,13 @@ RUN_JAVA_BANK=1 npx playwright test e2e/java/verify-java-bank.spec.ts --project=
 ```
 
 - `java-runtime.spec.ts` grades smoke.json's "Shapes report" through the real
-  adapter (5/5) and asserts that broken source comes back as `compile-error`.
+  adapter (5/5) and asserts that broken source comes back as `compile-error`;
+  it also runs an inline battery of reflection-based exit-vector probes
+  against the in-JVM security manager (denied, worker survives) and an inline
+  battery of legitimate Java features (streams, lambdas, `java.time`, ...) to
+  prove the guard does not collaterally break them. One documented residual
+  remains — see the "declared-member gate" comment above `exploitBank` in that
+  file and the runtime report's known-limits section.
 - `verify-java-bank.spec.ts` certifies every code exercise in
   `seed/exercises/INFS3102.json` plus the smoke exercise, prints the table, and
   fails if any reference solution stops passing its own tests. Run it after any
