@@ -14,19 +14,25 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: mocks.fro
 const envelope = (agent: AgentName, reply: unknown): AgentEnvelope<unknown> => ({ ok: true, agent, reply, fallback: false, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 } })
 
 type Row = Record<string, unknown>
+type CandidateCall = { columns: string; eq: Record<string, unknown>; order: string[]; limit: number | null }
 let tables: Record<string, Row[]>
-let lastInFilter: { table: string; key: string; values: unknown[] } | null
+let candidateCalls: CandidateCall[]
 
 function query(table: string) {
   let payload: Row | undefined
   let action: 'read' | 'insert' | 'update' = 'read'
   let single = false
+  let limit: number | null = null
+  let orderKeys: string[] = []
+  let columns = ''
+  const eqValues: Record<string, unknown> = {}
   const filters: Array<(row: Row) => boolean> = []
   const builder = {
-    select: () => builder,
-    eq: (key: string, value: unknown) => { filters.push((row) => row[key] === value); return builder },
-    in: (key: string, values: unknown[]) => { lastInFilter = { table, key, values }; filters.push((row) => values.includes(row[key])); return builder },
-    order: () => builder,
+    select: (value: string) => { columns = value; return builder },
+    eq: (key: string, value: unknown) => { eqValues[key] = value; filters.push((row) => row[key] === value); return builder },
+    in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return builder },
+    order: (key: string) => { orderKeys.push(key); return builder },
+    limit: (count: number) => { limit = count; return builder },
     maybeSingle: () => { single = true; return builder },
     insert: (value: Row) => { action = 'insert'; payload = value; return builder },
     update: (value: Row) => { action = 'update'; payload = value; return builder },
@@ -44,7 +50,12 @@ function query(table: string) {
         if (!found.length) return Promise.resolve(resolve({ data: null, error: null }))
         return Promise.resolve(resolve({ data: single ? { version: found[0].version } : found, error: null }))
       }
-      const found = rows.filter((row) => filters.every((filter) => filter(row)))
+      let found = rows.filter((row) => filters.every((filter) => filter(row)))
+      if (table === 'exercises_public' && !single) {
+        candidateCalls.push({ columns, eq: { ...eqValues }, order: [...orderKeys], limit })
+        for (const key of orderKeys) found = [...found].sort((a, b) => Number(a[key]) - Number(b[key]))
+        if (limit !== null) found = found.slice(0, limit)
+      }
       return Promise.resolve(resolve({ data: single ? found[0] ?? null : found, error: null }))
     },
   }
@@ -74,7 +85,7 @@ function session(overrides: Partial<{ version: number; onboardingComplete: boole
 
 beforeEach(() => {
   vi.clearAllMocks()
-  lastInFilter = null
+  candidateCalls = []
   tables = {
     courses: [
       { code: 'C1', slug: 'foundations', title: 'Programming foundations', language: 'python', level: 1, status: 'live' },
@@ -160,12 +171,16 @@ describe('onboarding', () => {
     expect(screen.getByRole('group', { name: 'Coming soon' })).toBeTruthy()
   })
 
-  it('fetches candidates for exactly the first three CLOs by ordinal and calls the Planner once', async () => {
+  it('fetches candidates for exactly the first three CLOs by ordinal, bounded and ordered, and calls the Planner once', async () => {
     await completeToCoursePicker()
     mocks.call.mockResolvedValueOnce(envelope('planner', { path: ['C1-1', 'C1-2', 'C1-3', 'C1-4'], nextExerciseIds: ['ex1'], focus: 'Start with the basics.' }))
     fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
-    expect(lastInFilter).toEqual({ table: 'exercises_public', key: 'clo_id', values: ['C1-1', 'C1-2', 'C1-3'] })
+    expect(candidateCalls.map((call) => call.eq.clo_id)).toEqual(['C1-1', 'C1-2', 'C1-3'])
+    expect(candidateCalls.every((call) => call.eq.verified === true)).toBe(true)
+    expect(candidateCalls.every((call) => call.limit === 10)).toBe(true)
+    expect(candidateCalls.every((call) => call.order.includes('difficulty'))).toBe(true)
+    expect(candidateCalls.every((call) => call.columns === 'id,clo_id,pattern,difficulty,title')).toBe(true)
     expect(mocks.call.mock.calls.filter(([req]) => req.agent === 'planner')).toHaveLength(1)
     const plannerRequest = mocks.call.mock.calls.find(([req]) => req.agent === 'planner')![0]
     expect(plannerRequest.trigger).toBe('plan-refresh')
@@ -191,7 +206,7 @@ describe('onboarding', () => {
   })
 
   it('completes onboarding even when no candidates are available for the chosen CLOs', async () => {
-    tables.clos = []
+    // CLOs exist (the course is ready); only the bank for them is still empty.
     tables.exercises_public = []
     await completeToCoursePicker()
     mocks.call.mockResolvedValueOnce(envelope('planner', { path: [], nextExerciseIds: [], focus: 'Your next exercises are still being prepared.' }))
@@ -199,9 +214,32 @@ describe('onboarding', () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
     const plannerRequest = mocks.call.mock.calls.find(([req]) => req.agent === 'planner')![0]
     expect(plannerRequest.candidates).toEqual([])
-    expect(plannerRequest.clos).toEqual([])
+    expect(plannerRequest.clos).toHaveLength(4)
     const row = tables.learner_state.find((entry) => entry.user_id === 'student')!
     const state = row.state as { nextExerciseIds: string[] }
     expect(state.nextExerciseIds).toEqual([])
+  })
+
+  it('returns to the course picker with a message when the chosen course has no ready outcomes', async () => {
+    tables.clos = []
+    await completeToCoursePicker()
+    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
+    await screen.findByText(/is not ready for practice yet/)
+    expect(await screen.findByRole('heading', { name: 'Choose your course' })).toBeTruthy()
+    expect(mocks.call.mock.calls.filter(([req]) => req.agent === 'planner')).toHaveLength(0)
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('shows a recoverable error with a way back to the course picker when the Planner call fails', async () => {
+    await completeToCoursePicker()
+    mocks.call.mockRejectedValueOnce(new Error('Upstream unavailable'))
+    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
+    await screen.findByRole('alert')
+    expect(screen.getByText('Upstream unavailable')).toBeTruthy()
+    expect(mocks.push).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a different course' }))
+    expect(await screen.findByRole('heading', { name: 'Choose your course' })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 })

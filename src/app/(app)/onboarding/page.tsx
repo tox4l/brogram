@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight } from 'lucide-react'
-import type { ExercisePublic } from '@/lib/contracts'
+import type { Difficulty, PatternId } from '@/lib/contracts'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { callAgent } from '@/lib/agents/client'
-import { toExercisePublic } from '@/lib/learner/bank'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
 import comingSoonSeed from '../../../../seed/courses.json'
@@ -20,10 +19,23 @@ import {
 type Stage = 'question' | 'course' | 'plan'
 type LiveCourse = { code: string; slug: string; title: string; language: string; level: number }
 type ComingSoonCourse = { slug: string; title: string; language: string }
+type CandidateExercise = { id: string; cloId: string; pattern: PatternId; difficulty: Difficulty; title: string }
 
 /** Onboarding stays under four minutes; this is a hard client-side backstop on top of the agent's own cap. */
 const MAX_QUESTIONS = 13
+/** Per CLO, not per course: three CLOs at 10 each keeps the request at 30 candidates, never one CLO's whole bank. */
+const CANDIDATES_PER_CLO = 10
 const COMING_SOON: ComingSoonCourse[] = comingSoonSeed.coming_soon
+
+async function fetchCandidates(supabase: ReturnType<typeof createClient>, cloId: string): Promise<CandidateExercise[]> {
+  const { data, error } = await supabase.from('exercises_public').select('id,clo_id,pattern,difficulty,title')
+    .eq('clo_id', cloId).eq('verified', true).order('difficulty').limit(CANDIDATES_PER_CLO)
+  if (error) throw error
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: String(row.id), cloId: String(row.clo_id), pattern: String(row.pattern) as PatternId,
+    difficulty: Number(row.difficulty) as Difficulty, title: String(row.title),
+  }))
+}
 
 export default function Onboarding() {
   const session = useSession()
@@ -43,6 +55,7 @@ export default function Onboarding() {
   const [liveCourses, setLiveCourses] = useState<LiveCourse[] | null>(null)
   const [coursesLoading, setCoursesLoading] = useState(false)
   const [coursesError, setCoursesError] = useState<string | null>(null)
+  const [courseNotice, setCourseNotice] = useState<string | null>(null)
   const [selectedCourseTitle, setSelectedCourseTitle] = useState<string | null>(null)
 
   const userId = session.user?.id ?? null
@@ -60,6 +73,11 @@ export default function Onboarding() {
   const retryLast = useCallback(() => {
     if (lastActionRef.current) void perform(lastActionRef.current)
   }, [perform])
+
+  const backToCoursePicker = useCallback(() => {
+    setError(null)
+    setStage('course')
+  }, [])
 
   const submitAnswer = useCallback((option: string) => {
     if (!userId) return
@@ -97,22 +115,27 @@ export default function Onboarding() {
 
   const chooseCourse = useCallback((course: LiveCourse) => {
     if (!userId || !session.learnerState) return
+    setCourseNotice(null)
     setSelectedCourseTitle(course.title)
     setStage('plan')
     void perform(async () => {
       const supabase = client()
+      // Drafts are excluded here, at the source; a course whose CLOs are all still
+      // draft therefore yields an empty list, which is a normal outcome, not an error.
       const { data: cloRows, error: cloError } = await supabase.from('clos').select('*').eq('course', course.code).eq('draft', false).order('ordinal')
       if (cloError) throw cloError
       const clos = (cloRows ?? []).map(mapCloRow)
+      if (!clos.length) {
+        setCourseNotice(`${course.title} is not ready for practice yet. Choose another course.`)
+        setStage('course')
+        return
+      }
       const firstThree = clos.slice(0, 3).map((clo) => clo.id)
 
-      let candidateRows: ExercisePublic[] = []
-      if (firstThree.length) {
-        const { data: exerciseRows, error: exerciseError } = await supabase.from('exercises_public').select('*').in('clo_id', firstThree).eq('verified', true)
-        if (exerciseError) throw exerciseError
-        candidateRows = (exerciseRows ?? []).map(toExercisePublic)
-      }
-      const candidates = candidateRows.slice(0, 30).map(({ id, cloId, pattern, difficulty, title }) => ({ id, cloId, pattern, difficulty, title }))
+      // Bounded and ordered per CLO so one heavily seeded CLO cannot crowd out the
+      // others, and only the fields the Planner needs travel over the wire.
+      const candidateLists = await Promise.all(firstThree.map((cloId) => fetchCandidates(supabase, cloId)))
+      const candidates = candidateLists.flat()
 
       const plannerEnvelope = await callAgent({
         agent: 'planner', trigger: 'plan-refresh',
@@ -172,6 +195,7 @@ export default function Onboarding() {
           <h1 className="text-2xl font-medium tracking-tight">Choose your course</h1>
           <p className="text-sm text-muted-foreground">You can change this anytime from your dashboard.</p>
         </div>
+        {courseNotice && <p role="status" className="rounded-lg border border-dashed border-input p-4 text-sm text-muted-foreground">{courseNotice}</p>}
         {coursesLoading && <StepLoading label="Opening your courses." />}
         {coursesError && <ErrorRetry message={coursesError} onRetry={loadCourses} />}
         {!coursesLoading && !coursesError && liveCourses && (
@@ -213,7 +237,7 @@ export default function Onboarding() {
       <h1 className="text-2xl font-medium tracking-tight">Building your path</h1>
       <p className="text-sm text-muted-foreground">{selectedCourseTitle ? `Matching your first exercises in ${selectedCourseTitle}.` : 'Matching your first exercises.'}</p>
       <StepLoading label="Preparing your plan." />
-      {error && <ErrorRetry message={error} onRetry={retryLast} />}
+      {error && <ErrorRetry message={error} onRetry={retryLast} onSecondary={backToCoursePicker} secondaryLabel="Choose a different course" />}
     </div>
   )
 }
@@ -231,11 +255,16 @@ function StepLoading({ label }: { label: string }) {
   )
 }
 
-function ErrorRetry({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorRetry({ message, onRetry, onSecondary, secondaryLabel }: {
+  message: string; onRetry: () => void; onSecondary?: () => void; secondaryLabel?: string
+}) {
   return (
     <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-4">
       <p className="min-w-0 flex-1 text-sm">{message}</p>
-      <Button variant="outline" onClick={onRetry}>Try again</Button>
+      <div className="flex flex-wrap gap-2">
+        {onSecondary && <Button variant="ghost" onClick={onSecondary}>{secondaryLabel}</Button>}
+        <Button variant="outline" onClick={onRetry}>Try again</Button>
+      </div>
     </div>
   )
 }
