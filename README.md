@@ -15,10 +15,13 @@ security, so a browser can read and write its own learner state directly
 without a server in the middle for the common path. Seven learner-state
 agents — Profiler, Planner, Author, Diagnoser, Coach, Reviewer, and Buddy —
 sit behind a single route and share one frozen request and reply contract.
-Code, HTML/CSS/JS, and SQL/Mongo exercises run and grade in the browser's own
-runtimes (Pyodide, a sandboxed iframe, sql.js, and mingo); Java is the one
-language that would leave the browser for a remote judge, but there is
-no code judge at launch — Java exercises are marked not available. The
+Every language runs and grades in the browser's own runtimes — Pyodide, a
+sandboxed iframe, sql.js, and mingo — and Java joins them through CheerpJ, a
+WebAssembly JVM loaded from its vendor's CDN under the free Community License
+that compiles submissions in a Worker with the real OpenJDK 8 `javac` from a
+self-hosted `tools.jar` (GPLv2 with the Classpath Exception, fetched at install
+time and never committed; see `public/java/README.md`), with tree-sitter
+checking a submission's structure where output alone cannot. The
 shapes every part of the app agrees on — learner state, exercises, agent messages, runtime
 requests — are frozen in `src/lib/contracts.ts` and
 `src/lib/agents/requests.ts`, and no other file redefines them.
@@ -29,7 +32,7 @@ Requires Node.js 22 or later and npm.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in Supabase and DeepSeek credentials; no code judge at launch, Java exercises are marked not available
+cp .env.example .env.local   # fill in Supabase and DeepSeek credentials; Java runs in the browser (NEXT_PUBLIC_JUDGE_PROVIDER=browser)
 supabase db push             # apply migrations to your Supabase project
 node scripts/seed-load.mjs   # load courses, CLOs, patterns, exercises, and drills
 npm run dev

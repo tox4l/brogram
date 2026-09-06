@@ -58,7 +58,8 @@ function ExerciseWorkspace({ id }: { id: string }) {
           : exercise.kind === 'schema' ? <SchemaEditor {...answerProps} logIntegrity={lockdown.logIntegrity} />
           : <Editor {...answerProps} language={exercise.language} logIntegrity={lockdown.logIntegrity} />}
         <div className="space-y-3 border-t border-border p-3">
-          {loop.progress?.phase === 'loading' && <p role="status" className="break-words text-xs leading-relaxed text-muted-foreground">Loading {loop.progress.packageName}{loop.progress.message ? ` · ${loop.progress.message}` : ''}</p>}
+          {/* Java's warmup reports whole steps ("Fetching the compiler (18 MB, once)"), not package names. */}
+          {loop.progress?.phase === 'loading' && <p role="status" className="break-words text-xs leading-relaxed text-muted-foreground">{exercise.language === 'java' ? loop.progress.packageName : `Loading ${loop.progress.packageName}`}{loop.progress.message ? ` · ${loop.progress.message}` : ''}</p>}
           {loop.judgeAbsent
             ? <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm"><p className="text-muted-foreground">Java exercises are not available yet. Pick another course for now.</p><Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>Back to dashboard</Link></div>
             : <div className="flex flex-wrap items-center justify-end gap-2">

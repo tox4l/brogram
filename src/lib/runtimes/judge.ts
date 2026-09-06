@@ -1,10 +1,15 @@
 import type { Language, RunRequest, RunResult, RuntimeAdapter, TestCase, TestResult } from '@/lib/contracts'
 import { buildJavaSource } from './java-normalize'
 
-/** No server judge is wired up yet; the exercise screen hides Run/Submit for Java while this holds. */
+/** No Java execution path at all; the exercise screen hides Run/Submit for Java while this holds. */
 export function judgeProviderAbsent(): boolean {
   const value = process.env.NEXT_PUBLIC_JUDGE_PROVIDER?.trim()
   return !value || value === 'none'
+}
+
+/** 'browser' runs Java through CheerpJ on the client; anything else keeps the remote-judge seam. */
+export function browserJavaEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_JUDGE_PROVIDER?.trim() === 'browser'
 }
 
 interface JudgeReply {

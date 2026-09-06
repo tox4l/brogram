@@ -3,10 +3,13 @@ import { errorOutput, type ExecutionOutput } from './shared'
 
 export interface RuntimeEngine {
   warmup(packages: string[], progress: (packageName: string) => void): Promise<void>
+  /** Optional once-per-run preparation that gets its own deadline; Java compiles here. */
+  compile?(request: RunRequest): Promise<void>
   execute(request: RunRequest, test?: TestCase): Promise<ExecutionOutput>
 }
 export type WorkerCommand =
   | { type: 'prepare'; id: number; packages: string[] }
+  | { type: 'compile'; id: number; request: RunRequest }
   | { type: 'run'; id: number; request: RunRequest; test?: TestCase }
 export type WorkerReply =
   | { type: 'ready'; id: number }
@@ -19,6 +22,9 @@ export async function handleWorkerCommand(engine: RuntimeEngine, command: Worker
   try {
     if (command.type === 'prepare') {
       await engine.warmup(command.packages, packageName => send({ type: 'progress', packageName }))
+      send({ type: 'ready', id: command.id })
+    } else if (command.type === 'compile') {
+      await engine.compile?.(command.request)
       send({ type: 'ready', id: command.id })
     } else {
       let output: ExecutionOutput

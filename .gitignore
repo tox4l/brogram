@@ -34,9 +34,12 @@ test-results/
 playwright-report/
 coverage/
 
-# CheerpJ spike: GPLv2+CE OpenJDK 8 tools.jar (18 MB), self-hosted, not committed.
-# See docs/research/cheerpj-spike.md for the exact download URL and size.
+# CheerpJ: GPLv2+CE OpenJDK 8 tools.jar (18 MB), self-hosted, not committed to an
+# MIT history. scripts/fetch-java-tools.mjs downloads it; the notice that must
+# travel with it is public/java/TOOLS-JAR-LICENSE.md.
 public/spikes/cheerpj/tools.jar
+public/java/tools.jar
+public/java/tools.jar.download
 
 # OS
 .DS_Store

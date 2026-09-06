@@ -4,7 +4,8 @@ import { JsAdapter } from './js'
 import { WebAdapter } from './web'
 import { SqlAdapter } from './sql'
 import { MongoAdapter } from './mongo'
-import { JudgeAdapter } from './judge'
+import { JudgeAdapter, browserJavaEnabled } from './judge'
+import { JavaAdapter } from './java'
 
 export { subscribeRuntimeProgress, type RuntimeProgress } from './progress'
 export { judgeProviderAbsent } from './judge'
@@ -21,7 +22,9 @@ export function getRuntime(language: Language): RuntimeAdapter {
     case 'web': adapter = new WebAdapter(); break
     case 'sql': adapter = new SqlAdapter(); break
     case 'mongo': adapter = new MongoAdapter(); break
-    case 'java': adapter = new JudgeAdapter(); break
+    // NEXT_PUBLIC_JUDGE_PROVIDER=browser compiles and runs Java on the client
+    // with CheerpJ; every other value keeps the remote-judge seam untouched.
+    case 'java': adapter = browserJavaEnabled() ? new JavaAdapter() : new JudgeAdapter(); break
     default: throw new Error(`Unsupported runtime: ${language}`)
   }
   runtimes.set(language, adapter)

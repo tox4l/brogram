@@ -135,8 +135,9 @@ export function useExerciseLoop(exerciseId: string) {
         exerciseRef.current = item; cloRef.current = outcome
         const initialCode = usesAnswerForm(item) ? item.kind === 'spot-the-bug' ? '[]' : item.kind === 'trace' ? '{}' : '' : item.starterCode
         codeRef.current = initialCode; updateCode(initialCode); setExercise(item); setClo(outcome); setStatus('ready')
-        // A Java exercise with no configured judge has no runtime to warm up and no agent to call yet;
-        // the exercise screen replaces Run/Submit with a not-available notice for this case.
+        // NEXT_PUBLIC_JUDGE_PROVIDER=browser gives Java a real runtime to warm up (CheerpJ, which
+        // takes seconds, so warming it here matters). With no provider at all there is nothing to warm
+        // and no agent to call; the exercise screen replaces Run/Submit with a not-available notice.
         if (!usesAnswerForm(item) && !(item.language === 'java' && judgeProviderAbsent())) {
           try { await getRuntime(item.kind === 'schema' ? 'sql' : item.language).warmup() }
           catch (warmupError) { if (active()) setError(`Runtime preparation failed: ${messageOf(warmupError)}. Run or submit to retry.`) }

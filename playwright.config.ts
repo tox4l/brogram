@@ -11,7 +11,13 @@ export default defineConfig({
   // before CLI file-path filtering, so an excluded file can't be re-included by
   // naming it on the command line - RUN_SPIKES=1 lifts the exclusion instead:
   //   RUN_SPIKES=1 npx playwright test e2e/spikes/cheerpj.spec.ts --config playwright.config.ts
-  testIgnore: process.env.RUN_SPIKES ? undefined : '**/spikes/**',
+  // The whole-Java-bank certification run is excluded the same way (it compiles
+  // every reference solution in a real browser and takes minutes):
+  //   RUN_JAVA_BANK=1 npx playwright test e2e/java/verify-java-bank.spec.ts --project=chromium
+  testIgnore: [
+    ...(process.env.RUN_SPIKES ? [] : ['**/spikes/**']),
+    ...(process.env.RUN_JAVA_BANK ? [] : ['**/verify-java-bank.spec.ts']),
+  ],
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

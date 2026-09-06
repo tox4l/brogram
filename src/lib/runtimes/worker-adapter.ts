@@ -15,6 +15,9 @@ type Slot = { worker: RuntimeWorker; pending: Map<number, Pending>; prepared: Se
 type Run = { request: RunRequest; results: TestResult[]; resolve: (result: RunResult) => void; done: boolean; timer?: ReturnType<typeof setTimeout> }
 const timeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'Execution timed out or was aborted.', failureKind: 'timeout' }
 
+/** A run is one optional compile followed by one deadline per test. */
+export type RunPhase = 'compile' | 'test'
+
 /** Main-thread deadlines surround one test at a time; student execution never runs here. */
 export class WorkerAdapter implements RuntimeAdapter {
   private active?: Slot
@@ -50,7 +53,16 @@ export class WorkerAdapter implements RuntimeAdapter {
     slot.pending.clear()
   }
 
-  private send(slot: Slot, command: Omit<Extract<WorkerCommand, { type: 'prepare' }>, 'id'> | Omit<Extract<WorkerCommand, { type: 'run' }>, 'id'>): Promise<ExecutionOutput | undefined> {
+  /**
+   * Wall-clock budget for one phase. `null` means this runtime has no such
+   * phase, so no message is sent for it: only a compiled language overrides
+   * 'compile', and a compile must be allowed to outlast a single test.
+   */
+  protected phaseBudgetMs(phase: RunPhase, request: RunRequest): number | null {
+    return phase === 'test' ? browserTimeout(request.timeoutMs) : null
+  }
+
+  private send(slot: Slot, command: Omit<Extract<WorkerCommand, { type: 'prepare' }>, 'id'> | Omit<Extract<WorkerCommand, { type: 'compile' }>, 'id'> | Omit<Extract<WorkerCommand, { type: 'run' }>, 'id'>): Promise<ExecutionOutput | undefined> {
     if (slot.dead) return Promise.reject(new Error('Runtime worker is unavailable.'))
     return new Promise((resolve, reject) => {
       const id = ++this.sequence
@@ -124,9 +136,17 @@ export class WorkerAdapter implements RuntimeAdapter {
       if (needsBoth) await this.warmup()
       else await this.prepare(this.active!)
       if (run.done) return
+      const compileBudget = this.phaseBudgetMs('compile', run.request)
+      if (compileBudget !== null) {
+        run.timer = setTimeout(() => { if (this.current === run) this.abort() }, compileBudget)
+        await this.send(this.active!, { type: 'compile', request: run.request })
+        clearTimeout(run.timer)
+        if (run.done) return
+      }
+      const testBudget = this.phaseBudgetMs('test', run.request) ?? browserTimeout(run.request.timeoutMs)
       for (const test of run.request.tests.length ? run.request.tests : [undefined]) {
         const start = performance.now()
-        run.timer = setTimeout(() => { if (this.current === run) this.abort() }, browserTimeout(run.request.timeoutMs))
+        run.timer = setTimeout(() => { if (this.current === run) this.abort() }, testBudget)
         const output = await this.send(this.active!, { type: 'run', request: run.request, test })
         clearTimeout(run.timer)
         if (run.done) return
