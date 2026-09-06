@@ -14,6 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const migrationsDir = join(here, '..', '..', '..', 'supabase', 'migrations')
 const sql = readFileSync(join(migrationsDir, '0008_integrity_breakdown.sql'), 'utf8')
 const sql0003 = readFileSync(join(migrationsDir, '0003_integrity.sql'), 'utf8')
+const sql0009 = readFileSync(join(migrationsDir, '0009_drill_lanes.sql'), 'utf8')
 
 /** Strips `--` line comments so a comment that merely talks about a `case`
  *  expression (as this file's own header does, describing the bug it fixes)
@@ -56,6 +57,12 @@ function policyDefinition(text: string, policyName: string): string {
   return match[0]
 }
 
+function functionBody(text: string, functionName: string): string {
+  const match = text.match(new RegExp(`create or replace function public\\.${functionName}\\([\\s\\S]*?\\$\\$;`))
+  if (!match) throw new Error(`could not find function ${functionName}`)
+  return match[0]
+}
+
 describe('0008_integrity_breakdown.sql weights', () => {
   it('seeds integrity_weights with exactly the INTEGRITY_WEIGHTS contract, key for key and number for number', () => {
     const sqlWeights = parseWeightTuples(sql)
@@ -83,5 +90,29 @@ describe('0008_integrity_breakdown.sql weights', () => {
     const policy = policyDefinition(sql, 'integrity_weights_read')
     expect(policy).not.toMatch(/\bto\s+authenticated\b/i)
     expect(policy).toMatch(/for select\s+using\s*\(true\)/i)
+  })
+})
+
+describe('0009_drill_lanes.sql append_drill_result required fields', () => {
+  // `result->>'x'` is SQL NULL for both a missing key and an explicit JSON
+  // null, and `NULL::timestamptz` is NULL (not an error) and `trim(NULL) = ''`
+  // is NULL (not true) — so a cast-only or trim-only guard lets a bare
+  // `{"drillId": null}` or an absent/null `at` slip through silently. Both
+  // fields need an explicit `is null` check before the value is used.
+  const body = functionBody(sql0009, 'append_drill_result')
+
+  it('rejects a missing or null "at" before ever attempting the timestamp cast', () => {
+    const requiredCheck = /if\s+not\s*\(result\s*\?\s*'at'\)\s+or\s+result->>'at'\s+is\s+null\s+then\s+raise exception/i
+    expect(body).toMatch(requiredCheck)
+
+    const requiredIndex = body.search(requiredCheck)
+    const castIndex = body.search(/perform\s*\(result->>'at'\)::timestamptz/i)
+    expect(requiredIndex).toBeGreaterThan(-1)
+    expect(castIndex).toBeGreaterThan(-1)
+    expect(requiredIndex).toBeLessThan(castIndex)
+  })
+
+  it('rejects a null "drillId", not just a missing key or an empty string', () => {
+    expect(body).toMatch(/if\s+not\s*\(result\s*\?\s*'drillId'\)\s+or\s+result->>'drillId'\s+is\s+null\s+or\s+trim\(result->>'drillId'\)\s*=\s*''\s+then/i)
   })
 })

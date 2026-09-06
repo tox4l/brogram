@@ -83,24 +83,47 @@ export function resolveConnectionString(values) {
   return `postgres://postgres.${ref}:${encodeURIComponent(password)}@${POOLER_HOST}:${POOLER_PORT}/postgres`
 }
 
-function sslOptions(values) {
-  const caPath = values.SUPABASE_DB_SSL_CA?.trim()
-  if (!caPath) return { rejectUnauthorized: true }
+/** The host TLS should verify against — parsed off the actual connection
+ *  string rather than the hardcoded pooler constant, so a SUPABASE_DB_URL
+ *  override (a different host) still gets a matching servername. */
+function targetHost(connectionString) {
   try {
-    return { ca: readFileSync(caPath, 'utf8'), rejectUnauthorized: true }
+    return new URL(connectionString).hostname || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function sslOptions(values, host) {
+  const caPath = values.SUPABASE_DB_SSL_CA?.trim()
+  // `servername` drives SNI on the way out and the SAN/hostname check on the
+  // way back; without it, passing a custom `ca` can otherwise verify a chain
+  // while skipping the hostname match entirely.
+  const base = { rejectUnauthorized: true, servername: host }
+  if (!caPath) return base
+  try {
+    return { ...base, ca: readFileSync(caPath, 'utf8') }
   } catch (error) {
     throw new Error(`Could not read SUPABASE_DB_SSL_CA at "${caPath}": ${error.message}`)
   }
 }
 
-async function connectOrExplain(client, values) {
+async function connectOrExplain(client, values, host) {
   try {
     await client.connect()
   } catch (error) {
-    const looksLikeTrust = /certificate|self.signed|unable to verify|SELF_SIGNED|UNABLE_TO_VERIFY_LEAF_SIGNATURE/i.test(error.message ?? '')
+    const message = error.message ?? ''
+    const looksLikeHostnameMismatch = error.code === 'ERR_TLS_CERT_ALTNAME_INVALID' || /altname|hostname\/ip does not match/i.test(message)
+    if (looksLikeHostnameMismatch) {
+      throw new Error(
+        `The server's TLS certificate does not cover the host "${host}" (${message}). Confirm SUPABASE_DB_SSL_CA ` +
+          'is the correct CA for this pooler, or that the connection string\'s host matches the certificate.',
+      )
+    }
+    const looksLikeTrust = /certificate|self.signed|unable to verify|SELF_SIGNED|UNABLE_TO_VERIFY_LEAF_SIGNATURE/i.test(message)
     if (looksLikeTrust && !values.SUPABASE_DB_SSL_CA) {
       throw new Error(
-        `Could not verify the server's TLS certificate (${error.message}). Set SUPABASE_DB_SSL_CA=<path to the ` +
+        `Could not verify the server's TLS certificate (${message}). Set SUPABASE_DB_SSL_CA=<path to the ` +
           "Supabase pooler's root CA certificate> to verify against it, rather than disabling verification.",
       )
     }
@@ -108,12 +131,20 @@ async function connectOrExplain(client, values) {
   }
 }
 
+/** Reads the applied-versions ledger. A missing table is reported loudly
+ *  (never treated as "nothing has been applied yet") — planMigrations calls
+ *  this before any bootstrap DDL, so a missing table means the ledger itself
+ *  is missing or pointed at the wrong database, not that the project is
+ *  fresh; silently returning an empty set there made a dry run list all nine
+ *  migrations, including five already live, with no hint why. */
 async function readLedger(client) {
   try {
     const { rows } = await client.query('select version from supabase_migrations.schema_migrations')
     return new Set(rows.map((row) => row.version))
   } catch (error) {
-    if (error.code === LEDGER_MISSING) return new Set()
+    if (error.code === LEDGER_MISSING) {
+      throw new Error('ledger table not found; refusing to apply')
+    }
     throw error
   }
 }
@@ -122,9 +153,10 @@ async function readLedger(client) {
 export async function planMigrations({ root = ROOT, env = process.env } = {}) {
   const values = mergedEnv(root, env)
   const connectionString = resolveConnectionString(values)
+  const host = targetHost(connectionString)
   const pg = await loadPg()
-  const client = new pg.Client({ connectionString, ssl: sslOptions(values) })
-  await connectOrExplain(client, values)
+  const client = new pg.Client({ connectionString, ssl: sslOptions(values, host) })
+  await connectOrExplain(client, values, host)
   try {
     const applied = await readLedger(client)
     return listMigrationFiles(join(root, 'supabase', 'migrations')).filter((file) => !applied.has(versionOf(file)))
@@ -137,9 +169,10 @@ export async function planMigrations({ root = ROOT, env = process.env } = {}) {
 export async function applyMigrations({ root = ROOT, env = process.env } = {}) {
   const values = mergedEnv(root, env)
   const connectionString = resolveConnectionString(values)
+  const host = targetHost(connectionString)
   const pg = await loadPg()
-  const client = new pg.Client({ connectionString, ssl: sslOptions(values) })
-  await connectOrExplain(client, values)
+  const client = new pg.Client({ connectionString, ssl: sslOptions(values, host) })
+  await connectOrExplain(client, values, host)
   try {
     await client.query(
       'create schema if not exists supabase_migrations; ' +

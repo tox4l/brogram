@@ -30,7 +30,10 @@ begin
   if (select auth.uid()) is null then raise exception 'not signed in'; end if;
   if not public.is_not_banned() then raise exception 'account is banned'; end if;
 
-  if not (result ? 'drillId') or trim(result->>'drillId') = '' then
+  -- `->>` returns NULL for both a missing key and an explicit JSON null, but
+  -- `trim(NULL) = ''` is NULL (not true), so a bare `{"drillId": null}` used
+  -- to slip past this check silently. The explicit `is null` closes that.
+  if not (result ? 'drillId') or result->>'drillId' is null or trim(result->>'drillId') = '' then
     raise exception 'append_drill_result: drillId is required';
   end if;
   if result->>'kind' is null or result->>'kind' not in (
@@ -47,6 +50,12 @@ begin
   end if;
   if jsonb_typeof(result->'timeMs') is distinct from 'number' or jsonb_typeof(result->'score') is distinct from 'number' then
     raise exception 'append_drill_result: timeMs and score must be numbers';
+  end if;
+  -- Same NULL-passes-a-cast trap as drillId: `NULL::timestamptz` is NULL,
+  -- not an error, so a missing or JSON-null `at` used to sail through the
+  -- exception block below untouched. Required explicitly, first.
+  if not (result ? 'at') or result->>'at' is null then
+    raise exception 'append_drill_result: at is required';
   end if;
   begin
     perform (result->>'at')::timestamptz;
