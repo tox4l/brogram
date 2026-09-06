@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { compileLearnerState } from '@/lib/learner/compile'
+import { SessionProvider } from '@/components/shell/SessionProvider'
+import type { SessionData } from '@/store/session'
+import { QuerySeed } from '@/components/shell/QuerySeed'
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), query: vi.fn(), from: vi.fn(), headers: new Headers() }))
 vi.mock('next/headers', () => ({ headers: async () => mocks.headers }))
 vi.mock('next/navigation', () => ({ redirect: (path: string) => { throw new Error(`REDIRECT:${path}`) } }))
@@ -18,11 +21,41 @@ beforeEach(() => {
     return query
   })
 })
-async function layout() {
+// `Layout` now wraps `SessionProvider` in `QueryProvider` (T0.4). None of this
+// file's assertions render the tree through React, so a plain call still
+// returns the element graph as data; unwrap it here rather than in every
+// test so every existing assertion below reads `SessionProvider`'s props
+// exactly as it did before the wrapper was added.
+function childArray(element: { props: { children: unknown } }) {
+  const children = element.props.children
+  return Array.isArray(children) ? children : [children]
+}
+/** Finds the element of `type` among `tree`'s direct children and returns it typed by that component's own props. */
+function findChild<P>(tree: { props: { children: unknown } }, type: unknown): { props: P } {
+  const match = childArray(tree).find((child) => (child as { type?: unknown } | null)?.type === type) as { props: P } | undefined
+  if (!match) throw new Error('Expected child not found in the tree QueryProvider rendered')
+  return match
+}
+async function layoutTree() {
   const { default: Layout } = await import('./layout')
   return Layout({ children: <p>Protected child</p> })
 }
+// Every test below reaches `layout()` only after the redirect/error guards pass,
+// at which point `AppLayout` has always built a concrete profile and learner
+// state — never `null` — so this narrows `SessionData`'s nullable fields once
+// here rather than asserting non-null at each of this file's existing reads.
+type RenderedSession = { initialState: { user: SessionData['user']; profile: NonNullable<SessionData['profile']>; learnerState: NonNullable<SessionData['learnerState']> } }
+async function layout() {
+  const tree = await layoutTree()
+  return findChild<RenderedSession>(tree, SessionProvider)
+}
 describe('app hydration', () => {
+  it('mounts QueryProvider around SessionProvider and seeds the learner state', async () => {
+    const tree = await layoutTree()
+    const seed = findChild<Parameters<typeof QuerySeed>[0]>(tree, QuerySeed)
+    expect(seed.props.userId).toBe('student')
+    expect(seed.props.learnerState?.userId).toBe('student')
+  })
   it('uses the forwarded account without selecting profiles again', async () => {
     const tree = await layout()
     expect(tree.props.initialState.profile.account_status).toBe('active')

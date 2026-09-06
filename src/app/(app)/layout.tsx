@@ -7,6 +7,8 @@ import type { AccountStatus, LearnerState } from '@/lib/contracts'
 import { AppShell } from '@/components/shell/AppShell'
 import { AccountNotice } from '@/components/shell/AccountNotice'
 import { SessionProvider } from '@/components/shell/SessionProvider'
+import { QueryProvider } from '@/components/shell/QueryProvider'
+import { QuerySeed } from '@/components/shell/QuerySeed'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = await serverClient()
@@ -59,9 +61,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   learnerState = { ...learnerState, userId: user.id, accountStatus: profile.account_status, version: row?.version ?? 0 }
 
   return (
-    <SessionProvider key={`${user.id}:${profile.account_status}:${profile.restricted_until}`} initialState={{ user, profile, learnerState }}>
-      <AccountNotice status={profile.account_status} restrictedUntil={profile.restricted_until} />
-      <AppShell>{children}</AppShell>
-    </SessionProvider>
+    <QueryProvider>
+      <QuerySeed userId={user.id} learnerState={learnerState} />
+      <SessionProvider key={`${user.id}:${profile.account_status}:${profile.restricted_until}`} initialState={{ user, profile, learnerState }}>
+        <AccountNotice status={profile.account_status} restrictedUntil={profile.restricted_until} />
+        <AppShell>{children}</AppShell>
+      </SessionProvider>
+    </QueryProvider>
   )
 }
