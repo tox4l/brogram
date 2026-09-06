@@ -33,13 +33,43 @@ for t in TESTS:
 RESULT_JSON = json.dumps(results)
 `
 
+/** Counts declared parameters, ignoring *args/**kwargs; a default value still counts as one param. */
+function paramCount(signature: string): number {
+  const trimmed = signature.trim()
+  if (!trimmed) return 0
+  return trimmed.split(',').map(p => p.trim()).filter(p => p && !p.startsWith('*')).length
+}
+
+/**
+ * Picks the entry point among a request's top-level defs. An exercise's helpers commonly sit
+ * after the entry point (e.g. "Discount then tax" defines checkout_total first, then the two
+ * helpers it calls), so the LAST def is not a safe default. Instead: prefer the def whose
+ * parameter count matches the first test's JSON argument count (first match wins); otherwise
+ * fall back to the first top-level def, matching the starterCode convention of defining the
+ * entry point before its helpers.
+ */
+function entryPointName(request: RunRequest): string {
+  const defs = [...request.code.matchAll(/^def\s+(\w+)\s*\(([^)]*)\)/gm)].map(m => ({ name: m[1], params: m[2] }))
+  if (!defs.length) return ''
+  const firstTest = request.tests[0]
+  if (firstTest) {
+    try {
+      const args = JSON.parse(firstTest.input)
+      if (Array.isArray(args)) {
+        const match = defs.find(d => paramCount(d.params) === args.length)
+        if (match) return match.name
+      }
+    } catch { /* not a JSON argument array; fall through to the starterCode convention */ }
+  }
+  return defs[0].name
+}
+
 function functionName(request: RunRequest, test?: TestCase): string {
-  // RunRequest has no mode/fnName. JSON argument arrays select function mode;
-  // the last top-level definition is the entry point, matching verifier fallback.
+  // RunRequest has no mode/fnName. JSON argument arrays select function mode.
   // An explicit leading '# brogram:stdin' handles programs reading JSON arrays.
   if (!test || /^\s*#\s*brogram:stdin\b/m.test(request.code)) return ''
   try { if (!Array.isArray(JSON.parse(test.input))) return '' } catch { return '' }
-  return [...request.code.matchAll(/^def\s+(\w+)\s*\(/gm)].at(-1)?.[1] ?? ''
+  return entryPointName(request)
 }
 
 export function createPyodideEngine(load: () => Promise<PyodideAPI>): RuntimeEngine {

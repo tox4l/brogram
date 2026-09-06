@@ -14,9 +14,9 @@ function failure(test: TestCase, kind: TestResult['failureKind'], stderr: string
   return { testId: test.id, passed: false, actual: '', expected: test.expected, stdout: '', stderr, durationMs, failureKind: kind }
 }
 
-function summarize(results: TestResult[]): RunResult {
+function summarize(results: TestResult[], totalCount = results.length): RunResult {
   const passedCount = results.filter(result => result.passed).length
-  return { ok: passedCount === results.length, results, passedCount, totalCount: results.length, runtime: 'judge' }
+  return { ok: passedCount === results.length && totalCount === results.length, results, passedCount, totalCount, runtime: 'judge' }
 }
 
 /** Java executes remotely; cancelling a run aborts its HTTP request and settles every pending test. */
@@ -64,14 +64,19 @@ export class JudgeAdapter implements RuntimeAdapter {
           break
         }
       }
-      return summarize(results)
+      // A transport/configuration failure surfaces only one actionable result (see above),
+      // but totalCount must still reflect every test the caller asked for.
+      return summarize(results, req.tests.length)
     } finally {
       if (this.current === controller) this.current = undefined
     }
   }
 
   private async submit(body: { language: Language; code: string; stdin: string }, controller: AbortController, timeoutMs: number): Promise<JudgeReply> {
-    const limit = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000
+    // timeoutMs is a browser-runtime deadline; a remote Judge0 round trip needs longer,
+    // so the client-side deadline for the judge is floored rather than honored as-is.
+    const requested = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000
+    const limit = Math.max(requested, 30_000)
     let onAbort: () => void = () => {}
     const aborted = new Promise<never>((_resolve, reject) => {
       onAbort = () => reject(new DOMException('Aborted', 'AbortError'))

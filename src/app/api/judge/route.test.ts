@@ -1,12 +1,24 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { User } from '@supabase/supabase-js'
-import { getUserAndProfile } from '@/lib/supabase/server'
+import { getUserAndProfile, serviceClient } from '@/lib/supabase/server'
 import { checkRate } from '@/lib/agents/ratelimit'
 import { POST } from './route'
 
-vi.mock('@/lib/supabase/server', () => ({ getUserAndProfile: vi.fn() }))
+vi.mock('@/lib/supabase/server', () => ({ getUserAndProfile: vi.fn(), serviceClient: vi.fn() }))
 vi.mock('@/lib/agents/ratelimit', () => ({ checkRate: vi.fn() }))
+
+/** Supabase builders are lazy: a stub that only records on `.then()` proves the route awaits the insert. */
+function usageStub(onInsert: (row: unknown) => void) {
+  return {
+    from: (_table: string) => ({
+      insert: (row: unknown) => ({
+        then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+          Promise.resolve().then(() => { onInsert(row); return { data: null, error: null } }).then(resolve, reject),
+      }),
+    }),
+  }
+}
 
 const signedIn = { user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null } }
 const body = { language: 'java', code: 'public class Solution {}', stdin: 'square 2', fixture: 'public class Main {}' }
@@ -18,6 +30,7 @@ const upstream = (id = 3) => ({ stdout: 'square:4.0', stderr: null, compile_outp
 beforeEach(() => {
   vi.mocked(getUserAndProfile).mockResolvedValue(signedIn)
   vi.mocked(checkRate).mockResolvedValue({ ok: true, message: '' })
+  vi.mocked(serviceClient).mockReturnValue(usageStub(() => {}) as never)
   vi.stubEnv('JUDGE0_API_KEY', 'test-key')
   vi.stubEnv('JUDGE0_HOST', 'judge0-ce.p.rapidapi.com')
   vi.stubEnv('JUDGE_PROVIDER', 'judge0')
@@ -128,6 +141,29 @@ describe('POST /api/judge', () => {
     const response = await POST(request())
     expect(response.status).toBe(502)
     expect(await response.json()).toMatchObject({ error: 'judge-unavailable' })
+  })
+
+  it('inserts and awaits an agent_usage row after a successful run, so the hourly backstop counts Java submissions across instances', async () => {
+    const calls: unknown[] = []
+    vi.mocked(serviceClient).mockReturnValue(usageStub(row => calls.push(row)) as never)
+    const response = await POST(request())
+    expect(response.status).toBe(200)
+    expect(calls).toEqual([{ user_id: 'student', agent: 'judge', trigger: 'judge-submit', prompt_tokens: 0, completion_tokens: 0, cache_hit_tokens: 0, fallback: false }])
+  })
+
+  it('does not fail the response when the usage insert errors', async () => {
+    vi.mocked(serviceClient).mockReturnValue({ from: () => ({ insert: () => Promise.reject(new Error('db down')) }) } as never)
+    const response = await POST(request())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ stdout: 'square:4.0' })
+  })
+
+  it('does not insert a usage row when the judge is never reached', async () => {
+    const calls: unknown[] = []
+    vi.mocked(serviceClient).mockReturnValue(usageStub(row => calls.push(row)) as never)
+    vi.mocked(getUserAndProfile).mockResolvedValue({ user: null, profile: null })
+    await POST(request())
+    expect(calls).toHaveLength(0)
   })
 
   it('enables the Python Judge0 language id only with the server flag', async () => {

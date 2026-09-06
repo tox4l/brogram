@@ -1,7 +1,7 @@
 import type { Language } from '@/lib/contracts'
 import { checkRate } from '@/lib/agents/ratelimit'
 import { buildJavaSource } from '@/lib/runtimes/java-normalize'
-import { getUserAndProfile } from '@/lib/supabase/server'
+import { getUserAndProfile, serviceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -122,7 +122,13 @@ export async function POST(req: Request) {
   try {
     const rate = await checkRate(user.id, 'judge')
     if (!rate.ok) return errorResponse('rate-limited', rate.message, 429)
-    return Response.json(await runJudge0(body, source, key, host, req.signal), { headers: { 'Cache-Control': 'no-store' } })
+    const result = await runJudge0(body, source, key, host, req.signal)
+    // checkRate's hourly backstop reads agent_usage, so a serverless instance's in-memory
+    // bucket is not the only thing standing between a student and unlimited Java submissions.
+    try {
+      await serviceClient().from('agent_usage').insert({ user_id: user.id, agent: 'judge', trigger: 'judge-submit', prompt_tokens: 0, completion_tokens: 0, cache_hit_tokens: 0, fallback: false })
+    } catch { /* a usage row that will not write must never cost the student their result */ }
+    return Response.json(result, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') return Response.json(timeoutResult(), { headers: { 'Cache-Control': 'no-store' } })
     return errorResponse('judge-unavailable', 'The judge could not complete this submission. Please try again.', 502)

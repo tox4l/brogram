@@ -1,4 +1,4 @@
-import type { RunRequest, RunResult, RuntimeAdapter, TestResult } from '../contracts'
+import type { RunRequest, RunResult, RuntimeAdapter, TestResult } from '@/lib/contracts'
 import { publishRuntimeProgress } from './progress'
 import { makeTestResult, summarizeResults, type ExecutionOutput } from './shared'
 import { webFrameDocument } from './web-frame'
@@ -44,13 +44,20 @@ export class WebAdapter implements RuntimeAdapter {
     const ready = new Promise<void>((resolve) => { resolveReady = resolve })
     const frame: Frame = {
       element, nonce, ready,
-      dispose() {
+      // Arrow function: captures the adapter's `this` so a frame that failed at startup can
+      // clear itself out of active/standby, instead of leaving a poisoned slot that a later
+      // warmup() or run() reuses forever (dispose() is called from many places by name).
+      dispose: () => {
         if (disposed) return
         disposed = true
         clearTimeout(startupTimer)
         window.removeEventListener('message', onMessage)
         element.remove()
         resolveReady()
+        if (frame.error) {
+          if (this.active === frame) this.active = undefined
+          if (this.standby === frame) this.standby = undefined
+        }
       },
     }
     const onMessage = (event: MessageEvent) => {
@@ -162,18 +169,15 @@ export class WebAdapter implements RuntimeAdapter {
 
   abort(): void {
     const pending = this.pending
-    if (pending) {
-      pending.cancelled = true
-      pending.cancelTest?.()
-      for (const test of pending.request.tests.slice(pending.results.length)) {
-        pending.results.push(makeTestResult(test, timeoutOutput(), 0))
-      }
-      pending.finish({ ...summarizeResults(pending.results), ok: false, stderr: timeoutOutput().stderr })
-      this.promote()
-    } else {
-      this.active?.dispose()
-      this.standby?.dispose()
-      this.active = this.standby = undefined
+    // Matches WorkerAdapter.abort(): nothing to cancel means nothing to do, rather than
+    // tearing down two warm frames a caller may just be about to reuse.
+    if (!pending) return
+    pending.cancelled = true
+    pending.cancelTest?.()
+    for (const test of pending.request.tests.slice(pending.results.length)) {
+      pending.results.push(makeTestResult(test, timeoutOutput(), 0))
     }
+    pending.finish({ ...summarizeResults(pending.results), ok: false, stderr: timeoutOutput().stderr })
+    this.promote()
   }
 }

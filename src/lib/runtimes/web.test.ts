@@ -188,11 +188,34 @@ describe('WebAdapter', () => {
     adapter.abort()
   })
 
-  it('does not reject an outstanding warmup when its view tears down', async () => {
-    installFrames({ stallReady: true })
+  it('abort is a no-op when nothing is pending, matching WorkerAdapter.abort()', async () => {
+    const { frames } = installFrames()
     const adapter = new WebAdapter()
-    const warming = adapter.warmup()
+    await adapter.warmup()
+    const active = frames[0].element
+    const standby = frames[1].element
     adapter.abort()
-    await expect(warming).resolves.toBeUndefined()
+    expect(active.isConnected).toBe(true)
+    expect(standby.isConnected).toBe(true)
+    const result = await adapter.run(request())
+    expect(result.ok).toBe(true)
+    adapter.abort()
+  })
+
+  it('recovers after a frame fails at startup, so the failure does not poison later warmups', async () => {
+    const { options } = installFrames({ stallReady: true })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const adapter = new WebAdapter()
+    // Attach the rejection handler before advancing timers so Node never sees an
+    // unhandled rejection window between the reject and this test's own assertion.
+    const failure = adapter.warmup().then(() => null, (e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(await failure).toMatchObject({ message: 'The web sandbox could not start.' })
+    vi.useRealTimers()
+    options.stallReady = false
+    await adapter.warmup()
+    const result = await adapter.run(request())
+    expect(result.ok).toBe(true)
+    adapter.abort()
   })
 })

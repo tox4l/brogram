@@ -33,11 +33,14 @@ describe('JudgeAdapter', () => {
     expect(result.results.every(r => r.passed && !r.failureKind)).toBe(true)
   })
 
-  it('reports a missing judge key once with a clear runtime error', async () => {
+  it('reports a missing judge key once with a clear runtime error but counts every requested test toward the total', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ error: 'judge-not-configured' }, { status: 503 }))
     vi.stubGlobal('fetch', fetcher)
     const result = await new JudgeAdapter().run(request)
-    expect(result).toMatchObject({ ok: false, passedCount: 0, totalCount: 1 })
+    // A transport/configuration failure surfaces one actionable failure, not a duplicate
+    // per hidden test, but totalCount must still reflect the full request so the UI does
+    // not report "1 of 1" when the student actually submitted more tests.
+    expect(result).toMatchObject({ ok: false, passedCount: 0, totalCount: request.tests.length })
     expect(result.results).toHaveLength(1)
     expect(result.results[0]).toMatchObject({ testId: 'first', failureKind: 'runtime-error', passed: false })
     expect(result.results[0].stderr).toMatch(/not configured|JUDGE0_API_KEY/i)
@@ -78,8 +81,24 @@ describe('JudgeAdapter', () => {
   it('settles a stalled network fetch at the requested deadline even if fetch ignores abort', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    const pending = new JudgeAdapter().run({ ...request, timeoutMs: 45_000 })
+    await vi.advanceTimersByTimeAsync(45_000)
+    const result = await pending
+    expect(result.results.every(r => r.failureKind === 'timeout')).toBe(true)
+    expect(result.results).toHaveLength(2)
+  })
+
+  it('floors a short browser timeoutMs at 30 seconds for the remote judge deadline', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     const pending = new JudgeAdapter().run({ ...request, timeoutMs: 250 })
-    await vi.advanceTimersByTimeAsync(250)
+    // A 250ms browser timeout must not cut off a remote Judge0 round trip early.
+    await vi.advanceTimersByTimeAsync(29_000)
+    let settled = false
+    void pending.then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(1_000)
     const result = await pending
     expect(result.results.every(r => r.failureKind === 'timeout')).toBe(true)
     expect(result.results).toHaveLength(2)
