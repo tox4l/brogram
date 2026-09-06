@@ -1,6 +1,10 @@
+import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from 'next-themes'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LearnerState } from '@/lib/contracts'
+import { makeQueryClient } from '@/lib/query/client'
 import Dashboard from './page'
 import { AppShell } from '@/components/shell/AppShell'
 
@@ -209,10 +213,26 @@ describe('dashboard', () => {
   })
 })
 
+// `AppShell`'s header now also mounts `SoundToggle`, `ThemeQuickSwitch` and
+// `DockControl` (T0.7) -- each reads `useWellness()` (needs a QueryClient in
+// context) and/or `next-themes`' `useTheme()` (needs a `ThemeProvider`),
+// neither of which this suite's plain `render(<AppShell>...)` supplied
+// before. In the real app both come from the root layout's `<Providers>`;
+// here they are supplied directly, matching how `SoundToggle.test.tsx` and
+// `ThemeQuickSwitch.test.tsx` wrap those components in isolation.
+function renderShell(children: ReactNode) {
+  const client = makeQueryClient()
+  return render(
+    <ThemeProvider attribute="data-theme" themes={['midnight', 'amber', 'paper', 'arcade']} defaultTheme="midnight" enableSystem={false} disableTransitionOnChange>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </ThemeProvider>,
+  )
+}
+
 describe('app shell', () => {
   it('keeps the exercise root wellness strip compact', () => {
     mocks.pathname.mockReturnValue('/exercise')
-    render(<AppShell><h1>Choose an exercise</h1></AppShell>)
+    renderShell(<AppShell><h1>Choose an exercise</h1></AppShell>)
     // The compact strip renders the same water/stretch controls inline instead of the
     // full rail's labelled buttons and headings.
     expect(screen.queryByText('Water & stretch')).toBeNull()
@@ -222,12 +242,21 @@ describe('app shell', () => {
   })
 
   it('offers accessible navigation, a wellness slot, and a contextual Buddy dialog', async () => {
-    render(<AppShell><h1>Dashboard content</h1></AppShell>)
+    renderShell(<AppShell><h1>Dashboard content</h1></AppShell>)
     const nav = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(within(nav).getByRole('link', { name: 'Courses' }).getAttribute('href')).toBe('/dashboard#course')
+    // "Courses" now points at /courses (T1.6's route) rather than the old
+    // dashboard-anchor link, and the reports nav item reads "Progress".
+    expect(within(nav).getByRole('link', { name: 'Courses' }).getAttribute('href')).toBe('/courses')
     expect(within(nav).getByRole('link', { name: 'De-rot' }).getAttribute('href')).toBe('/derot')
-    expect(within(nav).getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports')
+    expect(within(nav).getByRole('link', { name: 'Progress' }).getAttribute('href')).toBe('/reports')
     expect(screen.getByRole('complementary', { name: 'Wellness' })).toBeTruthy()
+    // The header's right-hand cluster (ShellHeaderControls, T0.7): the sound
+    // toggle and theme quick-switch are always present; the dock re-open
+    // glyph stays hidden because the default dock placement is not 'hidden'.
+    expect(screen.getByRole('button', { name: /mute sound/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /choose theme/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /show wellness dock/i })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Account' }).getAttribute('href')).toBe('/account')
     fireEvent.click(screen.getByRole('button', { name: 'Buddy' }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Your coding Buddy' })).toBeTruthy())
     expect(screen.getByText('Ask about the code you are stuck on, or why a pattern keeps failing.')).toBeTruthy()

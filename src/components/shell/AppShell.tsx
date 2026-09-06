@@ -4,20 +4,20 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { BuddyButton } from './BuddyButton'
+import { ShellLayout } from './ShellLayout'
+import { ShellHeaderControls } from './ShellHeaderControls'
 import { WellnessSlot } from './WellnessSlot'
 
-export function AppShell({ children, wellnessRail, buddy }: {
+export function AppShell({ children, wellnessRail }: {
   children: ReactNode
   wellnessRail?: ReactNode
-  buddy?: ReactNode
 }) {
   const pathname = usePathname()
   const exercise = pathname === '/exercise' || pathname.startsWith('/exercise/')
   const navigation = [
-    { title: 'Courses', href: '/dashboard#course', active: pathname === '/dashboard' || pathname.startsWith('/onboarding') || exercise },
+    { title: 'Courses', href: '/courses', active: pathname === '/dashboard' || pathname.startsWith('/onboarding') || exercise },
     { title: 'De-rot', href: '/derot', active: pathname.startsWith('/derot') },
-    { title: 'Reports', href: '/reports', active: pathname.startsWith('/reports') },
+    { title: 'Progress', href: '/reports', active: pathname.startsWith('/reports') },
   ]
 
   return (
@@ -34,21 +34,10 @@ export function AppShell({ children, wellnessRail, buddy }: {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-4">
-            <Link href="/account" aria-current={pathname.startsWith('/account') ? 'page' : undefined}
-              className="rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none">
-              Account
-            </Link>
-            {buddy ?? <BuddyButton />}
-          </div>
+          <ShellHeaderControls />
         </div>
       </header>
-      <div className={cn('mx-auto grid w-full max-w-7xl flex-1 px-5 py-6 sm:px-8', exercise ? 'content-start gap-4' : 'gap-8 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10')}>
-        <main id="main-content" tabIndex={-1} className="min-w-0 outline-none">{children}</main>
-        <aside aria-label="Wellness" className={cn('min-w-0', exercise ? 'order-first border-b border-border pb-3' : 'border-t border-border pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-7')}>
-          {wellnessRail ?? <WellnessSlot compact={exercise} />}
-        </aside>
-      </div>
+      <ShellLayout dock={wellnessRail ?? <WellnessSlot />}>{children}</ShellLayout>
     </div>
   )
 }
