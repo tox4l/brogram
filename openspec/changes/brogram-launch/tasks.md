@@ -29,14 +29,14 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [ ] C6 Seed refresh and smoke with Musa (Claude)
 
 ## v2 (plan: docs/superpowers/plans/2026-09-06-brogram-v2-plan.md; spec: docs/superpowers/specs/2026-09-06-brogram-v2-bro.md)
-- [ ] T0.0 Dependency and script bootstrap (serial, first, alone)
-- [ ] T0.1 The contracts PR
-- [ ] T0.2 Migrations, seed loader, validator, golden lesson
-- [ ] T0.3 The static curriculum bundle
-- [ ] T0.4 TanStack Query provider, hydration, query keys
-- [ ] T0.5 Sound manager and motion manager
-- [ ] T0.6 Themes: four palettes, tokens, provider, no flash
-- [ ] T0.7 Shell recomposition (Group C)
+- [x] T0.0 Dependency and script bootstrap (serial, first, alone) (d7fb7e3)
+- [x] T0.1 The contracts PR (36e7508, a76494f; typecheck sweep 7946cc5)
+- [x] T0.2 Migrations, seed loader, validator, golden lesson (d7a7946, 5b82340, ff376e9; live apply pending on Musa)
+- [x] T0.3 The static curriculum bundle (a43196f, 5d17e33)
+- [x] T0.4 TanStack Query provider, hydration, query keys (10a2a9c, 0699430)
+- [x] T0.5 Sound manager and motion manager (1f8e4f5, 2528bfe)
+- [x] T0.6 Themes: four palettes, tokens, provider, no flash (31e2e30, ae72325)
+- [x] T0.7 Shell recomposition (Group C) (9e36834, 5789e7d)
 - [ ] T1.1 Lesson generation workflow, verifier, and the first batch
 - [ ] T1.2 Lesson grading and progress (pure)
 - [ ] T1.3 The walkthrough screen (Group B)
