@@ -59,10 +59,12 @@ function ExerciseWorkspace({ id }: { id: string }) {
           : <Editor {...answerProps} language={exercise.language} logIntegrity={lockdown.logIntegrity} />}
         <div className="space-y-3 border-t border-border p-3">
           {loop.progress?.phase === 'loading' && <p role="status" className="break-words text-xs leading-relaxed text-muted-foreground">Loading {loop.progress.packageName}{loop.progress.message ? ` · ${loop.progress.message}` : ''}</p>}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {(exercise.kind === 'code' || exercise.kind === 'schema') && <Button variant="outline" onClick={() => void loop.run()} disabled={disabled} className="transition-none active:translate-y-0"><Play aria-hidden="true" />{loop.status === 'running' ? 'Running…' : 'Run'}</Button>}
-            <Button onClick={() => void loop.submit()} disabled={disabled} className="bg-emerald-300 text-primary-foreground transition-none hover:bg-emerald-200 active:translate-y-0"><Send aria-hidden="true" />{loop.status === 'submitting' ? 'Checking…' : loop.status === 'passed' ? 'Passed' : 'Submit'}</Button>
-          </div>
+          {loop.judgeAbsent
+            ? <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm"><p className="text-muted-foreground">Java exercises are not available yet. Pick another course for now.</p><Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>Back to dashboard</Link></div>
+            : <div className="flex flex-wrap items-center justify-end gap-2">
+                {(exercise.kind === 'code' || exercise.kind === 'schema') && <Button variant="outline" onClick={() => void loop.run()} disabled={disabled} className="transition-none active:translate-y-0"><Play aria-hidden="true" />{loop.status === 'running' ? 'Running…' : 'Run'}</Button>}
+                <Button onClick={() => void loop.submit()} disabled={disabled} className="bg-emerald-300 text-primary-foreground transition-none hover:bg-emerald-200 active:translate-y-0"><Send aria-hidden="true" />{loop.status === 'submitting' ? 'Checking…' : loop.status === 'passed' ? 'Passed' : 'Submit'}</Button>
+              </div>}
         </div>
       </section>
       <div className="min-w-0 space-y-5 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1">

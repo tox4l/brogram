@@ -7,6 +7,7 @@ import { MongoAdapter } from './mongo'
 import { JudgeAdapter } from './judge'
 
 export { subscribeRuntimeProgress, type RuntimeProgress } from './progress'
+export { judgeProviderAbsent } from './judge'
 const runtimes = new Map<Language, RuntimeAdapter>()
 
 /** Lazy, stable adapters: importing this module does not download WASM or start a worker. */

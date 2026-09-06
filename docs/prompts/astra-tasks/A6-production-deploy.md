@@ -4,6 +4,7 @@ Execute Task A6 from docs/superpowers/plans/2026-09-05-brogram-build-plan.md: se
 
 <context>
 vercel env add stores production values as sensitive; Musa must keep local copies. The first deploy of a new project is production regardless of the flag; every later deploy needs --prod. The auth hook registration is a dashboard step; verify it by attempting a gmail sign-up on production and reading the rejection message.
+Note (2026-09-06): no Judge0 key to set. JUDGE_PROVIDER=none and NEXT_PUBLIC_JUDGE_PROVIDER=none per .env.example; Java exercises show a not-available notice instead.
 </context>
 
 <end_state>

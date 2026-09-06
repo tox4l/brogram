@@ -109,6 +109,8 @@ export async function POST(req: Request) {
   const { user, profile } = await getUserAndProfile()
   if (!user || !profile) return errorResponse('not-signed-in', 'Sign in to use the Java judge.', 401)
   if (profile.account_status === 'banned') return errorResponse('banned', 'This account is banned.', 403)
+  const provider = process.env.JUDGE_PROVIDER?.trim() || 'none'
+  if (provider === 'none') return Response.json({ ok: false, error: 'judge-absent', message: 'Code execution for this language is not available yet.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
   const body = parseSubmission(await req.json().catch(() => null))
   if (!body) return errorResponse('invalid-request', 'Expected language, code and stdin strings.', 400)
   const source = body.language === 'java' ? buildJavaSource(body.code, body.fixture) : body.code
@@ -116,7 +118,7 @@ export async function POST(req: Request) {
   if (body.language !== 'java' && process.env.JUDGE_ALL_LANGUAGES !== 'true') return errorResponse('judge-disabled', 'Remote judging is enabled only for Java.', 503)
   const key = process.env.JUDGE0_API_KEY?.trim()
   if (!key) return errorResponse('judge-not-configured', 'The Java judge is not configured on the server.', 503)
-  if ((process.env.JUDGE_PROVIDER ?? 'judge0') !== 'judge0') return errorResponse('judge-provider-unavailable', 'The configured judge provider is not available.', 503)
+  if (provider !== 'judge0') return errorResponse('judge-provider-unavailable', 'The configured judge provider is not available.', 503)
   const host = process.env.JUDGE0_HOST?.trim() || 'judge0-ce.p.rapidapi.com'
   if (!/^[a-zA-Z0-9.-]+$/.test(host)) return errorResponse('judge-not-configured', 'The configured judge host is invalid.', 503)
   try {

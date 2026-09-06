@@ -40,6 +40,23 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers() })
 
 describe('POST /api/judge', () => {
+  it('returns judge-absent when no provider is configured, before any rate spend or fetch', async () => {
+    vi.stubEnv('JUDGE_PROVIDER', 'none')
+    const response = await POST(request())
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ ok: false, error: 'judge-absent', message: 'Code execution for this language is not available yet.' })
+    expect(checkRate).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('treats an unset JUDGE_PROVIDER as absent', async () => {
+    vi.stubEnv('JUDGE_PROVIDER', '')
+    const response = await POST(request())
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ error: 'judge-absent' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('denies signed-out users before contacting the judge', async () => {
     vi.mocked(getUserAndProfile).mockResolvedValue({ user: null, profile: null })
     expect((await POST(request())).status).toBe(401)

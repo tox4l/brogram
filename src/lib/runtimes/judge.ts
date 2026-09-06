@@ -1,6 +1,12 @@
 import type { Language, RunRequest, RunResult, RuntimeAdapter, TestCase, TestResult } from '@/lib/contracts'
 import { buildJavaSource } from './java-normalize'
 
+/** No server judge is wired up yet; the exercise screen hides Run/Submit for Java while this holds. */
+export function judgeProviderAbsent(): boolean {
+  const value = process.env.NEXT_PUBLIC_JUDGE_PROVIDER?.trim()
+  return !value || value === 'none'
+}
+
 interface JudgeReply {
   stdout: string
   stderr: string
@@ -90,6 +96,7 @@ export class JudgeAdapter implements RuntimeAdapter {
         const value: unknown = await response.json().catch(() => null)
         const reply = value && typeof value === 'object' ? value as Record<string, unknown> : {}
         if (!response.ok) {
+          if (reply.error === 'judge-absent') throw new Error('Java execution is not available yet.')
           if (reply.error === 'judge-not-configured') throw new Error('The Java judge is not configured. JUDGE0_API_KEY must be configured on the server.')
           throw new Error(typeof reply.message === 'string' ? reply.message : `The Java judge is unavailable (${response.status}${typeof reply.error === 'string' ? `: ${reply.error}` : ''}).`)
         }

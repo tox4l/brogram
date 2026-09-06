@@ -47,6 +47,16 @@ describe('JudgeAdapter', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('reports an absent judge provider once with a clear runtime error but counts every requested test toward the total', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: false, error: 'judge-absent', message: 'Code execution for this language is not available yet.' }, { status: 503 }))
+    vi.stubGlobal('fetch', fetcher)
+    const result = await new JudgeAdapter().run(request)
+    expect(result).toMatchObject({ ok: false, passedCount: 0, totalCount: request.tests.length })
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0]).toMatchObject({ testId: 'first', failureKind: 'runtime-error', passed: false, stderr: 'Java execution is not available yet.' })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it.each([
     [{ stdout: 'different', stderr: '', compileOutput: '', exitCode: 0, timedOut: false }, 'wrong-answer'],
     [{ stdout: '', stderr: 'limit', compileOutput: '', exitCode: 1, timedOut: true }, 'timeout'],

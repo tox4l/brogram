@@ -17,8 +17,9 @@ agents — Profiler, Planner, Author, Diagnoser, Coach, Reviewer, and Buddy —
 sit behind a single route and share one frozen request and reply contract.
 Code, HTML/CSS/JS, and SQL/Mongo exercises run and grade in the browser's own
 runtimes (Pyodide, a sandboxed iframe, sql.js, and mingo); Java is the one
-language that leaves the browser, graded through Judge0. The shapes every
-part of the app agrees on — learner state, exercises, agent messages, runtime
+language that would leave the browser for a remote judge, but there is
+no code judge at launch — Java exercises are marked not available. The
+shapes every part of the app agrees on — learner state, exercises, agent messages, runtime
 requests — are frozen in `src/lib/contracts.ts` and
 `src/lib/agents/requests.ts`, and no other file redefines them.
 
@@ -28,7 +29,7 @@ Requires Node.js 22 or later and npm.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in Supabase, DeepSeek, and Judge0 credentials
+cp .env.example .env.local   # fill in Supabase and DeepSeek credentials; no code judge at launch, Java exercises are marked not available
 supabase db push             # apply migrations to your Supabase project
 node scripts/seed-load.mjs   # load courses, CLOs, patterns, exercises, and drills
 npm run dev

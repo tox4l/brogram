@@ -9,7 +9,7 @@ import { callAgent, streamAgent } from '@/lib/agents/client'
 import { DEFAULT_DIFFICULTY, fetchBank, pickFromBank, toExercisePublic } from '@/lib/learner/bank'
 import { nextInChain } from '@/lib/learner/chain'
 import { applyFail, applyPass } from '@/lib/learner/score'
-import { getRuntime, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
+import { getRuntime, judgeProviderAbsent, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
 import { createClient } from '@/lib/supabase/client'
 import { codeDiff, exerciseRunRequest, gradeAnswer, usesAnswerForm } from '@/lib/exercise/grading'
 import { useSession } from '@/store/session'
@@ -135,7 +135,9 @@ export function useExerciseLoop(exerciseId: string) {
         exerciseRef.current = item; cloRef.current = outcome
         const initialCode = usesAnswerForm(item) ? item.kind === 'spot-the-bug' ? '[]' : item.kind === 'trace' ? '{}' : '' : item.starterCode
         codeRef.current = initialCode; updateCode(initialCode); setExercise(item); setClo(outcome); setStatus('ready')
-        if (!usesAnswerForm(item)) {
+        // A Java exercise with no configured judge has no runtime to warm up and no agent to call yet;
+        // the exercise screen replaces Run/Submit with a not-available notice for this case.
+        if (!usesAnswerForm(item) && !(item.language === 'java' && judgeProviderAbsent())) {
           try { await getRuntime(item.kind === 'schema' ? 'sql' : item.language).warmup() }
           catch (warmupError) { if (active()) setError(`Runtime preparation failed: ${messageOf(warmupError)}. Run or submit to retry.`) }
         }
@@ -442,5 +444,6 @@ export function useExerciseLoop(exerciseId: string) {
   const hintWaitSeconds = Math.max(0, Math.ceil((waitUntil - clock) / 1000))
   const hintAvailable = !busy && status === 'failed' && diagnosis !== null && hintCount < LOCKDOWN.maxHintsPerExercise && hintWaitSeconds === 0
   const controlsDisabled = busy || hasPending || status === 'passed' || !exercise
-  return { exercise, clo, code, setCode, run, submit, status, results, diagnosis, partialDiagnosis, hints, partialHint, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, closed }
+  const judgeAbsent = exercise?.language === 'java' && judgeProviderAbsent()
+  return { exercise, clo, code, setCode, run, submit, status, results, diagnosis, partialDiagnosis, hints, partialHint, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, closed, judgeAbsent }
 }

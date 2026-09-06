@@ -83,6 +83,8 @@ Every claim below was web-grounded by a research agent and then attacked by a se
 
 ## Java judge (Judge0 CE)
 
+Decision 2026-09-06: no judge provider at launch; Judge0 is not used. The section below is kept for a future provider.
+
 - Sign up at rapidapi.com → subscribe to `judge0-ce` Basic (free) → get `X-RapidAPI-Key`. **Musa does this before the build reaches the judge task.**
 - `POST https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true` with `{ language_id: 62, source_code, stdin }` (62 = Java OpenJDK 13.0.1). Response: `stdout`, `stderr`, `compile_output`, `status: { id, description }`, `time`, `memory`. With `wait=true` no polling is needed for short runs; fall back to `GET /submissions/{token}` if `wait` is refused.
 - Free-tier quota could not be read (JS-rendered pricing page). Check it on the RapidAPI dashboard after subscribing and put the number in this file.

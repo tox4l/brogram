@@ -346,7 +346,7 @@ async function main() {
 
   let passed = 0
   let failed = 0
-  let unverified = 0
+  let absent = 0
   let skipped = 0
 
   for (const file of files) {
@@ -357,9 +357,9 @@ async function main() {
         skipped++
         continue
       }
-      if (exercise.language === 'java' && !process.env.JUDGE0_API_KEY) {
-        console.log(`unverified: ${exercise.title}`)
-        unverified++
+      if (exercise.language === 'java' && process.env.JUDGE_PROVIDER !== 'judge0' && !process.env.JUDGE0_API_KEY) {
+        console.log(`absent: ${exercise.title} (no judge provider)`)
+        absent++
         continue
       }
 
@@ -380,7 +380,7 @@ async function main() {
     }
   }
 
-  console.log(`${passed} passed, ${failed} failed, ${unverified} unverified, ${skipped} skipped`)
+  console.log(`${passed} passed, ${failed} failed, ${absent} absent, ${skipped} skipped`)
   process.exitCode = failed > 0 ? 1 : 0
 }
 
