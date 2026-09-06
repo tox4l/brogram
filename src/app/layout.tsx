@@ -31,7 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <footer className="flex flex-wrap justify-center gap-x-4 gap-y-2 px-6 py-8 text-center text-sm text-muted-foreground">
           Built by Velocity
-          <a href="https://github.com/musallam/brogram" className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">Open source</a>
+          <a href="https://github.com/tox4l/brogram" className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">Open source</a>
         </footer>
       </body>
     </html>

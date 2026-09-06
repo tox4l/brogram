@@ -3,7 +3,7 @@
 Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05-brogram-build-plan.md`.
 
 ## Phase 0: Bootstrap
-- [ ] A0 Scaffold the app and deploy (Astra) — local part done by Claude (scaffold, install, build, commit c4365e6); Vercel deploy and GitHub push wait for Musa's logins
+- [x] A0 Scaffold the app and deploy — scaffold, install, build, commit by Claude; repo created and pushed to https://github.com/tox4l/brogram on 2026-09-06; Vercel deploy is Musa's (import the repo)
 - [x] C0 Test scaffold and contracts guard (Claude)
 
 ## Phase 1: Core
