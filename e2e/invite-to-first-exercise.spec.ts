@@ -79,7 +79,9 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
 
     await expect(page.getByTestId('exercise-workspace')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Exercise prompt' })).toBeVisible()
-    await expect(page.getByRole('textbox', { name: 'Code editor' })).toBeVisible()
+    // The first exercise the Planner picks may be a code kind or a predict-output kind; both open a
+    // workspace that accepts the learner's work, which is the contract this flow guards.
+    await expect(page.getByRole('textbox', { name: /Code editor|Predicted output/ })).toBeVisible()
   } finally {
     await resetLearnerData(service, userId)
   }
