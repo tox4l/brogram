@@ -118,19 +118,30 @@ function mapRow(table, source) {
 
 export async function readSeedTables(root = ROOT) {
   const seed = join(root, 'seed')
-  const sources = await Promise.all([
+  const [patterns, courses, clos, exercises, drillItems, lessons] = await Promise.all([
     readRows(join(seed, 'patterns.json'), 'patterns'),
     readRows(join(seed, 'courses.json'), 'courses', true),
     readRows(join(seed, 'clos.json'), 'clos'),
     readFolder(join(seed, 'exercises'), 'exercises'),
-    readFolder(join(seed, 'drills'), 'items').then(items => [...items, ...playDrillItems()]),
+    readFolder(join(seed, 'drills'), 'items'),
     readFolder(join(seed, 'lessons'), 'lessons', new Set(['lesson.schema.json'])),
-    Promise.resolve(ACHIEVEMENTS),
   ])
-  return Object.keys(COLUMNS).map((name, index) => ({
+  // Named, not positional: pairing table name to source data by array index
+  // meant reordering COLUMNS could silently load one table's rows into
+  // another's (e.g. lessons into drills) with no error.
+  const sourcesByTable = {
+    patterns,
+    courses,
+    clos,
+    exercises,
+    drills: [...drillItems, ...playDrillItems()],
+    lessons,
+    achievements: ACHIEVEMENTS,
+  }
+  return Object.keys(COLUMNS).map((name) => ({
     name,
     onConflict: name === 'courses' ? 'code' : 'id',
-    rows: sources[index].map(source => mapRow(name, source)),
+    rows: sourcesByTable[name].map((source) => mapRow(name, source)),
   }))
 }
 

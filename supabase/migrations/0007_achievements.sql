@@ -25,6 +25,10 @@ create policy user_achievements_select_own on public.user_achievements
   using ((select auth.uid()) = user_id and public.is_not_banned());
 -- Insert only. No update, no delete: an unlock is permanent and cannot be
 -- rewritten, and the primary key makes a duplicate unlock impossible.
+-- Accepted risk, recorded (spec 11.2 verbatim, same trust model as v1's "own
+-- mastery" for all policy): a learner can self-insert any achievement_id for
+-- themselves, so this is an honour-system unlock, not server-verified proof,
+-- until a security definer function re-checks the predicate server-side.
 create policy user_achievements_insert_own on public.user_achievements
   for insert to authenticated
   with check ((select auth.uid()) = user_id and public.is_not_banned());

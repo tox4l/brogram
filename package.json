@@ -82,6 +82,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "jsdom": "^30.0.1",
+    "pg": "^8.23.0",
     "pyodide": "^314.0.6",
     "tailwindcss": "^4",
     "tree-sitter-java": "0.23.5",

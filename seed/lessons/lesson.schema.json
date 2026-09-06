@@ -29,7 +29,7 @@
         "id": { "type": "string", "minLength": 1 },
         "input": { "type": "string" },
         "expected": { "type": "string" },
-        "hidden": { "type": "boolean" },
+        "hidden": { "const": false, "description": "A lesson check is never a hidden-test wall (contracts.ts LessonCheck micro-code: 'tests, ALL visible'). If present, must be false." },
         "name": { "type": "string" }
       },
       "additionalProperties": true
@@ -298,7 +298,7 @@
     "maxBlocks": 8,
     "code": { "maxLines": 20, "maxCols": 90 },
     "estimatedMinutes": { "min": 4, "max": 8 },
-    "bannedTextPattern": "\\b(CLO|learning outcome|syllabus)\\b",
+    "bannedTextPattern": "\\b(CLO|learning outcome|syllabus|udst|university|instructor|professor)\\b",
     "bannedTextFlags": "i",
     "noEmoji": true,
     "idEqualsCloId": true,

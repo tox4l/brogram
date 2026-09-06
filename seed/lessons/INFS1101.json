@@ -3,22 +3,22 @@
   "course": "INFS1101",
   "lessons": [
     {
-      "id": "INFS1101-2",
-      "cloId": "INFS1101-2",
+      "id": "INFS1101-3",
+      "cloId": "INFS1101-3",
       "course": "INFS1101",
       "language": "python",
       "version": 1,
-      "title": "Plan the steps, then write the code",
-      "hook": "Every working program starts as a plan you could say out loud.",
+      "title": "First true check wins",
+      "hook": "if, elif, else — three words that decide which one line actually runs.",
       "estimatedMinutes": 5,
       "draft": false,
-      "tags": ["planning", "selection"],
+      "tags": ["selection", "branch-order"],
       "blocks": [
         {
           "type": "concept",
           "id": "concept-1",
-          "heading": "Say the steps before you write them",
-          "body": "Before you touch the keyboard, write down what has to happen, in order: what comes in, what gets checked, and what comes out. Once the steps are right in plain words, each one turns into close to one line of code. A step that says \"check this first\" becomes an if. A step that says \"otherwise, check this\" becomes an elif. The one step left over, the one that catches everything else, becomes else. Coding gets easier the moment you stop trying to write the steps and the code at the same time."
+          "heading": "Only one branch runs, and order decides which",
+          "body": "A chain of if, elif and else is not several separate checks — it is one decision that stops at the first true answer. Each condition is checked top to bottom, and the moment one comes back true, its branch runs and every condition after it is skipped, even one that would also have been true. That is why the order you write the checks in is not a style choice: swap two conditions around and a different score, age or amount can land in the wrong branch. else is not \"one option among many\" — it only runs when every condition above it has already failed, so it becomes the catch-all for whatever the earlier checks missed."
         },
         {
           "type": "snippet",

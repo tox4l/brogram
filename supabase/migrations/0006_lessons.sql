@@ -28,7 +28,7 @@ revoke all on public.lessons from anon, authenticated;
 create table public.lesson_progress (
   user_id        uuid not null references auth.users(id) on delete cascade,
   lesson_id      text not null references public.lessons(id) on delete cascade,
-  clo_id         text not null,
+  clo_id         text not null references public.clos(id) on delete cascade,
   status         text not null check (status in ('started','completed','skipped')),
   block_index    int  not null default 0,
   checks_passed  int  not null default 0,
@@ -40,6 +40,17 @@ create table public.lesson_progress (
   primary key (user_id, lesson_id)
 );
 alter table public.lesson_progress enable row level security;
+
+-- updated_at has a default for the insert but nothing bumps it on update
+-- (unlike learner_state, which folds the bump into its version-guard
+-- trigger) unless every caller remembers to set it by hand.
+create function public.lesson_progress_touch() returns trigger language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+create trigger lesson_progress_touch before update on public.lesson_progress
+  for each row execute function public.lesson_progress_touch();
 
 create policy lesson_progress_select_own on public.lesson_progress
   for select to authenticated

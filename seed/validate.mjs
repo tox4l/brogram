@@ -275,6 +275,18 @@ if (existsSync(lessonsDir)) {
         }
         if (lesson.blocks.length > maxBlocks) errors.push(`${tag} has ${lesson.blocks.length} blocks, over the cap of ${maxBlocks}`)
 
+        // A `snippet` is illustration attached to the idea just taught, not a
+        // block that can legally drift anywhere (e.g. after `bridge`).
+        for (const optional of invariants.optionalBlockTypes ?? []) {
+          lesson.blocks.forEach((block, i) => {
+            if (block.type !== optional) return
+            const previous = lesson.blocks[i - 1]?.type
+            if (previous !== 'concept' && previous !== 'worked') {
+              errors.push(`${tag} a "${optional}" block must immediately follow a "concept" or "worked" block`)
+            }
+          })
+        }
+
         // Code limits, per block.
         for (const code of codeStrings(lesson)) {
           const lines = code.split('\n')
@@ -290,14 +302,29 @@ if (existsSync(lessonsDir)) {
           }
         }
 
-        // Prose: no institution/CLO jargon, no pattern ids, no emoji.
+        // Prose: no institution/CLO jargon, no pattern ids, no emoji. The
+        // pattern-id leak check is scoped to hyphenated/multi-word ids only
+        // and matched on word boundaries: eleven single-word ids (accumulate,
+        // filter, transform, search, boundary, guard, recursion, aliasing,
+        // aggregate, composition, trace) are ordinary English words a lesson
+        // legitimately needs ("linear search", "aggregates") — a plain
+        // substring check over all 42 ids blocked authoring CLOs that teach
+        // exactly those ideas (INFS1201-2, INFS2201-4/-5).
         for (const text of proseStrings(lesson)) {
           if (bannedTextPattern.test(text)) errors.push(`${tag} prose contains a banned word: "${text}"`)
           if (emojiPattern.test(text)) errors.push(`${tag} prose contains an emoji: "${text}"`)
-          const lower = text.toLowerCase()
           for (const pid of patternIds) {
-            if (lower.includes(pid.toLowerCase())) errors.push(`${tag} prose leaks pattern id "${pid}": "${text}"`)
+            if (!pid.includes('-')) continue
+            const idRe = new RegExp(`\\b${pid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+            if (idRe.test(text)) errors.push(`${tag} prose leaks pattern id "${pid}": "${text}"`)
           }
+        }
+
+        // Emoji in code is still rendered UI copy (constraint 6): checked
+        // separately from the banned-word and pattern-id sweeps, which must
+        // stay prose-only or ordinary code (loops, variable names) would fail.
+        for (const code of codeStrings(lesson)) {
+          if (emojiPattern.test(code)) errors.push(`${tag} code contains an emoji`)
         }
       }
     }

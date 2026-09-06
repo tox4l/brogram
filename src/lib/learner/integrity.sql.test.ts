@@ -11,8 +11,9 @@ import { INTEGRITY_WEIGHTS } from '@/lib/contracts'
 // own SQL rather than hitting a database, so it runs in the normal unit
 // suite with no live project required.
 const here = dirname(fileURLToPath(import.meta.url))
-const migrationPath = join(here, '..', '..', '..', 'supabase', 'migrations', '0008_integrity_breakdown.sql')
-const sql = readFileSync(migrationPath, 'utf8')
+const migrationsDir = join(here, '..', '..', '..', 'supabase', 'migrations')
+const sql = readFileSync(join(migrationsDir, '0008_integrity_breakdown.sql'), 'utf8')
+const sql0003 = readFileSync(join(migrationsDir, '0003_integrity.sql'), 'utf8')
 
 /** Strips `--` line comments so a comment that merely talks about a `case`
  *  expression (as this file's own header does, describing the bug it fixes)
@@ -35,14 +36,52 @@ function parseWeightTuples(text: string): Record<string, number> {
   return weights
 }
 
+/** 0003's inlined `case type when '...' then N ... else 0 end` — superseded
+ *  at runtime by 0008's `create or replace function integrity_score`, but
+ *  the file is not deleted (migrations are immutable once applied) and its
+ *  numbers must not silently drift from the table that now actually runs. */
+function parseCaseWeights(text: string, keys: string[]): Record<string, number> {
+  const weights: Record<string, number> = {}
+  for (const key of keys) weights[key] = 0
+  const tupleRe = /when\s+'([^']+)'\s+then\s+(\d+)/g
+  for (const tuple of text.matchAll(tupleRe)) {
+    weights[tuple[1]] = Number(tuple[2])
+  }
+  return weights
+}
+
+function policyDefinition(text: string, policyName: string): string {
+  const match = text.match(new RegExp(`create policy ${policyName}\\b[\\s\\S]*?;`))
+  if (!match) throw new Error(`could not find policy ${policyName}`)
+  return match[0]
+}
+
 describe('0008_integrity_breakdown.sql weights', () => {
   it('seeds integrity_weights with exactly the INTEGRITY_WEIGHTS contract, key for key and number for number', () => {
     const sqlWeights = parseWeightTuples(sql)
     expect(sqlWeights).toEqual(INTEGRITY_WEIGHTS)
   })
 
-  it('has no second case expression over event types — the table is the only place the weights live', () => {
+  it('has no second case expression over event types in 0008 — the table is the only place the weights live', () => {
     const codeOnly = stripLineComments(sql)
     expect(codeOnly).not.toMatch(/\bcase\b[\s\S]*?\bwhen\b/i)
+  })
+
+  it('the superseded case expression left in 0003_integrity.sql still agrees with the same numbers', () => {
+    // Dead code at runtime (0008's `create or replace` wins), but a second
+    // written copy of the numbers exists in the tree and must not drift.
+    expect(parseCaseWeights(sql0003, Object.keys(INTEGRITY_WEIGHTS))).toEqual(INTEGRITY_WEIGHTS)
+  })
+
+  it('integrity_weights_read is not role-restricted to "authenticated" (C1)', () => {
+    // integrity_score() is invoker-rights and its only caller,
+    // apply_integrity_escalation(), is `security definer` — it runs as ITS
+    // OWNER, not as `authenticated`. A `to authenticated` policy would hide
+    // every row from that definer function whenever the owner role differs,
+    // silently zeroing every learner's score. The policy must apply to
+    // every role (no `to <role>` clause at all).
+    const policy = policyDefinition(sql, 'integrity_weights_read')
+    expect(policy).not.toMatch(/\bto\s+authenticated\b/i)
+    expect(policy).toMatch(/for select\s+using\s*\(true\)/i)
   })
 })
