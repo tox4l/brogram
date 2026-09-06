@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="color-scheme" content="dark" />
+<meta name="supported-color-schemes" content="dark" />
+<title>Sign in to BroGram</title>
+</head>
+<body style="margin:0; padding:0; background-color:#0a0a0a; -webkit-text-size-adjust:100%; text-size-adjust:100%;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">Your BroGram sign-in link is ready. It works once and expires in an hour.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0a0a0a;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px; max-width:560px;">
+          <tr>
+            <td style="padding:0 8px 24px 8px;">
+              <span style="font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:20px; font-weight:600; color:#fafafa; letter-spacing:-0.02em;">BroGram<span style="color:#6ee7b7;">.</span></span>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#0a0a0a; border:1px solid #262626; border-radius:12px; padding:40px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:24px; line-height:32px; font-weight:600; color:#fafafa; padding-bottom:12px;">
+                    Sign in to BroGram
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:15px; line-height:24px; color:#a1a1aa; padding-bottom:28px;">
+                    Use the button below to sign in to your coding space — no password needed.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-bottom:20px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" style="border-radius:8px; background-color:#6ee7b7;">
+                          <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email" target="_blank" style="display:inline-block; padding:14px 28px; font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:15px; font-weight:600; color:#0a0a0a; text-decoration:none; border-radius:8px;">Sign in to BroGram</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:20px; color:#71717a; padding-bottom:8px;">
+                    Or copy and paste this link into your browser:
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:20px; color:#a1a1aa; word-break:break-all; padding-bottom:24px;">
+                    {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border-top:1px solid #262626; padding-top:20px; font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:20px; color:#71717a;">
+                    This link works once and expires in an hour.<br />
+                    If you did not request this, ignore this email.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 8px 0 8px; font-family:system-ui, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:12px; line-height:18px; color:#52525b;">
+              Built by Velocity
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
