@@ -13,6 +13,7 @@ function item(over: Partial<DrillItem>): DrillItem {
     difficulty: 1,
     timeLimitS: 20,
     payload: {},
+    lane: 'arcade',
     ...over,
   }
 }

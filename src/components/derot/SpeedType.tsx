@@ -51,9 +51,10 @@ export function SpeedType({ item, onResult, now = Date.now }: SpeedTypeProps) {
         timeMs: elapsedMs,
         score: grade.score,
         at: new Date(now()).toISOString(),
+        lane: item.lane,
       })
     },
-    [item.id, item.kind, onResult, payload.snippet, now]
+    [item.id, item.kind, item.lane, onResult, payload.snippet, now]
   )
 
   const { percentRemaining, remainingMs } = useCountdown({

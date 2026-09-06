@@ -14,6 +14,7 @@ const item: DrillItem = {
     snippet: 'x = 5\ny = 2\nprint(x // y)\nprint(x % y)',
     expectedOutput: '2\n1',
   },
+  lane: 'arcade',
 }
 
 describe('PredictOutput', () => {

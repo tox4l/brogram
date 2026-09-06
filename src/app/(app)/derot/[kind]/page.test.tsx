@@ -18,7 +18,7 @@ vi.mock('@/store/session', () => ({
 vi.mock('@/hooks/useLockdown', () => ({ useLockdown: (...args: unknown[]) => mocks.lockdown(...args) }))
 vi.mock('@/components/derot', () => ({
   DrillRunner: ({ item, onResult }: { item: DrillItem; onResult: (result: DrillResult) => void }) => (
-    <button onClick={() => onResult({ drillId: item.id, kind: item.kind, correct: true, timeMs: 500, score: 88, at: '2026-09-06T12:00:00.000Z' })}>
+    <button onClick={() => onResult({ drillId: item.id, kind: item.kind, correct: true, timeMs: 500, score: 88, at: '2026-09-06T12:00:00.000Z', lane: item.lane })}>
       Simulate result for {item.id}
     </button>
   ),
@@ -65,7 +65,7 @@ function drillRow(overrides: Partial<Record<string, unknown>>): Record<string, u
   return { id: 'd1', kind: 'trace', difficulty: 3, time_limit_s: 60, payload: {}, ...overrides }
 }
 function result(overrides: Partial<DrillResult>): DrillResult {
-  return { drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 50, at: '2026-01-01T00:00:00.000Z', ...overrides }
+  return { drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 50, at: '2026-01-01T00:00:00.000Z', lane: 'arcade', ...overrides }
 }
 function learnerState(overrides: Partial<LearnerState> = {}): LearnerState {
   return {
@@ -141,7 +141,7 @@ describe('de-rot runner', () => {
     expect(Object.keys(payload)).toEqual(['drill_results'])
     const nextResults = payload.drill_results as DrillResult[]
     expect(nextResults).toHaveLength(2)
-    expect(nextResults[1]).toEqual({ drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 88, at: '2026-09-06T12:00:00.000Z' })
+    expect(nextResults[1]).toEqual({ drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 88, at: '2026-09-06T12:00:00.000Z', lane: 'arcade' })
     expect(eqAfterUpdateSpy).toHaveBeenCalledWith('user_id', 'student')
     expect(insertSpy).not.toHaveBeenCalled()
 
@@ -157,7 +157,7 @@ describe('de-rot runner', () => {
     await waitFor(() => expect(insertSpy).toHaveBeenCalledTimes(1))
     expect(insertSpy).toHaveBeenCalledWith({
       user_id: 'student',
-      drill_results: [{ drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 88, at: '2026-09-06T12:00:00.000Z' }],
+      drill_results: [{ drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 88, at: '2026-09-06T12:00:00.000Z', lane: 'arcade' }],
     })
     expect(await screen.findByText('Score: 88')).toBeTruthy()
   })

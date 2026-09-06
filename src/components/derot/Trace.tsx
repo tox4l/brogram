@@ -53,9 +53,10 @@ export function Trace({ item, onResult, now = Date.now }: TraceProps) {
         timeMs: elapsedMs,
         score,
         at: new Date(now()).toISOString(),
+        lane: item.lane,
       })
     },
-    [item.id, item.kind, item.timeLimitS, onResult, payload.expected, now]
+    [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.expected, now]
   )
 
   const { percentRemaining, remainingMs } = useCountdown({

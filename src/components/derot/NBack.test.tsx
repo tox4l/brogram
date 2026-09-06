@@ -13,6 +13,7 @@ const item: DrillItem = {
   difficulty: 1,
   timeLimitS: 60,
   payload: { n: 1, tokens, language: 'python' },
+  lane: 'arcade',
 }
 
 /** Advancing the fake clock must happen inside act() so the effect that reschedules the next 1500ms timer flushes before the next advance. */

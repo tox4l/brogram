@@ -15,6 +15,7 @@ const item: DrillItem = {
     bugLines: [3],
     explanation: 'range(1, n) stops before n, so the loop never adds n itself; it should be range(1, n + 1).',
   },
+  lane: 'arcade',
 }
 
 describe('SpotTheBug', () => {

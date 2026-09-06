@@ -244,13 +244,30 @@ export const fixtureSchemaExercise: ExercisePublic = {
 // De-rot: one item per kind
 // ---------------------------------------------------------------------------
 
+/** Seed drill json predates the `lane` field; every seed drill is an Arcade kind, so it is stamped on here. */
+function arcadeDrillItem(raw: unknown): DrillItem {
+  return { ...(raw as unknown as DrillItem), lane: 'arcade' }
+}
+
+/** Playground kinds have no seed data yet (Wave 2 builds the games); a minimal honest placeholder item
+ * is enough for DrillRunner's "coming in the next update" placeholder to render in the gallery. */
+function playDrillItem(kind: DrillKind, id: string): DrillItem {
+  return { id, kind, difficulty: 3, timeLimitS: 60, payload: {}, lane: 'play' }
+}
+
 export const fixtureDrillItems: Record<DrillKind, DrillItem> = {
-  'predict-output': predictOutputDrills.items[5] as DrillItem,
-  'spot-the-bug': spotTheBugDrills.items[4] as DrillItem,
-  trace: traceDrills.items[5] as DrillItem,
-  'hold-focus': holdFocusDrills.items[2] as DrillItem,
-  'n-back': nBackDrills.items[2] as DrillItem,
-  'speed-type': speedTypeDrills.items[2] as DrillItem,
+  'predict-output': arcadeDrillItem(predictOutputDrills.items[5]),
+  'spot-the-bug': arcadeDrillItem(spotTheBugDrills.items[4]),
+  trace: arcadeDrillItem(traceDrills.items[5]),
+  'hold-focus': arcadeDrillItem(holdFocusDrills.items[2]),
+  'n-back': arcadeDrillItem(nBackDrills.items[2]),
+  'speed-type': arcadeDrillItem(speedTypeDrills.items[2]),
+  'follow-the-dot': playDrillItem('follow-the-dot', 'follow-the-dot-preview'),
+  'color-nback': playDrillItem('color-nback', 'color-nback-preview'),
+  reaction: playDrillItem('reaction', 'reaction-preview'),
+  rhythm: playDrillItem('rhythm', 'rhythm-preview'),
+  breathe: playDrillItem('breathe', 'breathe-preview'),
+  'memory-grid': playDrillItem('memory-grid', 'memory-grid-preview'),
 }
 
 export const DRILL_KINDS: DrillKind[] = ['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type']
@@ -261,6 +278,12 @@ export const DRILL_KIND_LABELS: Record<DrillKind, string> = {
   'hold-focus': 'Hold focus',
   'n-back': 'N-back',
   'speed-type': 'Speed type',
+  'follow-the-dot': 'Follow the Dot',
+  'color-nback': 'Colour Back',
+  reaction: 'Twitch',
+  rhythm: 'Keep Time',
+  breathe: 'Breathe',
+  'memory-grid': 'Grid',
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +336,7 @@ export const fixtureDrillResults: DrillResult[] = drillKindOrder.flatMap((kind, 
     timeMs: 8_000 + run * 2_000 + kindIndex * 500,
     score: run === 1 ? 40 + kindIndex * 3 : 78 + run * 6 + kindIndex,
     at: isoDaysAgo(9 - kindIndex - run, 16),
+    lane: 'arcade' as const,
   }))
 ))
 

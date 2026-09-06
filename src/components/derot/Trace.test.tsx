@@ -16,6 +16,7 @@ const item: DrillItem = {
     variables: ['i', 'total', 'count'],
     expected: { i: '2', total: '3', count: '2' },
   },
+  lane: 'arcade',
 }
 
 function fillIn(values: Record<string, string>) {

@@ -13,6 +13,7 @@ const item: DrillItem = {
     language: 'python',
     snippet: 'numbers = [1, 2, 3, 4, 5]\ntotal = sum(numbers)\nprint(total)',
   },
+  lane: 'arcade',
 }
 
 describe('SpeedType', () => {

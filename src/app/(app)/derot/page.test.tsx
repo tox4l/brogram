@@ -43,7 +43,7 @@ vi.mock('@/lib/supabase/client', () => ({
 const allKinds = ['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type']
 
 function result(overrides: Partial<DrillResult>): DrillResult {
-  return { drillId: 'd', kind: 'trace', correct: true, timeMs: 500, score: 0, at: '2026-01-01T00:00:00.000Z', ...overrides }
+  return { drillId: 'd', kind: 'trace', correct: true, timeMs: 500, score: 0, at: '2026-01-01T00:00:00.000Z', lane: 'arcade', ...overrides }
 }
 
 function cardFor(title: string): HTMLElement {

@@ -59,8 +59,9 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
       timeMs: elapsedMs,
       score,
       at: new Date(now()).toISOString(),
+      lane: item.lane,
     })
-  }, [item.id, item.kind, onResult, plantedMatches, now, elapsed])
+  }, [item.id, item.kind, item.lane, onResult, plantedMatches, now, elapsed])
 
   // Held in a ref (the way useCountdown holds onExpire) so the token-advance
   // effect below does not depend on `finish` -- a parent re-render that hands

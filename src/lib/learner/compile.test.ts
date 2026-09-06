@@ -183,7 +183,7 @@ describe('compileLearnerState', () => {
       attemptRow({ id: 'a-2', created_at: '2026-09-02T10:00:00.000Z' }),
     ]
     const wellness: WellnessRow = {
-      drill_results: [{ drillId: 'd1', kind: 'trace', correct: true, timeMs: 900, score: 10, at: '2026-03-04T20:00:00.000Z' }],
+      drill_results: [{ drillId: 'd1', kind: 'trace', correct: true, timeMs: 900, score: 10, at: '2026-03-04T20:00:00.000Z', lane: 'arcade' }],
     }
     const state = compileLearnerState(profileRow(), [], attempts, [], wellness, null, now)
 
@@ -196,8 +196,8 @@ describe('compileLearnerState', () => {
   it('counts the de-rot streak from drill results and leaves both streaks at zero with no activity', () => {
     const wellness: WellnessRow = {
       drill_results: [
-        { drillId: 'd1', kind: 'trace', correct: true, timeMs: 900, score: 10, at: '2026-03-04T20:00:00.000Z' },
-        { drillId: 'd2', kind: 'n-back', correct: false, timeMs: 900, score: 0, at: '2026-03-05T20:00:00.000Z' },
+        { drillId: 'd1', kind: 'trace', correct: true, timeMs: 900, score: 10, at: '2026-03-04T20:00:00.000Z', lane: 'arcade' },
+        { drillId: 'd2', kind: 'n-back', correct: false, timeMs: 900, score: 0, at: '2026-03-05T20:00:00.000Z', lane: 'arcade' },
       ],
     }
     const state = compileLearnerState(profileRow(), [], [], [], wellness, null, new Date('2026-03-06T06:00:00.000Z'))

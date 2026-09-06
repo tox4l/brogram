@@ -48,8 +48,8 @@ const attempts: Attempt[] = [{
 }]
 
 const drillResults: DrillResult[] = [
-  { drillId: 'd1', kind: 'trace', correct: true, timeMs: 1000, score: 70, at: '2026-09-01T00:00:00.000Z' },
-  { drillId: 'd2', kind: 'trace', correct: true, timeMs: 1000, score: 90, at: '2026-09-02T00:00:00.000Z' },
+  { drillId: 'd1', kind: 'trace', correct: true, timeMs: 1000, score: 70, at: '2026-09-01T00:00:00.000Z', lane: 'arcade' },
+  { drillId: 'd2', kind: 'trace', correct: true, timeMs: 1000, score: 90, at: '2026-09-02T00:00:00.000Z', lane: 'arcade' },
 ]
 
 function session(state: LearnerState | null = learnerState()) {

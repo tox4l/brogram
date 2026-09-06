@@ -1,6 +1,7 @@
 import type { DrillKind } from '@/lib/contracts'
 import type { DrillKindSummary } from '../derive'
 
+/** Titles mirror DRILL_META in src/app/(app)/derot/lib.ts, kept in sync by hand since that file is frozen. */
 const DRILL_LABELS: Record<DrillKind, string> = {
   'predict-output': 'Predict the output',
   'spot-the-bug': 'Spot the bug',
@@ -8,13 +9,19 @@ const DRILL_LABELS: Record<DrillKind, string> = {
   'hold-focus': 'Hold focus',
   'n-back': 'N-back',
   'speed-type': 'Speed type',
+  'follow-the-dot': 'Follow the Dot',
+  'color-nback': 'Colour Back',
+  reaction: 'Twitch',
+  rhythm: 'Keep Time',
+  breathe: 'Breathe',
+  'memory-grid': 'Grid',
 }
 
 interface DrillScoresProps {
   rows: DrillKindSummary[]
 }
 
-/** De-rot scores grouped by drill kind: best, mean, and run count. All six kinds always show, even at zero. */
+/** De-rot scores grouped by drill kind: best, mean, and run count. All twelve kinds always show, even at zero. */
 export function DrillScores({ rows }: DrillScoresProps) {
   return (
     <section className="flex flex-col gap-3" data-section="drill-scores">

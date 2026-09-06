@@ -28,6 +28,7 @@ const item: DrillItem = {
     options: ['A named memory location.', 'A loop.', 'A function.', 'A class.'],
     answerIndex: 0,
   },
+  lane: 'arcade',
 }
 
 describe('HoldFocus', () => {
@@ -56,6 +57,7 @@ describe('HoldFocus', () => {
       difficulty: 1,
       timeLimitS: 180,
       payload: seedItem.payload,
+      lane: 'arcade',
     }
 
     render(<HoldFocus item={longItem} onResult={() => {}} />)

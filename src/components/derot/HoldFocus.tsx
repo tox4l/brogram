@@ -50,9 +50,10 @@ export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
         timeMs: elapsedMs,
         score,
         at: new Date(now()).toISOString(),
+        lane: item.lane,
       })
     },
-    [item.id, item.kind, item.timeLimitS, onResult, payload.answerIndex, now, elapsed]
+    [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.answerIndex, now, elapsed]
   )
 
   const voidDrill = useCallback(() => finish(null, true), [finish])
