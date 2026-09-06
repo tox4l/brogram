@@ -6,11 +6,11 @@ import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
 
 export type LockdownReason = 'blur' | 'idle' | 'printscreen'
-export interface LockdownOptions { duringAttempt?: boolean; enabled?: boolean }
+export interface LockdownOptions { duringAttempt?: boolean; enabled?: boolean; idleGuard?: boolean }
 
 interface IntegrityRow {
   user_id: string
-  exercise_id: string
+  exercise_id: string | null
   type: IntegrityEventType
   during_attempt: boolean
   created_at: string
@@ -20,7 +20,16 @@ function attemptIsActive() {
   try { return sessionStorage.getItem('brogram:attempt-active') === 'true' } catch { return false }
 }
 
-export function useLockdown(exerciseId: string, { duringAttempt, enabled = true }: LockdownOptions = {}) {
+/**
+ * `exerciseId` is `null` on screens with no exercise row to attach the event
+ * to (the de-rot drill runner: drill ids are not `exercise_id`'s uuid type),
+ * matching the nullable `IntegrityEvent.exerciseId` contract and column.
+ * `idleGuard` (default true) gates only the 15s idle overlay/cover; blur,
+ * printscreen and clipboard guards are unaffected. Hold-focus passes false
+ * because reading a passage without moving the mouse is the point, and the
+ * drill has its own blur/scroll voids as its reading guard.
+ */
+export function useLockdown(exerciseId: string | null, { duringAttempt, enabled = true, idleGuard = true }: LockdownOptions = {}) {
   const userId = useSession(session => session.user?.id)
   const [blurred, setBlurred] = useState(false)
   const [idle, setIdle] = useState(false)
@@ -104,7 +113,8 @@ export function useLockdown(exerciseId: string, { duringAttempt, enabled = true 
       setIdle(false)
       clearTimeout(idleCoverTimer)
       clearTimeout(idleLogTimer)
-      idleCoverTimer = setTimeout(() => setIdle(true), LOCKDOWN.idleBlurAfterS * 1_000)
+      // idleGuard only gates the visual cover; idle is weight-0 and still worth logging.
+      if (idleGuard) idleCoverTimer = setTimeout(() => setIdle(true), LOCKDOWN.idleBlurAfterS * 1_000)
       idleLogTimer = setTimeout(() => {
         logIntegrity('idle')
         flush()
@@ -158,7 +168,7 @@ export function useLockdown(exerciseId: string, { duringAttempt, enabled = true 
       activity.current = () => {}
       flush()
     }
-  }, [enabled, flush, logIntegrity])
+  }, [enabled, flush, logIntegrity, idleGuard])
 
   const block = useCallback((event: SyntheticEvent, type: IntegrityEventType) => {
     if (!enabled) return

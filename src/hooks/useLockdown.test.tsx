@@ -11,7 +11,7 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: (table: s
 vi.mock('@/store/session', () => ({ useSession: (selector: (value: unknown) => unknown) => selector({ user: { id: 'learner-1' } }) }))
 
 function rows() {
-  return insert.mock.calls.flatMap(([batch]) => batch as { type: IntegrityEventType; during_attempt: boolean; exercise_id: string; user_id: string }[])
+  return insert.mock.calls.flatMap(([batch]) => batch as { type: IntegrityEventType; during_attempt: boolean; exercise_id: string | null; user_id: string }[])
 }
 
 beforeEach(() => {
@@ -144,5 +144,27 @@ describe('useLockdown', () => {
     await act(async () => { vi.advanceTimersByTime(1_000) })
     expect(result.current.loggingError).toContain('could not be saved')
     expect(error).toHaveBeenCalledTimes(1)
+  })
+
+  it('inserts a null exercise_id on screens with no exercise row, such as the de-rot runner', async () => {
+    const { result } = renderHook(() => useLockdown(null, { duringAttempt: false }))
+    act(() => result.current.logIntegrity('paste-blocked'))
+    await act(async () => { vi.advanceTimersByTime(1_000) })
+    expect(rows()).toEqual([expect.objectContaining({ type: 'paste-blocked', exercise_id: null, user_id: 'learner-1' })])
+  })
+
+  it('skips the idle overlay when idleGuard is false but keeps the blur guard on', async () => {
+    const { result } = renderHook(() => useLockdown('exercise-1', { idleGuard: false }))
+    await act(async () => { vi.advanceTimersByTime(15_000) })
+    expect(result.current.overlay).toBeNull()
+    fireEvent.blur(window)
+    expect(result.current.overlay).toBe('blur')
+  })
+
+  it('still logs an idle event at 60 seconds when idleGuard is false', async () => {
+    const { result } = renderHook(() => useLockdown('exercise-1', { duringAttempt: true, idleGuard: false }))
+    await act(async () => { vi.advanceTimersByTime(60_000) })
+    expect(result.current.overlay).toBeNull()
+    expect(rows().filter(row => row.type === 'idle')).toHaveLength(1)
   })
 })

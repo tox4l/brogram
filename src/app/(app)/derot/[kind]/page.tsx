@@ -12,7 +12,7 @@ import { LockdownOverlay } from '@/components/exercise/LockdownOverlay'
 import { DrillRunner } from '@/components/derot'
 import { useSession } from '@/store/session'
 import type { DrillItem, DrillKind, DrillResult } from '@/lib/contracts'
-import { DRILL_META, isDrillKind, mapDrillRow, pickDrillItem } from '../lib'
+import { DRILL_META, computeDerotStreak, dateKey, isDrillKind, mapDrillRow, pickDrillItem } from '../lib'
 
 type Phase = 'loading' | 'ready' | 'result' | 'empty' | 'error'
 
@@ -22,17 +22,22 @@ interface RunnerState {
   allResults: DrillResult[]
   current: DrillItem | null
   lastResult: DrillResult | null
+  pendingResult: DrillResult | null
   error: string | null
   saveError: string | null
 }
 
-const INITIAL_STATE: RunnerState = { phase: 'loading', items: [], allResults: [], current: null, lastResult: null, error: null, saveError: null }
+const INITIAL_STATE: RunnerState = { phase: 'loading', items: [], allResults: [], current: null, lastResult: null, pendingResult: null, error: null, saveError: null }
 
 function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: string | null) {
   const [state, setState] = useState<RunnerState>(INITIAL_STATE)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef(state)
   stateRef.current = state
+  const learnerState = useSession((session) => session.learnerState)
+  const setLearnerState = useSession((session) => session.setLearnerState)
+  const learnerStateRef = useRef(learnerState)
+  useEffect(() => { learnerStateRef.current = learnerState }, [learnerState])
 
   useEffect(() => {
     if (!userId) return
@@ -53,7 +58,7 @@ function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: stri
         if (items.length === 0) { setState({ ...INITIAL_STATE, phase: 'empty', allResults }); return }
         const forKind = allResults.filter((result) => result.kind === kind)
         const current = pickDrillItem(items, forKind, new Date(), explicitId)
-        setState({ phase: 'ready', items, allResults, current, lastResult: null, error: null, saveError: null })
+        setState({ ...INITIAL_STATE, phase: 'ready', items, allResults, current })
       } catch (err) {
         if (!cancelled) setState({ ...INITIAL_STATE, phase: 'error', error: err instanceof Error ? err.message : 'This drill could not open.' })
       }
@@ -65,6 +70,7 @@ function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: stri
 
   const submitResult = useCallback(async (result: DrillResult) => {
     if (!userId) return
+    setState((prev) => ({ ...prev, pendingResult: result, saveError: null }))
     try {
       const client = createClient()
       // Fresh read right before the write: wellness also carries prefs, water_log
@@ -74,22 +80,53 @@ function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: stri
       if (readError) throw readError
       const current = (data?.drill_results ?? []) as DrillResult[]
       const nextResults = [...current, result]
-      const { error: writeError } = await client.from('wellness').update({ drill_results: nextResults }).eq('user_id', userId)
+      // `.select().maybeSingle()` confirms the update actually touched a row.
+      // Without it a missing wellness row makes a zero-row UPDATE look like
+      // success, and the drill result is silently lost.
+      const { data: updated, error: writeError } = await client
+        .from('wellness')
+        .update({ drill_results: nextResults })
+        .eq('user_id', userId)
+        .select('user_id')
+        .maybeSingle()
       if (writeError) throw writeError
-      setState((prev) => ({ ...prev, phase: 'result', allResults: nextResults, lastResult: result, saveError: null }))
+      if (!updated) {
+        // The row is normally created by handle_new_user on sign-up; be safe
+        // if it is somehow missing rather than dropping the result.
+        const { error: insertError } = await client.from('wellness').insert({ user_id: userId, drill_results: nextResults })
+        if (insertError) throw insertError
+      }
+      setState((prev) => ({ ...prev, phase: 'result', allResults: nextResults, lastResult: result, pendingResult: null, saveError: null }))
+
+      const learner = learnerStateRef.current
+      if (learner) {
+        setLearnerState({
+          ...learner,
+          streak: {
+            ...learner.streak,
+            derotDays: computeDerotStreak(nextResults.map((r) => r.at)),
+            lastDerotDate: dateKey(result.at) ?? learner.streak.lastDerotDate,
+          },
+          updatedAt: new Date().toISOString(),
+        })
+      }
     } catch {
-      setState((prev) => ({ ...prev, saveError: 'Your result could not be saved. Check your connection before continuing.' }))
+      setState((prev) => ({ ...prev, saveError: 'Your result could not be saved. Check your connection, then try again.' }))
     }
-  }, [userId])
+  }, [userId, setLearnerState])
 
   const next = useCallback(() => {
     const { items, allResults } = stateRef.current
     const forKind = allResults.filter((result) => result.kind === kind)
     const current = pickDrillItem(items, forKind, new Date())
-    setState((prev) => ({ ...prev, phase: 'ready', current, lastResult: null }))
+    setState((prev) => ({ ...prev, phase: 'ready', current, lastResult: null, pendingResult: null, saveError: null }))
   }, [kind])
 
-  return { ...state, retry: () => setAttempt((n) => n + 1), submitResult, next }
+  const retrySave = useCallback(() => {
+    if (stateRef.current.pendingResult) void submitResult(stateRef.current.pendingResult)
+  }, [submitResult])
+
+  return { ...state, retry: () => setAttempt((n) => n + 1), submitResult, next, retrySave }
 }
 
 function RunnerBody({ kind }: { kind: DrillKind }) {
@@ -99,10 +136,11 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
   const runner = useDrillRunner(kind, userId, explicitId)
   const meta = DRILL_META[kind]
 
-  // useLockdown's exerciseId is typed as a plain string, not nullable, so the
-  // drill's id stands in for it once loaded; `enabled` keeps it inert before
-  // that (see the report for why null was not used).
-  const lockdown = useLockdown(runner.current?.id ?? '', { enabled: Boolean(runner.current) })
+  // exercise_id is a uuid column; a drill id is not one, so this screen logs
+  // with a null exercise reference. idleGuard is off for hold-focus, whose
+  // own blur/scroll voids are the reading guard -- the 15s idle overlay would
+  // otherwise cover a student who is reading, not idle.
+  const lockdown = useLockdown(null, { enabled: Boolean(runner.current), idleGuard: runner.current?.kind !== 'hold-focus' })
 
   return (
     <div {...lockdown.containerProps} className="relative min-w-0 space-y-5">
@@ -116,6 +154,12 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
       <div inert={Boolean(lockdown.overlay)} className="space-y-5">
         {lockdown.pasteMessage && <p role="status" className="text-sm text-muted-foreground">{lockdown.pasteMessage}</p>}
         {lockdown.loggingError && <p role="alert" className="text-sm text-muted-foreground">{lockdown.loggingError}</p>}
+        {runner.saveError && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
+            <p className="min-w-0 flex-1">{runner.saveError}</p>
+            <Button variant="outline" onClick={runner.retrySave}>Retry save</Button>
+          </div>
+        )}
 
         {runner.phase === 'loading' && <p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}
 
@@ -134,13 +178,14 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
           </div>
         )}
 
-        {runner.phase === 'ready' && runner.current && <DrillRunner item={runner.current} onResult={(result) => void runner.submitResult(result)} />}
+        {runner.phase === 'ready' && runner.current && (
+          <DrillRunner key={runner.current.id} item={runner.current} onResult={(result) => void runner.submitResult(result)} />
+        )}
 
         {runner.phase === 'result' && runner.lastResult && (
           <div className="mx-auto w-full max-w-2xl space-y-5 rounded-xl border border-border p-6">
             <p className="text-lg font-medium tracking-tight">{runner.lastResult.correct ? 'Correct.' : 'Not quite.'}</p>
             <p className="font-mono text-sm text-muted-foreground">Score: {runner.lastResult.score}</p>
-            {runner.saveError && <p role="alert" className="text-sm text-muted-foreground">{runner.saveError}</p>}
             <div className="flex flex-wrap gap-3">
               <Button onClick={runner.next} className="bg-emerald-200 text-primary-foreground hover:bg-emerald-100">Next drill<ArrowRight aria-hidden="true" /></Button>
               <Link href="/derot" className={buttonVariants({ variant: 'outline' })}>Back to de-rot</Link>
