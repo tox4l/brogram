@@ -2,18 +2,15 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { test, expect } from '@playwright/test'
-import { createClient } from '@supabase/supabase-js'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { compileLearnerState } from '../src/lib/learner/compile'
 import type { Exercise } from '../src/lib/contracts'
+import { readEnv, hasEnv, serviceClient, mintSession, type E2eEnv } from './support/session'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const env = readEnv()
 
 test('failed submit → fix plan → hint → pass → a different pattern', async ({ page, context, baseURL }) => {
-  test.skip(!url || !anonKey || !serviceKey, 'Pending C5: configure Supabase and run node scripts/seed-load.mjs first.')
-  const service = createClient(url!, serviceKey!, { auth: { persistSession: false, autoRefreshToken: false } })
+  test.skip(!hasEnv(env), 'Pending C5: configure Supabase and run node scripts/seed-load.mjs first.')
+  const service = serviceClient(env as E2eEnv)
   const email = `brogram-smoke-${randomUUID()}@test.edu.qa`
   const inviteCode = randomUUID()
   let userId: string | undefined
@@ -39,19 +36,7 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     const initial = await service.from('learner_state').insert({ user_id: userId, state, version: 0 })
     if (initial.error) throw initial.error
 
-    const cookies = new Map<string, { name: string; value: string; options: CookieOptions }>()
-    const auth = createServerClient(url!, anonKey!, { cookies: {
-      getAll: () => [...cookies.values()].map(({ name, value }) => ({ name, value })),
-      setAll: (values) => { for (const cookie of values) cookies.set(cookie.name, cookie) },
-    } })
-    const verified = await auth.auth.verifyOtp({ token_hash: link.data.properties.hashed_token, type: 'email' })
-    if (verified.error) throw verified.error
-    const origin = new URL(baseURL!)
-    await context.addCookies([...cookies.values()].map(({ name, value, options }) => ({
-      name, value, domain: origin.hostname, path: options.path ?? '/',
-      httpOnly: Boolean(options.httpOnly), secure: origin.protocol === 'https:',
-      sameSite: options.sameSite === 'none' ? 'None' as const : options.sameSite === 'strict' ? 'Strict' as const : 'Lax' as const,
-    })))
+    await mintSession(env as E2eEnv, context, baseURL!, link.data)
 
     const agents: string[] = []
     page.on('request', (request) => {
