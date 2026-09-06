@@ -263,4 +263,11 @@ describe('app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
+
+  it('marks Courses current on the route it now links to', () => {
+    mocks.pathname.mockReturnValue('/courses')
+    renderShell(<AppShell><h1>Courses content</h1></AppShell>)
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' })
+    expect(within(nav).getByRole('link', { name: 'Courses' }).getAttribute('aria-current')).toBe('page')
+  })
 })

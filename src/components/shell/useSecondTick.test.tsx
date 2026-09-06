@@ -1,6 +1,11 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSecondTick } from './useSecondTick'
+
+function Probe() {
+  return <span>{useSecondTick()}</span>
+}
 
 function setHidden(hidden: boolean) {
   Object.defineProperty(document, 'hidden', { value: hidden, configurable: true })
@@ -91,5 +96,18 @@ describe('useSecondTick', () => {
     expect(result.current).toBe(whenHidden + 6000)
 
     unmount()
+  })
+
+  it('renders a stable sentinel on the server, never a stale module-eval clock', () => {
+    // No live clock exists on the server: `getServerSnapshot` must return the
+    // same constant every time, not `Date.now()` frozen at module load,
+    // which would drift stale on a warm server and mismatch on hydration.
+    vi.setSystemTime(new Date(Date.now() + 60_000))
+    const first = renderToStaticMarkup(<Probe />)
+    vi.setSystemTime(new Date(Date.now() + 60_000))
+    const second = renderToStaticMarkup(<Probe />)
+
+    expect(first).toBe(second)
+    expect(first).toContain('>0<')
   })
 })

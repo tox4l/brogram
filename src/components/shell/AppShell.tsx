@@ -15,7 +15,7 @@ export function AppShell({ children, wellnessRail }: {
   const pathname = usePathname()
   const exercise = pathname === '/exercise' || pathname.startsWith('/exercise/')
   const navigation = [
-    { title: 'Courses', href: '/courses', active: pathname === '/dashboard' || pathname.startsWith('/onboarding') || exercise },
+    { title: 'Courses', href: '/courses', active: pathname.startsWith('/courses') || pathname === '/dashboard' || pathname.startsWith('/onboarding') || exercise },
     { title: 'De-rot', href: '/derot', active: pathname.startsWith('/derot') },
     { title: 'Progress', href: '/reports', active: pathname.startsWith('/reports') },
   ]

@@ -78,8 +78,16 @@ function getSnapshot(): number {
   return now
 }
 
+/** A live clock has no server value: `now` is frozen at module-eval time
+ *  (process start on a warm server), so returning it would put an
+ *  arbitrarily stale second in the HTML and guarantee a hydration mismatch
+ *  once the client's own module-eval time differs. Consumers render a
+ *  placeholder while this is `0` and pick up the real clock the moment
+ *  `subscribe` runs on the client (T2.4 step 7). */
+const SERVER_SNAPSHOT = 0
+
 function getServerSnapshot(): number {
-  return now
+  return SERVER_SNAPSHOT
 }
 
 export function useSecondTick(): number {
