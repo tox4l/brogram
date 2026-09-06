@@ -32,7 +32,6 @@ const TOOLS_JAR = '/app/java/tools.jar'
 const SOURCE_DIR = '/str'
 const RUNNER_SOURCE = `${SOURCE_DIR}/Runner.java`
 const MAIN_SOURCE = `${SOURCE_DIR}/Main.java`
-const SOLUTION_SOURCE = `${SOURCE_DIR}/Solution.java`
 const STDIN_FILE = `${SOURCE_DIR}/stdin.txt`
 const RUNNER_DIR = '/files'
 // Java's own mkdirs makes this one; the compiled student classes are wiped and
@@ -172,20 +171,61 @@ public class Runner {
 }
 `
 
-interface JavaSource { path: string; contents: string }
+export interface JavaProgram {
+  source: string
+  /** 1-based line range the student's own code occupies in `source`. */
+  codeStart: number
+  codeEnd: number
+}
+
+const IMPORT_LINE = /^[ \t]*import[ \t]+[^;]+;[ \t]*$/
 
 /**
- * A fixture supplies Main.java and the student writes Solution; `public` is
- * stripped from `class Solution` by java-normalize so one convention covers both
- * this runtime and the server judge. Without a fixture the submission is the
- * whole program and becomes Main.java untouched.
+ * One compilation unit, exactly as the bank was authored and as the server judge
+ * concatenates: javac insists `public class Main` lives in Main.java, and a
+ * student's Solution routinely leans on an import the fixture already declares
+ * ("Playlist total time" uses List and ArrayList and imports neither). `public`
+ * is stripped from `class Solution` by java-normalize so one convention covers
+ * both runtimes.
+ *
+ * Imports from both halves are hoisted, because Java forbids an import after a
+ * type declaration, and are blanked where they stood so the student's own line
+ * numbering survives. The student's code comes first so a compile error lands
+ * near the line they actually wrote; remapDiagnostics finishes the job.
  */
-export function javaSourceSet(request: RunRequest): JavaSource[] {
-  if (!request.fixture) return [{ path: MAIN_SOURCE, contents: request.code }]
-  return [
-    { path: MAIN_SOURCE, contents: request.fixture },
-    { path: SOLUTION_SOURCE, contents: normalizeJavaSolution(request.code) },
-  ]
+export function javaProgram(request: RunRequest): JavaProgram {
+  const code = normalizeJavaSolution(request.code)
+  if (!request.fixture) {
+    const lines = code.split('\n')
+    return { source: code, codeStart: 1, codeEnd: lines.length }
+  }
+  const imports: string[] = []
+  const strip = (text: string) => text.split('\n').map(line => {
+    if (!IMPORT_LINE.test(line)) return line
+    const statement = line.trim()
+    if (!imports.includes(statement)) imports.push(statement)
+    return ''
+  })
+  const body = strip(code)
+  const fixture = strip(request.fixture)
+  return {
+    source: [...imports, ...body, ...fixture].join('\n'),
+    codeStart: imports.length + 1,
+    codeEnd: imports.length + body.length,
+  }
+}
+
+/**
+ * javac reports lines in the combined file. Students see their own line numbers
+ * under a filename that matches the class they are editing.
+ */
+export function remapDiagnostics(text: string, program: JavaProgram): string {
+  return text.replace(new RegExp(`${MAIN_SOURCE.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}:(\\d+):`, 'g'), (_whole, digits: string) => {
+    const line = Number(digits)
+    if (line >= program.codeStart && line <= program.codeEnd) return `Solution.java:${line - program.codeStart + 1}:`
+    if (line > program.codeEnd) return `Main.java:${line - program.codeEnd}:`
+    return `Main.java:${line}:`
+  })
 }
 
 /** Structural tests never compile or run; a run made only of them skips javac entirely. */
@@ -206,14 +246,14 @@ export function createJavaEngine(options: JavaEngineOptions): RuntimeEngine {
 
   async function compileSources(request: RunRequest): Promise<void> {
     if (!host) throw new Error('The Java engine is not ready.')
-    const sources = javaSourceSet(request)
-    const key = sources.map(source => `${source.path}\n${source.contents}`).join('\0')
-    if (compiled?.key === key) return
+    const program = javaProgram(request)
+    if (compiled?.key === program.source) return
     compiled = undefined
-    for (const source of sources) host.addStringFile(source.path, source.contents)
-    await host.runMain('Runner', CLASS_PATH, ['compile', CLASS_DIR, DIAGNOSTICS_FILE, ...sources.map(source => source.path)])
+    host.addStringFile(MAIN_SOURCE, program.source)
+    await host.runMain('Runner', CLASS_PATH, ['compile', CLASS_DIR, DIAGNOSTICS_FILE, MAIN_SOURCE])
     const status = await host.readTextFile(`${DIAGNOSTICS_FILE}.status`)
-    const diagnostics = (await host.readTextFile(DIAGNOSTICS_FILE))?.trim() ?? ''
+    const diagnostics = remapDiagnostics((await host.readTextFile(DIAGNOSTICS_FILE))?.trim() ?? '', program)
+    const key = program.source
     if (status === null) {
       compiled = { key, error: diagnostics || 'The Java compiler stopped before it reported a result.' }
       return

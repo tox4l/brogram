@@ -17,11 +17,7 @@ import unverified from '../../../../seed/exercises/unverified/INFS3102.json'
 
 interface Failure { testId: string; expected: string; actual: string; stderr: string; failureKind?: string }
 interface Row { file: string; title: string; cloId: string; pattern: string; passed: number; total: number; ms: number; failures: Failure[] }
-interface Verify { rows: Row[]; compileError: { failureKind?: string; stderr: string } | null; done: boolean; error: string | null }
-
-declare global {
-  interface Window { __javaVerify?: Verify }
-}
+interface Verify { rows: Row[]; compileError: { failureKind?: string; stderr: string } | null; done: boolean; error: string | null; status: string }
 
 interface SeedExercise {
   cloId: string
@@ -46,56 +42,78 @@ function toRequest(exercise: SeedExercise, code: string): RunRequest {
   return { language: 'java', code, fixture: exercise.fixture, tests: exercise.tests as TestCase[], timeoutMs: 5000 }
 }
 
+// Each CheerpJ worker holds an 18 MB JVM and the adapter keeps a warm standby,
+// so the run must start exactly once per page load: React mounts this component
+// twice in development, and four JVMs on one page thrash badly.
+let state: Verify | null = null
+
+/**
+ * Started once per page load and never cancelled: unmounting a component must
+ * not abort a run that takes minutes, and in development the harness is
+ * mounted twice. window.__javaVerify is the authoritative result; the table
+ * below just polls it.
+ */
+function startVerification(): Verify {
+  if (state) return state
+  const verify: Verify = { rows: [], compileError: null, done: false, error: null, status: 'starting' }
+  state = verify
+  // e2e/java/support.ts owns the Window declaration for this key.
+  ;(window as unknown as { __javaVerify: Verify }).__javaVerify = verify
+  subscribeRuntimeProgress(event => { verify.status = `${event.phase}: ${event.packageName}` })
+  const adapter = new JavaAdapter()
+
+  // ?only=smoke keeps the default e2e suite to one exercise plus the
+  // compile-error case; the full bank run is the tagged spec's job.
+  const only = new URLSearchParams(window.location.search).get('only')
+  const bank = only ? BANK.filter(entry => entry.file.includes(only)) : BANK
+
+  void (async () => {
+    try {
+      for (const { file, exercise } of bank) {
+        verify.status = `running ${exercise.title}`
+        console.log(`[java-verify] start ${exercise.title}`)
+        const startedAt = performance.now()
+        const result = await adapter.run(toRequest(exercise, exercise.referenceSolution))
+        const row: Row = {
+          file, title: exercise.title, cloId: exercise.cloId, pattern: exercise.pattern,
+          passed: result.passedCount, total: exercise.tests.length, ms: Math.round(performance.now() - startedAt),
+          failures: result.results.filter(item => !item.passed).map(item => ({
+            testId: item.testId, expected: item.expected, actual: item.actual,
+            stderr: item.stderr.slice(0, 600), failureKind: item.failureKind,
+          })),
+        }
+        verify.rows.push(row)
+        console.log(`[java-verify] ${row.title}: ${row.passed}/${row.total} in ${row.ms} ms${row.failures[0] ? ` | ${row.failures[0].testId} expected ${JSON.stringify(row.failures[0].expected)} got ${JSON.stringify(row.failures[0].actual)}` : ''}`)
+      }
+
+      verify.status = 'checking the compile-error path'
+      const broken = await adapter.run(toRequest(BANK[0].exercise, BROKEN_SOLUTION))
+      verify.compileError = { failureKind: broken.results[0]?.failureKind, stderr: broken.results[0]?.stderr ?? '' }
+    } catch (error) {
+      verify.error = error instanceof Error ? error.message : String(error)
+    } finally {
+      verify.done = true
+      verify.status = verify.error ? `failed: ${verify.error}` : 'done'
+      console.log(`[java-verify] done: ${verify.rows.filter(row => row.passed === row.total).length}/${verify.rows.length} green`)
+    }
+  })()
+  return verify
+}
+
 export default function JavaVerifyPage() {
-  const [rows, setRows] = useState<Row[]>([])
-  const [status, setStatus] = useState('starting')
+  // Started from an effect, never during render: the run mutates its state
+  // immediately and a render-phase start makes hydration disagree with itself.
+  const [snapshot, setSnapshot] = useState<Verify | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-    const state: Verify = { rows: [], compileError: null, done: false, error: null }
-    window.__javaVerify = state
-    const unsubscribe = subscribeRuntimeProgress(event => { if (!cancelled) setStatus(`${event.phase}: ${event.packageName}`) })
-    const adapter = new JavaAdapter()
-
-    // ?only=smoke keeps the default e2e suite to one exercise plus the
-    // compile-error case; the full bank run is the tagged spec's job.
-    const only = new URLSearchParams(window.location.search).get('only')
-    const bank = only ? BANK.filter(entry => entry.file.includes(only)) : BANK
-
-    void (async () => {
-      try {
-        for (const { file, exercise } of bank) {
-          if (cancelled) return
-          setStatus(`running ${exercise.title}`)
-          const started = performance.now()
-          const result = await adapter.run(toRequest(exercise, exercise.referenceSolution))
-          const row: Row = {
-            file, title: exercise.title, cloId: exercise.cloId, pattern: exercise.pattern,
-            passed: result.passedCount, total: exercise.tests.length, ms: Math.round(performance.now() - started),
-            failures: result.results.filter(item => !item.passed).map(item => ({
-              testId: item.testId, expected: item.expected, actual: item.actual,
-              stderr: item.stderr.slice(0, 600), failureKind: item.failureKind,
-            })),
-          }
-          state.rows.push(row)
-          if (!cancelled) setRows([...state.rows])
-        }
-
-        setStatus('checking the compile-error path')
-        const shapes = BANK[0].exercise
-        const broken = await adapter.run(toRequest(shapes, BROKEN_SOLUTION))
-        state.compileError = { failureKind: broken.results[0]?.failureKind, stderr: broken.results[0]?.stderr ?? '' }
-      } catch (error) {
-        state.error = error instanceof Error ? error.message : String(error)
-      } finally {
-        state.done = true
-        if (!cancelled) setStatus(state.error ? `failed: ${state.error}` : 'done')
-      }
-    })()
-
-    return () => { cancelled = true; unsubscribe(); adapter.abort() }
+    const verify = startVerification()
+    setSnapshot({ ...verify })
+    const timer = window.setInterval(() => setSnapshot({ ...verify }), 500)
+    return () => window.clearInterval(timer)
   }, [])
 
+  const rows = snapshot?.rows ?? []
+  const status = snapshot?.status ?? 'starting'
   const passedExercises = rows.filter(row => row.passed === row.total).length
   return (
     <main className="mx-auto max-w-5xl space-y-4 p-8">
@@ -104,8 +122,9 @@ export default function JavaVerifyPage() {
       <table className="w-full border-collapse text-left text-xs">
         <thead><tr className="border-b border-border"><th className="py-2">Exercise</th><th>Outcome</th><th>Pattern</th><th>Tests</th><th>ms</th><th>First failure</th></tr></thead>
         <tbody>
+          {/* Keyed by outcome and title: two exercises are both called "Coffee order pricing". */}
           {rows.map(row => (
-            <tr key={`${row.file}:${row.title}`} className="border-b border-border/50 align-top">
+            <tr key={`${row.cloId}|${row.title}`} className="border-b border-border/50 align-top">
               <td className="py-1.5 pr-3">{row.title}</td>
               <td className="pr-3">{row.cloId}</td>
               <td className="pr-3">{row.pattern}</td>

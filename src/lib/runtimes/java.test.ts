@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RunRequest } from '@/lib/contracts'
-import { createJavaEngine, javaSourceSet, needsCompiler, JAVA_PROGRESS, type CheerpJHost } from './java-engine'
+import { createJavaEngine, javaProgram, needsCompiler, remapDiagnostics, JAVA_PROGRESS, type CheerpJHost } from './java-engine'
 import { JavaAdapter, JAVA_COMPILE_BUDGET_MS } from './java'
 import { createEngineWorker } from './engine-worker.test-support'
 import type { JavaStructureChecker } from './java-structure'
@@ -79,16 +79,34 @@ const structuralTest = { id: 's1', input: '{"structure":{"types":[{"name":"Shape
 afterEach(() => vi.useRealTimers())
 
 describe('java source assembly', () => {
-  it('pairs the fixture as Main.java with a de-publicized Solution.java', () => {
-    const sources = javaSourceSet(request())
-    expect(sources.map(source => source.path)).toEqual(['/str/Main.java', '/str/Solution.java'])
-    expect(sources[0].contents).toContain('public class Main')
-    expect(sources[1].contents).toContain('class Solution')
-    expect(sources[1].contents).not.toContain('public class Solution')
+  it('builds one compilation unit with the student first and public stripped from Solution', () => {
+    const program = javaProgram(request())
+    expect(program.source).toContain('public class Main')
+    expect(program.source).toContain('class Solution')
+    expect(program.source).not.toContain('public class Solution')
+    expect(program.source.indexOf('class Solution')).toBeLessThan(program.source.indexOf('public class Main'))
+  })
+
+  it('hoists imports from both halves and keeps the student line numbering', () => {
+    const code = 'class Solution {\n    static List<String> pick() { return new ArrayList<>(); }\n}\n'
+    const program = javaProgram(request({ code, fixture: 'import java.util.*;\npublic class Main { public static void main(String[] a) { } }\n' }))
+    const lines = program.source.split('\n')
+    expect(lines[0]).toBe('import java.util.*;')
+    // One hoisted import, so the student's first line is file line 2 - and the
+    // range the engine reports errors against says exactly that.
+    expect(program.codeStart).toBe(2)
+    expect(lines[program.codeStart - 1]).toBe('class Solution {')
+    expect(program.source.slice(program.source.indexOf('public class Main'))).not.toContain('import')
+  })
+
+  it('rewrites compiler line numbers onto the file the student is editing', () => {
+    const program = { source: '', codeStart: 2, codeEnd: 5 }
+    expect(remapDiagnostics('/str/Main.java:4: error: \';\' expected', program)).toBe("Solution.java:3: error: ';' expected")
+    expect(remapDiagnostics('/str/Main.java:7: error: bad', program)).toBe('Main.java:2: error: bad')
   })
 
   it('treats a fixtureless submission as the whole program', () => {
-    expect(javaSourceSet(request({ fixture: undefined, code: 'public class Main {}' }))).toEqual([{ path: '/str/Main.java', contents: 'public class Main {}' }])
+    expect(javaProgram(request({ fixture: undefined, code: 'public class Main {}' }))).toMatchObject({ source: 'public class Main {}', codeStart: 1, codeEnd: 1 })
   })
 
   it('needs the compiler unless every test is structural', () => {

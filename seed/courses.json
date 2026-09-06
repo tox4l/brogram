@@ -56,13 +56,13 @@
       "slug": "object-oriented-programming",
       "title": "Object Oriented Programming",
       "language": "java",
-      "runtime": "judge",
+      "runtime": "browser",
       "level": 3,
       "prerequisites": ["INFS1201"],
       "topics": ["paradigms", "java-syntax", "classes-objects", "encapsulation", "static", "inheritance", "polymorphism", "interfaces", "associations", "collections", "exceptions", "streams", "uml", "design-patterns"],
       "clo_ids": ["INFS3102-1", "INFS3102-2", "INFS3102-3", "INFS3102-4"],
-      "status": "coming-soon",
-      "note": "Bank has only 3 verified exercises; the other 15 sit in seed/exercises/unverified/ until a Judge0 key certifies them. Flip back to live after C6 certifies the Java rows."
+      "status": "live",
+      "note": "Java compiles and runs in the browser on CheerpJ. All 18 exercises are certified by e2e/java/verify-java-bank.spec.ts: every reference solution passes every one of its tests through a real javac."
     },
     {
       "code": "DSAI2201",
