@@ -20,9 +20,9 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [ ] C3b Load the seed to Supabase (Claude)
 
 ## Phase 3: Surround
-- [ ] A5a Onboarding, buddy drawer, wellness rail (Astra)
-- [ ] A5b De-rot, report, admin (Astra; capacity valve may move presentation pieces to Claude)
-- [ ] C5 Integration tests, Playwright specs, PR reviews (Claude)
+- [x] A5a Onboarding, buddy drawer, wellness rail (built by Claude subagents under the capacity valve while Codex was down; 1b51977, 1741a41, 8dc981f plus fix rounds; Opus review clean after fixes; live walk-through pending Supabase)
+- [x] A5b De-rot, report, admin (Claude under the capacity valve; components 8743575, ccf018e, 4874144; pages eb531e2, 104c109, 2792249 plus fix rounds; Opus review clean after fixes; live walk-through pending Supabase)
+- [x] C5 Integration tests, Playwright specs, PR reviews (Claude) — three specs and support helpers (5c37091); written, unrun (no Supabase); every Astra task reviewed
 
 ## Phase 4: Ship
 - [ ] A6 Production deploy (Astra)
