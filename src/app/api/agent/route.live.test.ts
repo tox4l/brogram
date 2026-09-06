@@ -56,35 +56,38 @@ const db = vi.hoisted(() => {
 
 type Message = { role: string; content: string }
 type Reply = { object: unknown } | { error: string }
+type CallOptions = { messages: Message[]; allowSystemInMessages?: boolean; providerOptions?: { deepseek?: { thinking?: { type?: string } } } }
 
 const ai = vi.hoisted(() => ({
-  calls: [] as Message[][],
+  calls: [] as { messages: { role: string; content: string }[]; allowSystemInMessages?: boolean; providerOptions?: { deepseek?: { thinking?: { type?: string } } } }[],
   /** One entry per model call, consumed in order. */
   replies: [] as ({ object: unknown } | { error: string })[],
   partials: [] as unknown[],
+  /** What the provider reports back; cacheReadTokens is what DeepSeek's prompt cache returns. */
+  usage: { outputTokens: 12, inputTokenDetails: { cacheReadTokens: 1024 } },
 }))
 
-const nextReply = (messages: Message[]): Reply => {
-  ai.calls.push(messages)
+const nextReply = (options: CallOptions): Reply => {
+  ai.calls.push(options)
   return ai.replies.shift() ?? { error: 'no reply configured for this call' }
 }
 
 vi.mock('@ai-sdk/deepseek', () => ({ deepseek: (modelId: string) => ({ modelId }) }))
 
 vi.mock('ai', () => ({
-  generateObject: async ({ messages }: { messages: Message[] }) => {
-    const reply = nextReply(messages)
+  generateObject: async (options: CallOptions) => {
+    const reply = nextReply(options)
     if ('error' in reply) throw new Error(reply.error)
-    return { object: reply.object, usage: { outputTokens: 12 } }
+    return { object: reply.object, usage: ai.usage }
   },
-  streamObject: ({ messages }: { messages: Message[] }) => {
-    const reply = nextReply(messages)
+  streamObject: (options: CallOptions) => {
+    const reply = nextReply(options)
     return {
       partialObjectStream: (async function* () {
         for (const partial of ai.partials) yield partial
       })(),
       object: 'error' in reply ? Promise.reject(new Error(reply.error)) : Promise.resolve(reply.object),
-      usage: Promise.resolve({ outputTokens: 12 }),
+      usage: Promise.resolve(ai.usage),
     }
   },
 }))
@@ -130,18 +133,63 @@ beforeEach(() => {
 })
 
 describe('POST /api/agent with a mocked provider', () => {
+  // both proved necessary against the real provider: ai@7 refuses a system role in `messages`
+  // without the first, and deepseek-v4-flash spends its reasoning tokens out of maxOutputTokens
+  // without the second, leaving the 1,500-token agents with no object at all
+  const expectProviderOptions = () => {
+    expect(ai.calls.length).toBeGreaterThan(0)
+    for (const call of ai.calls) {
+      expect(call.allowSystemInMessages).toBe(true)
+      expect(call.providerOptions?.deepseek?.thinking?.type).toBe('disabled')
+      expect(call.messages[0].role).toBe('system')
+    }
+  }
+
+  it('lets every generated call carry the system turn with thinking off', async () => {
+    ai.replies = [{ error: 'bad json' }, { object: REVIEWER_REPLY }]
+    const { POST } = await route()
+    await POST(post(request('reviewer')))
+    expect(ai.calls).toHaveLength(2)
+    expectProviderOptions()
+  })
+
+  it('lets every streamed call carry the system turn with thinking off', async () => {
+    const hint = 'Look again at where the loop ends and ask what runs before it finishes.'
+    ai.partials = [{ hint }]
+    ai.replies = [{ object: { hint, planStep: 2 } }]
+    const { POST } = await route()
+    await POST(post(request('coach'), { Accept: 'text/event-stream' })).then(r => r.text())
+    expect(ai.calls).toHaveLength(1)
+    expectProviderOptions()
+  })
+
+  it('reports the prompt-cache hits the provider measured, on both paths', async () => {
+    ai.replies = [{ object: REVIEWER_REPLY }]
+    const { POST } = await route()
+    const body = await (await POST(post(request('reviewer')))).json()
+    expect(body.usage.cacheHitTokens).toBe(1024)
+    expect(db.state.inserts.find(i => i.table === 'agent_usage')?.row).toMatchObject({ cache_hit_tokens: 1024 })
+
+    const hint = 'Look again at where the loop ends and ask what runs before it finishes.'
+    ai.partials = [{ hint }]
+    ai.replies = [{ object: { hint, planStep: 2 } }]
+    const streamed = await POST(post(request('coach'), { Accept: 'text/event-stream' }))
+    const frames = (await streamed.text()).split('\n\n').filter(Boolean).map(f => JSON.parse(f.replace('data: ', '')))
+    expect(frames.at(-1).envelope.usage.cacheHitTokens).toBe(1024)
+  })
+
   it('retries once with the validation message and keeps the second reply', async () => {
     ai.replies = [{ error: 'response did not match schema' }, { object: REVIEWER_REPLY }]
     const { POST } = await route()
     const body = await (await POST(post(request('reviewer')))).json()
 
     expect(ai.calls).toHaveLength(2)
-    const retry = ai.calls[1].at(-1)!
+    const retry = ai.calls[1].messages.at(-1)!
     expect(retry.role).toBe('user')
     expect(retry.content.startsWith('Your previous reply failed validation:')).toBe(true)
     expect(retry.content.endsWith('Reply with valid json matching the schema.')).toBe(true)
     expect(retry.content).toContain('response did not match schema')
-    expect(ai.calls[0]).toHaveLength(ai.calls[1].length - 1)
+    expect(ai.calls[0].messages).toHaveLength(ai.calls[1].messages.length - 1)
     expect(body).toMatchObject({ ok: true, agent: 'reviewer', fallback: false })
     expect(body.reply).toEqual(REVIEWER_REPLY)
     // a call that throws carries no usage, so only the second reply's tokens are billed
@@ -174,7 +222,7 @@ describe('POST /api/agent with a mocked provider', () => {
     const { POST } = await route()
     const body = await (await POST(post(request('planner')))).json()
     expect(ai.calls).toHaveLength(2)
-    expect(ai.calls[1].at(-1)!.content).toContain('ex_99')
+    expect(ai.calls[1].messages.at(-1)!.content).toContain('ex_99')
     expect(body).toMatchObject({ ok: true, fallback: false })
     expect(body.reply.nextExerciseIds).toEqual(['ex_10', 'ex_11', 'ex_12'])
     // both calls answered, so both are billed

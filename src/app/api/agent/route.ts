@@ -10,6 +10,14 @@ import { getUserAndProfile, serviceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 const MODEL = deepseek('deepseek-v4-flash')
+// buildMessages puts the static system prompt first for DeepSeek prefix caching, and ai@7 refuses a
+// system role inside `messages` without this; deepseek-v4-flash also has thinking on by default and
+// spends reasoning tokens out of maxOutputTokens, which starves the 1,500-token agents of a reply.
+const PROVIDER_CALL = {
+  allowSystemInMessages: true,
+  providerOptions: { deepseek: { thinking: { type: 'disabled' as const } } },
+}
+const cacheHits = (usage: { inputTokenDetails?: { cacheReadTokens?: number } }) => usage.inputTokenDetails?.cacheReadTokens ?? 0
 const err = (agent: string, error: string, message: string, status: number) => NextResponse.json({ ok: false, agent, error, message }, { status })
 
 export async function POST(req: Request) {
@@ -75,7 +83,7 @@ export async function POST(req: Request) {
 
   if (wantsStream) {
     // streaming agents never retry; the terminal frame carries the validated object or the fallback
-    const result = streamObject({ model: MODEL, schema: mod.schema, messages, temperature: mod.temperature, maxOutputTokens: mod.maxTokens })
+    const result = streamObject({ model: MODEL, schema: mod.schema, messages, temperature: mod.temperature, maxOutputTokens: mod.maxTokens, ...PROVIDER_CALL })
     // a partial stream that throws leaves these two unobserved; the catch below is what answers the client
     result.object.catch(() => {})
     result.usage.catch(() => {})
@@ -87,7 +95,7 @@ export async function POST(req: Request) {
           // repair first: a partial must never show the student something the final reply would strip
           for await (const partial of result.partialObjectStream) send({ partial: repair(partial) })
           const object = await result.object
-          const u = await result.usage; usage.completionTokens = u.outputTokens ?? 0
+          const u = await result.usage; usage.completionTokens = u.outputTokens ?? 0; usage.cacheHitTokens = cacheHits(u)
           const { reply, error } = finalize(object)
           const env = error ? finish(mod.fallback!(body), true) : finish(reply, false)
           await record(env.fallback); send({ envelope: env })
@@ -99,12 +107,12 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
   }
 
-  const once = async (extra?: string) => generateObject({ model: MODEL, schema: mod.schema, messages: extra ? [...messages, { role: 'user' as const, content: extra }] : messages, temperature: mod.temperature, maxOutputTokens: mod.maxTokens })
+  const once = async (extra?: string) => generateObject({ model: MODEL, schema: mod.schema, messages: extra ? [...messages, { role: 'user' as const, content: extra }] : messages, temperature: mod.temperature, maxOutputTokens: mod.maxTokens, ...PROVIDER_CALL })
   let obj: unknown = null, lastError = ''
   for (let attempt = 0; attempt < 2 && obj === null; attempt++) {
     try {
       const r = await once(attempt ? `Your previous reply failed validation: ${lastError}. Reply with valid json matching the schema.` : undefined)
-      usage.completionTokens += r.usage.outputTokens ?? 0
+      usage.completionTokens += r.usage.outputTokens ?? 0; usage.cacheHitTokens += cacheHits(r.usage)
       const { reply, error } = finalize(r.object)
       if (error) { lastError = error; continue }
       obj = reply
