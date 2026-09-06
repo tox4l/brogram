@@ -25,6 +25,7 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
   compact?: boolean
 }) {
   const firedRef = useRef<Set<string>>(new Set())
+  const seededDateRef = useRef<string | null>(null)
   const queuedRef = useRef<PrayerReminderEvent[]>([])
   const wasActiveRef = useRef(attemptActive)
 
@@ -32,6 +33,16 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
     if (!result) return
     const events = buildPrayerReminders(result.date, result.times, prefs.prayerLeadMinutes)
       .filter((event) => prefs.prayerReminders[event.prayer])
+
+    if (seededDateRef.current !== result.date) {
+      // First evaluation for this day: mark every reminder already strictly in the past as
+      // fired without toasting, so a rail opened well after a prayer's time (or after a
+      // reload) never replays the day's backlog. A reminder whose time is exactly now still
+      // falls through below and fires normally.
+      firedRef.current = new Set(events.filter((event) => event.atMs < now).map((event) => event.firedKey))
+      seededDateRef.current = result.date
+    }
+
     const due = dueReminders(events, now, firedRef.current)
     for (const event of due) {
       firedRef.current.add(event.firedKey)

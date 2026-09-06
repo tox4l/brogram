@@ -51,9 +51,16 @@ export function buildPrayerReminders(dateKey: string, times: Record<PrayerName, 
   })
 }
 
-/** Events whose time has arrived and have not already fired. Does not mutate `fired`. */
+/** A reminder only counts as "due" within this window of its time; older ones are backlog, not a live event. */
+export const REMINDER_WINDOW_MS = 60_000
+
+/**
+ * Events whose time has just arrived (within `REMINDER_WINDOW_MS`) and have not already
+ * fired. Bounded so a rail opened long after a prayer's time does not replay it — the
+ * caller pre-seeds `fired` with anything already past on first load for the day.
+ */
 export function dueReminders(events: PrayerReminderEvent[], now: number, fired: ReadonlySet<string>): PrayerReminderEvent[] {
-  return events.filter((event) => now >= event.atMs && !fired.has(event.firedKey))
+  return events.filter((event) => now >= event.atMs && now - event.atMs < REMINDER_WINDOW_MS && !fired.has(event.firedKey))
 }
 
 // ---------------------------------------------------------------------------
@@ -137,26 +144,35 @@ export function tickPomodoro(state: PomodoroState, now: number, workMin: number,
   }
 }
 
+export interface PomodoroCompletion {
+  phase: PomodoroPhase
+  /** The real (scheduled) boundary timestamp the phase completed at, not the render's `now`. */
+  at: number
+}
+
 export interface PomodoroAdvanceResult {
   state: PomodoroState
   /** Every phase completed between the stored state and `now`, oldest first. */
-  completed: PomodoroPhase[]
+  completed: PomodoroCompletion[]
 }
 
 /**
  * Pure derivation of "what the pomodoro looks like right now": repeatedly applies
  * `tickPomodoro` so a component can compute its live phase/remaining time straight from
- * render (state, now) without ever calling setState inside an effect. Callers persist the
- * returned `state` back only from an event handler (start / pause / reset).
+ * render (state, now) without ever calling setState inside an effect just to keep the
+ * clock moving. Callers persist the returned `state` back only from an event handler
+ * (start / pause / reset), or when collapsing a multi-boundary catch-up (see the Pomodoro
+ * component) into an explicit pause.
  */
 export function advancePomodoro(state: PomodoroState, now: number, workMin: number, breakMin: number): PomodoroAdvanceResult {
   let current = state
-  const completed: PomodoroPhase[] = []
+  const completed: PomodoroCompletion[] = []
   // A generous but finite cap: even a tab left open for a year of 5-minute breaks stays well under this.
   for (let i = 0; i < 10_000; i++) {
+    const boundary = current.targetAt
     const result = tickPomodoro(current, now, workMin, breakMin)
-    if (result.completedPhase === null) break
-    completed.push(result.completedPhase)
+    if (result.completedPhase === null || boundary === null) break
+    completed.push({ phase: result.completedPhase, at: boundary })
     current = result.state
   }
   return { state: current, completed }

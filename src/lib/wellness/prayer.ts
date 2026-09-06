@@ -66,9 +66,26 @@ function readCache(key: string): PrayerTimesResult | null {
   }
 }
 
+/** Removes any `brogram:prayer:*` cache entry that is not for `todayKey`, so the cache never grows unbounded. */
+function pruneStaleCache(todayKey: string) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    const keepPrefix = `${CACHE_PREFIX}${todayKey}:`
+    const stale: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const existingKey = localStorage.key(i)
+      if (existingKey && existingKey.startsWith(CACHE_PREFIX) && !existingKey.startsWith(keepPrefix)) stale.push(existingKey)
+    }
+    stale.forEach((existingKey) => localStorage.removeItem(existingKey))
+  } catch {
+    /* Best-effort housekeeping; a stale entry left behind does not break anything. */
+  }
+}
+
 function writeCache(key: string, value: PrayerTimesResult) {
   try {
     if (typeof localStorage === 'undefined') return
+    pruneStaleCache(value.date)
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
     /* Storage may be full or disabled; the rail still works without the cache. */
@@ -82,11 +99,22 @@ function normalizeTime(raw: unknown): string {
   return match ? match[1] : text
 }
 
+/** Asia/Qatar for the Doha default (matches the Aladhan API's own zone); the device's own timezone otherwise. */
+export function resolveFallbackTimeZone(coords: GeoCoordinates): string {
+  const isDoha = coords.latitude === DOHA_COORDS.latitude && coords.longitude === DOHA_COORDS.longitude
+  if (isDoha) return 'Asia/Qatar'
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Qatar'
+  } catch {
+    return 'Asia/Qatar'
+  }
+}
+
 function computeFallback(date: Date, coords: GeoCoordinates): PrayerTimesResult {
   const coordinates = new Coordinates(coords.latitude, coords.longitude)
   const params = CalculationMethod.Qatar()
   const prayerTimes = new AdhanPrayerTimes(coordinates, date, params)
-  const formatter = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Qatar' })
+  const formatter = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: resolveFallbackTimeZone(coords) })
   return {
     date: dateKeyOf(date),
     times: {

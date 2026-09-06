@@ -41,13 +41,31 @@ describe('PrayerTimes', () => {
     expect(toast).not.toHaveBeenCalled()
   })
 
-  it('toasts a lead reminder and the at-time reminder for an enabled prayer', () => {
+  it('toasts exactly the lead reminder, then exactly the at-time reminder, for an enabled prayer', () => {
     const leadMs = dhuhrAtMs - DEFAULT_WELLNESS.prayerLeadMinutes * 60_000
     const { rerender } = render(<PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={leadMs} attemptActive={false} />)
-    expect(toast).toHaveBeenCalledWith(expect.stringContaining('Dhuhr'))
+    // Exactly one call — a looser `toHaveBeenCalledWith` alone would also pass if earlier
+    // prayers' backlog toasted too, which is exactly the bug this pins down.
+    expect(toast).toHaveBeenCalledTimes(1)
+    expect(toast).toHaveBeenCalledWith(`Dhuhr in ${DEFAULT_WELLNESS.prayerLeadMinutes} minutes.`)
     vi.mocked(toast).mockClear()
     rerender(<PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={dhuhrAtMs} attemptActive={false} />)
-    expect(toast).toHaveBeenCalledWith(expect.stringContaining('Dhuhr time has arrived'))
+    expect(toast).toHaveBeenCalledTimes(1)
+    expect(toast).toHaveBeenCalledWith('Dhuhr time has arrived.')
+  })
+
+  it('fires nothing when mounted well after all of today\'s prayers (no backlog dump)', () => {
+    const lateNight = parseLocalDateTime('2026-09-06', '22:00')
+    render(<PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={lateNight} attemptActive={false} />)
+    expect(toast).not.toHaveBeenCalled()
+  })
+
+  it('does not replay an already-fired reminder later the same day', () => {
+    const { rerender } = render(<PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={dhuhrAtMs} attemptActive={false} />)
+    vi.mocked(toast).mockClear()
+    const lateNight = parseLocalDateTime('2026-09-06', '22:00')
+    rerender(<PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={lateNight} attemptActive={false} />)
+    expect(toast).not.toHaveBeenCalled()
   })
 
   it('suppresses the toast for a disabled prayer', () => {

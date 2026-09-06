@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ATTEMPT_ACTIVE_KEY,
+  REMINDER_WINDOW_MS,
   advancePomodoro,
   advanceRecurringTimer,
   buildPrayerReminders,
@@ -61,7 +62,20 @@ describe('prayer reminders', () => {
     const events = buildPrayerReminders('2026-09-06', times, 10)
     const dhuhrLead = events.find((event) => event.prayer === 'dhuhr' && event.kind === 'lead')!
     const fired = new Set([dhuhrLead.firedKey])
-    expect(dueReminders(events, dhuhrLead.atMs + 60_000, fired).some((event) => event.firedKey === dhuhrLead.firedKey)).toBe(false)
+    expect(dueReminders(events, dhuhrLead.atMs + 30_000, fired).some((event) => event.firedKey === dhuhrLead.firedKey)).toBe(false)
+  })
+
+  it('stops treating an event as due once it falls outside the reminder window (no backlog dump)', () => {
+    const events = buildPrayerReminders('2026-09-06', times, 10)
+    const dhuhrLead = events.find((event) => event.prayer === 'dhuhr' && event.kind === 'lead')!
+    expect(dueReminders(events, dhuhrLead.atMs + REMINDER_WINDOW_MS - 1, new Set())).toContainEqual(dhuhrLead)
+    expect(dueReminders(events, dhuhrLead.atMs + REMINDER_WINDOW_MS, new Set())).not.toContainEqual(dhuhrLead)
+  })
+
+  it('never reports hours-old events as due, even unfired', () => {
+    const events = buildPrayerReminders('2026-09-06', times, 10)
+    const now = parseLocalDateTime('2026-09-06', '22:00')
+    expect(dueReminders(events, now, new Set())).toEqual([])
   })
 })
 
@@ -142,17 +156,22 @@ describe('advancePomodoro', () => {
     expect(result.completed).toEqual([])
     expect(result.state).toBe(started)
   })
-  it('derives a single completed work block without mutating the caller-visible flow', () => {
+  it('derives a single completed work block, stamped at the real boundary, without mutating the caller-visible flow', () => {
     const started = startPomodoro(resetPomodoroState(25), 0)
     const result = advancePomodoro(started, 25 * 60_000, 25, 5)
-    expect(result.completed).toEqual(['work'])
+    expect(result.completed).toEqual([{ phase: 'work', at: 25 * 60_000 }])
     expect(result.state.phase).toBe('break')
   })
-  it('derives every phase passed through in one big jump forward (a long-backgrounded tab)', () => {
+  it('derives every phase passed through in one big jump forward (a long-backgrounded tab), each stamped at its real boundary', () => {
     const started = startPomodoro(resetPomodoroState(25), 0)
     const farFuture = (25 + 5 + 25 + 5) * 60_000 + 1000
     const result = advancePomodoro(started, farFuture, 25, 5)
-    expect(result.completed).toEqual(['work', 'break', 'work', 'break'])
+    expect(result.completed).toEqual([
+      { phase: 'work', at: 25 * 60_000 },
+      { phase: 'break', at: 30 * 60_000 },
+      { phase: 'work', at: 55 * 60_000 },
+      { phase: 'break', at: 60 * 60_000 },
+    ])
     expect(result.state.phase).toBe('work')
     expect(result.state.running).toBe(true)
   })

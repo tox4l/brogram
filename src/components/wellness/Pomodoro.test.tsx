@@ -38,7 +38,7 @@ describe('Pomodoro', () => {
     fireEvent.click(screen.getByRole('button', { name: /start pomodoro/i }))
     vi.setSystemTime(workMs)
     rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={workMs} attemptActive={false} onSessionComplete={onSessionComplete} />)
-    expect(onSessionComplete).toHaveBeenCalledWith({ workMinutes: DEFAULT_WELLNESS.pomodoroWorkMin, completedAt: new Date(workMs).toISOString() })
+    expect(onSessionComplete).toHaveBeenCalledWith([{ workMinutes: DEFAULT_WELLNESS.pomodoroWorkMin, completedAt: new Date(workMs).toISOString() }])
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/work block complete/i))
     expect(screen.getByText(/break/i)).toBeTruthy()
     expect(screen.getByText(DEFAULT_WELLNESS.pomodoroBreakMin < 10 ? `0${DEFAULT_WELLNESS.pomodoroBreakMin}:00` : `${DEFAULT_WELLNESS.pomodoroBreakMin}:00`)).toBeTruthy()
@@ -84,10 +84,50 @@ describe('Pomodoro', () => {
     fireEvent.click(screen.getByRole('button', { name: /start pomodoro/i }))
     vi.setSystemTime(workMs)
     rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={workMs} attemptActive onSessionComplete={onSessionComplete} />)
-    expect(onSessionComplete).toHaveBeenCalledWith({ workMinutes: DEFAULT_WELLNESS.pomodoroWorkMin, completedAt: new Date(workMs).toISOString() })
+    expect(onSessionComplete).toHaveBeenCalledWith([{ workMinutes: DEFAULT_WELLNESS.pomodoroWorkMin, completedAt: new Date(workMs).toISOString() }])
     expect(toast).not.toHaveBeenCalled()
 
     rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={workMs} attemptActive={false} onSessionComplete={onSessionComplete} />)
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/work block complete/i))
+  })
+
+  it('exposes an id="pomodoro" anchor in both the full card and the compact strip', () => {
+    const { rerender } = render(<Pomodoro prefs={DEFAULT_WELLNESS} now={0} attemptActive={false} onSessionComplete={vi.fn()} />)
+    expect(document.getElementById('pomodoro')).toBeTruthy()
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={0} attemptActive={false} onSessionComplete={vi.fn()} compact />)
+    expect(document.getElementById('pomodoro')).toBeTruthy()
+  })
+
+  it('collapses a 9-hour jump into a single pause, one toast, and one batched write of every completed work phase', () => {
+    const onSessionComplete = vi.fn()
+    const { rerender } = render(<Pomodoro prefs={DEFAULT_WELLNESS} now={0} attemptActive={false} onSessionComplete={onSessionComplete} />)
+    fireEvent.click(screen.getByRole('button', { name: /start pomodoro/i }))
+
+    const nineHoursMs = 9 * 60 * 60_000
+    vi.setSystemTime(nineHoursMs)
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={nineHoursMs} attemptActive={false} onSessionComplete={onSessionComplete} />)
+
+    // A full work+break cycle is 30 minutes; 9 hours is 18 of them, so every replayed
+    // phase lands exactly on a work→break boundary and the timer is caught up mid-work.
+    expect(onSessionComplete).toHaveBeenCalledTimes(1)
+    const [sessions] = onSessionComplete.mock.calls[0] as [{ workMinutes: number; completedAt: string }[]]
+    expect(sessions.length).toBeGreaterThan(1)
+    expect(sessions.every((session) => session.workMinutes === DEFAULT_WELLNESS.pomodoroWorkMin)).toBe(true)
+    expect(new Set(sessions.map((session) => session.completedAt)).size).toBe(sessions.length)
+
+    expect(toast).toHaveBeenCalledTimes(1)
+    expect(toast).toHaveBeenCalledWith('Timer paused while you were away.')
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/work block complete/i))
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/break complete/i))
+
+    expect(screen.getByText(/paused/i)).toBeTruthy()
+    expect(screen.getByText('25:00')).toBeTruthy()
+
+    // Stays collapsed (does not re-fire) on a later render with the same now.
+    vi.mocked(toast).mockClear()
+    onSessionComplete.mockClear()
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={nineHoursMs} attemptActive={false} onSessionComplete={onSessionComplete} />)
+    expect(toast).not.toHaveBeenCalled()
+    expect(onSessionComplete).not.toHaveBeenCalled()
   })
 })

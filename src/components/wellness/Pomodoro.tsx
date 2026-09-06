@@ -30,12 +30,14 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact
   prefs: WellnessPrefs
   now: number
   attemptActive: boolean
-  onSessionComplete: (session: PomodoroSession) => void
+  /** Always an array — a caught-up backlog reports every completed work phase in one call, so Rail persists it in a single write. */
+  onSessionComplete: (sessions: PomodoroSession[]) => void
   compact?: boolean
 }) {
-  // `state` only changes from user actions (start/pause/reset). The live phase and
-  // remaining time are derived fresh every render from (state, now) so nothing needs to
-  // call setState from inside an effect just to keep the clock moving.
+  // `state` only changes from user actions (start/pause/reset), and once from the effect
+  // below when a multi-boundary catch-up needs to commit an explicit pause. The live phase
+  // and remaining time are otherwise derived fresh every render from (state, now) so
+  // nothing needs to call setState just to keep the clock moving.
   const [state, setState] = useState<PomodoroState>(() => resetPomodoroState(prefs.pomodoroWorkMin))
   const derived = advancePomodoro(state, now, prefs.pomodoroWorkMin, prefs.pomodoroBreakMin)
 
@@ -43,25 +45,41 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact
   const queuedRef = useRef<string[]>([])
   const wasActiveRef = useRef(attemptActive)
 
-  // `state` only advances from start/pause/reset, so derived.completed resets to a short
-  // (usually empty) list right after any of those; re-arm the notified count then, in an
-  // effect (never by touching a ref during render).
+  // `state` only advances from start/pause/reset (or the catch-up pause below), so
+  // derived.completed resets to a short (usually empty) list right after any of those;
+  // re-arm the notified count then, in an effect (never by touching a ref during render).
   useEffect(() => {
     notifiedRef.current = 0
   }, [state])
 
-  // Side effects only (toast, persisting a completed session) — no setState here, so a
-  // long-open tab can pass through many phase completions in one derivation without this
-  // effect ever needing to "catch up" the stored state itself.
   useEffect(() => {
     if (derived.completed.length <= notifiedRef.current) return
     const newlyCompleted = derived.completed.slice(notifiedRef.current)
     notifiedRef.current = derived.completed.length
-    for (const phase of newlyCompleted) {
-      if (phase === 'work') onSessionComplete({ workMinutes: prefs.pomodoroWorkMin, completedAt: new Date(now).toISOString() })
-      const message = phase === 'work' ? 'Work block complete. Time for a short break.' : 'Break complete. Ready for another focused block.'
+
+    if (newlyCompleted.length > 1) {
+      // A background tab (or a closed laptop lid) let more than one phase boundary pass in
+      // a single jump: don't replay each one — persist the completed work phases (stamped
+      // at their real boundary) in one write, pause right where we caught up rather than
+      // silently continuing to count down unattended, and say so exactly once.
+      const sessions = newlyCompleted
+        .filter((completion) => completion.phase === 'work')
+        .map((completion) => ({ workMinutes: prefs.pomodoroWorkMin, completedAt: new Date(completion.at).toISOString() }))
+      if (sessions.length) onSessionComplete(sessions)
+      const pausedDurationMs = Math.max(1, derived.state.phase === 'work' ? prefs.pomodoroWorkMin : prefs.pomodoroBreakMin) * 60_000
+      // Committing this pause is reacting to an external event (a large clock jump found on
+      // this render), not per-render UI derivation — the one legitimate case for setState here.
+      setState({ phase: derived.state.phase, running: false, targetAt: null, remainingMs: pausedDurationMs })
+      const message = 'Timer paused while you were away.'
       if (attemptActive) queuedRef.current.push(message)
       else toast(message)
+    } else {
+      for (const completion of newlyCompleted) {
+        if (completion.phase === 'work') onSessionComplete([{ workMinutes: prefs.pomodoroWorkMin, completedAt: new Date(completion.at).toISOString() }])
+        const message = completion.phase === 'work' ? 'Work block complete. Time for a short break.' : 'Break complete. Ready for another focused block.'
+        if (attemptActive) queuedRef.current.push(message)
+        else toast(message)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [derived.completed.length, now])
@@ -83,7 +101,7 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div id="pomodoro" className="flex scroll-mt-20 items-center gap-2 text-xs text-muted-foreground">
         <Timer className="size-3.5 shrink-0" aria-hidden="true" />
         <span className="font-mono tabular-nums">{formatClock(remaining)}</span>
         <span className="capitalize">{derived.state.phase}</span>
@@ -92,7 +110,7 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact
   }
 
   return (
-    <div>
+    <div id="pomodoro" className="scroll-mt-20">
       <h3 className="text-sm font-medium">Pomodoro</h3>
       <div className="mt-3 flex items-center justify-between gap-3">
         <div>

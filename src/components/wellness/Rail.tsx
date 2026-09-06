@@ -13,23 +13,6 @@ import { PrayerTimes } from './PrayerTimes'
 import { WaterStretch, type WellnessLogEntry } from './WaterStretch'
 import { Pomodoro, type PomodoroSession } from './Pomodoro'
 
-// sonner's Toaster reads window.matchMedia for OS theme detection. Real browsers always
-// have it; jsdom (unit tests) does not. This is the only place Toaster gets mounted, so
-// a missing matchMedia is patched here defensively rather than in every test that renders
-// the app shell.
-if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
-  window.matchMedia = ((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia
-}
-
 interface WellnessRow {
   prefs: Partial<WellnessPrefs> | null
   water_log: WellnessLogEntry[] | null
@@ -76,6 +59,52 @@ function useDeviceCoords(enabled: boolean): GeoCoordinates | null {
     return () => { cancelled = true }
   }, [enabled])
   return coords
+}
+
+function parsePositiveMinutes(value: string, fallback: number, max: number): number {
+  const parsed = Math.round(Number(value))
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return Math.min(parsed, max)
+}
+
+function NumberField({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (value: number) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+      <span>{label}</span>
+      <input
+        type="number"
+        min={1}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(parsePositiveMinutes(event.target.value, value, max))}
+        className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+    </label>
+  )
+}
+
+function WellnessSettings({ prefs, onChange }: { prefs: WellnessPrefs; onChange: (patch: Partial<WellnessPrefs>) => void }) {
+  return (
+    <details className="mt-5 border-t border-border pt-5">
+      <summary className="w-fit cursor-pointer rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">Settings</summary>
+      <div className="mt-4 space-y-3">
+        <NumberField label="Prayer lead time (min)" value={prefs.prayerLeadMinutes} max={60} onChange={(value) => onChange({ prayerLeadMinutes: value })} />
+        <NumberField label="Water interval (min)" value={prefs.waterIntervalMin} max={180} onChange={(value) => onChange({ waterIntervalMin: value })} />
+        <NumberField label="Stretch interval (min)" value={prefs.stretchIntervalMin} max={180} onChange={(value) => onChange({ stretchIntervalMin: value })} />
+        <NumberField label="Pomodoro work (min)" value={prefs.pomodoroWorkMin} max={120} onChange={(value) => onChange({ pomodoroWorkMin: value })} />
+        <NumberField label="Pomodoro break (min)" value={prefs.pomodoroBreakMin} max={60} onChange={(value) => onChange({ pomodoroBreakMin: value })} />
+        <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>Use device location</span>
+          <input
+            type="checkbox"
+            checked={prefs.useDeviceLocation}
+            onChange={(event) => onChange({ useDeviceLocation: event.target.checked })}
+            className="size-4 rounded-sm border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </label>
+      </div>
+    </details>
+  )
 }
 
 export function Rail({ compact = false }: { compact?: boolean }) {
@@ -132,16 +161,23 @@ export function Rail({ compact = false }: { compact?: boolean }) {
     if (!userId) return
     try {
       const client = clientRef.current ??= createClient()
-      await client.from('wellness').upsert({ user_id: userId, ...patch }, { onConflict: 'user_id' })
+      // The row normally already exists (created by handle_new_user on signup), so a plain
+      // update is the common case; insert once as a fallback if it somehow does not.
+      const { data } = await client.from('wellness').update({ ...patch, updated_at: new Date().toISOString() }).eq('user_id', userId).select('user_id').maybeSingle()
+      if (!data) await client.from('wellness').insert({ user_id: userId, ...patch })
     } catch {
       // Best-effort; the local state already reflects the change.
     }
   }
 
-  function handleTogglePrayer(prayer: PrayerName) {
-    const next = { ...prefs, prayerReminders: { ...prefs.prayerReminders, [prayer]: !prefs.prayerReminders[prayer] } }
+  function updatePrefs(patch: Partial<WellnessPrefs>) {
+    const next = { ...prefs, ...patch }
     setPrefs(next)
     void persist({ prefs: next })
+  }
+
+  function handleTogglePrayer(prayer: PrayerName) {
+    updatePrefs({ prayerReminders: { ...prefs.prayerReminders, [prayer]: !prefs.prayerReminders[prayer] } })
   }
 
   function handleLog(entry: WellnessLogEntry) {
@@ -150,8 +186,8 @@ export function Rail({ compact = false }: { compact?: boolean }) {
     void persist({ water_log: next })
   }
 
-  function handleSessionComplete(session: PomodoroSession) {
-    const next = [...pomodoroSessions, session]
+  function handleSessionComplete(sessions: PomodoroSession[]) {
+    const next = [...pomodoroSessions, ...sessions]
     setPomodoroSessions(next)
     void persist({ pomodoro_sessions: next })
   }
@@ -176,7 +212,8 @@ export function Rail({ compact = false }: { compact?: boolean }) {
         <div className="border-t border-border pt-5"><WaterStretch prefs={prefs} now={now} log={waterLog} onLog={handleLog} /></div>
         <div className="border-t border-border pt-5"><Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={handleSessionComplete} /></div>
       </div>
-      <div className="mt-7 border-t border-border pt-5">
+      <WellnessSettings prefs={prefs} onChange={updatePrefs} />
+      <div className="mt-5 border-t border-border pt-5">
         <Link href="/derot" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">Open de-rot<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </div>
     </div>

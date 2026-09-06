@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DOHA_COORDS, dateKeyOf, fetchPrayerTimes } from './prayer'
+import { DOHA_COORDS, dateKeyOf, fetchPrayerTimes, resolveFallbackTimeZone } from './prayer'
 
 function aladhanBody(timings: Record<string, string>) {
   return { data: { timings } }
@@ -107,10 +107,42 @@ describe('fetchPrayerTimes', () => {
     expect(url).toContain('latitude=24.4667')
     expect(url).toContain('longitude=54.3667')
   })
+
+  it('prunes cache entries from other days once a new day is fetched', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => aladhanBody(timings) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchPrayerTimes(new Date(2026, 8, 6))
+    expect(localStorage.getItem(`brogram:prayer:2026-09-06:${DOHA_COORDS.latitude.toFixed(4)},${DOHA_COORDS.longitude.toFixed(4)}`)).not.toBeNull()
+
+    await fetchPrayerTimes(new Date(2026, 8, 7))
+
+    expect(localStorage.getItem(`brogram:prayer:2026-09-06:${DOHA_COORDS.latitude.toFixed(4)},${DOHA_COORDS.longitude.toFixed(4)}`)).toBeNull()
+    expect(localStorage.getItem(`brogram:prayer:2026-09-07:${DOHA_COORDS.latitude.toFixed(4)},${DOHA_COORDS.longitude.toFixed(4)}`)).not.toBeNull()
+  })
+
+  it('leaves unrelated localStorage keys alone while pruning', async () => {
+    localStorage.setItem('brogram:not-prayer-related', 'keep me')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => aladhanBody(timings) }))
+
+    await fetchPrayerTimes(new Date(2026, 8, 6))
+
+    expect(localStorage.getItem('brogram:not-prayer-related')).toBe('keep me')
+  })
 })
 
 describe('dateKeyOf', () => {
   it('formats using local date parts', () => {
     expect(dateKeyOf(new Date(2026, 0, 5))).toBe('2026-01-05')
+  })
+})
+
+describe('resolveFallbackTimeZone', () => {
+  it('uses Asia/Qatar for the default Doha coordinates', () => {
+    expect(resolveFallbackTimeZone(DOHA_COORDS)).toBe('Asia/Qatar')
+  })
+  it('uses the device timezone for other coordinates', () => {
+    const nonDoha = { latitude: 51.5074, longitude: -0.1278 }
+    expect(resolveFallbackTimeZone(nonDoha)).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
   })
 })
