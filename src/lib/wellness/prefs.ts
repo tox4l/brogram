@@ -76,9 +76,12 @@ function resolveSound(raw: unknown): WellnessPrefs['sound'] {
   }
 }
 
+const MAX_GOAL_DAYS = 120
+
 function resolveGoalDays(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [...DEFAULT_WELLNESS.goalDays]
-  return raw.filter((v): v is string => typeof v === 'string')
+  const strings = raw.filter((v): v is string => typeof v === 'string')
+  return [...new Set(strings)].slice(-MAX_GOAL_DAYS)
 }
 
 /** Deep merge over DEFAULT_WELLNESS. A shallow spread hands back a half-built
@@ -121,8 +124,6 @@ export function prefsPatch(next: WellnessPrefs): Partial<WellnessPrefs> {
   }
   return patch
 }
-
-const MAX_GOAL_DAYS = 120
 
 /** Append today's UTC date key, dedupe, keep the most recent 120. */
 export function recordGoalDay(days: string[], dateKey: string): string[] {

@@ -758,10 +758,10 @@ export interface Lesson {
  *  out explicitly, the same way ExercisePublic is. */
 export type LessonPublicBlock =
   | LessonConcept
-  | Omit<LessonSnippet, 'expectedStdout'>
+  | (Omit<LessonSnippet, 'expectedStdout'> & { expectedStdout?: never })
   | LessonWorked
   | Exclude<LessonCheck, { kind: 'micro-code' }>
-  | (Omit<Extract<LessonCheck, { kind: 'micro-code' }>, 'referenceSolution'>)
+  | (Omit<Extract<LessonCheck, { kind: 'micro-code' }>, 'referenceSolution'> & { referenceSolution?: never })
   | LessonRecap
   | LessonBridge
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { recordGoalDay, resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { ACHIEVEMENTS, DEFAULT_WELLNESS, levelForXp, MAX_LEVEL, xpToReach } from './contracts'
+import type { Lesson, LessonCheck, LessonPublic, LessonPublicBlock, LessonSnippet } from './contracts'
 
 describe('xpToReach', () => {
   it('pins the exact cumulative XP curve', () => {
@@ -114,5 +115,54 @@ describe('recordGoalDay', () => {
     const result = recordGoalDay(days, 'd0')
     expect(result).toHaveLength(120)
     expect(result[result.length - 1]).toBe('d0')
+  })
+})
+
+describe('LessonPublicBlock / LessonPublic secrecy (type-level, review C1)', () => {
+  it('does not let a full snippet, a full micro-code check, or a full lesson satisfy the public types', () => {
+    const fullSnippet: LessonSnippet = {
+      type: 'snippet',
+      id: 's1',
+      language: 'python',
+      code: 'print(1)',
+      runnable: true,
+      expectedStdout: '1',
+    }
+    const fullMicroCode: Extract<LessonCheck, { kind: 'micro-code' }> = {
+      type: 'check',
+      id: 'c1',
+      kind: 'micro-code',
+      prompt: 'p',
+      language: 'python',
+      starterCode: '',
+      tests: [],
+      referenceSolution: 'SECRET',
+      hint: 'h',
+      explain: 'e',
+    }
+    const fullLesson: Lesson = {
+      id: 'INFS1101-1',
+      cloId: 'INFS1101-1',
+      course: 'INFS1101',
+      language: 'python',
+      version: 1,
+      title: 't',
+      hook: 'h',
+      estimatedMinutes: 5,
+      draft: false,
+      tags: [],
+      blocks: [fullMicroCode],
+      exitLine: 'e',
+    }
+
+    // @ts-expect-error a full LessonSnippet (carrying expectedStdout) must not satisfy LessonPublicBlock
+    const publicSnippet: LessonPublicBlock = fullSnippet
+    // @ts-expect-error a full micro-code LessonCheck (carrying referenceSolution) must not satisfy LessonPublicBlock
+    const publicCheck: LessonPublicBlock = fullMicroCode
+    // @ts-expect-error a full Lesson (its blocks carry referenceSolution) must not satisfy LessonPublic
+    const publicLesson: LessonPublic = fullLesson
+
+    // Real usage so this stays a live compile check, not dead code a linter flags.
+    expect([publicSnippet, publicCheck, publicLesson]).toHaveLength(3)
   })
 })

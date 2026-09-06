@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DrillItem, DrillResult } from '@/lib/contracts'
-import { computeDerotStreak, isDrillKind, mapDrillRow, pickDrillItem, statsForKind } from './lib'
+import { computeDerotStreak, isArcadeKind, isDrillKind, isPlayKind, mapDrillRow, pickDrillItem, statsForKind } from './lib'
 
 function result(overrides: Partial<DrillResult> = {}): DrillResult {
   return { drillId: 'd1', kind: 'trace', correct: true, timeMs: 1000, score: 80, at: '2026-09-06T10:00:00.000Z', lane: 'arcade', ...overrides }
@@ -11,12 +11,32 @@ function item(overrides: Partial<DrillItem> = {}): DrillItem {
 }
 
 describe('isDrillKind', () => {
-  it('accepts only the six known kinds', () => {
+  it('accepts all twelve known kinds, both lanes', () => {
     expect(isDrillKind('trace')).toBe(true)
     expect(isDrillKind('speed-type')).toBe(true)
+    expect(isDrillKind('breathe')).toBe(true)
+    expect(isDrillKind('memory-grid')).toBe(true)
     expect(isDrillKind('made-up')).toBe(false)
     expect(isDrillKind(null)).toBe(false)
     expect(isDrillKind(undefined)).toBe(false)
+  })
+})
+
+describe('isArcadeKind', () => {
+  it('accepts only the six Arcade kinds', () => {
+    expect(isArcadeKind('trace')).toBe(true)
+    expect(isArcadeKind('speed-type')).toBe(true)
+    expect(isArcadeKind('breathe')).toBe(false)
+    expect(isArcadeKind('made-up')).toBe(false)
+  })
+})
+
+describe('isPlayKind', () => {
+  it('accepts only the six Playground kinds', () => {
+    expect(isPlayKind('breathe')).toBe(true)
+    expect(isPlayKind('memory-grid')).toBe(true)
+    expect(isPlayKind('trace')).toBe(false)
+    expect(isPlayKind('made-up')).toBe(false)
   })
 })
 

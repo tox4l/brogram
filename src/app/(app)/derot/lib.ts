@@ -25,8 +25,18 @@ export const DRILL_META: Record<DrillKind, { title: string; description: string;
   'memory-grid': { title: 'Grid', description: 'Watch a pattern flash on the grid, then reproduce it before it fades.', lane: 'play' },
 }
 
-export function isDrillKind(value: string | null | undefined): value is DrillKind {
+export function isArcadeKind(value: string | null | undefined): value is DrillKind {
   return DRILL_KINDS.includes(value as DrillKind)
+}
+
+export function isPlayKind(value: string | null | undefined): value is DrillKind {
+  return PLAY_KINDS.includes(value as DrillKind)
+}
+
+/** True for any of the twelve DrillKind ids, either lane. Callers that need
+ *  to gate on one specific lane should use isArcadeKind / isPlayKind instead. */
+export function isDrillKind(value: string | null | undefined): value is DrillKind {
+  return isArcadeKind(value) || isPlayKind(value)
 }
 
 // ---------------------------------------------------------------------------

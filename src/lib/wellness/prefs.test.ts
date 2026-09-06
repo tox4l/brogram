@@ -65,6 +65,19 @@ describe('resolveWellnessPrefs', () => {
     expect(resolveWellnessPrefs({ goalDays: ['2026-09-01', '2026-09-02'] }).goalDays).toEqual(['2026-09-01', '2026-09-02'])
     expect(resolveWellnessPrefs({ goalDays: 'not-an-array' }).goalDays).toEqual([])
   })
+
+  it('caps a stored goalDays row at the most recent 120, newest last', () => {
+    const days = Array.from({ length: 200 }, (_, i) => `2026-01-${String(i).padStart(4, '0')}`)
+    const resolved = resolveWellnessPrefs({ goalDays: days }).goalDays
+    expect(resolved).toHaveLength(120)
+    expect(resolved[resolved.length - 1]).toBe(days[days.length - 1])
+    expect(resolved[0]).toBe(days[days.length - 120])
+  })
+
+  it('dedupes a stored goalDays row with repeated entries', () => {
+    const resolved = resolveWellnessPrefs({ goalDays: ['2026-09-01', '2026-09-02', '2026-09-01', '2026-09-03', '2026-09-02'] }).goalDays
+    expect(resolved).toEqual(['2026-09-01', '2026-09-02', '2026-09-03'])
+  })
 })
 
 describe('prefsPatch', () => {
