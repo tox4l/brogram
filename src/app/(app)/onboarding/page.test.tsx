@@ -1,256 +1,212 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentEnvelope, AgentName } from '@/lib/contracts'
+import type { AgentEnvelope, LearnerState } from '@/lib/contracts'
+import { QUESTIONS } from '@/lib/onboarding/questions'
 import Onboarding from './page'
-import { FIRST_QUESTION } from './lib'
 
-const mocks = vi.hoisted(() => ({ session: vi.fn(), call: vi.fn(), from: vi.fn(), push: vi.fn(), setLearnerState: vi.fn() }))
+/**
+ * Rewritten for T1.5: the flow this file tested (up to 13 questions, one blocking Profiler call
+ * per answer, an inline course picker and Planner call) is replaced (spec R1.3, R1.4, R4.1-R4.4).
+ * Guarantees carried over from the previous suite, re-asserted here against the new flow:
+ *   - cumulative answers are sent to the Profiler (now once, not per-question);
+ *   - a profile delta's `motivation` merges key-by-key over what the learner already has, never
+ *     replacing the object outright;
+ *   - the `learner_state` write is the same version-guarded upsert, landing at `version + 1` with
+ *     `onboardingComplete: true`.
+ * "Error recovery" (the old retry-with-alert UI) no longer applies to this page: the only network
+ * call left in onboarding is the single background Profiler refinement, which by design never
+ * surfaces an error to the learner (spec R4.2.5) — course selection and its own error recovery
+ * move to `/courses` (T1.6).
+ */
+
+const mocks = vi.hoisted(() => ({
+  session: vi.fn(), call: vi.fn(), from: vi.fn(), push: vi.fn(), redirect: vi.fn(), setLearnerState: vi.fn(),
+}))
 
 vi.mock('@/store/session', () => ({ useSession: () => mocks.session() }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), redirect: mocks.redirect }))
 vi.mock('@/lib/agents/client', () => ({ callAgent: mocks.call }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: mocks.from }) }))
 
-const envelope = (agent: AgentName, reply: unknown): AgentEnvelope<unknown> => ({ ok: true, agent, reply, fallback: false, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 } })
+const envelope = (reply: unknown, fallback = false): AgentEnvelope<unknown> => ({
+  ok: true, agent: 'profiler', reply, fallback, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 },
+})
 
 type Row = Record<string, unknown>
-type CandidateCall = { columns: string; eq: Record<string, unknown>; order: string[]; limit: number | null }
-let tables: Record<string, Row[]>
-let candidateCalls: CandidateCall[]
+let learnerStateRows: Row[]
 
-function query(table: string) {
-  let payload: Row | undefined
-  let action: 'read' | 'insert' | 'update' = 'read'
-  let single = false
-  let limit: number | null = null
-  const orderKeys: string[] = []
-  let columns = ''
-  const eqValues: Record<string, unknown> = {}
-  const filters: Array<(row: Row) => boolean> = []
-  const builder = {
-    select: (value: string) => { columns = value; return builder },
-    eq: (key: string, value: unknown) => { eqValues[key] = value; filters.push((row) => row[key] === value); return builder },
-    in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return builder },
-    order: (key: string) => { orderKeys.push(key); return builder },
-    limit: (count: number) => { limit = count; return builder },
-    maybeSingle: () => { single = true; return builder },
-    insert: (value: Row) => { action = 'insert'; payload = value; return builder },
-    update: (value: Row) => { action = 'update'; payload = value; return builder },
-    then: (resolve: (result: { data: unknown; error: { message: string; code?: string } | null }) => unknown) => {
-      const rows = tables[table] ??= []
-      if (action === 'insert') {
-        const row = { ...payload! }
-        rows.push(row)
-        if (table === 'learner_state') return Promise.resolve(resolve({ data: single ? { version: row.version } : [row], error: null }))
-        return Promise.resolve(resolve({ data: single ? row : [row], error: null }))
-      }
-      if (action === 'update') {
-        const found = rows.filter((row) => filters.every((filter) => filter(row)))
-        found.forEach((row) => Object.assign(row, payload))
-        if (!found.length) return Promise.resolve(resolve({ data: null, error: null }))
-        return Promise.resolve(resolve({ data: single ? { version: found[0].version } : found, error: null }))
-      }
-      let found = rows.filter((row) => filters.every((filter) => filter(row)))
-      if (table === 'exercises_public' && !single) {
-        candidateCalls.push({ columns, eq: { ...eqValues }, order: [...orderKeys], limit })
-        for (const key of orderKeys) found = [...found].sort((a, b) => Number(a[key]) - Number(b[key]))
-        if (limit !== null) found = found.slice(0, limit)
-      }
-      return Promise.resolve(resolve({ data: single ? found[0] ?? null : found, error: null }))
+function baseLearnerState(overrides: Partial<{ version: number; onboardingComplete: boolean }> = {}): LearnerState {
+  return {
+    userId: 'student',
+    profile: {
+      displayName: 'Maya',
+      learningStyle: 'mixed',
+      styleVector: { visual: 0.5, verbal: 0.5, example: 0.5, theory: 0.5 },
+      tone: 'supportive',
+      verbosity: 'short',
+      motivation: { why: '', beyondCourses: false, depth: 'understand', wantsAgenticCoding: false },
+      onboardingComplete: overrides.onboardingComplete ?? false,
     },
+    currentCourse: null,
+    path: [],
+    nextExerciseIds: [],
+    mastery: {},
+    recentMistakes: [],
+    streak: { exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null },
+    points: 0,
+    integrityScore: 0,
+    accountStatus: 'active',
+    version: overrides.version ?? 4,
+    updatedAt: '2026-09-05T09:00:00Z',
   }
-  return builder
 }
 
 function session(overrides: Partial<{ version: number; onboardingComplete: boolean }> = {}) {
   return {
     user: { id: 'student' },
     profile: { id: 'student', account_status: 'active', restricted_until: null },
-    learnerState: {
-      userId: 'student',
-      profile: {
-        displayName: 'Maya', learningStyle: 'mixed',
-        styleVector: { visual: 0.5, verbal: 0.5, example: 0.5, theory: 0.5 },
-        tone: 'supportive', verbosity: 'short',
-        motivation: { why: '', beyondCourses: false, depth: 'understand', wantsAgenticCoding: false },
-        onboardingComplete: overrides.onboardingComplete ?? false,
-      },
-      currentCourse: null, path: [], nextExerciseIds: [], mastery: {}, recentMistakes: [],
-      streak: { exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null },
-      points: 0, integrityScore: 0, accountStatus: 'active', version: overrides.version ?? 4, updatedAt: '2026-09-05T09:00:00Z',
-    },
+    learnerState: baseLearnerState(overrides),
     setLearnerState: mocks.setLearnerState,
+  }
+}
+
+/** A minimal Supabase query-builder fake, just enough for the `learner_state` read-modify-write in `writeLearnerState`. */
+function learnerStateBuilder() {
+  let action: 'read' | 'insert' | 'update' = 'read'
+  let payload: Row | undefined
+  const eqValues: Record<string, unknown> = {}
+  const builder = {
+    select: () => builder,
+    eq: (key: string, value: unknown) => { eqValues[key] = value; return builder },
+    maybeSingle: () => builder,
+    insert: (value: Row) => { action = 'insert'; payload = value; return builder },
+    update: (value: Row) => { action = 'update'; payload = value; return builder },
+    then: (resolve: (result: { data: unknown; error: null }) => unknown) => {
+      if (action === 'insert') {
+        const row = { ...payload! }
+        learnerStateRows.push(row)
+        return Promise.resolve(resolve({ data: { version: row.version }, error: null }))
+      }
+      if (action === 'update') {
+        const found = learnerStateRows.filter((row) => Object.entries(eqValues).every(([k, v]) => row[k] === v))
+        found.forEach((row) => Object.assign(row, payload))
+        return Promise.resolve(resolve({ data: found.length ? { version: found[0].version } : null, error: null }))
+      }
+      const found = learnerStateRows.find((row) => Object.entries(eqValues).every(([k, v]) => row[k] === v))
+      return Promise.resolve(resolve({ data: found ?? null, error: null }))
+    },
+  }
+  return builder
+}
+
+function currentRow(): LearnerState {
+  const row = learnerStateRows.find((entry) => entry.user_id === 'student')!
+  return row.state as LearnerState
+}
+
+/** Answers the first five questions with each question's first option, advancing past the option-fill delay each time. */
+async function answerFirstFive() {
+  for (let i = 0; i < 5; i += 1) {
+    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[i].options[0].label }))
+    await screen.findByText(QUESTIONS[i + 1].text)
   }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  candidateCalls = []
-  tables = {
-    courses: [
-      { code: 'C1', slug: 'foundations', title: 'Programming foundations', language: 'python', level: 1, status: 'live' },
-    ],
-    clos: [
-      { id: 'C1-1', course: 'C1', ordinal: 1, outcome: 'Outcome one', topics: [], prerequisites: [], patterns: [], assessable_in_code: true, draft: false },
-      { id: 'C1-2', course: 'C1', ordinal: 2, outcome: 'Outcome two', topics: [], prerequisites: [], patterns: [], assessable_in_code: true, draft: false },
-      { id: 'C1-3', course: 'C1', ordinal: 3, outcome: 'Outcome three', topics: [], prerequisites: [], patterns: [], assessable_in_code: true, draft: false },
-      { id: 'C1-4', course: 'C1', ordinal: 4, outcome: 'Outcome four', topics: [], prerequisites: [], patterns: [], assessable_in_code: true, draft: false },
-    ],
-    exercises_public: [
-      { id: 'ex1', clo_id: 'C1-1', language: 'python', kind: 'code', difficulty: 3, pattern: 'p', title: 'Ex1', prompt: '', starter_code: '', tests: [], origin: 'seed', tags: [], verified: true },
-      { id: 'ex2', clo_id: 'C1-4', language: 'python', kind: 'code', difficulty: 3, pattern: 'p', title: 'Ex2', prompt: '', starter_code: '', tests: [], origin: 'seed', tags: [], verified: true },
-    ],
-    learner_state: [{ user_id: 'student', state: session().learnerState, version: session().learnerState!.version }],
-  }
+  learnerStateRows = [{ user_id: 'student', state: baseLearnerState(), version: 4 }]
   mocks.session.mockReturnValue(session())
-  mocks.from.mockImplementation(query)
+  mocks.from.mockImplementation(() => learnerStateBuilder())
 })
 afterEach(cleanup)
 
-async function completeToCoursePicker() {
-  mocks.call.mockResolvedValueOnce(envelope('profiler', { nextQuestion: null, profileDelta: { onboardingComplete: true }, done: true }))
-  render(<Onboarding />)
-  fireEvent.click(screen.getByRole('button', { name: FIRST_QUESTION.options[0] }))
-  return screen.findByRole('heading', { name: 'Choose your course' })
-}
-
 describe('onboarding', () => {
-  it('calls no agent on mount and shows the first phase-1 question from the fallback fixture', () => {
+  it('shows exactly the first of six local questions on mount and calls no agent', () => {
     render(<Onboarding />)
-    expect(screen.getByText(FIRST_QUESTION.text)).toBeTruthy()
+    expect(screen.getByText(QUESTIONS[0].text)).toBeTruthy()
+    expect(QUESTIONS).toHaveLength(6)
+    expect(mocks.call).not.toHaveBeenCalled()
+    expect(mocks.redirect).not.toHaveBeenCalled()
+    const progress = screen.getByRole('img', { name: 'Question 1 of 6' })
+    expect(progress.children).toHaveLength(6)
+  })
+
+  it('focuses the first option so the flow is usable by keyboard alone', () => {
+    render(<Onboarding />)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: QUESTIONS[0].options[0].label }))
+  })
+
+  it('answers questions one through five entirely locally: zero agent calls, each tap advances the card', async () => {
+    render(<Onboarding />)
+    await answerFirstFive()
+    expect(screen.getByText(QUESTIONS[5].text)).toBeTruthy()
     expect(mocks.call).not.toHaveBeenCalled()
   })
 
-  it('sends cumulative answers and merges the returned styleVector for a phase-1 answer', async () => {
-    mocks.call.mockResolvedValueOnce(envelope('profiler', {
-      nextQuestion: { id: 'p1q2', text: 'Second question', options: ['A', 'B'] },
-      profileDelta: { styleVector: { visual: 0.7, verbal: 0.3, example: 0.5, theory: 0.5 }, learningStyle: 'visual' },
-      done: false,
-    }))
+  it('fires exactly one Profiler call on the sixth answer and advances to /courses without awaiting it', async () => {
+    let resolveCall!: (value: AgentEnvelope<unknown>) => void
+    mocks.call.mockImplementationOnce(() => new Promise((resolve) => { resolveCall = resolve }))
     render(<Onboarding />)
-    const firstOption = FIRST_QUESTION.options[0]
-    fireEvent.click(screen.getByRole('button', { name: firstOption }))
-    await screen.findByText('Second question')
-    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({
-      agent: 'profiler', trigger: 'onboarding-answer', phase: 1,
-      answers: [{ questionId: FIRST_QUESTION.id, answer: firstOption }],
-    }))
+    await answerFirstFive()
 
-    mocks.call.mockResolvedValueOnce(envelope('profiler', { nextQuestion: { id: 'p1q3', text: 'Third question', options: ['C', 'D'] }, profileDelta: {}, done: false }))
-    fireEvent.click(screen.getByRole('button', { name: 'A' }))
-    await screen.findByText('Third question')
-    const secondRequest = mocks.call.mock.calls[1][0]
-    expect(secondRequest.answers).toEqual([
-      { questionId: FIRST_QUESTION.id, answer: firstOption },
-      { questionId: 'p1q2', answer: 'A' },
-    ])
-    expect(secondRequest.state.profile.styleVector).toEqual({ visual: 0.7, verbal: 0.3, example: 0.5, theory: 0.5 })
+    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
+
+    // The stage has already advanced; only now do we resolve the still-pending call.
+    expect(mocks.call).toHaveBeenCalledTimes(1)
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ agent: 'profiler', trigger: 'onboarding-answer', phase: 2 }))
+    const request = mocks.call.mock.calls[0][0]
+    expect(request.answers).toEqual(QUESTIONS.map((q) => ({ questionId: q.id, answer: q.options[0].label })))
+
+    resolveCall(envelope({ nextQuestion: null, done: true, profileDelta: {} }))
+    await waitFor(() => expect(currentRow().version).toBe(5))
+    expect(currentRow().profile.onboardingComplete).toBe(true)
   })
 
-  it('merges phase-2 motivation keys one at a time without an earlier key being erased', async () => {
-    mocks.call
-      .mockResolvedValueOnce(envelope('profiler', { nextQuestion: { id: 'p2q1', text: 'How deep do you want to go?', options: ['Pass', 'Master'] }, profileDelta: {}, done: false }))
-      .mockResolvedValueOnce(envelope('profiler', { nextQuestion: { id: 'p2q2', text: 'Why are you learning?', options: ['To build something'] }, profileDelta: { motivation: { depth: 'master' } }, done: false }))
-      .mockResolvedValueOnce(envelope('profiler', { nextQuestion: { id: 'p2q3', text: 'Talk tone?', options: ['Direct'] }, profileDelta: { motivation: { why: 'To build something' } }, done: false }))
+  it('completes onboarding with the provisional profile and onboardingComplete: true when the Profiler call rejects', async () => {
+    mocks.call.mockRejectedValueOnce(new Error('upstream unavailable'))
     render(<Onboarding />)
-    fireEvent.click(screen.getByRole('button', { name: FIRST_QUESTION.options[0] }))
-    await screen.findByText('How deep do you want to go?')
-    fireEvent.click(screen.getByRole('button', { name: 'Master' }))
-    await screen.findByText('Why are you learning?')
-    fireEvent.click(screen.getByRole('button', { name: 'To build something' }))
-    await screen.findByText('Talk tone?')
-    fireEvent.click(screen.getByRole('button', { name: 'Direct' }))
-    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(4))
-    const lastRequest = mocks.call.mock.calls[3][0]
-    expect(lastRequest.state.profile.motivation).toMatchObject({ depth: 'master', why: 'To build something' })
-  })
+    await answerFirstFive()
+    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
 
-  it('shows the course picker once the Profiler reports done', async () => {
-    await completeToCoursePicker()
-    expect(await screen.findByRole('button', { name: /Programming foundations/ })).toBeTruthy()
-    expect(screen.getByRole('group', { name: 'Coming soon' })).toBeTruthy()
-  })
-
-  it('renders a not-yet-live course from the database as a disabled coming-soon tile instead of dropping it', async () => {
-    tables.courses.push({ code: 'C2', slug: 'object-oriented-programming', title: 'Object Oriented Programming', language: 'java', level: 3, status: 'coming-soon' })
-    await completeToCoursePicker()
-    await screen.findByRole('button', { name: /Programming foundations/ })
-    const liveCourses = within(screen.getByRole('group', { name: 'Live courses' }))
-    expect(liveCourses.queryByText('Object Oriented Programming')).toBeNull()
-    const comingSoon = within(screen.getByRole('group', { name: 'Coming soon' }))
-    expect(comingSoon.getByText('Object Oriented Programming')).toBeTruthy()
-    expect(comingSoon.getByRole('button', { name: /Object Oriented Programming/ })).toHaveProperty('disabled', true)
-  })
-
-  it('fetches candidates for exactly the first three CLOs by ordinal, bounded and ordered, and calls the Planner once', async () => {
-    await completeToCoursePicker()
-    mocks.call.mockResolvedValueOnce(envelope('planner', { path: ['C1-1', 'C1-2', 'C1-3', 'C1-4'], nextExerciseIds: ['ex1'], focus: 'Start with the basics.' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
-    expect(candidateCalls.map((call) => call.eq.clo_id)).toEqual(['C1-1', 'C1-2', 'C1-3'])
-    expect(candidateCalls.every((call) => call.eq.verified === true)).toBe(true)
-    expect(candidateCalls.every((call) => call.limit === 10)).toBe(true)
-    expect(candidateCalls.every((call) => call.order.includes('difficulty'))).toBe(true)
-    expect(candidateCalls.every((call) => call.columns === 'id,clo_id,pattern,difficulty,title')).toBe(true)
-    expect(mocks.call.mock.calls.filter(([req]) => req.agent === 'planner')).toHaveLength(1)
-    const plannerRequest = mocks.call.mock.calls.find(([req]) => req.agent === 'planner')![0]
-    expect(plannerRequest.trigger).toBe('plan-refresh')
-    expect(plannerRequest.candidates.map((candidate: { id: string }) => candidate.id)).toEqual(['ex1'])
-  })
-
-  it('writes onboardingComplete, version + 1, path, and nextExerciseIds through the learner_state upsert path', async () => {
-    await completeToCoursePicker()
-    mocks.call.mockResolvedValueOnce(envelope('planner', { path: ['C1-1', 'C1-2', 'C1-3', 'C1-4'], nextExerciseIds: ['ex1'], focus: 'Start with the basics.' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
-    const row = tables.learner_state.find((entry) => entry.user_id === 'student')!
-    expect(row.version).toBe(5)
-    const state = row.state as { profile: { onboardingComplete: boolean }; path: string[]; nextExerciseIds: string[]; currentCourse: string; focus?: string }
-    expect(state.profile.onboardingComplete).toBe(true)
-    expect(state.path).toEqual(['C1-1', 'C1-2', 'C1-3', 'C1-4'])
-    expect(state.nextExerciseIds).toEqual(['ex1'])
-    expect(state.currentCourse).toBe('C1')
-    // `focus` is not part of the frozen LearnerState contract; it rides along as an extra
-    // jsonb key alongside path and nextExerciseIds so the dashboard and report can show it.
-    expect(state.focus).toBe('Start with the basics.')
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
+    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    expect(currentRow().version).toBe(5)
+    // Locally-scored values from the taps above stand: p2q1's first option is "To pass my
+    // courses" (motivation.why) and p2q5's first option is "Playful" (tone).
+    expect(currentRow().profile.motivation.why).toBe('To pass my courses')
+    expect(currentRow().profile.tone).toBe('playful')
     expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ version: 5 }))
   })
 
-  it('completes onboarding even when no candidates are available for the chosen CLOs', async () => {
-    // CLOs exist (the course is ready); only the bank for them is still empty.
-    tables.exercises_public = []
-    await completeToCoursePicker()
-    mocks.call.mockResolvedValueOnce(envelope('planner', { path: [], nextExerciseIds: [], focus: 'Your next exercises are still being prepared.' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
-    const plannerRequest = mocks.call.mock.calls.find(([req]) => req.agent === 'planner')![0]
-    expect(plannerRequest.candidates).toEqual([])
-    expect(plannerRequest.clos).toHaveLength(4)
-    const row = tables.learner_state.find((entry) => entry.user_id === 'student')!
-    const state = row.state as { nextExerciseIds: string[] }
-    expect(state.nextExerciseIds).toEqual([])
+  it('merges a genuine (non-fallback) Profiler reply over the provisional profile, motivation key-by-key', async () => {
+    mocks.call.mockResolvedValueOnce(envelope({ nextQuestion: null, done: true, profileDelta: { tone: 'direct', motivation: { depth: 'master' } } }, false))
+    render(<Onboarding />)
+    await answerFirstFive()
+    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+
+    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    expect(currentRow().profile.tone).toBe('direct')
+    expect(currentRow().profile.motivation.depth).toBe('master')
+    // `why` was decided locally by the p2q1 tap and must survive a delta that only carries `depth`.
+    expect(currentRow().profile.motivation.why).toBe('To pass my courses')
   })
 
-  it('returns to the course picker with a message when the chosen course has no ready outcomes', async () => {
-    tables.clos = []
-    await completeToCoursePicker()
-    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
-    await screen.findByText(/is not ready for practice yet/)
-    expect(await screen.findByRole('heading', { name: 'Choose your course' })).toBeTruthy()
-    expect(mocks.call.mock.calls.filter(([req]) => req.agent === 'planner')).toHaveLength(0)
-    expect(mocks.push).not.toHaveBeenCalled()
+  it('treats a fallback reply (AGENT_DRY_RUN or an exhausted retry) like a failure: the provisional profile stands', async () => {
+    mocks.call.mockResolvedValueOnce(envelope({ nextQuestion: null, done: true, profileDelta: { tone: 'direct' } }, true))
+    render(<Onboarding />)
+    await answerFirstFive()
+    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+
+    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    expect(currentRow().profile.tone).toBe('playful')
   })
 
-  it('shows a recoverable error with a way back to the course picker when the Planner call fails', async () => {
-    await completeToCoursePicker()
-    mocks.call.mockRejectedValueOnce(new Error('Upstream unavailable'))
-    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
-    await screen.findByRole('alert')
-    expect(screen.getByText('Upstream unavailable')).toBeTruthy()
-    expect(mocks.push).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Choose a different course' }))
-    expect(await screen.findByRole('heading', { name: 'Choose your course' })).toBeTruthy()
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(mocks.push).not.toHaveBeenCalled()
+  it('redirects to /courses and renders no question when onboardingComplete is already true', () => {
+    mocks.session.mockReturnValue(session({ onboardingComplete: true }))
+    render(<Onboarding />)
+    expect(mocks.redirect).toHaveBeenCalledWith('/courses')
+    expect(screen.queryByText(QUESTIONS[0].text)).toBeNull()
+    expect(mocks.call).not.toHaveBeenCalled()
   })
 })

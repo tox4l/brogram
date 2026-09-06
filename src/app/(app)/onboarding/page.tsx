@@ -1,278 +1,164 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowRight } from 'lucide-react'
-import type { Difficulty, PatternId } from '@/lib/contracts'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { redirect, useRouter } from 'next/navigation'
+import { AnimatePresence, motion } from 'motion/react'
 import { callAgent } from '@/lib/agents/client'
 import { createClient } from '@/lib/supabase/client'
+import { provisionalProfile } from '@/lib/onboarding/derive'
+import { QUESTIONS } from '@/lib/onboarding/questions'
+import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { useSession } from '@/store/session'
-import comingSoonSeed from '../../../../seed/courses.json'
-import {
-  FIRST_QUESTION, INITIAL_PROFILE, LANGUAGE_LABELS,
-  mapCloRow, mergeProfileDelta, messageOf, phaseOfQuestion, writeLearnerState,
-  type OnboardingQuestion, type WorkingProfile,
-} from './lib'
+import { mergeProfileDelta, messageOf, writeLearnerState } from './lib'
 
-type Stage = 'question' | 'course' | 'plan'
-type LiveCourse = { code: string; slug: string; title: string; language: string; level: number }
-type ComingSoonCourse = { slug: string; title: string; language: string }
-type CourseRow = LiveCourse & { status: string }
-type CandidateExercise = { id: string; cloId: string; pattern: PatternId; difficulty: Difficulty; title: string }
+/**
+ * The chosen option gets a fill before the card exits (spec 10.2). This is deliberate local
+ * choreography, not a busy state: nothing here waits on data, so it never violates "no busy state
+ * between cards, ever" (R4.2) — the next card's content is already known synchronously.
+ */
+const OPTION_FILL_MS = 120
 
-/** Onboarding stays under four minutes; this is a hard client-side backstop on top of the agent's own cap. */
-const MAX_QUESTIONS = 13
-/** Per CLO, not per course: three CLOs at 10 each keeps the request at 30 candidates, never one CLO's whole bank. */
-const CANDIDATES_PER_CLO = 10
-const COMING_SOON: ComingSoonCourse[] = comingSoonSeed.coming_soon
+// Motion needs a numeric bezier tuple; these mirror EASE.move / EASE.standard in
+// src/lib/motion/tokens.ts, which stores the CSS-string form for raw CSS/GSAP consumers.
+const MOVE_EASE: [number, number, number, number] = [0.25, 1, 0.5, 1]
+const STANDARD_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
+const CARD_DURATION = 0.2 // DUR.base, in seconds
 
-async function fetchCandidates(supabase: ReturnType<typeof createClient>, cloId: string): Promise<CandidateExercise[]> {
-  const { data, error } = await supabase.from('exercises_public').select('id,clo_id,pattern,difficulty,title')
-    .eq('clo_id', cloId).eq('verified', true).order('difficulty').limit(CANDIDATES_PER_CLO)
-  if (error) throw error
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: String(row.id), cloId: String(row.clo_id), pattern: String(row.pattern) as PatternId,
-    difficulty: Number(row.difficulty) as Difficulty, title: String(row.title),
-  }))
-}
+type Answer = { questionId: string; answer: string }
 
 export default function Onboarding() {
   const session = useSession()
   const router = useRouter()
-  const clientRef = useRef<ReturnType<typeof createClient> | null>(null)
-  const client = useCallback(() => clientRef.current ??= createClient(), [])
+  const reducedMotion = useReducedMotion()
 
-  const [stage, setStage] = useState<Stage>('question')
-  const [phase, setPhase] = useState<1 | 2>(1)
-  const [question, setQuestion] = useState<OnboardingQuestion>(FIRST_QUESTION)
-  const [answers, setAnswers] = useState<{ questionId: string; answer: string }[]>([])
-  const [profile, setProfile] = useState<WorkingProfile>(INITIAL_PROFILE)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const lastActionRef = useRef<(() => Promise<void>) | null>(null)
+  const [index, setIndex] = useState(0)
+  const [answers, setAnswers] = useState<Answer[]>([])
+  const [selected, setSelected] = useState<string | null>(null)
+  const fillTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [liveCourses, setLiveCourses] = useState<LiveCourse[] | null>(null)
-  const [dbComingSoon, setDbComingSoon] = useState<ComingSoonCourse[]>([])
-  const [coursesLoading, setCoursesLoading] = useState(false)
-  const [coursesError, setCoursesError] = useState<string | null>(null)
-  const [courseNotice, setCourseNotice] = useState<string | null>(null)
-  const [selectedCourseTitle, setSelectedCourseTitle] = useState<string | null>(null)
-
-  const userId = session.user?.id ?? null
-  const version = session.learnerState?.version ?? 0
-  const displayName = session.learnerState?.profile.displayName ?? ''
-
-  const perform = useCallback(async (action: () => Promise<void>) => {
-    lastActionRef.current = action
-    setBusy(true); setError(null)
-    try { await action() }
-    catch (actionError) { setError(messageOf(actionError)) }
-    finally { setBusy(false) }
+  useEffect(() => () => {
+    if (fillTimeout.current) clearTimeout(fillTimeout.current)
   }, [])
 
-  const retryLast = useCallback(() => {
-    if (lastActionRef.current) void perform(lastActionRef.current)
-  }, [perform])
+  // The only irreducible wait in this flow is the background Profiler call, and it never blocks
+  // the UI: the course picker is already showing by the time it starts (spec R4.3).
+  const finishOnboarding = useCallback((finalAnswers: Answer[]) => {
+    const learnerState = session.learnerState
+    router.push('/courses')
+    if (!learnerState) return
 
-  const backToCoursePicker = useCallback(() => {
-    setError(null)
-    setStage('course')
-  }, [])
+    const provisional = provisionalProfile(finalAnswers)
+    session.setLearnerState({ ...learnerState, profile: { ...learnerState.profile, ...provisional } })
 
-  const submitAnswer = useCallback((option: string) => {
-    if (!userId) return
-    void perform(async () => {
-      const nextAnswers = [...answers, { questionId: question.id, answer: option }]
-      const envelope = await callAgent({
-        agent: 'profiler', trigger: 'onboarding-answer', phase, answers: nextAnswers,
-        state: { userId, version, profile: { ...profile, displayName } },
-      })
-      const reply = envelope.reply
-      const merged = mergeProfileDelta(profile, reply.profileDelta)
-      setAnswers(nextAnswers)
-      setProfile(merged)
-      if (!reply.nextQuestion || reply.done || nextAnswers.length >= MAX_QUESTIONS) { setStage('course'); return }
-      setPhase(phaseOfQuestion(reply.nextQuestion.id))
-      setQuestion(reply.nextQuestion)
-    })
-  }, [answers, displayName, perform, phase, profile, question.id, userId, version])
-
-  const loadCourses = useCallback(() => {
     void (async () => {
-      setCoursesLoading(true); setCoursesError(null)
+      let finalProfile = provisional
       try {
-        // Every course is read, live or not, so a non-live course (e.g. INFS3102 while its
-        // Java bank is uncertified) still renders as a disabled coming-soon tile below,
-        // rather than disappearing because it fell outside a status filter.
-        const { data, error: readError } = await client().from('courses').select('code,slug,title,language,level,status').order('level').order('title')
-        if (readError) throw readError
-        const rows = (data ?? []) as CourseRow[]
-        setLiveCourses(rows.filter((row) => row.status === 'live'))
-        setDbComingSoon(rows.filter((row) => row.status !== 'live').map(({ slug, title, language }) => ({ slug, title, language })))
-      } catch (readError) { setCoursesError(messageOf(readError)) }
-      finally { setCoursesLoading(false) }
-    })()
-  }, [client])
-
-  useEffect(() => {
-    if (stage === 'course' && liveCourses === null && !coursesLoading && !coursesError) loadCourses()
-  }, [stage, liveCourses, coursesLoading, coursesError, loadCourses])
-
-  const chooseCourse = useCallback((course: LiveCourse) => {
-    if (!userId || !session.learnerState) return
-    setCourseNotice(null)
-    setSelectedCourseTitle(course.title)
-    setStage('plan')
-    void perform(async () => {
-      const supabase = client()
-      // Draft CLOs (no syllabus yet) are usable, not excluded; this guards only the
-      // case where a course genuinely has no CLOs at all, which is a normal outcome,
-      // not an error.
-      const { data: cloRows, error: cloError } = await supabase.from('clos').select('*').eq('course', course.code).order('ordinal')
-      if (cloError) throw cloError
-      const clos = (cloRows ?? []).map(mapCloRow)
-      if (!clos.length) {
-        setCourseNotice(`${course.title} is not ready for practice yet. Choose another course.`)
-        setStage('course')
-        return
+        const envelope = await callAgent({
+          agent: 'profiler',
+          trigger: 'onboarding-answer',
+          phase: 2,
+          answers: finalAnswers,
+          state: { userId: learnerState.userId, version: learnerState.version, profile: { ...provisional, displayName: learnerState.profile.displayName } },
+        })
+        // `fallback: true` means the route never reached a live model reply (AGENT_DRY_RUN, or
+        // DeepSeek failed twice); the provisional profile stands rather than merging a delta that
+        // was never actually decided by the model (spec R4.2.5).
+        if (!envelope.fallback) finalProfile = mergeProfileDelta(provisional, envelope.reply.profileDelta)
+      } catch {
+        // network failure, timeout, or rate-limited: the provisional profile stands.
       }
-      const firstThree = clos.slice(0, 3).map((clo) => clo.id)
+      try {
+        const supabase = createClient()
+        const nextState = await writeLearnerState(supabase, learnerState, (base) => ({
+          ...base,
+          profile: { ...base.profile, ...finalProfile, onboardingComplete: true },
+        }))
+        session.setLearnerState(nextState)
+      } catch (writeError) {
+        // Nothing left on screen to show this to — the learner already moved on to /courses.
+        console.error('[onboarding] could not persist onboardingComplete:', messageOf(writeError))
+      }
+    })()
+  }, [router, session])
 
-      // Bounded and ordered per CLO so one heavily seeded CLO cannot crowd out the
-      // others, and only the fields the Planner needs travel over the wire.
-      const candidateLists = await Promise.all(firstThree.map((cloId) => fetchCandidates(supabase, cloId)))
-      const candidates = candidateLists.flat()
+  const selectOption = useCallback((value: string) => {
+    if (selected !== null) return
+    setSelected(value)
+    const finalAnswers = [...answers, { questionId: QUESTIONS[index].id, answer: value }]
+    fillTimeout.current = setTimeout(() => {
+      if (index + 1 < QUESTIONS.length) {
+        setAnswers(finalAnswers)
+        setIndex(index + 1)
+        setSelected(null)
+      } else {
+        finishOnboarding(finalAnswers)
+      }
+    }, reducedMotion ? 0 : OPTION_FILL_MS)
+  }, [answers, finishOnboarding, index, reducedMotion, selected])
 
-      const plannerEnvelope = await callAgent({
-        agent: 'planner', trigger: 'plan-refresh',
-        state: { userId, version, profile: { ...profile, displayName }, mastery: {}, recentMistakes: [], currentCourse: course.code },
-        course: course.code, clos, candidates,
-      })
-      const plan = plannerEnvelope.reply
-
-      const nextState = await writeLearnerState(supabase, session.learnerState!, (base) => ({
-        ...base,
-        profile: { ...base.profile, ...profile, onboardingComplete: true },
-        currentCourse: course.code,
-        path: plan.path,
-        nextExerciseIds: plan.nextExerciseIds,
-        // `focus` is not part of the frozen LearnerState contract; it rides along as an
-        // extra jsonb key so the dashboard and report can show the Planner's latest line.
-        focus: plan.focus,
-      }) as typeof base)
-      session.setLearnerState(nextState)
-      router.push('/dashboard')
-    })
-  }, [client, displayName, perform, profile, router, session, userId, version])
-
-  if (!userId) return null
-
-  const progressValue = Math.min(100, Math.round((answers.length / MAX_QUESTIONS) * 100))
-
-  if (stage === 'question') {
-    return (
-      <div className="mx-auto max-w-2xl space-y-8 py-10">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{phase === 1 ? 'How you learn' : 'About you'}</span>
-            <span>Question {Math.min(answers.length + 1, MAX_QUESTIONS)} of about {MAX_QUESTIONS}</span>
-          </div>
-          <Progress value={progressValue} aria-label="Onboarding progress" />
-        </div>
-        <h1 className="max-w-xl text-2xl font-medium leading-relaxed tracking-tight">{question.text}</h1>
-        <div role="group" aria-label="Choose one" className="grid gap-3 sm:grid-cols-2">
-          {question.options.map((option) => (
-            <button key={option} type="button" disabled={busy} onClick={() => submitAnswer(option)}
-              className="rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-emerald-300 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:opacity-50 motion-reduce:transition-none">
-              {option}
-            </button>
-          ))}
-        </div>
-        {busy && <StepLoading label="Finding your next question." />}
-        {error && <ErrorRetry message={error} onRetry={retryLast} />}
-      </div>
-    )
+  if (!session.user?.id) return null
+  if (session.learnerState?.profile.onboardingComplete) {
+    redirect('/courses')
+    return null
   }
 
-  if (stage === 'course') {
-    return (
-      <div className="mx-auto max-w-3xl space-y-10 py-10">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-medium tracking-tight">Choose your course</h1>
-          <p className="text-sm text-muted-foreground">You can change this anytime from your dashboard.</p>
+  const question = QUESTIONS[index]
+  const slideVariants = reducedMotion
+    ? { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
+    : { enter: { x: 24, opacity: 0 }, center: { x: 0, opacity: 1 }, exit: { x: -24, opacity: 0 } }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-8 py-10">
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">Question {index + 1} of {QUESTIONS.length}</p>
+        <div role="img" aria-label={`Question ${index + 1} of ${QUESTIONS.length}`} className="flex gap-1.5">
+          {QUESTIONS.map((q, i) => (
+            <span
+              key={q.id}
+              aria-hidden="true"
+              className={`h-1.5 flex-1 rounded-full transition-colors motion-reduce:transition-none ${i <= index ? 'bg-emerald-300' : 'bg-muted'}`}
+            />
+          ))}
         </div>
-        {courseNotice && <p role="status" className="rounded-lg border border-dashed border-input p-4 text-sm text-muted-foreground">{courseNotice}</p>}
-        {coursesLoading && <StepLoading label="Opening your courses." />}
-        {coursesError && <ErrorRetry message={coursesError} onRetry={loadCourses} />}
-        {!coursesLoading && !coursesError && liveCourses && (
-          liveCourses.length ? (
-            <div role="group" aria-label="Live courses" className="grid gap-3 sm:grid-cols-2">
-              {liveCourses.map((course) => (
-                <button key={course.code} type="button" disabled={busy} onClick={() => chooseCourse(course)}
-                  className="group flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-5 text-left outline-none transition-colors hover:border-emerald-300 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:opacity-50 motion-reduce:transition-none">
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{course.title}</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[course.language] ?? course.language}</span>
-                  </span>
-                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-emerald-200" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Courses are being prepared. Check back shortly.</p>
-          )
-        )}
-        <div className="space-y-3 border-t border-border pt-6">
-          <h2 className="text-xs font-medium text-muted-foreground">Coming soon</h2>
-          <div role="group" aria-label="Coming soon" className="grid gap-3 sm:grid-cols-3">
-            {[...dbComingSoon, ...COMING_SOON].map((course) => (
-              <button key={course.slug} type="button" disabled aria-disabled="true"
-                className="rounded-xl border border-dashed border-input p-4 text-left opacity-50">
-                <span className="block text-sm font-medium">{course.title}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[course.language] ?? course.language}</span>
+      </div>
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={question.id}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          variants={slideVariants}
+          transition={{ duration: CARD_DURATION, ease: MOVE_EASE }}
+          className="space-y-8"
+        >
+          <h1 className="max-w-xl text-2xl font-medium leading-relaxed tracking-tight">{question.text}</h1>
+          <div role="group" aria-label="Choose one" className="grid gap-3 sm:grid-cols-2">
+            {question.options.map((option, i) => (
+              <button
+                key={option.value}
+                type="button"
+                autoFocus={i === 0}
+                disabled={selected !== null}
+                aria-pressed={selected === option.value}
+                onClick={() => selectOption(option.value)}
+                className={`relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-emerald-300 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-default motion-reduce:transition-none ${selected !== null && selected !== option.value ? 'opacity-50' : ''}`}
+              >
+                {!reducedMotion && selected === option.value && (
+                  <motion.span
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-emerald-300/30"
+                    style={{ transformOrigin: 'left' }}
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ duration: OPTION_FILL_MS / 1000, ease: STANDARD_EASE }}
+                  />
+                )}
+                <span className="relative">{option.label}</span>
               </button>
             ))}
           </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="mx-auto max-w-xl space-y-6 py-16 text-center">
-      <h1 className="text-2xl font-medium tracking-tight">Building your path</h1>
-      <p className="text-sm text-muted-foreground">{selectedCourseTitle ? `Matching your first exercises in ${selectedCourseTitle}.` : 'Matching your first exercises.'}</p>
-      <StepLoading label="Preparing your plan." />
-      {error && <ErrorRetry message={error} onRetry={retryLast} onSecondary={backToCoursePicker} secondaryLabel="Choose a different course" />}
-    </div>
-  )
-}
-
-function StepLoading({ label }: { label: string }) {
-  return (
-    <div role="status" aria-live="polite" className="space-y-3 rounded-xl border border-dashed border-input p-5">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="size-2 animate-pulse rounded-full bg-emerald-300" aria-hidden="true" />
-        {label}
-      </div>
-      <div className="h-2 w-2/3 animate-pulse rounded-full bg-muted" />
-      <div className="h-2 w-1/2 animate-pulse rounded-full bg-muted" />
-    </div>
-  )
-}
-
-function ErrorRetry({ message, onRetry, onSecondary, secondaryLabel }: {
-  message: string; onRetry: () => void; onSecondary?: () => void; secondaryLabel?: string
-}) {
-  return (
-    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-4">
-      <p className="min-w-0 flex-1 text-sm">{message}</p>
-      <div className="flex flex-wrap gap-2">
-        {onSecondary && <Button variant="ghost" onClick={onSecondary}>{secondaryLabel}</Button>}
-        <Button variant="outline" onClick={onRetry}>Try again</Button>
-      </div>
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }

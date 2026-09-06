@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import type { LearnerProfile, ProfilerReply, ProfilerRequest } from '@/lib/contracts'
+import type { ProfilerReply, ProfilerRequest } from '@/lib/contracts'
 import type { AgentModule } from './shared'
-import fallbackQuestions from './fixtures/profiler-fallback.json'
+import { PHASE1, PHASE2, motivationFromAnswers, styleFromAnswers } from '@/lib/onboarding/derive'
 
 const system = `You are the BroGram Profiler. You run a two-phase onboarding for a university student who wants to learn to code. You ask one question at a time and you decide the next question from the answers so far. Reply only with json.
 
@@ -45,60 +45,6 @@ export const profilerReply = z.object({
   }),
   done: z.boolean(),
 }).refine(r => r.done === (r.nextQuestion === null), { error: 'done must be true exactly when nextQuestion is null' })
-
-type StyleAxis = 'visual' | 'verbal' | 'example' | 'theory'
-type FallbackQuestion = { id: string; text: string; options: { text: string; axis: StyleAxis }[] }
-const PHASE1: FallbackQuestion[] = fallbackQuestions.questions as FallbackQuestion[]
-
-const PHASE2 = [
-  { id: 'p2q1', text: 'Why are you learning to code right now?', options: ['To pass my courses', 'To get good at this', 'To build something', 'I am not sure yet'] },
-  { id: 'p2q2', text: 'Do you want to go beyond what your courses cover?', options: ['Yes', 'Only what the course needs', 'Ask me later'] },
-  { id: 'p2q3', text: 'How deep do you want to go?', options: ['Pass', 'Understand', 'Master'] },
-  { id: 'p2q4', text: 'Do you want to learn how to work with AI coding agents as part of this?', options: ['Yes', 'Not now'] },
-  { id: 'p2q5', text: 'How should I talk to you?', options: ['Playful', 'Supportive', 'Tough love', 'Direct'] },
-  { id: 'p2q6', text: 'Short answers or detailed ones?', options: ['Short', 'Detailed'] },
-]
-
-const TONE_BY_OPTION: Record<string, LearnerProfile['tone']> = {
-  Playful: 'playful',
-  Supportive: 'supportive',
-  'Tough love': 'tough-love',
-  Direct: 'direct',
-}
-
-/** Every chosen option adds 0.2 to its axis, clamped to 1. */
-function styleFromAnswers(answers: ProfilerRequest['answers']) {
-  const counts: Record<StyleAxis, number> = { visual: 0, verbal: 0, example: 0, theory: 0 }
-  for (const a of answers) {
-    const q = PHASE1.find(x => x.id === a.questionId)
-    const option = q?.options.find(o => o.text === a.answer)
-    if (option) counts[option.axis] += 1
-  }
-  const axis = (n: number) => Math.min(1, Math.round(n * 20) / 100)
-  const styleVector = { visual: axis(counts.visual), verbal: axis(counts.verbal), example: axis(counts.example), theory: axis(counts.theory) }
-  const learningStyle: LearnerProfile['learningStyle'] =
-    styleVector.visual - styleVector.verbal >= 0.2 ? 'visual' : styleVector.verbal - styleVector.visual >= 0.2 ? 'verbal' : 'mixed'
-  return { styleVector, learningStyle }
-}
-
-/** Phase-2 answers map by question id and exact option text; only the keys those answers decided are sent. */
-function motivationFromAnswers(answers: ProfilerRequest['answers']) {
-  const delta: ProfilerReply['profileDelta'] = {}
-  const motivation: NonNullable<ProfilerReply['profileDelta']['motivation']> = {}
-  for (const a of answers) {
-    const index = PHASE2.findIndex(q => q.id === a.questionId)
-    switch (index) {
-      case 0: motivation.why = a.answer; break
-      case 1: motivation.beyondCourses = a.answer === 'Yes'; break
-      case 2: motivation.depth = a.answer.toLowerCase() as 'pass' | 'understand' | 'master'; break
-      case 3: motivation.wantsAgenticCoding = a.answer === 'Yes'; break
-      case 4: delta.tone = TONE_BY_OPTION[a.answer] ?? 'direct'; break
-      case 5: delta.verbosity = a.answer === 'Detailed' ? 'verbose' : 'short'; break
-    }
-  }
-  if (Object.keys(motivation).length) delta.motivation = motivation
-  return delta
-}
 
 /**
  * `answers` is cumulative across both phases, so each phase is positioned by its own count.
