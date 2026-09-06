@@ -19,7 +19,7 @@ import { useSession } from '@/store/session'
 const FOCUS_FALLBACK = 'Your next exercises are still being prepared.'
 
 type CourseDetails = { code: string; title: string; language: string }
-type OutcomeDetails = { id: string; ordinal: number; outcome: string }
+type OutcomeDetails = { id: string; ordinal: number; outcome: string; draft: boolean }
 type ExerciseDetails = { id: string; title: string; difficulty: number; language: string; clo_id: string }
 type Curriculum = { course: CourseDetails | null; outcomes: OutcomeDetails[]; exercises: ExerciseDetails[] }
 type CurriculumResult = { key: string; data: Curriculum | null; failed: boolean }
@@ -45,8 +45,10 @@ function useCurriculum(userId: string | null, courseCode: string | null, exercis
         const ids: string[] = JSON.parse(exerciseKey)
         const [course, outcomes, exercises] = await Promise.all([
           courseCode ? client.from('courses').select('code,title,language').eq('code', courseCode).maybeSingle() : { data: null, error: null },
-          courseCode ? client.from('clos').select('id,ordinal,outcome').eq('course', courseCode).eq('draft', false).order('ordinal') : { data: [], error: null },
-          ids.length ? client.from('exercises_public').select('id,title,difficulty,language,clo_id').in('id', ids) : { data: [], error: null },
+          // Draft CLOs (no syllabus yet) are still usable, not hidden; a "draft outcome"
+          // marker is shown beside them below instead of filtering them out.
+          courseCode ? client.from('clos').select('id,ordinal,outcome,draft').eq('course', courseCode).order('ordinal') : { data: [], error: null },
+          ids.length ? client.from('exercises_public').select('id,title,difficulty,language,clo_id').eq('verified', true).in('id', ids) : { data: [], error: null },
         ])
         if (course.error || outcomes.error || exercises.error) throw new Error('Curriculum unavailable')
         if (!cancelled) setResult({
@@ -169,7 +171,10 @@ export default function Dashboard() {
               return (
                 <div key={outcome.id} className="rounded-lg border border-border p-4">
                   <div className="flex items-center justify-between gap-3 text-xs"><span className="text-muted-foreground">Outcome {outcome.ordinal}</span><span className={mastery?.closed ? 'text-emerald-200' : 'text-muted-foreground'}>{mastery?.closed ? 'Complete' : mastery ? 'In progress' : 'Not started'}</span></div>
-                  <h3 className="mt-2 text-sm font-medium leading-relaxed">{outcome.outcome}</h3>
+                  <h3 className="mt-2 text-sm font-medium leading-relaxed">
+                    {outcome.outcome}
+                    {outcome.draft && <span className="ml-2 align-middle text-[10px] font-normal tracking-wide text-muted-foreground uppercase">Draft outcome</span>}
+                  </h3>
                   <div className="mt-4 flex items-center gap-3"><Progress value={score} aria-label={outcome.outcome} className="flex-1 [&_[data-slot=progress-indicator]]:bg-emerald-200" /><span className="font-mono text-xs text-muted-foreground">{score}%</span></div>
                 </div>
               )

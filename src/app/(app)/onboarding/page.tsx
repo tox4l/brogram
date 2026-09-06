@@ -19,6 +19,7 @@ import {
 type Stage = 'question' | 'course' | 'plan'
 type LiveCourse = { code: string; slug: string; title: string; language: string; level: number }
 type ComingSoonCourse = { slug: string; title: string; language: string }
+type CourseRow = LiveCourse & { status: string }
 type CandidateExercise = { id: string; cloId: string; pattern: PatternId; difficulty: Difficulty; title: string }
 
 /** Onboarding stays under four minutes; this is a hard client-side backstop on top of the agent's own cap. */
@@ -53,6 +54,7 @@ export default function Onboarding() {
   const lastActionRef = useRef<(() => Promise<void>) | null>(null)
 
   const [liveCourses, setLiveCourses] = useState<LiveCourse[] | null>(null)
+  const [dbComingSoon, setDbComingSoon] = useState<ComingSoonCourse[]>([])
   const [coursesLoading, setCoursesLoading] = useState(false)
   const [coursesError, setCoursesError] = useState<string | null>(null)
   const [courseNotice, setCourseNotice] = useState<string | null>(null)
@@ -101,9 +103,14 @@ export default function Onboarding() {
     void (async () => {
       setCoursesLoading(true); setCoursesError(null)
       try {
-        const { data, error: readError } = await client().from('courses').select('code,slug,title,language,level').eq('status', 'live').order('level').order('title')
+        // Every course is read, live or not, so a non-live course (e.g. INFS3102 while its
+        // Java bank is uncertified) still renders as a disabled coming-soon tile below,
+        // rather than disappearing because it fell outside a status filter.
+        const { data, error: readError } = await client().from('courses').select('code,slug,title,language,level,status').order('level').order('title')
         if (readError) throw readError
-        setLiveCourses((data ?? []) as LiveCourse[])
+        const rows = (data ?? []) as CourseRow[]
+        setLiveCourses(rows.filter((row) => row.status === 'live'))
+        setDbComingSoon(rows.filter((row) => row.status !== 'live').map(({ slug, title, language }) => ({ slug, title, language })))
       } catch (readError) { setCoursesError(messageOf(readError)) }
       finally { setCoursesLoading(false) }
     })()
@@ -120,9 +127,10 @@ export default function Onboarding() {
     setStage('plan')
     void perform(async () => {
       const supabase = client()
-      // Drafts are excluded here, at the source; a course whose CLOs are all still
-      // draft therefore yields an empty list, which is a normal outcome, not an error.
-      const { data: cloRows, error: cloError } = await supabase.from('clos').select('*').eq('course', course.code).eq('draft', false).order('ordinal')
+      // Draft CLOs (no syllabus yet) are usable, not excluded; this guards only the
+      // case where a course genuinely has no CLOs at all, which is a normal outcome,
+      // not an error.
+      const { data: cloRows, error: cloError } = await supabase.from('clos').select('*').eq('course', course.code).order('ordinal')
       if (cloError) throw cloError
       const clos = (cloRows ?? []).map(mapCloRow)
       if (!clos.length) {
@@ -219,7 +227,7 @@ export default function Onboarding() {
         <div className="space-y-3 border-t border-border pt-6">
           <h2 className="text-xs font-medium text-muted-foreground">Coming soon</h2>
           <div role="group" aria-label="Coming soon" className="grid gap-3 sm:grid-cols-3">
-            {COMING_SOON.map((course) => (
+            {[...dbComingSoon, ...COMING_SOON].map((course) => (
               <button key={course.slug} type="button" disabled aria-disabled="true"
                 className="rounded-xl border border-dashed border-input p-4 text-left opacity-50">
                 <span className="block text-sm font-medium">{course.title}</span>

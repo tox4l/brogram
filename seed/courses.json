@@ -61,7 +61,8 @@
       "prerequisites": ["INFS1201"],
       "topics": ["paradigms", "java-syntax", "classes-objects", "encapsulation", "static", "inheritance", "polymorphism", "interfaces", "associations", "collections", "exceptions", "streams", "uml", "design-patterns"],
       "clo_ids": ["INFS3102-1", "INFS3102-2", "INFS3102-3", "INFS3102-4"],
-      "status": "live"
+      "status": "coming-soon",
+      "note": "Bank has only 3 verified exercises; the other 15 sit in seed/exercises/unverified/ until a Judge0 key certifies them. Flip back to live after C6 certifies the Java rows."
     },
     {
       "code": "DSAI2201",

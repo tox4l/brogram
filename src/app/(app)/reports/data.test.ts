@@ -5,7 +5,7 @@ import { fetchReportData } from './data'
 
 const cloRow = {
   id: 'INFS1101-1', course: 'INFS1101', ordinal: 1, outcome: 'Write a loop that accumulates a total',
-  topics: ['loops'], prerequisites: [], patterns: ['accumulate'], assessable_in_code: true,
+  topics: ['loops'], prerequisites: [], patterns: ['accumulate'], assessable_in_code: true, draft: false,
 }
 
 function makeClient(overrides: {
@@ -29,15 +29,10 @@ function makeClient(overrides: {
               return {
                 eq: (column: string, value: unknown) => {
                   cloFilters.push([column, value])
-                  return {
-                    eq: (column2: string, value2: unknown) => {
-                      cloFilters.push([column2, value2])
-                      return { order: (orderColumn: string) => {
-                        expect(orderColumn).toBe('ordinal')
-                        return Promise.resolve(closResult)
-                      } }
-                    },
-                  }
+                  return { order: (orderColumn: string) => {
+                    expect(orderColumn).toBe('ordinal')
+                    return Promise.resolve(closResult)
+                  } }
                 },
               }
             },
@@ -82,14 +77,20 @@ function makeClient(overrides: {
 }
 
 describe('fetchReportData', () => {
-  it('loads clos for the current course only, excludes drafts, and maps every field', async () => {
+  it('loads every clo for the current course, drafts included, and maps every field', async () => {
     const { client, cloFilters } = makeClient()
     const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
-    expect(cloFilters).toEqual([['course', 'INFS1101'], ['draft', false]])
+    expect(cloFilters).toEqual([['course', 'INFS1101']])
     expect(result.clos).toEqual([{
       id: 'INFS1101-1', course: 'INFS1101', ordinal: 1, outcome: 'Write a loop that accumulates a total',
       topics: ['loops'], prerequisites: [], patterns: ['accumulate'], assessableInCode: true,
     }])
+  })
+
+  it('marks a draft clo with a " (draft)" outcome suffix instead of excluding it', async () => {
+    const { client } = makeClient({ clos: { data: [{ ...cloRow, draft: true }], error: null } })
+    const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
+    expect(result.clos).toEqual([expect.objectContaining({ outcome: 'Write a loop that accumulates a total (draft)' })])
   })
 
   it('never queries a different course than the one requested', async () => {

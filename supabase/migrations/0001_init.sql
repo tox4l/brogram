@@ -169,7 +169,7 @@ create policy "read drills" on public.drills for select using (public.is_not_ban
 -- exercises: no client policy at all; service role bypasses RLS
 create policy "own attempts" on public.attempts for select using (user_id = (select auth.uid()) and public.is_not_banned());
 create policy "insert attempts" on public.attempts for insert with check (user_id = (select auth.uid()) and public.can_attempt());
-create policy "own mastery" on public.mastery for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "own mastery" on public.mastery for all using (user_id = (select auth.uid()) and public.is_not_banned()) with check (user_id = (select auth.uid()) and public.is_not_banned());
 create policy "own state" on public.learner_state for all using (user_id = (select auth.uid()) and public.is_not_banned()) with check (user_id = (select auth.uid()) and public.is_not_banned());
 create policy "insert integrity" on public.integrity_events for insert with check (user_id = (select auth.uid()));
 create policy "own wellness" on public.wellness for all using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

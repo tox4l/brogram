@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, AgentName } from '@/lib/contracts'
 import Onboarding from './page'
@@ -169,6 +169,17 @@ describe('onboarding', () => {
     await completeToCoursePicker()
     expect(await screen.findByRole('button', { name: /Programming foundations/ })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'Coming soon' })).toBeTruthy()
+  })
+
+  it('renders a not-yet-live course from the database as a disabled coming-soon tile instead of dropping it', async () => {
+    tables.courses.push({ code: 'C2', slug: 'object-oriented-programming', title: 'Object Oriented Programming', language: 'java', level: 3, status: 'coming-soon' })
+    await completeToCoursePicker()
+    await screen.findByRole('button', { name: /Programming foundations/ })
+    const liveCourses = within(screen.getByRole('group', { name: 'Live courses' }))
+    expect(liveCourses.queryByText('Object Oriented Programming')).toBeNull()
+    const comingSoon = within(screen.getByRole('group', { name: 'Coming soon' }))
+    expect(comingSoon.getByText('Object Oriented Programming')).toBeTruthy()
+    expect(comingSoon.getByRole('button', { name: /Object Oriented Programming/ })).toHaveProperty('disabled', true)
   })
 
   it('fetches candidates for exactly the first three CLOs by ordinal, bounded and ordered, and calls the Planner once', async () => {

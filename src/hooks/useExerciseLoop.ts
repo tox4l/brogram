@@ -115,7 +115,7 @@ export function useExerciseLoop(exerciseId: string) {
         if (!row) throw new Error('This exercise is unavailable. Choose another from your dashboard.')
         const item = toExercisePublic(row)
         const [cloResult, attempts] = await Promise.all([
-          client.from('clos').select('*').eq('id', item.cloId).eq('draft', false).maybeSingle(),
+          client.from('clos').select('*').eq('id', item.cloId).maybeSingle(),
           client.from('attempts').select('id,exercise_id,passed,hint_count,created_at').eq('user_id', userId).order('created_at', { ascending: false }),
         ])
         if (cloResult.error) throw cloResult.error
@@ -200,7 +200,7 @@ export function useExerciseLoop(exerciseId: string) {
     const mastery = state.mastery[operation.exercise.cloId]
     if (mastery.closed) {
       if (!operation.planner) {
-        const { data, error: cloError } = await client.from('clos').select('*').eq('course', operation.clo.course).eq('draft', false)
+        const { data, error: cloError } = await client.from('clos').select('*').eq('course', operation.clo.course)
         if (cloError) throw cloError
         const clos = (data ?? []).map(mapClo)
         const banks = await Promise.all(clos.map(item => fetchBank(client, { cloId: item.id })))
@@ -250,7 +250,7 @@ export function useExerciseLoop(exerciseId: string) {
         console.warn('Exercise generation failed; selecting the nearest bank exercise.', authorError)
         chosen = pickFromBank({ ...query, excludeExerciseIds: [] }, bank)
         if (!chosen) {
-          const { data, error: fallbackError } = await client.from('clos').select('*').eq('course', operation.clo.course).eq('draft', false)
+          const { data, error: fallbackError } = await client.from('clos').select('*').eq('course', operation.clo.course)
           if (fallbackError) throw fallbackError
           const nearby = (await Promise.all((data ?? []).map(item => fetchBank(client, { cloId: String(item.id) })))).flat()
           chosen = nearby.filter(item => item.id !== operation.exercise.id && item.pattern !== operation.exercise.pattern).sort((a, b) => Math.abs(a.difficulty - DEFAULT_DIFFICULTY) - Math.abs(b.difficulty - DEFAULT_DIFFICULTY))[0] ?? null

@@ -10,12 +10,17 @@ export interface ReportData {
 /** Attempts are fetched a page at a time so a long history never truncates silently. */
 const ATTEMPTS_PAGE_SIZE = 1000
 
+/**
+ * `Clo` carries no `draft` field (the frozen contract is not extended for this), so a
+ * draft outcome's marker is baked into the outcome text itself: the same " (draft)"
+ * suffix the report's mastery table then simply renders as part of the row.
+ */
 function mapClo(row: Record<string, unknown>): Clo {
   return {
     id: String(row.id),
     course: String(row.course),
     ordinal: Number(row.ordinal),
-    outcome: String(row.outcome),
+    outcome: row.draft === true ? `${String(row.outcome)} (draft)` : String(row.outcome),
     topics: (row.topics as string[] | null) ?? [],
     prerequisites: (row.prerequisites as string[] | null) ?? [],
     patterns: (row.patterns as string[] | null) ?? [],
@@ -56,17 +61,17 @@ async function fetchAllAttempts(client: SupabaseClient, userId: string): Promise
 }
 
 /**
- * Everything the report needs for one course: the course's non-draft CLOs in
- * ordinal order, the student's full attempt history, and their saved de-rot
- * drill results. Never touches `exercises` — the report needs no bodies.
+ * Everything the report needs for one course: every one of the course's CLOs
+ * (draft ones marked, not hidden) in ordinal order, the student's full attempt
+ * history, and their saved de-rot drill results. Never touches `exercises` —
+ * the report needs no bodies.
  */
 export async function fetchReportData(client: SupabaseClient, userId: string, courseCode: string): Promise<ReportData> {
   const [clos, wellness, attempts] = await Promise.all([
     client
       .from('clos')
-      .select('id,course,ordinal,outcome,topics,prerequisites,patterns,assessable_in_code')
+      .select('id,course,ordinal,outcome,topics,prerequisites,patterns,assessable_in_code,draft')
       .eq('course', courseCode)
-      .eq('draft', false)
       .order('ordinal'),
     client.from('wellness').select('drill_results').eq('user_id', userId).maybeSingle(),
     fetchAllAttempts(client, userId),

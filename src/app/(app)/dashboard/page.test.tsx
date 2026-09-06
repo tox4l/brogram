@@ -30,18 +30,15 @@ vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
     from: (table: string) => ({
       select: (columns: string) => ({
-        eq: (column: string, value: string) => ({
+        eq: (column: string, value: unknown) => ({
           maybeSingle: () => mocks.query(table, columns, column, value),
-          order: () => {
-            const result = mocks.query(table, columns, column, value)
-            return Object.assign(result, { limit: () => result })
+          order: () => mocks.query(table, columns, column, value),
+          // exercises_public reads only the verified bank: eq('verified', true).in('id', ids).
+          in: (inColumn: string, inValue: string[]) => {
+            expect([column, value]).toEqual(['verified', true])
+            return mocks.query(table, columns, inColumn, inValue)
           },
-          eq: (filter: string, expected: boolean) => ({ order: () => {
-            expect([filter, expected]).toEqual(['draft', false])
-            return mocks.query(table, columns, column, value)
-          } }),
         }),
-        in: (column: string, value: string[]) => mocks.query(table, columns, column, value),
       }),
     }),
   }),
@@ -82,8 +79,8 @@ function session(state: LearnerState | null = learnerState(), status = 'active')
 function successfulQuery(table: string) {
   if (table === 'courses') return Promise.resolve({ data: { code: 'course-internal', title: 'Programming foundations', language: 'python' }, error: null })
   if (table === 'clos') return Promise.resolve({ data: [
-    { id: 'clo-internal', ordinal: 1, outcome: 'Write programs with loops' },
-    { id: 'clo-new', ordinal: 2, outcome: 'Organize code into functions' },
+    { id: 'clo-internal', ordinal: 1, outcome: 'Write programs with loops', draft: false },
+    { id: 'clo-new', ordinal: 2, outcome: 'Organize code into functions', draft: false },
   ], error: null })
   if (table === 'exercises_public') return Promise.resolve({ data: [
     { id: 'exercise-a', title: 'Count the vowels', difficulty: 1, language: 'python', clo_id: 'clo-internal' },
@@ -137,6 +134,19 @@ describe('dashboard', () => {
     await screen.findByText('Programming foundations')
     expect(screen.getByText('Start with the basics.')).toBeTruthy()
     expect(screen.queryByText('Your next exercises are still being prepared.')).toBeNull()
+  })
+
+  it('renders a muted marker beside a draft outcome instead of hiding it', async () => {
+    mocks.query.mockImplementation((table: string) => table === 'clos'
+      ? Promise.resolve({ data: [
+        { id: 'clo-internal', ordinal: 1, outcome: 'Write programs with loops', draft: true },
+        { id: 'clo-new', ordinal: 2, outcome: 'Organize code into functions', draft: false },
+      ], error: null })
+      : successfulQuery(table))
+    render(<Dashboard />)
+    await screen.findByText('Write programs with loops')
+    expect(screen.getByText('Draft outcome')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: 'Write programs with loops' })).toBeTruthy()
   })
 
   it('offers an actionable start when no learner state exists without inventing progress', () => {
