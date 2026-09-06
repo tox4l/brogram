@@ -22,7 +22,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 ## Phase 3: Surround
 - [x] A5a Onboarding, buddy drawer, wellness rail (built by Claude subagents under the capacity valve while Codex was down; 1b51977, 1741a41, 8dc981f plus fix rounds; Opus review clean after fixes; live walk-through pending Supabase)
 - [x] A5b De-rot, report, admin (Claude under the capacity valve; components 8743575, ccf018e, 4874144; pages eb531e2, 104c109, 2792249 plus fix rounds; Opus review clean after fixes; live walk-through pending Supabase)
-- [x] C5 Integration tests, Playwright specs, PR reviews (Claude) — three specs and support helpers (5c37091); written, unrun (no Supabase); every Astra task reviewed
+- [x] C5 Integration tests, Playwright specs, PR reviews (Claude) — three flows (5c37091) RUN GREEN against the real project on 2026-09-06 (3b7f24d); every Astra task reviewed
 
 ## Phase 4: Ship
 - [ ] A6 Production deploy (Astra)
