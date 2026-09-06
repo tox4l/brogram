@@ -45,7 +45,11 @@ describe('Supabase request proxy', () => {
     return updateSession(new NextRequest(`https://brogram.test${path}`, { headers }))
   }
 
-  it.each(['/dashboard', '/courses', '/derot', '/reports', '/onboarding', '/exercise/ex_1'])(
+  it.each([
+    '/dashboard', '/courses', '/derot', '/reports', '/onboarding', '/exercise/ex_1',
+    // C3 correction: these three were not behind the gate at all before T1.6.
+    '/account', '/course/C1', '/lesson/C1-1',
+  ])(
     'redirects a signed-out visit to %s even when getClaims has no error', async (path) => {
       mocks.getClaims.mockResolvedValue({ data: null, error: null })
       const response = await visit(path)
@@ -159,7 +163,13 @@ describe('Supabase request proxy', () => {
     },
   )
 
-  it.each(['/dashboard', '/derot'])(
+  it.each([
+    '/dashboard', '/derot',
+    // The restricted screen's copy promises dashboard, walkthroughs and De-rot stay
+    // open — a restricted learner loses only /exercise. /course and /account too:
+    // nothing about switching courses or account settings is an exercise.
+    '/course/C1', '/lesson/C1-1', '/account',
+  ])(
     'keeps %s open for a restricted account', async (path) => {
       mocks.maybeSingle.mockResolvedValue({
         data: { id: 'student', account_status: 'restricted', restricted_until: '2099-09-06T00:00:00Z' }, error: null,

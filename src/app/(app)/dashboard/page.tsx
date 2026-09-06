@@ -115,7 +115,7 @@ export default function Dashboard() {
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{course ? `${languages[course.language] ?? course.language} · ${completed} of ${outcomes.length} outcomes complete` : learnerState?.currentCourse ? 'Your saved progress is kept below.' : 'A course gives your practice a direction. You can change it anytime.'}</p>
             {learnerState?.currentCourse && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{focusLine}</p>}
           </div>
-          <Link href="/onboarding" className={cn(buttonVariants({ variant: learnerState?.currentCourse ? 'outline' : 'default' }), learnerState?.currentCourse ? 'h-9' : 'h-9 bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
+          <Link href={learnerState?.currentCourse ? '/courses' : '/onboarding'} className={cn(buttonVariants({ variant: learnerState?.currentCourse ? 'outline' : 'default' }), learnerState?.currentCourse ? 'h-9' : 'h-9 bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
             {learnerState?.currentCourse ? 'Change course' : 'Choose a course'}<ArrowUpRight aria-hidden="true" />
           </Link>
         </div>
@@ -152,7 +152,7 @@ export default function Dashboard() {
           <div className="mt-3 rounded-xl border border-dashed border-input p-5">
             <p className="text-sm font-medium">{curriculum.loading ? 'Your recommendations are on their way.' : curriculum.failed ? 'Your exercise list is waiting to reconnect.' : exerciseIds.length ? 'These exercises are no longer available.' : 'Your next exercises start here.'}</p>
             <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-muted-foreground">{exerciseIds.length ? 'Review your course to prepare a fresh practice path.' : 'Once your course and learning profile are ready, your next three exercises will appear here.'}</p>
-            {!curriculum.loading && !curriculum.failed && exerciseIds.length > 0 && <Link href="/onboarding" className="mt-3 inline-block rounded-sm text-sm font-medium text-emerald-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Review your course</Link>}
+            {!curriculum.loading && !curriculum.failed && exerciseIds.length > 0 && <Link href="/courses" className="mt-3 inline-block rounded-sm text-sm font-medium text-emerald-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Review your course</Link>}
           </div>
         )}
         {orderedExercises.length > 0 && orderedExercises.length < exerciseIds.length && <p className="mt-3 text-sm text-muted-foreground">Some recommendations are no longer available. Change your course to refresh your path.</p>}

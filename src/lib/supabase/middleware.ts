@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
-  const protectedPage = /^\/(dashboard|onboarding|courses|exercise|derot|reports|admin)(?:\/|$)/.test(pathname)
+  // C3 correction: `/account`, `/course` and `/lesson` were missing here, so
+  // session refresh and the ban/restrict gate never ran on them at all.
+  const protectedPage = /^\/(dashboard|onboarding|courses|course|lesson|exercise|derot|reports|account|admin)(?:\/|$)/.test(pathname)
   const exercisePage = /^\/exercise(?:\/|$)/.test(pathname)
   const pendingCookies = new Map<string, { name: string; value: string; options: CookieOptions }>()
   const cacheHeaders = new Headers({ 'Cache-Control': 'private, no-store' })
@@ -61,6 +63,10 @@ export async function updateSession(request: NextRequest) {
     if (profileError || !profile) return finish('/login?error=account-unavailable')
     account = profile
     if (profile.account_status === 'banned') return finish('/auth/signout')
+    // The restricted screen's own copy promises the learner keeps dashboard,
+    // walkthroughs and De-rot and loses only exercises — so this stays scoped
+    // to `exercisePage` alone. Widening `protectedPage` above to cover
+    // `/account`, `/course` and `/lesson` must never widen this too.
     if (exercisePage && profile.account_status === 'restricted') return finish('/dashboard')
     return finish()
   } catch {

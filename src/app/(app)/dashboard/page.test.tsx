@@ -119,7 +119,8 @@ describe('dashboard', () => {
     expect(screen.getByRole('progressbar', { name: 'Organize code into functions' }).getAttribute('aria-valuenow')).toBe('0')
     expect(screen.queryByText('course-internal')).toBeNull()
     expect(screen.queryByText('clo-internal')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Change course' }).getAttribute('href')).toBe('/onboarding')
+    // T1.6: switching courses moves to its own route; the Profiler never runs again.
+    expect(screen.getByRole('link', { name: 'Change course' }).getAttribute('href')).toBe('/courses')
     expect(screen.getByRole('link', { name: 'Try a de-rot drill' }).getAttribute('href')).toBe('/derot')
   })
 
@@ -209,7 +210,8 @@ describe('dashboard', () => {
       ? Promise.resolve({ data: [], error: null }) : successfulQuery(table))
     render(<Dashboard />)
     await screen.findByText('These exercises are no longer available.')
-    expect(within(screen.getByRole('region', { name: 'Next exercises' })).getByRole('link', { name: 'Review your course' }).getAttribute('href')).toBe('/onboarding')
+    // T1.6: switching courses moves to its own route; the Profiler never runs again.
+    expect(within(screen.getByRole('region', { name: 'Next exercises' })).getByRole('link', { name: 'Review your course' }).getAttribute('href')).toBe('/courses')
   })
 })
 
