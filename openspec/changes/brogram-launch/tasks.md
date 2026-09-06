@@ -27,3 +27,39 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 ## Phase 4: Ship
 - [ ] A6 Production deploy (Astra)
 - [ ] C6 Seed refresh and smoke with Musa (Claude)
+
+## v2 (plan: docs/superpowers/plans/2026-09-06-brogram-v2-plan.md; spec: docs/superpowers/specs/2026-09-06-brogram-v2-bro.md)
+- [ ] T0.0 Dependency and script bootstrap (serial, first, alone)
+- [ ] T0.1 The contracts PR
+- [ ] T0.2 Migrations, seed loader, validator, golden lesson
+- [ ] T0.3 The static curriculum bundle
+- [ ] T0.4 TanStack Query provider, hydration, query keys
+- [ ] T0.5 Sound manager and motion manager
+- [ ] T0.6 Themes: four palettes, tokens, provider, no flash
+- [ ] T0.7 Shell recomposition (Group C)
+- [ ] T1.1 Lesson generation workflow, verifier, and the first batch
+- [ ] T1.2 Lesson grading and progress (pure)
+- [ ] T1.3 The walkthrough screen (Group B)
+- [ ] T1.4 Course home and the path map
+- [ ] T1.5 Onboarding once: six local questions
+- [ ] T1.6 `/courses`, the optimistic course switch, and the proxy matcher
+- [ ] T2.1 Data layer: `(app)/layout.tsx` and the dashboard
+- [ ] T2.2 The optimistic submit path
+- [ ] T2.3 Data layer: Progress and Account
+- [ ] T2.4 The wellness dock
+- [ ] T2.5 Rewards: XP, levels, streaks, achievement predicates (pure)
+- [ ] T2.6 Rewards: celebrations, counters and the trophy shelf
+- [ ] T2.7a The voice bank (Group A)
+- [ ] T2.7b The copy sweep (Group C, serial, last)
+- [ ] T2.8 Honest lockdown and the integrity receipt
+- [ ] T2.9a De-rot Arcade: the hub, the run model, score normalisation
+- [ ] T2.9b De-rot Playground: six non-coding games
+- [ ] T2.10 Agent identity rewrites (copy only, no schema touched)
+- [ ] T2.11 Buddy drawer polish
+- [ ] T3.1 The bundle budget, generated from a measurement
+- [ ] T3.2 Timings, vitals, and the local diagnostics buffer
+- [ ] T3.3 e2e updates
+- [ ] T3.4 The no-agent-surfaces test
+- [ ] T3.5 Openness: the work items that make a fork real
+- [ ] T3.6 Whole-branch review (Group B)
+- [ ] T3.7 Deploy and the ten-minute acceptance run (Group C)
