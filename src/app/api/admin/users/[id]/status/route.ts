@@ -7,6 +7,7 @@ export const runtime = 'nodejs'
 
 const ACTIONS = ['lift', 'restrict', 'ban'] as const
 type Action = (typeof ACTIONS)[number]
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isAction(value: unknown): value is Action {
   return typeof value === 'string' && (ACTIONS as readonly string[]).includes(value)
@@ -28,6 +29,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (admin instanceof Response) return admin
 
   const { id } = await params
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json({ ok: false, error: 'id must be a uuid' }, { status: 400 })
+  }
   const body = (await req.json().catch(() => null)) as { action?: unknown } | null
   if (!isAction(body?.action)) {
     return NextResponse.json({ ok: false, error: 'action must be lift, restrict, or ban' }, { status: 400 })

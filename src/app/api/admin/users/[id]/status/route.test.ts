@@ -39,15 +39,19 @@ import { POST } from './route'
 
 const ORIGINAL_ADMIN_USER_IDS = process.env.ADMIN_USER_IDS
 
+const U1 = '11111111-1111-1111-1111-111111111111'
+const U2 = '22222222-2222-2222-2222-222222222222'
+const U3 = '33333333-3333-3333-3333-333333333333'
+
 function post(body: unknown) {
-  return new Request('http://localhost/api/admin/users/u1/status', {
+  return new Request(`http://localhost/api/admin/users/${U1}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: typeof body === 'string' ? body : JSON.stringify(body),
   })
 }
 
-function ctx(id = 'u1') {
+function ctx(id = U1) {
   return { params: Promise.resolve({ id }) }
 }
 
@@ -73,22 +77,28 @@ describe('POST /api/admin/users/[id]/status', () => {
     expect((await POST(post({ action: 'lift' }), ctx())).status).toBe(404)
   })
 
+  it('rejects a non-uuid id before touching the service client', async () => {
+    const res = await POST(post({ action: 'lift' }), ctx('not-a-uuid'))
+    expect(res.status).toBe(400)
+    expect(db.state.calls).toEqual([])
+  })
+
   it('rejects an unknown action', async () => {
     const res = await POST(post({ action: 'delete' }), ctx())
     expect(res.status).toBe(400)
   })
 
   it('lift sets account_status active and clears restricted_until', async () => {
-    const res = await POST(post({ action: 'lift' }), ctx('u1'))
+    const res = await POST(post({ action: 'lift' }), ctx(U1))
     expect(res.status).toBe(200)
     const update = db.state.calls.find((c) => c.method === 'update')!
     expect(update.args[0]).toEqual({ account_status: 'active', restricted_until: null })
-    expect(db.state.calls.find((c) => c.method === 'eq')?.args).toEqual(['id', 'u1'])
+    expect(db.state.calls.find((c) => c.method === 'eq')?.args).toEqual(['id', U1])
   })
 
   it('restrict sets account_status restricted with a restricted_until 24h out', async () => {
     const before = Date.now()
-    const res = await POST(post({ action: 'restrict' }), ctx('u2'))
+    const res = await POST(post({ action: 'restrict' }), ctx(U2))
     expect(res.status).toBe(200)
     const update = db.state.calls.find((c) => c.method === 'update')!
     const patch = update.args[0] as { account_status: string; restricted_until: string }
@@ -97,14 +107,14 @@ describe('POST /api/admin/users/[id]/status', () => {
     const hours = (until - before) / (60 * 60 * 1000)
     expect(hours).toBeGreaterThan(23.9)
     expect(hours).toBeLessThan(24.1)
-    expect(db.state.calls.find((c) => c.method === 'eq')?.args).toEqual(['id', 'u2'])
+    expect(db.state.calls.find((c) => c.method === 'eq')?.args).toEqual(['id', U2])
   })
 
   it('ban sets account_status banned', async () => {
-    const res = await POST(post({ action: 'ban' }), ctx('u3'))
+    const res = await POST(post({ action: 'ban' }), ctx(U3))
     expect(res.status).toBe(200)
     const update = db.state.calls.find((c) => c.method === 'update')!
     expect(update.args[0]).toEqual({ account_status: 'banned' })
-    expect(db.state.calls.find((c) => c.method === 'eq')?.args).toEqual(['id', 'u3'])
+    expect(db.state.calls.find((c) => c.method === 'eq')?.args).toEqual(['id', U3])
   })
 })

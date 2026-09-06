@@ -1,13 +1,9 @@
 import type { ReactNode } from 'react'
-import { notFound } from 'next/navigation'
-import { getUserAndProfile } from '@/lib/supabase/server'
-import { isAdmin } from '@/lib/admin/gate'
 import { Toaster } from '@/components/ui/sonner'
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const { user } = await getUserAndProfile()
-  if (!isAdmin(user?.id)) notFound()
-
+// The admin gate lives one level up, in src/app/(admin)/layout.tsx, so it
+// covers every route in the group. This layout is chrome only.
+export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col gap-8 px-6 py-10">
       <header className="flex items-baseline justify-between gap-4 border-b border-border pb-4">

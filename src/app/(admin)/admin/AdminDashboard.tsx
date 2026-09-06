@@ -5,7 +5,6 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { AgentUsageTable, BankStatsTable, InvitesTable, MintInviteForm, UsersTable } from '@/components/admin'
 import type { AgentUsageRow, BankStatRow, CloRef, InviteRow, UserRow } from '@/components/admin/types'
-import { createClient } from '@/lib/supabase/client'
 
 interface ErrorBody {
   ok: false
@@ -81,7 +80,7 @@ function InvitesSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       })
-      toast.success(`Invite sent to ${email}`)
+      toast.success(`Invite minted for ${email}`)
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not mint invite')
@@ -166,14 +165,9 @@ function BankSection() {
     setStats(null)
     setClos(null)
     try {
-      const supabase = createClient()
-      const [statsBody, closResult] = await Promise.all([
-        getJson<{ ok: true; stats: BankStatRow[] }>('/api/admin/bank-stats'),
-        supabase.from('clos').select('id, ordinal, course, patterns').order('course').order('ordinal'),
-      ])
-      if (closResult.error) throw new Error('Could not load CLOs')
-      setStats(statsBody.stats)
-      setClos((closResult.data ?? []) as unknown as CloRef[])
+      const body = await getJson<{ ok: true; stats: BankStatRow[]; clos: CloRef[] }>('/api/admin/bank-stats')
+      setStats(body.stats)
+      setClos(body.clos)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load bank stats')
     }
