@@ -1,6 +1,9 @@
+import type { ReactElement } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, LearnerState } from '@/lib/contracts'
+import { qk } from '@/lib/query/keys'
 import { QUESTIONS } from '@/lib/onboarding/questions'
 import Onboarding from './page'
 
@@ -17,6 +20,10 @@ import Onboarding from './page'
  * call left in onboarding is the single background Profiler refinement, which by design never
  * surfaces an error to the learner (spec R4.2.5) — course selection and its own error recovery
  * move to `/courses` (T1.6).
+ *
+ * Fix round 1 (Opus review) added: onboardingComplete is now persisted in its own write, started
+ * immediately rather than after the Profiler call settles (Critical C1), and every write also
+ * updates the TanStack Query cache `/courses` reads from (Important I2) — both covered below.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -34,6 +41,7 @@ const envelope = (reply: unknown, fallback = false): AgentEnvelope<unknown> => (
 
 type Row = Record<string, unknown>
 let learnerStateRows: Row[]
+let queryClient: QueryClient
 
 function baseLearnerState(overrides: Partial<{ version: number; onboardingComplete: boolean }> = {}): LearnerState {
   return {
@@ -104,10 +112,14 @@ function currentRow(): LearnerState {
   return row.state as LearnerState
 }
 
+function renderPage(ui: ReactElement = <Onboarding />) {
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+}
+
 /** Answers the first five questions with each question's first option, advancing past the option-fill delay each time. */
 async function answerFirstFive() {
   for (let i = 0; i < 5; i += 1) {
-    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[i].options[0].label }))
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[i].options[0].label }))
     await screen.findByText(QUESTIONS[i + 1].text)
   }
 }
@@ -115,6 +127,7 @@ async function answerFirstFive() {
 beforeEach(() => {
   vi.clearAllMocks()
   learnerStateRows = [{ user_id: 'student', state: baseLearnerState(), version: 4 }]
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   mocks.session.mockReturnValue(session())
   mocks.from.mockImplementation(() => learnerStateBuilder())
 })
@@ -122,89 +135,124 @@ afterEach(cleanup)
 
 describe('onboarding', () => {
   it('shows exactly the first of six local questions on mount and calls no agent', () => {
-    render(<Onboarding />)
+    renderPage()
     expect(screen.getByText(QUESTIONS[0].text)).toBeTruthy()
+    expect(screen.getByText('Question 1 of 6')).toBeTruthy()
     expect(QUESTIONS).toHaveLength(6)
     expect(mocks.call).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
-    const progress = screen.getByRole('img', { name: 'Question 1 of 6' })
-    expect(progress.children).toHaveLength(6)
   })
 
-  it('focuses the first option so the flow is usable by keyboard alone', () => {
-    render(<Onboarding />)
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: QUESTIONS[0].options[0].label }))
+  it('focuses the card (not an option) so the heading is announced before any option', () => {
+    renderPage()
+    const heading = screen.getByRole('heading', { name: QUESTIONS[0].text })
+    expect(document.activeElement?.contains(heading)).toBe(true)
   })
 
   it('answers questions one through five entirely locally: zero agent calls, each tap advances the card', async () => {
-    render(<Onboarding />)
+    renderPage()
     await answerFirstFive()
     expect(screen.getByText(QUESTIONS[5].text)).toBeTruthy()
     expect(mocks.call).not.toHaveBeenCalled()
   })
 
-  it('fires exactly one Profiler call on the sixth answer and advances to /courses without awaiting it', async () => {
+  it('fires exactly one Profiler call on the sixth answer and persists onboardingComplete before that call ever resolves', async () => {
     let resolveCall!: (value: AgentEnvelope<unknown>) => void
     mocks.call.mockImplementationOnce(() => new Promise((resolve) => { resolveCall = resolve }))
-    render(<Onboarding />)
+    renderPage()
     await answerFirstFive()
 
-    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
 
-    // The stage has already advanced; only now do we resolve the still-pending call.
     expect(mocks.call).toHaveBeenCalledTimes(1)
     expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ agent: 'profiler', trigger: 'onboarding-answer', phase: 2 }))
     const request = mocks.call.mock.calls[0][0]
     expect(request.answers).toEqual(QUESTIONS.map((q) => ({ questionId: q.id, answer: q.options[0].label })))
 
-    resolveCall(envelope({ nextQuestion: null, done: true, profileDelta: {} }))
+    // Fix round 1 (Critical C1): the completing write must not depend on the Profiler call
+    // resolving — assert it lands first, with the still-pending call never having been resolved.
     await waitFor(() => expect(currentRow().version).toBe(5))
     expect(currentRow().profile.onboardingComplete).toBe(true)
+    expect(queryClient.getQueryData(qk.learnerState('student'))).toMatchObject({ version: 5, profile: { onboardingComplete: true } })
+
+    resolveCall(envelope({ nextQuestion: null, done: true, profileDelta: {} }))
+    await waitFor(() => expect(currentRow().version).toBe(5))
+  })
+
+  it('a reload between the completing write and the Profiler response never re-asks and never re-calls (fix round 1, C1)', async () => {
+    let resolveCall!: (value: AgentEnvelope<unknown>) => void
+    mocks.call.mockImplementationOnce(() => new Promise((resolve) => { resolveCall = resolve }))
+    renderPage()
+    await answerFirstFive()
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
+
+    // The completing write has landed; the Profiler call is still pending.
+    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    expect(mocks.call).toHaveBeenCalledTimes(1)
+
+    // Simulate a hard reload: a brand-new mount, backed by the now-persisted row, in a fresh
+    // query cache — exactly what a real page load would rehydrate from Postgres.
+    cleanup()
+    mocks.session.mockReturnValue({ ...session(), learnerState: currentRow() })
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderPage()
+
+    expect(mocks.redirect).toHaveBeenCalledWith('/courses')
+    expect(screen.queryByText(QUESTIONS[0].text)).toBeNull()
+    expect(mocks.call).toHaveBeenCalledTimes(1) // still just the one call from before the "reload"
+
+    resolveCall(envelope({ nextQuestion: null, done: true, profileDelta: {} }))
   })
 
   it('completes onboarding with the provisional profile and onboardingComplete: true when the Profiler call rejects', async () => {
     mocks.call.mockRejectedValueOnce(new Error('upstream unavailable'))
-    render(<Onboarding />)
+    renderPage()
     await answerFirstFive()
-    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
 
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
     await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
-    expect(currentRow().version).toBe(5)
+    expect(currentRow().version).toBe(5) // one write only — the rejected call never triggers a second
     // Locally-scored values from the taps above stand: p2q1's first option is "To pass my
-    // courses" (motivation.why) and p2q5's first option is "Playful" (tone).
+    // courses" (motivation.why and, fix round 1 I1, motivation.depth: 'pass'); p2q5's first
+    // option is "Playful" (tone).
     expect(currentRow().profile.motivation.why).toBe('To pass my courses')
+    expect(currentRow().profile.motivation.depth).toBe('pass')
     expect(currentRow().profile.tone).toBe('playful')
     expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ version: 5 }))
+    expect(queryClient.getQueryData(qk.learnerState('student'))).toMatchObject({ version: 5 })
   })
 
-  it('merges a genuine (non-fallback) Profiler reply over the provisional profile, motivation key-by-key', async () => {
+  it('merges a genuine (non-fallback) Profiler reply over the completed profile, motivation key-by-key, in a second write', async () => {
     mocks.call.mockResolvedValueOnce(envelope({ nextQuestion: null, done: true, profileDelta: { tone: 'direct', motivation: { depth: 'master' } } }, false))
-    render(<Onboarding />)
+    renderPage()
     await answerFirstFive()
-    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
 
-    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    await waitFor(() => expect(currentRow().version).toBe(6)) // the completing write, then the merge write
     expect(currentRow().profile.tone).toBe('direct')
     expect(currentRow().profile.motivation.depth).toBe('master')
     // `why` was decided locally by the p2q1 tap and must survive a delta that only carries `depth`.
     expect(currentRow().profile.motivation.why).toBe('To pass my courses')
+    expect(currentRow().profile.onboardingComplete).toBe(true)
+    expect(queryClient.getQueryData(qk.learnerState('student'))).toMatchObject({ version: 6, profile: { tone: 'direct' } })
   })
 
-  it('treats a fallback reply (AGENT_DRY_RUN or an exhausted retry) like a failure: the provisional profile stands', async () => {
+  it('treats a fallback reply (AGENT_DRY_RUN or an exhausted retry) like a failure: no second write, the completed profile stands', async () => {
     mocks.call.mockResolvedValueOnce(envelope({ nextQuestion: null, done: true, profileDelta: { tone: 'direct' } }, true))
-    render(<Onboarding />)
+    renderPage()
     await answerFirstFive()
-    fireEvent.click(screen.getByRole('button', { name: QUESTIONS[5].options[0].label }))
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
 
     await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    expect(currentRow().version).toBe(5)
     expect(currentRow().profile.tone).toBe('playful')
   })
 
   it('redirects to /courses and renders no question when onboardingComplete is already true', () => {
     mocks.session.mockReturnValue(session({ onboardingComplete: true }))
-    render(<Onboarding />)
+    renderPage()
     expect(mocks.redirect).toHaveBeenCalledWith('/courses')
     expect(screen.queryByText(QUESTIONS[0].text)).toBeNull()
     expect(mocks.call).not.toHaveBeenCalled()

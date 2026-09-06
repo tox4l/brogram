@@ -15,15 +15,18 @@ describe('QUESTIONS anti-drift', () => {
     expect(MAX_QUESTIONS).toBe(6)
   })
 
-  it('the four phase-1 questions are the fixture entries in order, verbatim', () => {
+  it('the four phase-1 questions are exactly p1f1..p1f4, verbatim, from the fixture', () => {
+    // Pinned as literals (fix round 1, Minor M1), not derived by re-slicing the fixture: a
+    // reorder or an inserted entry in profiler-fallback.json must fail this test, not silently
+    // change which four questions a learner sees.
     const phase1 = QUESTIONS.filter((q) => q.phase === 1)
-    expect(phase1).toHaveLength(4)
-    const source = fallbackQuestions.questions.slice(0, 4)
-    expect(phase1.map((q) => q.id)).toEqual(source.map((q) => q.id))
-    phase1.forEach((question, i) => {
-      expect(question.text).toBe(source[i].text)
-      expect(question.options.map((o) => o.label)).toEqual(source[i].options.map((o) => o.text))
-      expect(question.options.map((o) => o.value)).toEqual(source[i].options.map((o) => o.text))
+    expect(phase1.map((q) => q.id)).toEqual(['p1f1', 'p1f2', 'p1f3', 'p1f4'])
+    const byId = new Map(fallbackQuestions.questions.map((q) => [q.id, q]))
+    phase1.forEach((question) => {
+      const source = byId.get(question.id)!
+      expect(question.text).toBe(source.text)
+      expect(question.options.map((o) => o.label)).toEqual(source.options.map((o) => o.text))
+      expect(question.options.map((o) => o.value)).toEqual(source.options.map((o) => o.text))
     })
   })
 

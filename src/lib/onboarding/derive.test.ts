@@ -63,21 +63,35 @@ describe('provisionalProfile (new: the whole six-answer set, scored locally, zer
     expect(profile.styleVector.theory).toBeGreaterThan(0)
   })
 
-  it('sets motivation.why and tone from the two phase-2 answers, key-by-key over the default', () => {
+  it('sets motivation.why, motivation.depth, and tone from the two phase-2 answers, key-by-key over the default', () => {
     const profile = provisionalProfile(SIX_ANSWERS)
     expect(profile.motivation.why).toBe('To build something')
+    expect(profile.motivation.depth).toBe('master')
     expect(profile.tone).toBe('playful')
   })
 
-  it('keeps the cut fields at their onboarding default: beyondCourses, wantsAgenticCoding, verbosity, depth', () => {
+  it.each([
+    ['To pass my courses', 'pass'],
+    ['To get good at this', 'understand'],
+    ['To build something', 'master'],
+    ['I am not sure yet', 'understand'],
+  ] as const)('derives motivation.depth from the p2q1 answer %s -> %s (fix round 1, I1)', (answer, depth) => {
+    const profile = provisionalProfile([{ questionId: 'p2q1', answer }])
+    expect(profile.motivation.depth).toBe(depth)
+  })
+
+  it('keeps the cut fields at their onboarding default: beyondCourses, wantsAgenticCoding, verbosity', () => {
     const profile = provisionalProfile(SIX_ANSWERS)
     expect(profile.motivation.beyondCourses).toBe(INITIAL_PROFILE.motivation.beyondCourses)
     expect(profile.motivation.wantsAgenticCoding).toBe(INITIAL_PROFILE.motivation.wantsAgenticCoding)
-    expect(profile.motivation.depth).toBe(INITIAL_PROFILE.motivation.depth)
     expect(profile.verbosity).toBe(INITIAL_PROFILE.verbosity)
   })
 
-  it('never sets onboardingComplete itself — the caller writes that after the background call settles', () => {
+  it('falls back to the onboarding default depth when p2q1 was never answered', () => {
+    expect(provisionalProfile([]).motivation.depth).toBe(INITIAL_PROFILE.motivation.depth)
+  })
+
+  it('never sets onboardingComplete itself — the caller decides when to write that', () => {
     expect(provisionalProfile(SIX_ANSWERS).onboardingComplete).toBe(false)
   })
 

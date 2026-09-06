@@ -96,21 +96,39 @@ export function motivationFromAnswers(answers: ProfilerRequest['answers']): Prof
 }
 
 /**
+ * `p2q1` ("Why are you learning to code right now?") feeds both `motivation.why` (via
+ * `motivationFromAnswers` above) and `motivation.depth` (fix round 1, Important I1): the brief's
+ * Step-1 table lists Feeds as `motivation.why`, `motivation.depth` for that one question, and its
+ * cut list conspicuously does not name `depth`. `motivationFromAnswers` itself stays untouched and
+ * sparse — `src/lib/agents/profiler.test.ts:149` pins that shape — so the derivation lives here,
+ * inside the local-only path, and a genuine Profiler reply's own `profileDelta.motivation.depth`
+ * (if the live model ever sends one for `p2q3`, which this six-question set never asks) still wins.
+ */
+const DEPTH_BY_WHY: Record<string, LearnerProfile['motivation']['depth']> = {
+  'To pass my courses': 'pass',
+  'To get good at this': 'understand',
+  'To build something': 'master',
+  'I am not sure yet': 'understand',
+}
+
+/**
  * The whole six-question answer set, scored locally with zero network calls (spec R4.2):
- * style/learningStyle from the phase-1 answers, tone and whichever motivation keys the phase-2
- * answers decided, everything else (verbosity, beyondCourses, wantsAgenticCoding) at the
- * onboarding default because those questions were cut from the six (brief R4.1) — the Buddy and
- * Account own asking for them later, never onboarding again.
+ * style/learningStyle from the phase-1 answers, tone/why/depth from the phase-2 answers,
+ * everything else (verbosity, beyondCourses, wantsAgenticCoding) at the onboarding default because
+ * those questions were cut from the six (brief R4.1) — the Buddy and Account own asking for them
+ * later, never onboarding again.
  */
 export function provisionalProfile(answers: { questionId: string; answer: string }[]): WorkingProfile {
   const { styleVector, learningStyle } = styleFromAnswers(answers)
   const delta = motivationFromAnswers(answers)
+  const whyAnswer = answers.find((a) => a.questionId === 'p2q1')?.answer
+  const depth = delta.motivation?.depth ?? (whyAnswer ? DEPTH_BY_WHY[whyAnswer] : undefined) ?? INITIAL_PROFILE.motivation.depth
   return {
     ...INITIAL_PROFILE,
     styleVector,
     learningStyle,
     tone: delta.tone ?? INITIAL_PROFILE.tone,
     verbosity: delta.verbosity ?? INITIAL_PROFILE.verbosity,
-    motivation: delta.motivation ? { ...INITIAL_PROFILE.motivation, ...delta.motivation } : INITIAL_PROFILE.motivation,
+    motivation: { ...INITIAL_PROFILE.motivation, ...delta.motivation, depth },
   }
 }
