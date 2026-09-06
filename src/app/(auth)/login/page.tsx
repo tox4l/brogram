@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 const MAGIC_LINK_ENABLED = process.env.NEXT_PUBLIC_AUTH_MAGIC_LINK === 'true'
 
 const linkErrors: Record<string, string> = {
-  'invalid-link': 'This sign-in link has expired or is invalid. Request a new one below.',
+  'invalid-link': 'This sign-in link has expired or is invalid. Sign in with your password, or ask Velocity for a new account.',
   'state-unavailable': 'Your link was verified, but your learning profile could not be loaded. Try opening your dashboard again.',
   'sign-in-unavailable': 'Sign-in is unavailable right now. Try again shortly.',
   'account-unavailable': 'Your account could not be checked. Try again shortly.',
@@ -22,13 +22,18 @@ const linkErrors: Record<string, string> = {
 
 type SupabaseClient = ReturnType<typeof createClient>
 
-/** Mirrors the routing rule in src/app/auth/confirm/route.ts so both sign-in paths agree. */
+/**
+ * Mirrors the routing rule in src/app/auth/confirm/route.ts so both sign-in paths agree.
+ * A failed read must never be treated as "no learner_state yet" — that would send an
+ * existing, onboarded learner back through onboarding. Fall back to the dashboard instead.
+ */
 async function destinationAfterSignIn(supabase: SupabaseClient, userId: string): Promise<string> {
-  const { data: learner } = await supabase
+  const { data: learner, error } = await supabase
     .from('learner_state')
     .select('state')
     .eq('user_id', userId)
     .maybeSingle()
+  if (error) return '/dashboard'
   const state = learner as { state?: { profile?: { onboardingComplete?: boolean } } } | null
   return state?.state?.profile?.onboardingComplete === true ? '/dashboard' : '/onboarding'
 }
@@ -45,8 +50,10 @@ function PasswordLoginForm() {
     if (submitting) return
     setSubmitting(true)
     setError(null)
+
+    const supabase = createClient()
+    let userId: string
     try {
-      const supabase = createClient()
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -56,13 +63,23 @@ function PasswordLoginForm() {
         setSubmitting(false)
         return
       }
-      const destination = await destinationAfterSignIn(supabase, data.user.id)
+      userId = data.user.id
+    } catch {
+      setError('We could not sign you in. Try again shortly.')
+      setSubmitting(false)
+      return
+    }
+
+    // The user is authenticated at this point. A failure below — reading their
+    // learner_state, or the navigation itself — must never be reported as a failed
+    // sign-in; fall back to the dashboard instead of leaving them stuck on this form.
+    try {
+      const destination = await destinationAfterSignIn(supabase, userId)
       // signInWithPassword persists the session to cookies before resolving, so a client-side
       // navigation already carries them; no full page load is required.
       router.replace(destination)
     } catch {
-      setError('We could not sign you in. Try again shortly.')
-      setSubmitting(false)
+      router.replace('/dashboard')
     }
   }
 

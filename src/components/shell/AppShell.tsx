@@ -34,7 +34,13 @@ export function AppShell({ children, wellnessRail, buddy }: {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto">{buddy ?? <BuddyButton />}</div>
+          <div className="ml-auto flex items-center gap-4">
+            <Link href="/account" aria-current={pathname.startsWith('/account') ? 'page' : undefined}
+              className="rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none">
+              Account
+            </Link>
+            {buddy ?? <BuddyButton />}
+          </div>
         </div>
       </header>
       <div className={cn('mx-auto grid w-full max-w-7xl flex-1 px-5 py-6 sm:px-8', exercise ? 'content-start gap-4' : 'gap-8 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10')}>

@@ -38,12 +38,22 @@ describe('CreateAccountForm', () => {
     expect(screen.getByText(/at least 8 characters/i)).toBeTruthy()
   })
 
-  it('fills a 12-character password from the generate button', () => {
+  it('fills a 12-character password from the generate button, excluding visually ambiguous characters', () => {
     render(<CreateAccountForm />)
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    for (let i = 0; i < 25; i += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+      const input = screen.getByLabelText('Temporary password') as HTMLInputElement
+      expect(input.value).toHaveLength(12)
+      expect(input.value).toMatch(/^[A-Za-z0-9]+$/)
+      expect(input.value).not.toMatch(/[0O1lIio]/)
+    }
+  })
+
+  it('disables autocomplete and spellcheck on the temporary-password input', () => {
+    render(<CreateAccountForm />)
     const input = screen.getByLabelText('Temporary password') as HTMLInputElement
-    expect(input.value).toHaveLength(12)
-    expect(input.value).toMatch(/^[A-Za-z0-9]+$/)
+    expect(input.getAttribute('autocomplete')).toBe('off')
+    expect(input.getAttribute('spellcheck')).toBe('false')
   })
 
   it('posts the trimmed, lowercased email and shows the created email with the temporary password once', async () => {
@@ -64,6 +74,20 @@ describe('CreateAccountForm', () => {
     expect(body).toEqual({ email: 'learner@uni.edu.qa', password: 'longenough1', displayName: 'Learner' })
 
     expect((screen.getByLabelText('Account email') as HTMLInputElement).value).toBe('')
+    expect(screen.getByRole('status').textContent).toContain('change this password on their Account page')
+  })
+
+  it('dismisses the shown-once panel when Dismiss is clicked', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({ ok: true, id: 'new-uid', email: 'learner@uni.edu.qa' })))
+    render(<CreateAccountForm />)
+
+    fireEvent.change(screen.getByLabelText('Account email'), { target: { value: 'learner@uni.edu.qa' } })
+    fireEvent.change(screen.getByLabelText('Temporary password'), { target: { value: 'longenough1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('shows the error message when the request fails', async () => {

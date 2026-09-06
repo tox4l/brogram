@@ -61,6 +61,22 @@ describe('email and password login', () => {
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/dashboard'))
   })
 
+  it('routes to dashboard, never onboarding, when the learner_state read fails', async () => {
+    mocks.signInWithPassword.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
+    mocks.maybeSingle.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
+    await submitPassword()
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/dashboard'))
+    expect(mocks.replace).not.toHaveBeenCalledWith('/onboarding')
+  })
+
+  it('falls back to the dashboard, without a sign-in error, when the post-auth lookup throws', async () => {
+    mocks.signInWithPassword.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
+    mocks.maybeSingle.mockRejectedValue(new Error('network down'))
+    await submitPassword()
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/dashboard'))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('shows the Supabase error verbatim on failure and does not navigate', async () => {
     const message = 'Invalid login credentials'
     mocks.signInWithPassword.mockResolvedValue({ data: { user: null }, error: { message } })

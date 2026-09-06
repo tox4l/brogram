@@ -4,8 +4,9 @@ import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
-// Excludes visually ambiguous characters (0/O, 1/l/I) so a handed-over password is easy to retype.
-const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+// Excludes visually ambiguous characters (0/O, 1/l/I, and i/o alongside l) so a
+// handed-over password is easy to read aloud and retype without mistakes.
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
 const PASSWORD_LENGTH = 12
 const MIN_PASSWORD_LENGTH = 8
 
@@ -88,6 +89,8 @@ export function CreateAccountForm({ onCreated }: CreateAccountFormProps) {
             placeholder="Temporary password"
             disabled={busy}
             aria-label="Temporary password"
+            autoComplete="off"
+            spellCheck={false}
             className="w-44"
           />
           <Button type="button" variant="outline" disabled={busy} onClick={() => setPassword(generatePassword())}>
@@ -104,14 +107,26 @@ export function CreateAccountForm({ onCreated }: CreateAccountFormProps) {
           className="w-48"
         />
         <Button type="submit" disabled={busy}>
-          {busy ? 'Creating...' : 'Create account'}
+          {busy ? 'Creating…' : 'Create account'}
         </Button>
       </form>
       {error && <p className="text-xs text-destructive">{error}</p>}
       {created && (
-        <p role="status" className="text-sm leading-relaxed">
-          Account created for {created.email}. Temporary password: <span className="font-mono">{created.password}</span> — hand this to the learner now, it will not be shown again.
-        </p>
+        <div role="status" className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+          <div className="space-y-1 text-sm leading-relaxed">
+            <p>
+              Account created for {created.email}. Temporary password: <span className="font-mono">{created.password}</span> — hand this to the learner now, it will not be shown again.
+            </p>
+            <p className="text-muted-foreground">Ask them to change this password on their Account page after the first sign-in.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreated(null)}
+            className="shrink-0 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
     </div>
   )

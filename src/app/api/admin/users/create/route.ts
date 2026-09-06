@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { requireAdmin } from '@/lib/admin/gate'
 import { serviceClient } from '@/lib/supabase/server'
 
@@ -31,6 +32,33 @@ export async function POST(req: Request) {
   }
 
   const svc = serviceClient()
+
+  const { data: existingInvite, error: existingInviteError } = await svc
+    .from('invites')
+    .select('email, redeemed_at')
+    .eq('email', email)
+    .maybeSingle()
+  if (existingInviteError) {
+    return NextResponse.json({ ok: false, error: existingInviteError.message }, { status: 500 })
+  }
+  // A redeemed invite means the trigger already saw an auth.users row for this email.
+  if (existingInvite && existingInvite.redeemed_at) {
+    return NextResponse.json({ ok: false, error: 'an account for this email already exists' }, { status: 409 })
+  }
+  // Only clean up on failure if this call is the one that created the row; a
+  // pre-existing unredeemed invite (e.g. minted via /api/admin/invites) is left alone.
+  const inviteExistedBeforehand = existingInvite !== null
+
+  // Upsert the invite BEFORE creating the auth user: handle_new_user redeems a matching
+  // unredeemed invite as soon as the auth.users row lands, so the invite must exist first.
+  const { error: upsertError } = await svc.from('invites').upsert(
+    { code: randomUUID(), email, created_by: admin.user.id, redeemed_at: null, redeemed_by: null },
+    { onConflict: 'email' },
+  )
+  if (upsertError) {
+    return NextResponse.json({ ok: false, error: upsertError.message }, { status: 500 })
+  }
+
   const { data, error } = await svc.auth.admin.createUser({
     email,
     password,
@@ -39,21 +67,11 @@ export async function POST(req: Request) {
   })
 
   if (error || !data.user) {
+    if (!inviteExistedBeforehand) {
+      await svc.from('invites').delete().eq('email', email)
+    }
     const status = error?.code === 'email_exists' || error?.code === 'user_already_exists' ? 409 : 500
     return NextResponse.json({ ok: false, error: error?.message ?? 'unable to create account' }, { status })
-  }
-
-  // Admin-issued accounts skip the invite-redemption flow entirely; this row exists only
-  // so the redemption gate hook still finds a record for the email.
-  const { error: inviteError } = await svc.from('invites').insert({
-    code: crypto.randomUUID(),
-    email,
-    created_by: admin.user.id,
-    redeemed_by: data.user.id,
-    redeemed_at: new Date().toISOString(),
-  })
-  if (inviteError) {
-    return NextResponse.json({ ok: false, error: inviteError.message }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true, id: data.user.id, email: data.user.email }, { status: 201 })
