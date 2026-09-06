@@ -59,6 +59,11 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
 
     const nextExercises = page.getByRole('region', { name: 'Next exercises' })
     await expect(nextExercises).toBeVisible()
+    // The dashboard fetches course/exercise details client-side after mount (useCurriculum in
+    // src/app/(app)/dashboard/page.tsx), so the link list is empty for a moment right after
+    // navigation. Wait for that fetch to settle before deciding which branch below applies —
+    // otherwise this races and can catch the loading placeholder instead of the real outcome.
+    await expect(page.getByText('Loading your course and exercise details. Your saved progress is ready.')).toBeHidden()
     const firstExerciseLink = nextExercises.getByRole('link').first()
     if (await firstExerciseLink.count()) {
       // The chosen course had at least one candidate exercise per outcome; open the first one listed.
