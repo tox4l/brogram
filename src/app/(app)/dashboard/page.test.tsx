@@ -1,8 +1,26 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LearnerState } from '@/lib/contracts'
 import Dashboard from './page'
 import { AppShell } from '@/components/shell/AppShell'
+
+// sonner's Toaster (mounted by the wellness rail) reads window.matchMedia for OS theme
+// detection. Real browsers always have it; jsdom does not, and Rail.tsx no longer patches
+// it in for production, so the "app shell" tests below must stub it themselves.
+beforeAll(() => {
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+  }
+})
 
 const mocks = vi.hoisted(() => ({ session: vi.fn(), query: vi.fn(), pathname: vi.fn() }))
 
@@ -14,7 +32,10 @@ vi.mock('@/lib/supabase/client', () => ({
       select: (columns: string) => ({
         eq: (column: string, value: string) => ({
           maybeSingle: () => mocks.query(table, columns, column, value),
-          order: () => mocks.query(table, columns, column, value),
+          order: () => {
+            const result = mocks.query(table, columns, column, value)
+            return Object.assign(result, { limit: () => result })
+          },
           eq: (filter: string, expected: boolean) => ({ order: () => {
             expect([filter, expected]).toEqual(['draft', false])
             return mocks.query(table, columns, column, value)
@@ -70,6 +91,8 @@ function successfulQuery(table: string) {
     { id: 'exercise-c', title: 'Trace the loop', difficulty: 3, language: 'python', clo_id: 'clo-internal' },
     { id: 'exercise-d', title: 'An exercise for later', difficulty: 4, language: 'python', clo_id: 'clo-new' },
   ], error: null })
+  if (table === 'wellness') return Promise.resolve({ data: null, error: null })
+  if (table === 'buddy_messages') return Promise.resolve({ data: [], error: null })
   throw new Error(`Unexpected table: ${table}`)
 }
 
@@ -163,8 +186,12 @@ describe('app shell', () => {
   it('keeps the exercise root wellness strip compact', () => {
     mocks.pathname.mockReturnValue('/exercise')
     render(<AppShell><h1>Choose an exercise</h1></AppShell>)
-    expect(screen.queryByText('Keep a little balance.')).toBeNull()
-    expect(screen.getByText(/Take a breath between exercises/)).toBeTruthy()
+    // The compact strip renders the same water/stretch controls inline instead of the
+    // full rail's labelled buttons and headings.
+    expect(screen.queryByText('Water & stretch')).toBeNull()
+    expect(screen.queryByText('Log water')).toBeNull()
+    expect(screen.getByText('Water')).toBeTruthy()
+    expect(screen.getByText('Stretch')).toBeTruthy()
   })
 
   it('offers accessible navigation, a wellness slot, and a contextual Buddy dialog', async () => {
@@ -176,8 +203,7 @@ describe('app shell', () => {
     expect(screen.getByRole('complementary', { name: 'Wellness' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Buddy' }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Your coding Buddy' })).toBeTruthy())
-    expect(screen.getByText(/4-day exercise streak/)).toBeTruthy()
-    expect(screen.getByText(/Buddy chat is not available yet/)).toBeTruthy()
+    expect(screen.getByText('Ask about the code you are stuck on, or why a pattern keeps failing.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })

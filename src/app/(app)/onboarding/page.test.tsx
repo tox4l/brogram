@@ -156,14 +156,14 @@ describe('onboarding', () => {
 
   it('shows the course picker once the Profiler reports done', async () => {
     await completeToCoursePicker()
-    expect(screen.getByRole('button', { name: /Programming foundations/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Programming foundations/ })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'Coming soon' })).toBeTruthy()
   })
 
   it('fetches candidates for exactly the first three CLOs by ordinal and calls the Planner once', async () => {
     await completeToCoursePicker()
     mocks.call.mockResolvedValueOnce(envelope('planner', { path: ['C1-1', 'C1-2', 'C1-3', 'C1-4'], nextExerciseIds: ['ex1'], focus: 'Start with the basics.' }))
-    fireEvent.click(screen.getByRole('button', { name: /Programming foundations/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
     expect(lastInFilter).toEqual({ table: 'exercises_public', key: 'clo_id', values: ['C1-1', 'C1-2', 'C1-3'] })
     expect(mocks.call.mock.calls.filter(([req]) => req.agent === 'planner')).toHaveLength(1)
@@ -175,7 +175,7 @@ describe('onboarding', () => {
   it('writes onboardingComplete, version + 1, path, and nextExerciseIds through the learner_state upsert path', async () => {
     await completeToCoursePicker()
     mocks.call.mockResolvedValueOnce(envelope('planner', { path: ['C1-1', 'C1-2', 'C1-3', 'C1-4'], nextExerciseIds: ['ex1'], focus: 'Start with the basics.' }))
-    fireEvent.click(screen.getByRole('button', { name: /Programming foundations/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
     const row = tables.learner_state.find((entry) => entry.user_id === 'student')!
     expect(row.version).toBe(5)
@@ -192,7 +192,7 @@ describe('onboarding', () => {
     tables.exercises_public = []
     await completeToCoursePicker()
     mocks.call.mockResolvedValueOnce(envelope('planner', { path: [], nextExerciseIds: [], focus: 'Your next exercises are still being prepared.' }))
-    fireEvent.click(screen.getByRole('button', { name: /Programming foundations/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Programming foundations/ }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
     const plannerRequest = mocks.call.mock.calls.find(([req]) => req.agent === 'planner')![0]
     expect(plannerRequest.candidates).toEqual([])

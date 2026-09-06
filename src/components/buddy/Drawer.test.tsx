@@ -77,6 +77,24 @@ beforeEach(() => {
 afterEach(() => { cleanup() })
 
 describe('buddy drawer', () => {
+  it('renders the empty state with no unhandled rejection when history fails to load', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    spies.from.mockImplementation(() => {
+      const rejectingBuilder = {
+        select: () => rejectingBuilder,
+        eq: () => rejectingBuilder,
+        order: () => rejectingBuilder,
+        limit: () => rejectingBuilder,
+        then: (_resolve: unknown, reject: (error: Error) => void) => Promise.reject(new Error('history unavailable')).catch(reject),
+      }
+      return rejectingBuilder
+    })
+    setup()
+    await screen.findByText('Ask about the code you are stuck on, or why a pattern keeps failing.')
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('loads history only when opened and calls no agent on mount', async () => {
     rows = [{ id: 'r1', role: 'user', content: 'hello there', created_at: '2026-09-05T00:00:00.000Z' }]
     const wrapper = ({ children }: PropsWithChildren) => <SessionProvider initialState={{ user: { id: 'student' } as User, profile: null, learnerState }}>{children}</SessionProvider>

@@ -33,15 +33,19 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
     if (!open || loadedRef.current || !user) return
     loadedRef.current = true
     void (async () => {
-      const client = (clientRef.current ??= createClient())
-      const { data } = await client
-        .from('buddy_messages')
-        .select('id,role,content,created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50)
-      const rows = [...(data ?? [])].reverse()
-      setMessages(rows.map(row => ({ id: String(row.id), role: row.role === 'assistant' ? 'assistant' : 'user', content: String(row.content), createdAt: String(row.created_at) })))
+      try {
+        const client = (clientRef.current ??= createClient())
+        const { data } = await client
+          .from('buddy_messages')
+          .select('id,role,content,created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(50)
+        const rows = [...(data ?? [])].reverse()
+        setMessages(rows.map(row => ({ id: String(row.id), role: row.role === 'assistant' ? 'assistant' : 'user', content: String(row.content), createdAt: String(row.created_at) })))
+      } catch (historyError) {
+        console.warn('Failed to load buddy history', historyError)
+      }
     })()
   }, [open, user])
 
