@@ -24,7 +24,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const ROOT = fileURLToPath(new URL('../', import.meta.url))
+// `dirname` twice rather than `new URL('../', import.meta.url)`: the latter
+// throws "The URL must be of scheme file" when a test runner (vitest/vite)
+// loads this module directly and rewrites import.meta.url to something that
+// is not a bare file:// URL. fileURLToPath + dirname works under both `node`
+// and a test runner's module loader.
+export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const SEED_DIR = join(ROOT, 'seed')
 const EXERCISES_DIR = join(SEED_DIR, 'exercises')
 const LESSONS_DIR = join(SEED_DIR, 'lessons')
@@ -50,6 +55,61 @@ function uuidv5(name, namespace) {
   hash[8] = (hash[8] & 0x3f) | 0x80
   const hex = hash.toString('hex')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+// Playground games are code, not seeded content (spec §7.9), but they still
+// need a drill row so drill_results and streak math need no special case for
+// `lane: 'play'`. Restated (not imported) so this script has no runtime
+// dependency on a file another Wave-0 task owns — must stay byte-identical to
+// scripts/seed-load.mjs's PLAY_GAME_TIME_LIMITS/playDrillItems(), and the
+// kind set must stay identical to PLAY_KINDS in src/app/(app)/derot/lib.ts.
+const PLAY_GAME_TIME_LIMITS = {
+  'follow-the-dot': 75,
+  'color-nback': 90,
+  reaction: 60,
+  rhythm: 60,
+  breathe: 90,
+  'memory-grid': 90,
+}
+
+function playDrillItems() {
+  return Object.entries(PLAY_GAME_TIME_LIMITS).map(([kind, timeLimitS]) => ({
+    id: `play-${kind}`,
+    kind,
+    lane: 'play',
+    difficulty: 3,
+    timeLimitS,
+    payload: {},
+  }))
+}
+
+/**
+ * Explicit field pick for a DrillItem, with the same default seed-load.mjs
+ * applies for a seed-authored row (`row.lane ??= 'arcade'`). `language` is
+ * omitted rather than nulled when absent: unlike the DB column, DrillItem's
+ * `language` is an optional TS field, not a nullable one.
+ */
+function normalizeDrillItem(raw) {
+  const item = {
+    id: raw.id,
+    kind: raw.kind,
+    difficulty: raw.difficulty,
+    payload: raw.payload,
+    timeLimitS: raw.timeLimitS,
+    lane: raw.lane ?? 'arcade',
+  }
+  if (raw.language) item.language = raw.language
+  return item
+}
+
+function assertDrillLanes(drillsByKind) {
+  for (const [kind, items] of drillsByKind) {
+    for (const item of items) {
+      if (item.lane !== 'arcade' && item.lane !== 'play') {
+        throw new Error(`build-static-curriculum: drill ${kind}/${item.id} has an invalid lane "${item.lane}"`)
+      }
+    }
+  }
 }
 
 function readJson(path) {
@@ -83,11 +143,65 @@ function sha1(content) {
   return createHash('sha1').update(content).digest('hex')
 }
 
-/** The three secrecy strips (R5.1) are asserted here, not only in the test that reads the written files. */
-function assertNoSubstring(value, needle, context) {
+/** The secrecy strips (R5.1) are asserted here, not only in the test that reads the written files. */
+export function assertNoSubstring(value, needle, context) {
   if (JSON.stringify(value).includes(needle)) {
     throw new Error(`build-static-curriculum: "${needle}" survived the ${context} strip`)
   }
+}
+
+/**
+ * Per-`type` (and, for `check`, per-`kind`) field allowlists mirroring
+ * `LessonPublicBlock` (src/lib/contracts.ts) field-for-field. This is an
+ * allowlist, not a denylist: a block or check kind not named here is a
+ * build error, not a silently-passed-through payload — the same fail-closed
+ * shape `buildModel` already uses for an unknown `cloId`.
+ */
+const LESSON_BLOCK_FIELDS = {
+  concept: ['type', 'id', 'heading', 'body', 'figure'],
+  snippet: ['type', 'id', 'language', 'code', 'runnable', 'caption', 'highlight', 'packages'],
+  worked: ['type', 'id', 'language', 'code', 'steps', 'caption'],
+  recap: ['type', 'id', 'bullets', 'remember'],
+  bridge: ['type', 'id', 'say'],
+}
+
+const LESSON_CHECK_FIELDS = {
+  'predict-output': ['type', 'id', 'kind', 'prompt', 'language', 'code', 'expected', 'normalize', 'hint', 'explain'],
+  choose: ['type', 'id', 'kind', 'prompt', 'options', 'correctIndex', 'why', 'hint', 'explain'],
+  'spot-the-bug': ['type', 'id', 'kind', 'prompt', 'language', 'code', 'bugLines', 'hint', 'explain'],
+  'fill-blank': ['type', 'id', 'kind', 'prompt', 'language', 'template', 'blanks', 'hint', 'explain'],
+  'micro-code': ['type', 'id', 'kind', 'prompt', 'language', 'starterCode', 'tests', 'hint', 'explain'],
+}
+
+function pickKnownFields(source, allowedKeys) {
+  const allowed = new Set(allowedKeys)
+  const out = {}
+  for (const key of Object.keys(source)) {
+    if (allowed.has(key)) out[key] = source[key]
+  }
+  return out
+}
+
+/**
+ * Projects one lesson block to its public shape. Throws — failing the build
+ * closed, exit non-zero, with the lesson id and the offending type/kind — on
+ * a block `type` or check `kind` this table does not recognise, instead of
+ * shipping an unknown shape's fields (including any secret it might carry)
+ * untouched.
+ */
+export function projectLessonBlock(lesson, block) {
+  if (block.type === 'check') {
+    const fields = LESSON_CHECK_FIELDS[block.kind]
+    if (!fields) {
+      throw new Error(`build-static-curriculum: lesson ${lesson.id}: unknown check kind "${block.kind}"`)
+    }
+    return pickKnownFields(block, fields)
+  }
+  const fields = LESSON_BLOCK_FIELDS[block.type]
+  if (!fields) {
+    throw new Error(`build-static-curriculum: lesson ${lesson.id}: unknown block type "${block.type}"`)
+  }
+  return pickKnownFields(block, fields)
 }
 
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
@@ -239,45 +353,47 @@ export function buildModel() {
     // by cloId (determinism rule; one lesson per CLO so this is a total order)
     .sort((a, b) => cmp(a.cloId, b.cloId))
 
-  return { patterns, courses, clos, exercisesFull, lessonsFull, drills, courseByCloId }
+  // Every seed-authored drill defaults to lane 'arcade' (mirrors
+  // scripts/seed-load.mjs's mapRow), and the six Playground kinds are
+  // synthesized with lane 'play' exactly as seed-load.mjs's playDrillItems()
+  // does — none of this comes from seed/drills/*.json, which carries no
+  // `lane` key at all.
+  const drillsByKind = new Map()
+  for (const [kind, items] of drills) drillsByKind.set(kind, items.map(normalizeDrillItem))
+  for (const item of playDrillItems()) drillsByKind.set(item.kind, [normalizeDrillItem(item)])
+  assertDrillLanes(drillsByKind)
+
+  return { patterns, courses, clos, exercisesFull, lessonsFull, drills: drillsByKind, courseByCloId }
 }
 
 // ---------------------------------------------------------------------------
-// Strip secrets — three steps, each asserted immediately after
+// Strip secrets — an explicit field allowlist per shape, asserted after
 // ---------------------------------------------------------------------------
 
-function stripExerciseSecrets(exercisesFull) {
-  const stripped = exercisesFull.map(({ referenceSolution, ...rest }) => rest)
+export function stripExerciseSecrets(exercisesFull) {
+  const stripped = exercisesFull.map((exercise) => {
+    const copy = { ...exercise }
+    delete copy.referenceSolution
+    return copy
+  })
   assertNoSubstring(stripped, 'referenceSolution', 'exercise')
   return stripped
 }
 
-function stripLessonSecrets(lessonsFull) {
-  const noMicroCodeSolutions = lessonsFull.map((lesson) => ({
+/**
+ * Every lesson block is rebuilt from `projectLessonBlock`'s per-type/per-kind
+ * allowlist (fails the build on an unrecognised type or check kind), and
+ * `assertNoSubstring` still runs afterward as a second, independent guard —
+ * belt and braces, not either/or.
+ */
+export function projectLessonPublic(lessonsFull) {
+  const projected = lessonsFull.map((lesson) => ({
     ...lesson,
-    blocks: lesson.blocks.map((block) => {
-      if (block.type === 'check' && block.kind === 'micro-code') {
-        const { referenceSolution, ...rest } = block
-        return rest
-      }
-      return block
-    }),
+    blocks: lesson.blocks.map((block) => projectLessonBlock(lesson, block)),
   }))
-  assertNoSubstring(noMicroCodeSolutions, 'referenceSolution', 'lesson micro-code check')
-
-  const noSnippetStdout = noMicroCodeSolutions.map((lesson) => ({
-    ...lesson,
-    blocks: lesson.blocks.map((block) => {
-      if (block.type === 'snippet') {
-        const { expectedStdout, ...rest } = block
-        return rest
-      }
-      return block
-    }),
-  }))
-  assertNoSubstring(noSnippetStdout, 'expectedStdout', 'lesson snippet')
-
-  return noSnippetStdout
+  assertNoSubstring(projected, 'referenceSolution', 'lesson micro-code check')
+  assertNoSubstring(projected, 'expectedStdout', 'lesson snippet')
+  return projected
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +430,7 @@ function renderGeneratedTs({ buildId, courses, clos, patterns, courseHashes }) {
 export function computeArtifacts() {
   const { patterns, courses, clos, exercisesFull, lessonsFull, drills, courseByCloId } = buildModel()
   const exercisesPublic = stripExerciseSecrets(exercisesFull)
-  const lessonsPublic = stripLessonSecrets(lessonsFull)
+  const lessonsPublic = projectLessonPublic(lessonsFull)
 
   const liveCodes = courses.filter((c) => c.status === 'live').map((c) => c.code)
 
@@ -377,6 +493,16 @@ export function writeArtifacts(artifacts) {
   }
 }
 
+/**
+ * A checkout with `core.autocrlf=true` and no `.gitattributes` (this
+ * machine's default) rewrites a committed LF file to CRLF on disk with zero
+ * real content drift. Comparing after normalizing both sides keeps `--check`
+ * honest about actual drift instead of the host's line-ending settings.
+ */
+function normalizeEol(text) {
+  return text.replace(/\r\n/g, '\n')
+}
+
 /** Compares artifacts against what is on disk without writing anything. */
 export function checkArtifacts(artifacts) {
   const mismatches = []
@@ -386,7 +512,7 @@ export function checkArtifacts(artifacts) {
       mismatches.push(`missing: ${path}`)
       continue
     }
-    if (readFileSync(path, 'utf8') !== content) mismatches.push(`stale: ${path}`)
+    if (normalizeEol(readFileSync(path, 'utf8')) !== normalizeEol(content)) mismatches.push(`stale: ${path}`)
   }
 
   for (const dir of [COURSE_DIR, DRILLS_OUT_DIR]) {
