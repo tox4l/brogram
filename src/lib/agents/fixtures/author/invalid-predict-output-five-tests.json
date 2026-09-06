@@ -1,0 +1,21 @@
+{
+  "exercise": {
+    "cloId": "INFS1101-2",
+    "language": "python",
+    "kind": "predict-output",
+    "difficulty": 2,
+    "pattern": "accumulate",
+    "title": "Running total on the till",
+    "prompt": "A till adds up the price of every item and prints the total once at the end.\n\n```python\ntotal = 0\nfor price in [4, 7, 2]:\n    total = total + price\nprint(total)\n```\n\nType exactly what this program prints. One line, no spaces around it.",
+    "starterCode": "",
+    "tests": [
+      { "id": "t1", "input": "", "expected": "13", "hidden": false },
+      { "id": "t2", "input": "[[1,2]]", "expected": "3", "hidden": false },
+      { "id": "t3", "input": "[[]]", "expected": "0", "hidden": true },
+      { "id": "t4", "input": "[[5]]", "expected": "5", "hidden": true },
+      { "id": "t5", "input": "[[-1,1]]", "expected": "0", "hidden": true }
+    ],
+    "referenceSolution": "The loop adds 4, then 7, then 2, so the printed total is 13.",
+    "tags": ["loops", "arithmetic"]
+  }
+}

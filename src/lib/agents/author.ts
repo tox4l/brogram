@@ -29,30 +29,43 @@ Rules:
 Reply format (json):
 { "exercise": { "cloId": "INFS1101-3", "language": "python", "kind": "code", "difficulty": 3, "pattern": "early-return", "title": "First late train", "prompt": "...", "starterCode": "def first_late(times, limit):\\n    pass\\n", "tests": [ { "id": "t1", "input": "[[3,5,9],6]", "expected": "9", "hidden": false, "name": "example" } ], "referenceSolution": "def first_late(times, limit):\\n    for t in times:\\n        if t > limit:\\n            return t\\n    return -1\\n", "tags": ["loops","lists"] } }`
 
-export const authorReply = z.object({
-  exercise: z.object({
-    cloId: z.string().min(1),
-    language: z.enum(['python', 'javascript', 'typescript', 'web', 'sql', 'mongo', 'java']),
-    kind: z.enum(['code', 'predict-output', 'spot-the-bug', 'trace', 'schema']),
-    difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
-    pattern: z.string().min(1),
-    title: z.string().min(3).max(50),
-    prompt: z.string().min(80).max(1800),
-    starterCode: z.string().max(2000),
-    tests: z.array(z.object({
-      id: z.string().min(1),
-      input: z.string(),
-      expected: z.string(),
-      hidden: z.boolean(),
-      name: z.string().max(60).optional(),
-    })).min(5).max(8)
-      .refine(t => t.filter(x => !x.hidden).length >= 2, { error: 'at least 2 visible tests' })
-      .refine(t => t.filter(x => x.hidden).length >= 3, { error: 'at least 3 hidden tests' }),
-    referenceSolution: z.string().min(10).max(4000),
-    tags: z.array(z.string().regex(/^[a-z0-9-]+$/)).min(2).max(5),
-    fixture: z.string().optional(),
-  }),
+/**
+ * Kinds the exercise screen grades by comparing ONE typed answer against `expected`: the printed
+ * output, a json array of 1-based line numbers, or a json object of variable to value. More than one
+ * test with distinct expecteds would make the exercise unpassable by construction.
+ * `seed/validate.mjs` keeps the 5-to-8 rule for committed seed files, where these kinds repeat the
+ * single answer across the battery; only exercises the Author writes at runtime take the rule below.
+ */
+const SINGLE_ANSWER_KINDS = new Set(['predict-output', 'spot-the-bug', 'trace'])
+const readsOneAnswer = (kind: string) => SINGLE_ANSWER_KINDS.has(kind)
+
+const authorExercise = z.object({
+  cloId: z.string().min(1),
+  language: z.enum(['python', 'javascript', 'typescript', 'web', 'sql', 'mongo', 'java']),
+  kind: z.enum(['code', 'predict-output', 'spot-the-bug', 'trace', 'schema']),
+  difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+  pattern: z.string().min(1),
+  title: z.string().min(3).max(50),
+  prompt: z.string().min(80).max(1800),
+  starterCode: z.string().max(2000),
+  tests: z.array(z.object({
+    id: z.string().min(1),
+    input: z.string(),
+    expected: z.string(),
+    hidden: z.boolean(),
+    name: z.string().max(60).optional(),
+  })).min(1).max(8),
+  referenceSolution: z.string().min(10).max(4000),
+  tags: z.array(z.string().regex(/^[a-z0-9-]+$/)).min(2).max(5),
+  fixture: z.string().optional(),
 })
+  .refine(e => !readsOneAnswer(e.kind) || e.tests.length === 1, { error: 'this kind carries exactly 1 test, the answer the student types' })
+  .refine(e => !readsOneAnswer(e.kind) || e.tests[0]?.hidden === false, { error: 'the single answer test is visible' })
+  .refine(e => readsOneAnswer(e.kind) || e.tests.length >= 5, { error: 'at least 5 tests' })
+  .refine(e => readsOneAnswer(e.kind) || e.tests.filter(t => !t.hidden).length >= 2, { error: 'at least 2 visible tests' })
+  .refine(e => readsOneAnswer(e.kind) || e.tests.filter(t => t.hidden).length >= 3, { error: 'at least 3 hidden tests' })
+
+export const authorReply = z.object({ exercise: authorExercise })
 
 interface ExerciseRow {
   title?: string

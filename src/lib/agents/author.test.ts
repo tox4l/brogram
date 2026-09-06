@@ -53,6 +53,39 @@ describe('author module', () => {
     expect(() => author.schema.parse(fixture('invalid-difficulty-3.5'))).toThrow()
   })
 
+  it('takes exactly one visible test for a kind the screen grades by typed answer', () => {
+    const reply = author.schema.parse(fixture('valid-predict-output'))
+    expect(reply.exercise.tests).toHaveLength(1)
+    expect(reply.exercise.tests[0].hidden).toBe(false)
+    expect(reply.exercise.tests[0].expected).toBe('13')
+  })
+
+  it('rejects a reading exercise carrying a battery of tests the screen cannot grade', () => {
+    expect(() => author.schema.parse(fixture('invalid-predict-output-five-tests'))).toThrow()
+  })
+
+  it('rejects a reading exercise whose one answer is hidden', () => {
+    const reply = fixture('valid-predict-output')
+    reply.exercise.tests[0].hidden = true
+    expect(() => author.schema.parse(reply)).toThrow()
+  })
+
+  it('applies the single-answer rule to every kind the screen reads, and no other', () => {
+    const one = fixture('valid-predict-output')
+    for (const kind of ['spot-the-bug', 'trace']) {
+      expect(() => author.schema.parse({ exercise: { ...one.exercise, kind } }), kind).not.toThrow()
+    }
+    for (const kind of ['code', 'schema']) {
+      expect(() => author.schema.parse({ exercise: { ...one.exercise, kind } }), kind).toThrow()
+    }
+  })
+
+  it('still demands a full battery for a code exercise', () => {
+    const python = fixture('valid-python')
+    expect(() => author.schema.parse({ exercise: { ...python.exercise, tests: python.exercise.tests.slice(0, 1) } })).toThrow()
+    expect(() => author.schema.parse({ exercise: { ...python.exercise, kind: 'schema' } })).not.toThrow()
+  })
+
   it('passes a matching exercise through the route check', () => {
     expect(author.routeCheck!(req(), author.schema.parse(fixture('valid-python')))).toBeNull()
   })
