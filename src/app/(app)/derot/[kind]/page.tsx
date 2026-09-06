@@ -33,7 +33,7 @@ function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: stri
   const [state, setState] = useState<RunnerState>(INITIAL_STATE)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef(state)
-  stateRef.current = state
+  useEffect(() => { stateRef.current = state }, [state])
   const learnerState = useSession((session) => session.learnerState)
   const setLearnerState = useSession((session) => session.setLearnerState)
   const learnerStateRef = useRef(learnerState)
@@ -42,7 +42,6 @@ function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: stri
   useEffect(() => {
     if (!userId) return
     let cancelled = false
-    setState((prev) => ({ ...prev, phase: 'loading', error: null }))
 
     async function load() {
       try {
@@ -126,7 +125,12 @@ function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: stri
     if (stateRef.current.pendingResult) void submitResult(stateRef.current.pendingResult)
   }, [submitResult])
 
-  return { ...state, retry: () => setAttempt((n) => n + 1), submitResult, next, retrySave }
+  const retry = useCallback(() => {
+    setState((prev) => ({ ...prev, phase: 'loading', error: null }))
+    setAttempt((n) => n + 1)
+  }, [])
+
+  return { ...state, retry, submitResult, next, retrySave }
 }
 
 function RunnerBody({ kind }: { kind: DrillKind }) {
@@ -211,5 +215,5 @@ function InvalidKind() {
 export default function DerotRunnerPage() {
   const { kind } = useParams<{ kind: string }>()
   if (!isDrillKind(kind)) return <InvalidKind />
-  return <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}><RunnerBody kind={kind} /></Suspense>
+  return <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}><RunnerBody key={kind} kind={kind} /></Suspense>
 }

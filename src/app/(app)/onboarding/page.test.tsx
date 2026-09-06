@@ -23,7 +23,7 @@ function query(table: string) {
   let action: 'read' | 'insert' | 'update' = 'read'
   let single = false
   let limit: number | null = null
-  let orderKeys: string[] = []
+  const orderKeys: string[] = []
   let columns = ''
   const eqValues: Record<string, unknown> = {}
   const filters: Array<(row: Row) => boolean> = []

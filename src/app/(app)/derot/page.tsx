@@ -24,11 +24,15 @@ const EMPTY_OVERVIEW: Overview = { loading: false, failed: false, results: [], a
 function useDerotOverview(userId: string | null) {
   const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState<Overview>({ ...EMPTY_OVERVIEW, loading: Boolean(userId) })
+  const [trackedUserId, setTrackedUserId] = useState(userId)
+  if (trackedUserId !== userId) {
+    setTrackedUserId(userId)
+    setState(userId ? { ...EMPTY_OVERVIEW, loading: true } : EMPTY_OVERVIEW)
+  }
 
   useEffect(() => {
-    if (!userId) { setState(EMPTY_OVERVIEW); return }
+    if (!userId) return
     let cancelled = false
-    setState((prev) => ({ ...prev, loading: true, failed: false }))
 
     async function load() {
       try {
@@ -51,7 +55,12 @@ function useDerotOverview(userId: string | null) {
     return () => { cancelled = true }
   }, [userId, attempt])
 
-  return { ...state, retry: () => setAttempt((n) => n + 1) }
+  const retry = () => {
+    setState((prev) => ({ ...prev, loading: true, failed: false }))
+    setAttempt((n) => n + 1)
+  }
+
+  return { ...state, retry }
 }
 
 /** `?drill=<kind>` is the buddy suggestion chip's deep link into a runner page. */

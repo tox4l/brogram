@@ -113,9 +113,10 @@ export default function JavaVerifyPage() {
 
   useEffect(() => {
     const verify = startVerification()
-    setSnapshot({ ...verify })
+    let cancelled = false
+    void Promise.resolve().then(() => { if (!cancelled) setSnapshot({ ...verify }) })
     const timer = window.setInterval(() => setSnapshot({ ...verify }), 500)
-    return () => window.clearInterval(timer)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [])
 
   const rows = snapshot?.rows ?? []

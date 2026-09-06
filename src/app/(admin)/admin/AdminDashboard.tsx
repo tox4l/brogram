@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { AgentUsageTable, BankStatsTable, CreateAccountForm, InvitesTable, MintInviteForm, UsersTable } from '@/components/admin'
@@ -57,20 +57,23 @@ function InvitesSection() {
   const [invites, setInvites] = useState<InviteRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [minting, setMinting] = useState(false)
-
-  const load = useCallback(async () => {
-    setError(null)
-    try {
-      const body = await getJson<{ ok: true; invites: InviteRow[] }>('/api/admin/invites')
-      setInvites(body.invites)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load invites')
-    }
-  }, [])
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const body = await getJson<{ ok: true; invites: InviteRow[] }>('/api/admin/invites')
+        if (cancelled) return
+        setInvites(body.invites)
+        setError(null)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load invites')
+      }
+    }
     void load()
-  }, [load])
+    return () => { cancelled = true }
+  }, [reloadKey])
 
   async function handleMint(email: string) {
     setMinting(true)
@@ -81,7 +84,7 @@ function InvitesSection() {
         body: JSON.stringify({ email }),
       })
       toast.success(`Invite minted for ${email}`)
-      await load()
+      setReloadKey((key) => key + 1)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not mint invite')
     } finally {
@@ -94,7 +97,7 @@ function InvitesSection() {
       <div className="flex flex-col gap-4">
         <MintInviteForm onMint={handleMint} busy={minting} />
         {error ? (
-          <SectionError message={error} onRetry={() => void load()} />
+          <SectionError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
         ) : invites === null ? (
           <SectionSkeleton />
         ) : (
@@ -116,20 +119,23 @@ function CreateAccountSection({ onCreated }: { onCreated?: () => void | Promise<
 function UsersSection({ refreshKey }: { refreshKey?: number }) {
   const [users, setUsers] = useState<UserRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    setError(null)
-    try {
-      const body = await getJson<{ ok: true; users: UserRow[] }>('/api/admin/users')
-      setUsers(body.users)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load users')
-    }
-  }, [])
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const body = await getJson<{ ok: true; users: UserRow[] }>('/api/admin/users')
+        if (cancelled) return
+        setUsers(body.users)
+        setError(null)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load users')
+      }
+    }
     void load()
-  }, [load, refreshKey])
+    return () => { cancelled = true }
+  }, [refreshKey, reloadKey])
 
   async function act(id: string, action: 'lift' | 'restrict' | 'ban') {
     try {
@@ -139,7 +145,7 @@ function UsersSection({ refreshKey }: { refreshKey?: number }) {
         body: JSON.stringify({ action }),
       })
       toast.success(`Status updated: ${action}`)
-      await load()
+      setReloadKey((key) => key + 1)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : `Could not ${action} this user`)
     }
@@ -148,7 +154,7 @@ function UsersSection({ refreshKey }: { refreshKey?: number }) {
   return (
     <Section title="Users" description="Integrity score, recent events, and account status.">
       {error ? (
-        <SectionError message={error} onRetry={() => void load()} />
+        <SectionError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
       ) : users === null ? (
         <SectionSkeleton />
       ) : (
@@ -167,28 +173,29 @@ function BankSection() {
   const [stats, setStats] = useState<BankStatRow[] | null>(null)
   const [clos, setClos] = useState<CloRef[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    setError(null)
-    setStats(null)
-    setClos(null)
-    try {
-      const body = await getJson<{ ok: true; stats: BankStatRow[]; clos: CloRef[] }>('/api/admin/bank-stats')
-      setStats(body.stats)
-      setClos(body.clos)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load bank stats')
-    }
-  }, [])
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const body = await getJson<{ ok: true; stats: BankStatRow[]; clos: CloRef[] }>('/api/admin/bank-stats')
+        if (cancelled) return
+        setStats(body.stats)
+        setClos(body.clos)
+        setError(null)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load bank stats')
+      }
+    }
     void load()
-  }, [load])
+    return () => { cancelled = true }
+  }, [reloadKey])
 
   return (
     <Section title="Bank" description="Exercise coverage per CLO per pattern: seed / verified / unverified.">
       {error ? (
-        <SectionError message={error} onRetry={() => void load()} />
+        <SectionError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
       ) : stats === null || clos === null ? (
         <SectionSkeleton />
       ) : (
@@ -201,25 +208,28 @@ function BankSection() {
 function AgentsSection() {
   const [usage, setUsage] = useState<AgentUsageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    setError(null)
-    try {
-      const body = await getJson<{ ok: true; usage: AgentUsageRow[] }>('/api/admin/agent-usage')
-      setUsage(body.usage)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load agent usage')
-    }
-  }, [])
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const body = await getJson<{ ok: true; usage: AgentUsageRow[] }>('/api/admin/agent-usage')
+        if (cancelled) return
+        setUsage(body.usage)
+        setError(null)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load agent usage')
+      }
+    }
     void load()
-  }, [load])
+    return () => { cancelled = true }
+  }, [reloadKey])
 
   return (
     <Section title="Agents" description="Calls per agent per day, last 14 days.">
       {error ? (
-        <SectionError message={error} onRetry={() => void load()} />
+        <SectionError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
       ) : usage === null ? (
         <SectionSkeleton />
       ) : (
