@@ -1,4 +1,5 @@
 import type { ExercisePublic, RunRequest, RunResult, TestResult } from '@/lib/contracts'
+import { normalizeOutput } from '@/components/derot/scoring'
 
 export function exerciseRunRequest(exercise: ExercisePublic, code: string, graded: boolean, packages: string[] = []): RunRequest {
   return { language: exercise.kind === 'schema' ? 'sql' : exercise.language, code, tests: graded ? exercise.tests : [], fixture: exercise.fixture, timeoutMs: 5000, packages }
@@ -14,8 +15,11 @@ export function gradeAnswer(exercise: ExercisePublic, answer: string): RunResult
     let passed = false
     try {
       if (exercise.kind === 'predict-output') {
-        const normalize = (text: string) => text.trim().replace(/\s+/g, ' ')
-        passed = normalize(answer) === normalize(test.expected)
+        // normalizeOutput is line-by-line and never collapses newlines into
+        // spaces (the 23:07 ruling); the old `.replace(/\s+/g, ' ')` here did
+        // exactly that, so a joined single-line answer wrongly passed against
+        // a multi-line expected output.
+        passed = normalizeOutput(answer) === normalizeOutput(test.expected)
       } else if (exercise.kind === 'spot-the-bug') {
         const expected: unknown = JSON.parse(test.expected)
         const actual: unknown = JSON.parse(answer)

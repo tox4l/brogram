@@ -3,9 +3,18 @@ import type { ExercisePublic } from '@/lib/contracts'
 import { gradeAnswer, exerciseRunRequest, codeDiff } from './grading'
 const exercise = (kind: ExercisePublic['kind'], expected: string): ExercisePublic => ({ id: 'e', cloId: 'c', language: 'javascript', kind, difficulty: 3, pattern: 'p', title: 't', prompt: 'p', starterCode: 'snippet', tests: [{ id: 't', input: '', expected, hidden: true }], tags: [], origin: 'seed' })
 describe('answer grading', () => {
-  it('normalizes whitespace for output but keeps content exact', () => {
-    expect(gradeAnswer(exercise('predict-output', 'one two\nthree'), ' one\t two three ').ok).toBe(true)
+  it('normalizes whitespace within a line for output but keeps content exact', () => {
+    // Corrected: the expected output is two lines ("one two", "three"); a
+    // one-line answer must not match it. The old assertion here collapsed
+    // both sides with `.replace(/\s+/g, ' ')`, which folded the newline into
+    // a space and let this wrongly pass -- the same bug the 23:07 ruling
+    // fixed in src/components/derot/scoring.ts.
+    expect(gradeAnswer(exercise('predict-output', 'one two\nthree'), ' one\t two three ').ok).toBe(false)
     expect(gradeAnswer(exercise('predict-output', 'one two'), 'onetwo').ok).toBe(false)
+  })
+  it('does not collapse newlines when grading predict-output (regression)', () => {
+    expect(gradeAnswer(exercise('predict-output', 'one\ntwo'), 'one\ntwo').ok).toBe(true)
+    expect(gradeAnswer(exercise('predict-output', 'one\ntwo'), 'one two').ok).toBe(false)
   })
   it('uses order-independent line set equality and rejects wrong or malformed lines', () => {
     expect(gradeAnswer(exercise('spot-the-bug', '[2,4]'), '[4,2,2]').ok).toBe(true)
