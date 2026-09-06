@@ -127,7 +127,10 @@ export default function Onboarding() {
         currentCourse: course.code,
         path: plan.path,
         nextExerciseIds: plan.nextExerciseIds,
-      }))
+        // `focus` is not part of the frozen LearnerState contract; it rides along as an
+        // extra jsonb key so the dashboard and report can show the Planner's latest line.
+        focus: plan.focus,
+      }) as typeof base)
       session.setLearnerState(nextState)
       router.push('/dashboard')
     })

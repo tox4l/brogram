@@ -179,11 +179,14 @@ describe('onboarding', () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/dashboard'))
     const row = tables.learner_state.find((entry) => entry.user_id === 'student')!
     expect(row.version).toBe(5)
-    const state = row.state as { profile: { onboardingComplete: boolean }; path: string[]; nextExerciseIds: string[]; currentCourse: string }
+    const state = row.state as { profile: { onboardingComplete: boolean }; path: string[]; nextExerciseIds: string[]; currentCourse: string; focus?: string }
     expect(state.profile.onboardingComplete).toBe(true)
     expect(state.path).toEqual(['C1-1', 'C1-2', 'C1-3', 'C1-4'])
     expect(state.nextExerciseIds).toEqual(['ex1'])
     expect(state.currentCourse).toBe('C1')
+    // `focus` is not part of the frozen LearnerState contract; it rides along as an extra
+    // jsonb key alongside path and nextExerciseIds so the dashboard and report can show it.
+    expect(state.focus).toBe('Start with the basics.')
     expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ version: 5 }))
   })
 

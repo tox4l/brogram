@@ -89,10 +89,21 @@ describe('reports page', () => {
     expect(within(preview).getByText('best 90 · mean 80 · 2 runs')).toBeTruthy()
   })
 
-  it('shows the Planner fallback focus sentence, since no focus line is persisted anywhere yet', async () => {
+  it('shows the Planner fallback focus sentence when no focus line is persisted', async () => {
     render(<ReportsPage />)
     const preview = await screen.findByTestId('report-preview')
     expect(within(preview).getByText('Your next exercises are still being prepared.')).toBeTruthy()
+  })
+
+  it('passes a persisted focus line through to the report instead of the fallback', async () => {
+    // `focus` rides along as an extra jsonb key on LearnerState (not part of the frozen
+    // contract), written by onboarding and by useExerciseLoop's plan-refresh.
+    const withFocus = { ...learnerState(), focus: 'Work on loops next.' }
+    mocks.session.mockReturnValue(session(withFocus))
+    render(<ReportsPage />)
+    const preview = await screen.findByTestId('report-preview')
+    expect(within(preview).getByText('Work on loops next.')).toBeTruthy()
+    expect(within(preview).queryByText('Your next exercises are still being prepared.')).toBeNull()
   })
 
   it('renders the report even with zero attempts and zero drill results', async () => {

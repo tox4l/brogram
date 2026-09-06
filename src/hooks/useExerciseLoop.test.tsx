@@ -288,6 +288,9 @@ describe('exercise loop triggers and durable progress', () => {
     await act(async () => { await hook.result.current.submit() })
     expect(store.mastery.c1.closed).toBe(true)
     expect(spies.call.mock.calls.map(([req]) => req.agent)).toEqual(['reviewer', 'planner'])
+    // `focus` is not part of the frozen LearnerState contract; it rides along as an extra
+    // jsonb key alongside path and nextExerciseIds from the same plan-refresh reply.
+    expect((store as LearnerState & { focus?: string }).focus).toBe('Continue.')
     await act(async () => { await hook.result.current.next() })
     expect(spies.push).toHaveBeenCalledWith('/dashboard')
   })

@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import type { LearnerState } from '@/lib/contracts'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
@@ -9,11 +10,10 @@ import { DownloadReportButton, REPORT_PAGE_HEIGHT_PX, REPORT_PAGE_WIDTH_PX, Repo
 import { fetchReportData, type ReportData } from './data'
 
 /**
- * The Planner never writes a `focus` line into Learner State today (only
- * `path` and `nextExerciseIds` are persisted after a plan refresh; see
- * `useExerciseLoop.queueNext`), and the dashboard has nowhere else that
- * stores one. Until that lands, every report shows the same sentence the
- * Planner itself falls back to when it has nothing to say yet.
+ * `focus` is not part of the frozen LearnerState contract; it rides along as an extra
+ * jsonb key written by onboarding and by useExerciseLoop's plan-refresh on CLO close (see
+ * both call sites). This sentence is the same fallback the Planner itself uses when it
+ * has nothing to say yet, shown until a focus line has been persisted.
  */
 const FOCUS_FALLBACK = 'Your next exercises are still being prepared.'
 
@@ -93,6 +93,7 @@ export default function ReportsPage() {
 
   const displayName = learnerState?.profile.displayName.trim() || 'Your progress'
   const fileName = `brogram-report-${generatedAt.slice(0, 10)}.pdf`
+  const focus = (learnerState as (LearnerState & { focus?: string }) | null)?.focus || FOCUS_FALLBACK
 
   return (
     <div className="space-y-5">
@@ -127,7 +128,7 @@ export default function ReportsPage() {
                   clos={report.data.clos}
                   attempts={report.data.attempts}
                   drillResults={report.data.drillResults}
-                  focus={FOCUS_FALLBACK}
+                  focus={focus}
                   generatedAt={generatedAt}
                   displayName={displayName}
                 />
@@ -142,7 +143,7 @@ export default function ReportsPage() {
                 clos={report.data.clos}
                 attempts={report.data.attempts}
                 drillResults={report.data.drillResults}
-                focus={FOCUS_FALLBACK}
+                focus={focus}
                 generatedAt={generatedAt}
                 displayName={displayName}
               />

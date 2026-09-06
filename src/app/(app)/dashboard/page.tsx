@@ -5,9 +5,18 @@ import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, LockKeyhole } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import type { LearnerState } from '@/lib/contracts'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/store/session'
+
+/**
+ * The Planner's `focus` line is not part of the frozen LearnerState contract; it rides
+ * along as an extra jsonb key written by onboarding and by useExerciseLoop's plan-refresh
+ * on CLO close. This sentence is the same fallback the Planner itself uses when it has
+ * nothing to say yet (see src/lib/agents/planner.ts and the reports page).
+ */
+const FOCUS_FALLBACK = 'Your next exercises are still being prepared.'
 
 type CourseDetails = { code: string; title: string; language: string }
 type OutcomeDetails = { id: string; ordinal: number; outcome: string }
@@ -83,6 +92,7 @@ export default function Dashboard() {
     return exercise ? [exercise] : []
   })
   const restricted = profile?.account_status === 'restricted'
+  const focusLine = (learnerState as (LearnerState & { focus?: string }) | null)?.focus || FOCUS_FALLBACK
   const displayName = learnerState?.profile.displayName.trim()
   const exerciseDays = learnerState?.streak.exerciseDays ?? 0
   const derotDays = learnerState?.streak.derotDays ?? 0
@@ -101,6 +111,7 @@ export default function Dashboard() {
             <h2 id="course-heading" className="text-xs font-medium text-muted-foreground">Current course</h2>
             <p className="mt-2 text-xl font-medium tracking-tight">{course?.title ?? (curriculum.loading ? 'Opening your course' : curriculum.failed ? 'Your course details are unavailable' : 'Find your starting point.')}</p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{course ? `${languages[course.language] ?? course.language} · ${completed} of ${outcomes.length} outcomes complete` : learnerState?.currentCourse ? 'Your saved progress is kept below.' : 'A course gives your practice a direction. You can change it anytime.'}</p>
+            {learnerState?.currentCourse && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{focusLine}</p>}
           </div>
           <Link href="/onboarding" className={cn(buttonVariants({ variant: learnerState?.currentCourse ? 'outline' : 'default' }), learnerState?.currentCourse ? 'h-9' : 'h-9 bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
             {learnerState?.currentCourse ? 'Change course' : 'Choose a course'}<ArrowUpRight aria-hidden="true" />

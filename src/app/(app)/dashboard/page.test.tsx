@@ -122,6 +122,23 @@ describe('dashboard', () => {
     expect(screen.getByRole('link', { name: 'Try a de-rot drill' }).getAttribute('href')).toBe('/derot')
   })
 
+  it('shows the persisted Planner focus line under the current course, falling back when none is saved', async () => {
+    render(<Dashboard />)
+    await screen.findByText('Programming foundations')
+    // `learnerState()` never sets `focus` (it is not part of the frozen LearnerState
+    // contract), so the same sentence the Planner falls back to itself should show.
+    expect(screen.getByText('Your next exercises are still being prepared.')).toBeTruthy()
+    cleanup()
+
+    // `focus` rides along as an extra jsonb key; a persisted one takes priority.
+    const withFocus = { ...learnerState(), focus: 'Start with the basics.' }
+    mocks.session.mockReturnValue(session(withFocus))
+    render(<Dashboard />)
+    await screen.findByText('Programming foundations')
+    expect(screen.getByText('Start with the basics.')).toBeTruthy()
+    expect(screen.queryByText('Your next exercises are still being prepared.')).toBeNull()
+  })
+
   it('offers an actionable start when no learner state exists without inventing progress', () => {
     mocks.session.mockReturnValue(session(null))
     render(<Dashboard />)

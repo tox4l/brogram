@@ -59,6 +59,15 @@ describe('app hydration', () => {
     expect(tree.props.initialState.learnerState.points).toBe(3210)
     expect(tree.props.initialState.learnerState.version).toBe(9)
   })
+  it('keeps a persisted Planner focus line through hydration', async () => {
+    // `focus` is not part of the frozen LearnerState contract; it rides along as an extra
+    // jsonb key that onboarding and useExerciseLoop write. Hydration spreads `row.state`
+    // into the compiled state, so this extra key must survive untouched.
+    const saved = { ...compileLearnerState({ id: 'student' }, [], [], [], null), focus: 'Work on loops next.' }
+    mocks.query.mockImplementation((table) => ({ data: table === 'learner_state' ? { state: saved, version: 3 } : table === 'attempts' ? [] : null, error: null }))
+    const tree = await layout()
+    expect((tree.props.initialState.learnerState as typeof saved).focus).toBe('Work on loops next.')
+  })
   it('recomputes a current streak from actual activity dates', async () => {
     const saved = compileLearnerState({ id: 'student' }, [], [], [], null)
     const today = new Date().toISOString()

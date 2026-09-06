@@ -210,7 +210,9 @@ export function useExerciseLoop(exerciseId: string) {
       if (generation.current !== token) return
       if (!operation.planned) {
         const plan = operation.planner
-        operation.state = await saveState(base => ({ ...base, path: plan!.path, nextExerciseIds: plan!.nextExerciseIds }), token)
+        // `focus` is not part of the frozen LearnerState contract; it rides along as an
+        // extra jsonb key so the dashboard and report can show the Planner's latest line.
+        operation.state = await saveState(base => ({ ...base, path: plan!.path, nextExerciseIds: plan!.nextExerciseIds, focus: plan!.focus }) as typeof base, token)
         operation.planned = true
       }
       setClosed(true); operation.queued = true
