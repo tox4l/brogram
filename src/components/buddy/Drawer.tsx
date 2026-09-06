@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { SendIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,7 @@ import type { AgentError, BuddyReply } from '@/lib/contracts'
 import { streamAgent } from '@/lib/agents/client'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
-import { type BuddyMessage, buddyStateSlice, capMessages, REFUSAL, suggestionHref, suggestionLabel } from './state'
+import { type BuddyMessage, buddyStateSlice, capMessages, handleSuggestionClick, REFUSAL, suggestionHref, suggestionLabel } from './state'
 
 const isAgentError = (value: unknown): value is AgentError =>
   Boolean(value) && typeof value === 'object' && (value as AgentError).ok === false
@@ -19,6 +20,7 @@ const isAgentError = (value: unknown): value is AgentError =>
 export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const user = useSession(session => session.user)
   const learnerState = useSession(session => session.learnerState)
+  const pathname = usePathname()
   const clientRef = useRef<SupabaseClient | null>(null)
   const loadedRef = useRef(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -131,7 +133,11 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
                 {message.content}
               </div>
               {message.suggestion && (
-                <Link href={suggestionHref(message.suggestion.kind, message.suggestion.ref)} className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <Link
+                  href={suggestionHref(message.suggestion.kind, message.suggestion.ref, pathname)}
+                  onClick={() => handleSuggestionClick(message.suggestion!.kind, onOpenChange)}
+                  className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
                   {suggestionLabel(message.suggestion.kind)}
                 </Link>
               )}

@@ -7,9 +7,10 @@ import { SessionProvider } from '@/components/shell/SessionProvider'
 import { BuddyDrawer } from './Drawer'
 import { REFUSAL } from './state'
 
-const spies = vi.hoisted(() => ({ stream: vi.fn(), from: vi.fn() }))
+const spies = vi.hoisted(() => ({ stream: vi.fn(), from: vi.fn(), pathname: vi.fn(() => '/dashboard') }))
 vi.mock('@/lib/agents/client', () => ({ streamAgent: spies.stream }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: spies.from }) }))
+vi.mock('next/navigation', () => ({ usePathname: () => spies.pathname() }))
 
 type Row = { id: string; role: 'user' | 'assistant'; content: string; created_at: string }
 let rows: Row[]
@@ -56,10 +57,10 @@ function envelope(reply: BuddyReply): AgentEnvelope<BuddyReply> {
   return { ok: true, agent: 'buddy', reply, fallback: false, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 } }
 }
 
-function setup() {
+function setup(onOpenChange = vi.fn()) {
   const initial = { user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState }
   const wrapper = ({ children }: PropsWithChildren) => <SessionProvider initialState={initial}>{children}</SessionProvider>
-  return render(<BuddyDrawer open={true} onOpenChange={vi.fn()} />, { wrapper })
+  return { ...render(<BuddyDrawer open={true} onOpenChange={onOpenChange} />, { wrapper }), onOpenChange }
 }
 
 async function typeAndSend(text: string) {
@@ -72,6 +73,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   rows = []
   spies.from.mockImplementation(supabaseBuilder)
+  spies.pathname.mockReturnValue('/dashboard')
 })
 
 afterEach(() => { cleanup() })
@@ -173,6 +175,29 @@ describe('buddy drawer', () => {
     await typeAndSend('i feel scattered today')
     const link = await screen.findByRole('link')
     expect(link.getAttribute('href')).toBe(href)
+  })
+
+  it('points the break chip at the pomodoro anchor and closes the drawer before navigating on a dashboard path', async () => {
+    spies.pathname.mockReturnValue('/dashboard')
+    spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'Take a moment.', suggestion: { kind: 'break', ref: 'pomodoro' } }))
+    const { onOpenChange } = setup()
+    await typeAndSend('i have been at this for two hours straight')
+    const link = await screen.findByRole('link')
+    expect(link.getAttribute('href')).toBe('#pomodoro')
+    expect(onOpenChange).not.toHaveBeenCalled()
+    fireEvent.click(link)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('falls back the break chip to /dashboard#pomodoro and still closes the drawer on an exercise page', async () => {
+    spies.pathname.mockReturnValue('/exercise/ex-1')
+    spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'Take a moment.', suggestion: { kind: 'break', ref: 'pomodoro' } }))
+    const { onOpenChange } = setup()
+    await typeAndSend('i have been at this for two hours straight')
+    const link = await screen.findByRole('link')
+    expect(link.getAttribute('href')).toBe('/dashboard#pomodoro')
+    fireEvent.click(link)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it('renders an AgentError inline and re-enables the input', async () => {
