@@ -4,7 +4,7 @@
 
 import type { Clo, Course, CourseCode } from '../contracts'
 
-export const BUILD_ID: string = "6fb826188c0fab2ef15bfd9f70526fe84a412e5e"
+export const BUILD_ID: string = "7a66c35e7f92aefcef8745a58b6a9a24e271e8e8"
 
 export const COURSES: readonly Course[] = [
   {
@@ -1003,7 +1003,7 @@ export const PATTERNS: readonly { id: string; name: string; description: string;
 
 export const COURSE_HASHES: Readonly<Record<CourseCode, string>> = {
   "DSAI2201": "431323b81cad137e2d7efdb62b9ddc6d955d7660",
-  "INFS1101": "b7b79e112a7715457e2f185bf3c9e48b2df2820a",
+  "INFS1101": "f78dfeb9556a175634ca5e9138141e6ade6a472c",
   "INFS1201": "bfb8c7d898706d53e3c69c952a44ffcf24f82a1f",
   "INFS2101": "844b3c98e6f59ed5dcaa671910a50035a0c3dbe0",
   "INFS2201": "aefa27c707bd841c0b7fb5eb0450c61ed4186f53",
