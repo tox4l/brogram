@@ -59,14 +59,14 @@ describe('resolveMotion', () => {
   })
 })
 
-describe('useReducedMotion', () => {
-  it('reads the initial OS signal', () => {
+describe('useReducedMotion (I6: returns the RESOLVED value, not the raw OS signal)', () => {
+  it('a bare call means "system" — defers to the OS signal', () => {
     installMatchMedia(true)
     const { result } = renderHook(() => useReducedMotion())
     expect(result.current).toBe(true)
   })
 
-  it('re-renders when the media query changes', () => {
+  it('re-renders when the media query changes, with no pref (system)', () => {
     const mql = installMatchMedia(false)
     const { result } = renderHook(() => useReducedMotion())
     expect(result.current).toBe(false)
@@ -75,6 +75,31 @@ describe('useReducedMotion', () => {
     expect(result.current).toBe(true)
 
     act(() => mql.set(false))
+    expect(result.current).toBe(false)
+  })
+
+  it("useReducedMotion('full') resolves to false even while the OS asks to reduce — the load-bearing override case", () => {
+    installMatchMedia(true)
+    const { result } = renderHook(() => useReducedMotion('full'))
+    expect(result.current).toBe(false)
+  })
+
+  it("useReducedMotion('reduced') resolves to true with no OS signal at all", () => {
+    installMatchMedia(false)
+    const { result } = renderHook(() => useReducedMotion('reduced'))
+    expect(result.current).toBe(true)
+  })
+
+  it('still re-renders on an OS change while an explicit pref is passed, even though the resolved value does not move', () => {
+    // The hook must keep subscribing to the media query regardless of `pref`
+    // — R7.9 requires exactly one reader of `matchMedia` for motion, and that
+    // reader must not silently stop listening just because an override is active.
+    const mql = installMatchMedia(false)
+    const { result, rerender } = renderHook(() => useReducedMotion('full'))
+    expect(result.current).toBe(false)
+    act(() => mql.set(true))
+    expect(result.current).toBe(false) // 'full' still wins
+    rerender()
     expect(result.current).toBe(false)
   })
 })
