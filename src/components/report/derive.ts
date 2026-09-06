@@ -19,8 +19,11 @@ export const MAX_PATTERNS_PER_GROUP = 6
 export const MISTAKE_TREND_WEEKS = 12
 export const MAX_TIME_SPENT_DAYS = 14
 
-/** Fixed order the six de-rot drills are always shown in, seed or not. */
-const DRILL_KIND_ORDER: DrillKind[] = ['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type']
+/** Fixed order the twelve de-rot drills (Arcade then Playground) are always shown in, seed or not. */
+const DRILL_KIND_ORDER: DrillKind[] = [
+  'predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type',
+  'follow-the-dot', 'color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid',
+]
 
 // ---------------------------------------------------------------------------
 // Small formatting helpers

@@ -3,17 +3,26 @@
  * so the picking and streak rules have direct unit tests, the same shape as
  * src/components/derot/scoring.ts and src/lib/learner/bank.ts.
  */
-import type { Difficulty, DrillItem, DrillKind, DrillResult, Language } from '@/lib/contracts'
+import type { Difficulty, DrillItem, DrillKind, DrillLane, DrillResult, Language } from '@/lib/contracts'
 
 export const DRILL_KINDS: DrillKind[] = ['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type']
 
-export const DRILL_META: Record<DrillKind, { title: string; description: string }> = {
-  'predict-output': { title: 'Predict the output', description: 'Read a snippet and type exactly what it prints before time runs out.' },
-  'spot-the-bug': { title: 'Spot the bug', description: "Click the line that's broken before the clock runs out." },
-  trace: { title: 'Trace by hand', description: "Step through execution and fill in each variable's value." },
-  'hold-focus': { title: 'Hold focus', description: 'Read a technical passage without scrolling, then answer one question.' },
-  'n-back': { title: 'N-back', description: 'Watch a stream of code tokens and catch the ones that repeat.' },
-  'speed-type': { title: 'Speed type', description: 'Type a snippet exactly as shown. Accuracy counts more than speed.' },
+/** Lane B: six non-coding games. Spec 7.9. Presentation lands with T2.9b. */
+export const PLAY_KINDS: DrillKind[] = ['follow-the-dot', 'color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid']
+
+export const DRILL_META: Record<DrillKind, { title: string; description: string; lane: DrillLane }> = {
+  'predict-output': { title: 'Predict the output', description: 'Read a snippet and type exactly what it prints before time runs out.', lane: 'arcade' },
+  'spot-the-bug': { title: 'Spot the bug', description: "Click the line that's broken before the clock runs out.", lane: 'arcade' },
+  trace: { title: 'Trace by hand', description: "Step through execution and fill in each variable's value.", lane: 'arcade' },
+  'hold-focus': { title: 'Hold focus', description: 'Read a technical passage without scrolling, then answer one question.', lane: 'arcade' },
+  'n-back': { title: 'N-back', description: 'Watch a stream of code tokens and catch the ones that repeat.', lane: 'arcade' },
+  'speed-type': { title: 'Speed type', description: 'Type a snippet exactly as shown. Accuracy counts more than speed.', lane: 'arcade' },
+  'follow-the-dot': { title: 'Follow the Dot', description: 'Keep the pointer inside a dot that drifts and accelerates along a smooth path.', lane: 'play' },
+  'color-nback': { title: 'Colour Back', description: 'Watch a stream of colours and shapes and catch the ones that match N back.', lane: 'play' },
+  reaction: { title: 'Twitch', description: 'Ten rounds. Tap the instant the shape lights up; an early tap voids the round.', lane: 'play' },
+  rhythm: { title: 'Keep Time', description: 'Tap on the beat for sixty seconds while the tempo drifts.', lane: 'play' },
+  breathe: { title: 'Breathe', description: 'Follow a slow four-seven-eight breathing pace. This one cannot be failed.', lane: 'play' },
+  'memory-grid': { title: 'Grid', description: 'Watch a pattern flash on the grid, then reproduce it before it fades.', lane: 'play' },
 }
 
 export function isDrillKind(value: string | null | undefined): value is DrillKind {
@@ -92,12 +101,14 @@ function asDifficulty(value: unknown): Difficulty {
 }
 
 export function mapDrillRow(row: Record<string, unknown>): DrillItem {
+  const kind = text(row.kind) as DrillKind
   const item: DrillItem = {
     id: text(row.id),
-    kind: text(row.kind) as DrillKind,
+    kind,
     difficulty: asDifficulty(row.difficulty),
     payload: row.payload && typeof row.payload === 'object' ? (row.payload as Record<string, unknown>) : {},
     timeLimitS: typeof row.time_limit_s === 'number' ? row.time_limit_s : 60,
+    lane: DRILL_META[kind]?.lane ?? 'arcade',
   }
   if (typeof row.language === 'string' && row.language) item.language = row.language as Language
   return item

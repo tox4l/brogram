@@ -59,6 +59,7 @@ export interface Clo {
   /** Patterns that make sense for this CLO. The bank query filters on these. */
   patterns: PatternId[]
   assessableInCode: boolean
+  draft?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +471,9 @@ export interface AgentError {
 // De-rot drills
 // ---------------------------------------------------------------------------
 
-export type DrillKind = 'predict-output' | 'spot-the-bug' | 'trace' | 'hold-focus' | 'n-back' | 'speed-type'
+export type DrillKind =
+  | 'predict-output' | 'spot-the-bug' | 'trace' | 'hold-focus' | 'n-back' | 'speed-type'
+  | 'follow-the-dot' | 'color-nback' | 'reaction' | 'rhythm' | 'breathe' | 'memory-grid'
 
 export interface DrillItem {
   id: string
@@ -481,6 +484,7 @@ export interface DrillItem {
   payload: Record<string, unknown>
   /** Seconds allowed. */
   timeLimitS: number
+  lane: DrillLane
 }
 
 export interface DrillResult {
@@ -490,6 +494,7 @@ export interface DrillResult {
   timeMs: number
   score: number
   at: string
+  lane: DrillLane
 }
 
 // ---------------------------------------------------------------------------
@@ -504,6 +509,14 @@ export interface WellnessPrefs {
   pomodoroWorkMin: number
   pomodoroBreakMin: number
   useDeviceLocation: boolean
+  dock: WellnessDockPrefs
+  theme: ThemeName
+  sound: { enabled: boolean; volume: number; interface: boolean }
+  motion: MotionPreference
+  /** 1-10. */
+  dailyGoal: number
+  /** UTC date keys, most recent 120. Durable source for `kept-the-promise`. */
+  goalDays: string[]
 }
 
 export const DEFAULT_WELLNESS: WellnessPrefs = {
@@ -514,6 +527,12 @@ export const DEFAULT_WELLNESS: WellnessPrefs = {
   pomodoroWorkMin: 25,
   pomodoroBreakMin: 5,
   useDeviceLocation: false,
+  dock: { placement: 'right', collapsed: false, compactOnExercise: true, corner: 'br' },
+  theme: 'midnight',
+  sound: { enabled: true, volume: 0.6, interface: false },
+  motion: 'system',
+  dailyGoal: 3,
+  goalDays: [],
 }
 
 // ---------------------------------------------------------------------------
@@ -548,3 +567,220 @@ export function nextMasteryScore(current: number, passed: boolean, difficulty: D
   const delta = passed ? 8 + difficulty * 2 : -5
   return Math.max(0, Math.min(100, current + delta))
 }
+
+// ---------------------------------------------------------------------------
+// v2 additions (2026-09-06). Additive only. See
+// docs/superpowers/specs/2026-09-06-brogram-v2-bro.md section 11.4.
+// ---------------------------------------------------------------------------
+
+// --- Look, sound, motion, dock ---------------------------------------------
+
+export type ThemeName = 'midnight' | 'amber' | 'paper' | 'arcade'
+export type DockPlacement = 'left' | 'right' | 'top' | 'float' | 'hidden'
+export type DockCorner = 'tl' | 'tr' | 'bl' | 'br'
+export type MotionPreference = 'system' | 'full' | 'reduced'
+
+export interface WellnessDockPrefs {
+  placement: DockPlacement
+  collapsed: boolean
+  /** Collapse automatically on the exercise and walkthrough screens. */
+  compactOnExercise: boolean
+  /** Only meaningful for placement 'float'. */
+  corner: DockCorner
+}
+
+// --- Levels -----------------------------------------------------------------
+
+export const MAX_LEVEL = 30
+
+/** Cumulative XP needed to BE at a level. Level 1 = 0. Rounded to 50. */
+export function xpToReach(level: number): number {
+  if (level <= 1) return 0
+  const capped = Math.min(level, MAX_LEVEL)
+  return Math.round((500 * Math.pow(capped - 1, 1.5)) / 50) * 50
+}
+
+/** Largest n with xpToReach(n) <= xp, capped at MAX_LEVEL. Never below 1. */
+export function levelForXp(xp: number): number {
+  if (!Number.isFinite(xp) || xp <= 0) return 1
+  let level = 1
+  while (level < MAX_LEVEL && xpToReach(level + 1) <= xp) level += 1
+  return level
+}
+
+// --- Achievements -----------------------------------------------------------
+
+export type AchievementTier = 'bronze' | 'silver' | 'gold'
+
+export interface Achievement {
+  id: string
+  /** In voice, at most 3 words. */
+  name: string
+  /** Shown on unlock, at most 12 words. */
+  line: string
+  tier: AchievementTier
+  /** Human-readable rule, shown on the locked card. Nothing is a mystery box. */
+  how: string
+  visibleWhenLocked: boolean
+  /** Display order. A product decision, not an array index. */
+  ordinal: number
+}
+
+export interface UserAchievement {
+  userId: string
+  achievementId: string
+  unlockedAt: string
+}
+
+export const ACHIEVEMENTS: readonly Achievement[] = [
+  { id: 'first-blood', name: 'First Blood', line: 'First one down. That feeling is the whole product.', tier: 'bronze', how: 'Pass your first rep.', visibleWhenLocked: true, ordinal: 1 },
+  { id: 'no-wheels', name: 'No Training Wheels', line: 'Medium or harder, zero hints.', tier: 'bronze', how: 'Pass a medium or harder rep with zero hints.', visibleWhenLocked: true, ordinal: 2 },
+  { id: 'three-angles', name: 'Three Angles', line: 'Three passes, three angles, one skill locked.', tier: 'silver', how: 'Lock your first skill: three passes, three different angles.', visibleWhenLocked: true, ordinal: 3 },
+  { id: 'five-locked', name: 'Five Locked', line: 'Five skills, locked.', tier: 'silver', how: 'Lock five skills.', visibleWhenLocked: true, ordinal: 4 },
+  { id: 'course-clear', name: 'Cleared It', line: 'Whole course. Go look at where you started.', tier: 'gold', how: 'Lock every skill in a course.', visibleWhenLocked: true, ordinal: 5 },
+  { id: 'read-the-manual', name: 'Reads the Manual', line: 'Five walkthroughs, read properly.', tier: 'bronze', how: 'Finish five walkthroughs.', visibleWhenLocked: true, ordinal: 6 },
+  { id: 'full-read', name: 'Full Read', line: 'Every walkthrough in a course.', tier: 'silver', how: 'Finish every walkthrough in a course.', visibleWhenLocked: true, ordinal: 7 },
+  { id: 'comeback', name: 'Comeback', line: 'Failed it three times, then took it.', tier: 'bronze', how: 'Pass a rep you failed three times or more, in your recent history.', visibleWhenLocked: true, ordinal: 8 },
+  { id: 'under-a-minute', name: 'Under a Minute', line: 'Sixty seconds, no hints.', tier: 'silver', how: 'Pass a rep in under 60 seconds with no hints.', visibleWhenLocked: true, ordinal: 9 },
+  { id: 'two-tongues', name: 'Two Tongues', line: 'Two languages, same head.', tier: 'bronze', how: 'Pass reps in two different languages.', visibleWhenLocked: true, ordinal: 10 },
+  { id: 'pattern-hunter', name: 'Pattern Hunter', line: 'Ten angles. Nothing catches you sideways.', tier: 'silver', how: 'Pass ten different angles across any skills.', visibleWhenLocked: true, ordinal: 11 },
+  { id: 'day-three', name: 'Three Deep', line: 'Three days straight.', tier: 'bronze', how: 'Three-day streak.', visibleWhenLocked: true, ordinal: 12 },
+  { id: 'week-strong', name: 'Week Strong', line: 'Seven days. That is a habit now.', tier: 'silver', how: 'Seven-day streak.', visibleWhenLocked: true, ordinal: 13 },
+  { id: 'thirty', name: 'Thirty', line: 'Thirty days straight. That is not luck.', tier: 'gold', how: 'Thirty-day streak.', visibleWhenLocked: true, ordinal: 14 },
+  { id: 'kept-the-promise', name: 'Kept the Promise', line: 'Seven days, goal met.', tier: 'silver', how: 'Hit your daily goal seven times.', visibleWhenLocked: true, ordinal: 15 },
+  { id: 'sharp', name: 'Sharp', line: 'Ten Arcade runs.', tier: 'bronze', how: 'Finish ten Arcade runs.', visibleWhenLocked: true, ordinal: 16 },
+  { id: 'touch-grass', name: 'Touch Grass', line: 'Ten Playground runs.', tier: 'bronze', how: 'Finish ten Playground runs.', visibleWhenLocked: true, ordinal: 17 },
+  { id: 'beat-yourself', name: 'Beat Yourself', line: 'Five personal bests. Only yours.', tier: 'silver', how: 'Set five personal bests.', visibleWhenLocked: true, ordinal: 18 },
+  { id: 'level-five', name: 'Level Five', line: 'Level 5. Wired in.', tier: 'silver', how: 'Reach level 5.', visibleWhenLocked: true, ordinal: 19 },
+  { id: 'machine', name: 'Machine', line: 'Level 25. Machine.', tier: 'gold', how: 'Reach level 25.', visibleWhenLocked: true, ordinal: 20 },
+] as const
+
+// --- Walkthroughs (lessons) -------------------------------------------------
+
+export interface LessonConcept {
+  type: 'concept'
+  id: string
+  /** <= 60 chars. */
+  heading: string
+  /** Markdown, <= 120 words, plain language, second person. */
+  body: string
+  /** Optional inline SVG. No external assets, no <script>, no <foreignObject>. */
+  figure?: string
+}
+
+export interface LessonSnippet {
+  type: 'snippet'
+  id: string
+  language: Language
+  code: string
+  /** true = a Run button appears; the learner may edit and re-run. Nothing is graded. */
+  runnable: boolean
+  /** Certified by the verifier, never shown to the learner, stripped from LessonPublic. */
+  expectedStdout: string
+  caption?: string
+  /** 1-indexed inclusive line ranges to highlight when the block enters view. */
+  highlight?: [number, number][]
+  /** Pyodide packages, mirrors RunRequest.packages. Usually omitted. */
+  packages?: string[]
+}
+
+export interface LessonWorked {
+  type: 'worked'
+  id: string
+  language: Language
+  code: string
+  /** Revealed one at a time. 2-6 steps. `say` <= 22 words. */
+  steps: { line: number | [number, number]; say: string }[]
+  caption?: string
+}
+
+export type LessonCheck =
+  | { type: 'check'; id: string; kind: 'predict-output'; prompt: string; language: Language; code: string
+      expected: string; normalize: 'lines' | 'exact'; hint: string; explain: string }
+  | { type: 'check'; id: string; kind: 'choose'; prompt: string
+      options: string[]; correctIndex: number
+      /** One line per option, shown the instant that option is chosen. */
+      why: string[]; hint: string; explain: string }
+  | { type: 'check'; id: string; kind: 'spot-the-bug'; prompt: string; language: Language; code: string
+      bugLines: number[]; hint: string; explain: string }
+  | { type: 'check'; id: string; kind: 'fill-blank'; prompt: string; language: Language
+      /** Template with __1__, __2__ markers. */
+      template: string
+      /** `accept` is compared trimmed and case-insensitively. */
+      blanks: { id: string; accept: string[] }[]
+      hint: string; explain: string }
+  | { type: 'check'; id: string; kind: 'micro-code'; prompt: string; language: Language
+      starterCode: string
+      /** 2-3 tests, ALL visible. A check is never a hidden-test wall. */
+      tests: TestCase[]
+      /** Stripped from LessonPublic at build. */
+      referenceSolution: string
+      hint: string; explain: string }
+
+export interface LessonRecap {
+  type: 'recap'
+  id: string
+  /** Exactly 2 or 3, <= 14 words each. */
+  bullets: string[]
+  /** One line the learner should still have in a week. */
+  remember: string
+}
+
+export interface LessonBridge {
+  type: 'bridge'
+  id: string
+  /** The handoff, in voice, <= 20 words. */
+  say: string
+}
+
+export type LessonBlock =
+  | LessonConcept | LessonSnippet | LessonWorked | LessonCheck | LessonRecap | LessonBridge
+
+export interface Lesson {
+  /** EXACTLY the cloId. One walkthrough per skill; `version` alone carries staleness. */
+  id: CloId
+  cloId: CloId
+  course: CourseCode
+  language: Language
+  version: number
+  title: string
+  hook: string
+  /** 4-8. The workflow rejects anything over 8. */
+  estimatedMinutes: number
+  draft: boolean
+  tags: string[]
+  blocks: LessonBlock[]
+  exitLine: string
+}
+
+/** The shipped shape. Every micro-code referenceSolution and every snippet
+ *  expectedStdout is removed by scripts/build-static-curriculum.mjs. Written
+ *  out explicitly, the same way ExercisePublic is. */
+export type LessonPublicBlock =
+  | LessonConcept
+  | Omit<LessonSnippet, 'expectedStdout'>
+  | LessonWorked
+  | Exclude<LessonCheck, { kind: 'micro-code' }>
+  | (Omit<Extract<LessonCheck, { kind: 'micro-code' }>, 'referenceSolution'>)
+  | LessonRecap
+  | LessonBridge
+
+export type LessonPublic = Omit<Lesson, 'blocks'> & { blocks: LessonPublicBlock[] }
+
+export interface LessonProgress {
+  userId: string
+  lessonId: CloId
+  cloId: CloId
+  status: 'started' | 'completed' | 'skipped'
+  blockIndex: number
+  checksPassed: number
+  checksFailed: number
+  lessonVersion: number
+  startedAt: string
+  completedAt: string | null
+  updatedAt: string
+}
+
+// --- De-rot lanes -----------------------------------------------------------
+
+export type DrillLane = 'arcade' | 'play'

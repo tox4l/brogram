@@ -104,6 +104,7 @@ function makeDrill(overrides: Partial<DrillResult> = {}): DrillResult {
     timeMs: 1000,
     score: 80,
     at: '2026-09-01T00:00:00.000Z',
+    lane: 'arcade',
     ...overrides,
   }
 }
@@ -275,11 +276,14 @@ describe('deriveTimeSpent', () => {
 })
 
 describe('deriveDrillScores', () => {
-  it('always returns all six kinds, zeroed and non-throwing, when there is no history', () => {
+  it('always returns all twelve kinds, zeroed and non-throwing, when there is no history', () => {
     const rows = deriveDrillScores([])
-    expect(rows).toHaveLength(6)
+    expect(rows).toHaveLength(12)
     expect(rows.every(r => r.count === 0 && r.best === 0 && r.mean === 0)).toBe(true)
-    expect(rows.map(r => r.kind)).toEqual(['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type'])
+    expect(rows.map(r => r.kind)).toEqual([
+      'predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type',
+      'follow-the-dot', 'color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid',
+    ])
   })
 
   it('computes best, mean, and count per kind', () => {

@@ -3,11 +3,11 @@ import type { DrillItem, DrillResult } from '@/lib/contracts'
 import { computeDerotStreak, isDrillKind, mapDrillRow, pickDrillItem, statsForKind } from './lib'
 
 function result(overrides: Partial<DrillResult> = {}): DrillResult {
-  return { drillId: 'd1', kind: 'trace', correct: true, timeMs: 1000, score: 80, at: '2026-09-06T10:00:00.000Z', ...overrides }
+  return { drillId: 'd1', kind: 'trace', correct: true, timeMs: 1000, score: 80, at: '2026-09-06T10:00:00.000Z', lane: 'arcade', ...overrides }
 }
 
 function item(overrides: Partial<DrillItem> = {}): DrillItem {
-  return { id: 'd1', kind: 'trace', difficulty: 3, payload: {}, timeLimitS: 60, ...overrides }
+  return { id: 'd1', kind: 'trace', difficulty: 3, payload: {}, timeLimitS: 60, lane: 'arcade', ...overrides }
 }
 
 describe('isDrillKind', () => {
@@ -23,7 +23,7 @@ describe('isDrillKind', () => {
 describe('mapDrillRow', () => {
   it('maps a snake_case drills row to a DrillItem', () => {
     const mapped = mapDrillRow({ id: 'trace-001', kind: 'trace', language: 'python', difficulty: 2, time_limit_s: 90, payload: { steps: 3 } })
-    expect(mapped).toEqual({ id: 'trace-001', kind: 'trace', language: 'python', difficulty: 2, payload: { steps: 3 }, timeLimitS: 90 })
+    expect(mapped).toEqual({ id: 'trace-001', kind: 'trace', language: 'python', difficulty: 2, payload: { steps: 3 }, timeLimitS: 90, lane: 'arcade' })
   })
 
   it('falls back to sane defaults for a malformed row', () => {
@@ -32,6 +32,12 @@ describe('mapDrillRow', () => {
     expect(mapped.payload).toEqual({})
     expect(mapped.timeLimitS).toBe(60)
     expect(mapped.language).toBeUndefined()
+    expect(mapped.lane).toBe('arcade')
+  })
+
+  it('maps a Playground row to its lane from DRILL_META', () => {
+    const mapped = mapDrillRow({ id: 'play-follow-the-dot', kind: 'follow-the-dot', difficulty: 3, time_limit_s: 75, payload: {} })
+    expect(mapped.lane).toBe('play')
   })
 })
 
