@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import type { LessonCheck, TestResult } from '@/lib/contracts'
+import type { LessonCheck, LessonPublicBlock, TestResult } from '@/lib/contracts'
 import { gradeCheck } from './grade'
 
-const result = (passed: boolean): TestResult => ({
-  testId: 't', passed, actual: '', expected: '', stdout: '', stderr: '', durationMs: 0,
+const result = (passed: boolean, testId = 't'): TestResult => ({
+  testId, passed, actual: '', expected: '', stdout: '', stderr: '', durationMs: 0,
   ...(passed ? {} : { failureKind: 'wrong-answer' as const }),
 })
 
@@ -100,18 +100,47 @@ describe('gradeCheck: micro-code', () => {
   const check: LessonCheck = {
     type: 'check', id: 'c5', kind: 'micro-code', prompt: 'p', language: 'python',
     starterCode: 'def f(): pass',
-    tests: [{ id: 't1', input: '', expected: '1', hidden: false }],
+    tests: [
+      { id: 't1', input: '', expected: '1', hidden: false },
+      { id: 't2', input: '', expected: '2', hidden: false },
+    ],
     referenceSolution: 'def f(): return 1',
     hint: 'h', explain: 'e',
   }
 
-  it('is right only when every visible test result passed', () => {
-    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true), result(true)] }, 1).right).toBe(true)
-    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true), result(false)] }, 1).right).toBe(false)
+  it('is right only when every one of the check\'s own tests has a passing result', () => {
+    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true, 't1'), result(true, 't2')] }, 1).right).toBe(true)
+    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true, 't1'), result(false, 't2')] }, 1).right).toBe(false)
   })
 
   it('is not right with zero results', () => {
     expect(gradeCheck(check, { kind: 'micro-code', results: [] }, 1).right).toBe(false)
+  })
+
+  it('is not right when results are short, padded, or belong to a different check (id mismatch)', () => {
+    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true, 't1')] }, 1).right).toBe(false) // missing t2
+    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true, 't1'), result(true, 't2'), result(true, 't3')] }, 1).right).toBe(false) // extra result
+    expect(gradeCheck(check, { kind: 'micro-code', results: [result(true, 'x1'), result(true, 'x2')] }, 1).right).toBe(false) // right count, wrong ids
+  })
+})
+
+describe('gradeCheck: accepts a LessonPublicBlock check with no cast', () => {
+  it('grades a public choose check', () => {
+    const publicCheck: Extract<LessonPublicBlock, { type: 'check' }> = {
+      type: 'check', id: 'pub1', kind: 'choose', prompt: 'p',
+      options: ['a', 'b'], correctIndex: 0, why: ['wa', 'wb'], hint: 'h', explain: 'e',
+    }
+    expect(gradeCheck(publicCheck, { kind: 'choose', index: 0 }, 1).right).toBe(true)
+  })
+
+  it('grades a public micro-code check, which carries no referenceSolution field', () => {
+    const publicCheck: Extract<LessonPublicBlock, { type: 'check' }> = {
+      type: 'check', id: 'pub2', kind: 'micro-code', prompt: 'p', language: 'python',
+      starterCode: 'def f(): pass',
+      tests: [{ id: 't1', input: '', expected: '1', hidden: false }],
+      hint: 'h', explain: 'e',
+    }
+    expect(gradeCheck(publicCheck, { kind: 'micro-code', results: [result(true, 't1')] }, 1).right).toBe(true)
   })
 })
 
@@ -132,8 +161,8 @@ describe('gradeCheck: reveal never punishes and never locks out', () => {
     expect(gradeCheck(check, wrong, 5).reveal).toBe('explain')
   })
 
-  it('reveals nothing when the answer is right, regardless of attempt number', () => {
-    expect(gradeCheck(check, right, 1).reveal).toBe('none')
-    expect(gradeCheck(check, right, 5).reveal).toBe('none')
+  it('reveals explain when the answer is right, regardless of attempt number (spec 7.6)', () => {
+    expect(gradeCheck(check, right, 1).reveal).toBe('explain')
+    expect(gradeCheck(check, right, 5).reveal).toBe('explain')
   })
 })

@@ -5,12 +5,22 @@
  * calls an agent, and this module has no access to mastery, points or the
  * integrity score -- checks never punish (R3.7).
  */
-import type { LessonCheck, TestResult } from '@/lib/contracts'
+import type { LessonCheck, LessonPublicBlock, TestResult } from '@/lib/contracts'
 import { gradePredictOutput, gradeSpotTheBug } from '@/components/derot/scoring'
+
+/**
+ * The check-block shape the client actually holds: identical to `LessonCheck`
+ * except a `micro-code` check has no `referenceSolution` (R3.5 strips it at
+ * build). `gradeCheck` accepts either so a caller holding a `LessonPublicBlock`
+ * check never needs an `as LessonCheck` cast -- that cast is exactly the crack
+ * the secrecy rule exists to close.
+ */
+export type GradableCheck = LessonCheck | Extract<LessonPublicBlock, { type: 'check' }>
 
 export interface CheckVerdict {
   right: boolean
-  /** 'hint' after the first wrong answer, 'explain' after the second. Nothing is ever consumed. */
+  /** 'hint' after the first wrong answer, 'explain' after the second. A right answer also reveals
+   *  'explain' (spec 7.6: the row goes green and explain expands). Nothing is ever consumed. */
   reveal: 'none' | 'hint' | 'explain'
   /** For `choose`: the line for the option actually chosen -- this is where the teaching happens. */
   why?: string
@@ -27,7 +37,7 @@ function foldAccept(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function isRight(check: LessonCheck, answer: CheckAnswer): boolean {
+function isRight(check: GradableCheck, answer: CheckAnswer): boolean {
   if (check.kind === 'predict-output' && answer.kind === 'predict-output') {
     return check.normalize === 'exact'
       ? check.expected === answer.text
@@ -46,15 +56,24 @@ function isRight(check: LessonCheck, answer: CheckAnswer): boolean {
     })
   }
   if (check.kind === 'micro-code' && answer.kind === 'micro-code') {
-    return answer.results.length > 0 && answer.results.every((r) => r.passed)
+    // Tied to the check's own tests, not just "some non-empty array of
+    // passes" -- a short array, a padded/truncated array, or results that
+    // belong to a different check must all grade wrong.
+    return (
+      answer.results.length === check.tests.length &&
+      check.tests.every((t) => answer.results.some((r) => r.testId === t.id && r.passed))
+    )
   }
   // A mismatched answer kind for this check is a wrong answer, not a broken screen.
   return false
 }
 
-export function gradeCheck(check: LessonCheck, answer: CheckAnswer, attemptNumber: number): CheckVerdict {
+export function gradeCheck(check: GradableCheck, answer: CheckAnswer, attemptNumber: number): CheckVerdict {
   const right = isRight(check, answer)
-  const reveal = right ? 'none' : attemptNumber <= 1 ? 'hint' : 'explain'
+  // A right answer also reveals 'explain' (spec 7.6): the teaching payoff for
+  // getting it right is the explanation, not silence. Only a wrong first
+  // attempt gets the softer 'hint'.
+  const reveal: CheckVerdict['reveal'] = right || attemptNumber > 1 ? 'explain' : 'hint'
   const why = check.kind === 'choose' && answer.kind === 'choose' ? check.why[answer.index] : undefined
   return { right, reveal, ...(why !== undefined ? { why } : {}) }
 }

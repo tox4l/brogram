@@ -3,16 +3,14 @@
  * folds a previous `LessonProgress` (or none) into the next one. No I/O, no
  * agent, no clock reads -- `now` is always passed in.
  *
- * `nextProgress` does not assign `userId`: it is threaded straight through
- * from `prev` when one exists. When `prev` is null (the 'opened' event
- * seeding a brand-new row) it is left as `''`; the caller owns attaching the
- * authenticated user id before persisting, the same way it owns the primary
- * key on insert.
+ * `userId` travels on the 'opened' event -- the only event that can create a
+ * row -- so a forgotten id is a compile error at the one call site that can
+ * get it wrong, rather than a runtime `''` a caller has to remember to patch.
  */
 import type { CloId, LessonProgress, LessonPublic } from '@/lib/contracts'
 
 export type LessonEvent =
-  | { type: 'opened'; lesson: LessonPublic }
+  | { type: 'opened'; lesson: LessonPublic; userId: string }
   | { type: 'block-advanced'; index: number }
   | { type: 'check'; right: boolean }
   | { type: 'completed' }
@@ -51,8 +49,15 @@ function requirePrev(prev: LessonProgress | null, event: LessonEvent['type']): L
 export function nextProgress(prev: LessonProgress | null, event: LessonEvent, now: string): LessonProgress {
   switch (event.type) {
     case 'opened': {
-      if (!prev || isStale(prev, event.lesson)) {
-        return freshProgress(prev?.userId ?? '', event.lesson, now)
+      if (!prev) return freshProgress(event.userId, event.lesson, now)
+      if (isStale(prev, event.lesson)) {
+        // Content was rewritten. Progress is never deleted (spec 3.2):
+        // status, completedAt and check counters survive a version bump so a
+        // content fix cannot silently un-finish a walkthrough or un-earn an
+        // achievement. Only blockIndex resets -- an old index may point past
+        // the rewritten block list -- and lessonVersion re-points at the
+        // current content.
+        return { ...prev, lessonVersion: event.lesson.version, blockIndex: 0, updatedAt: now }
       }
       // Reopening current content never regresses a finished lesson; anything
       // else (started, skipped) reopens as started.
@@ -73,7 +78,10 @@ export function nextProgress(prev: LessonProgress | null, event: LessonEvent, no
     }
     case 'completed': {
       const cur = requirePrev(prev, event.type)
-      return { ...cur, status: 'completed', completedAt: now, updatedAt: now }
+      // A repeat 'completed' (a re-read that scrolls past the bridge block
+      // again) must not mint a fresh completedAt -- that can manufacture a
+      // daily-goal win for a day the lesson was not actually finished.
+      return { ...cur, status: 'completed', completedAt: cur.completedAt ?? now, updatedAt: now }
     }
     case 'skipped': {
       const cur = requirePrev(prev, event.type)

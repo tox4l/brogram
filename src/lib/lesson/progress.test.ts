@@ -39,24 +39,33 @@ describe('isStale', () => {
 })
 
 describe('nextProgress: opened', () => {
-  it('creates a fresh started progress when there is none', () => {
-    const p = nextProgress(null, { type: 'opened', lesson: lesson(2) }, '2026-09-06T00:00:00.000Z')
+  it('creates a fresh started progress when there is none, carrying the userId from the event', () => {
+    const p = nextProgress(null, { type: 'opened', lesson: lesson(2), userId: 'u1' }, '2026-09-06T00:00:00.000Z')
     expect(p).toMatchObject({
-      lessonId: 'INFS1101-3', cloId: 'INFS1101-3', status: 'started',
+      userId: 'u1', lessonId: 'INFS1101-3', cloId: 'INFS1101-3', status: 'started',
       blockIndex: 0, checksPassed: 0, checksFailed: 0, lessonVersion: 2,
       startedAt: '2026-09-06T00:00:00.000Z', completedAt: null, updatedAt: '2026-09-06T00:00:00.000Z',
     })
   })
 
-  it('resets block and check counters when the stored progress is stale', () => {
+  it('preserves status, completedAt and check counters when the stored progress is stale (progress is never deleted); only blockIndex resets and lessonVersion bumps', () => {
     const prev = progress({ lessonVersion: 1, status: 'completed', blockIndex: 6, checksPassed: 3, checksFailed: 2, completedAt: '2026-09-01T00:00:00.000Z' })
-    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2) }, '2026-09-06T00:00:00.000Z')
-    expect(p).toMatchObject({ status: 'started', blockIndex: 0, checksPassed: 0, checksFailed: 0, lessonVersion: 2, completedAt: null })
+    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2), userId: 'u1' }, '2026-09-06T00:00:00.000Z')
+    expect(p).toMatchObject({
+      status: 'completed', blockIndex: 0, checksPassed: 3, checksFailed: 2,
+      lessonVersion: 2, completedAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-06T00:00:00.000Z',
+    })
+  })
+
+  it('also preserves a non-completed status (started/skipped) across a stale reopen', () => {
+    const prev = progress({ lessonVersion: 1, status: 'skipped', blockIndex: 3, checksPassed: 1, checksFailed: 4 })
+    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2), userId: 'u1' }, '2026-09-06T00:00:00.000Z')
+    expect(p).toMatchObject({ status: 'skipped', blockIndex: 0, checksPassed: 1, checksFailed: 4, lessonVersion: 2 })
   })
 
   it('never regresses a completed lesson back to started when reopened at the same version', () => {
     const prev = progress({ status: 'completed', lessonVersion: 2, completedAt: '2026-09-01T00:00:00.000Z' })
-    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2) }, '2026-09-06T00:00:00.000Z')
+    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2), userId: 'u1' }, '2026-09-06T00:00:00.000Z')
     expect(p.status).toBe('completed')
     expect(p.completedAt).toBe('2026-09-01T00:00:00.000Z')
     expect(p.updatedAt).toBe('2026-09-06T00:00:00.000Z')
@@ -64,7 +73,7 @@ describe('nextProgress: opened', () => {
 
   it('moves a skipped lesson back to started when reopened at the same version', () => {
     const prev = progress({ status: 'skipped', lessonVersion: 2 })
-    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2) }, '2026-09-06T00:00:00.000Z')
+    const p = nextProgress(prev, { type: 'opened', lesson: lesson(2), userId: 'u1' }, '2026-09-06T00:00:00.000Z')
     expect(p.status).toBe('started')
   })
 })
@@ -105,6 +114,14 @@ describe('nextProgress: completed', () => {
     const p = nextProgress(prev, { type: 'completed' }, '2026-09-06T00:00:00.000Z')
     expect(p.status).toBe('completed')
     expect(p.completedAt).toBe('2026-09-06T00:00:00.000Z')
+  })
+
+  it('keeps the first completedAt on a repeat completion (idempotent; no re-minted daily-goal win)', () => {
+    const firstCompletion = nextProgress(progress({ status: 'started', completedAt: null }), { type: 'completed' }, '2026-09-01T00:00:00.000Z')
+    const secondCompletion = nextProgress(firstCompletion, { type: 'completed' }, '2026-09-06T00:00:00.000Z')
+    expect(secondCompletion.completedAt).toBe('2026-09-01T00:00:00.000Z')
+    expect(secondCompletion.updatedAt).toBe('2026-09-06T00:00:00.000Z')
+    expect(secondCompletion.status).toBe('completed')
   })
 })
 
