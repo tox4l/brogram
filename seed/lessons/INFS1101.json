@@ -1,0 +1,95 @@
+{
+  "$note": "BroGram lessons. One lesson per CLO. No institution names, no pattern ids, no emoji.",
+  "course": "INFS1101",
+  "lessons": [
+    {
+      "id": "INFS1101-2",
+      "cloId": "INFS1101-2",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "Plan the steps, then write the code",
+      "hook": "Every working program starts as a plan you could say out loud.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": ["planning", "selection"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Say the steps before you write them",
+          "body": "Before you touch the keyboard, write down what has to happen, in order: what comes in, what gets checked, and what comes out. Once the steps are right in plain words, each one turns into close to one line of code. A step that says \"check this first\" becomes an if. A step that says \"otherwise, check this\" becomes an elif. The one step left over, the one that catches everything else, becomes else. Coding gets easier the moment you stop trying to write the steps and the code at the same time."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "age = 15\n\nif age < 5:\n    price = 0\nelif age < 18:\n    price = 8\nelse:\n    price = 12\n\nprint(price)",
+          "runnable": true,
+          "expectedStdout": "8\n",
+          "caption": "Change the age and run it again. Watch which branch wins."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "score = 82\n\nif score >= 90:\n    grade = \"A\"\nelif score >= 80:\n    grade = \"B\"\nelif score >= 70:\n    grade = \"C\"\nelse:\n    grade = \"F\"\n\nprint(grade)",
+          "steps": [
+            { "line": 1, "say": "Start with the one thing you are deciding about: the score." },
+            { "line": [3, 4], "say": "Check the top case first. Clear ninety, and you are done — straight to A." },
+            { "line": [5, 8], "say": "Each elif only runs if every check above it failed, so order decides everything." },
+            { "line": [9, 12], "say": "Whatever is left falls to else, then that single value gets used." }
+          ],
+          "caption": "One value, checked from the top down, until one branch fits."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same shape, different score. What does this print?",
+          "language": "python",
+          "code": "score = 65\n\nif score >= 90:\n    grade = \"A\"\nelif score >= 80:\n    grade = \"B\"\nelif score >= 70:\n    grade = \"C\"\nelse:\n    grade = \"F\"\n\nprint(grade)",
+          "expected": "F",
+          "normalize": "lines",
+          "hint": "Walk the conditions top to bottom. Where does 65 first fit one?",
+          "explain": "65 is not ninety or more, not eighty or more, and not seventy or more, so every elif fails and the code falls through to else, which is what makes grade equal \"F\"."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "The branches above are checked top to bottom. Why does that order matter here?",
+          "options": [
+            "It does not — every branch is checked and the last match wins.",
+            "Because once one branch runs, the rest are skipped, so the first true condition wins.",
+            "It only changes how fast the code runs, not which value gets picked."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Python stops at the first true branch and never looks at the rest, so a later match could never win anyway.",
+            "Right. The first true condition wins and everything after it is skipped, so the order the checks are written in is part of what the code decides.",
+            "It changes the result, not just the speed — swap the order and different scores land in the wrong bracket."
+          ],
+          "hint": "Think about what happens if the top check came last instead of first.",
+          "explain": "if and elif run top to bottom and stop at the first true one, so the order the checks are written in is part of the logic, not just a style choice."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Write the steps in plain words before touching the keyboard.",
+            "if, elif and else run in order; the first true one wins.",
+            "Whatever survives every check becomes the value you actually use."
+          ],
+          "remember": "The order of your checks is part of the logic, not just the style."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Same shape, harder numbers. Time to build one yourself."
+        }
+      ],
+      "exitLine": "That's the shape. Go take a real one."
+    }
+  ]
+}

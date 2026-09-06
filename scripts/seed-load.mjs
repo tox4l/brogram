@@ -3,6 +3,9 @@ import { readFile, readdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseEnv } from 'node:util'
+// ACHIEVEMENTS is imported from the contracts module (not re-typed here) so
+// the seeded table can never drift from the constant every other surface reads.
+import { ACHIEVEMENTS } from '../src/lib/contracts.ts'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 // Fixed DNS UUID namespace. Changing it would duplicate existing exercises.
@@ -12,7 +15,32 @@ const COLUMNS = {
   courses: ['code', 'slug', 'title', 'language', 'secondary_language', 'runtime', 'level', 'prerequisites', 'topics', 'clo_ids', 'status', 'packages'],
   clos: ['id', 'course', 'ordinal', 'outcome', 'topics', 'prerequisites', 'patterns', 'assessable_in_code', 'draft'],
   exercises: ['id', 'clo_id', 'language', 'kind', 'difficulty', 'pattern', 'title', 'prompt', 'starter_code', 'tests', 'reference_solution', 'origin', 'parent_exercise_id', 'author_user_id', 'verified', 'tags', 'fixture', 'created_at'],
-  drills: ['id', 'kind', 'language', 'difficulty', 'time_limit_s', 'payload'],
+  drills: ['id', 'kind', 'language', 'difficulty', 'time_limit_s', 'payload', 'lane'],
+  lessons: ['id', 'clo_id', 'course', 'language', 'version', 'title', 'hook', 'estimated_minutes', 'draft', 'tags', 'blocks', 'exit_line'],
+  achievements: ['id', 'name', 'line', 'tier', 'how', 'visible_when_locked', 'ordinal'],
+}
+
+// One synthetic DrillItem per Playground game (spec section 7.9): Playground
+// games are code, not seeded content, but they still need a drills row so
+// drill_results and streak math need no special case for lane: 'play'.
+const PLAY_GAME_TIME_LIMITS = {
+  'follow-the-dot': 75,
+  'color-nback': 90,
+  reaction: 60,
+  rhythm: 60,
+  breathe: 90,
+  'memory-grid': 90,
+}
+
+function playDrillItems() {
+  return Object.entries(PLAY_GAME_TIME_LIMITS).map(([kind, timeLimitS]) => ({
+    id: `play-${kind}`,
+    kind,
+    lane: 'play',
+    difficulty: 3,
+    timeLimitS,
+    payload: {},
+  }))
 }
 
 export function uuidv5(name, namespace) {
@@ -32,7 +60,7 @@ async function readRows(path, key, requireWrapper = false) {
   return rows
 }
 
-async function readFolder(path, key) {
+async function readFolder(path, key, exclude = new Set()) {
   let entries
   try {
     entries = await readdir(path, { withFileTypes: true })
@@ -40,7 +68,7 @@ async function readFolder(path, key) {
     if (error.code === 'ENOENT') return []
     throw error
   }
-  const files = entries.filter(entry => entry.isFile() && entry.name.endsWith('.json'))
+  const files = entries.filter(entry => entry.isFile() && entry.name.endsWith('.json') && !exclude.has(entry.name))
     .map(entry => entry.name).sort()
   const rows = await Promise.all(files.map(file => readRows(join(path, file), key)))
   return rows.flat()
@@ -83,6 +111,7 @@ function mapRow(table, source) {
     row.fixture ??= null
   } else if (table === 'drills') {
     row.language ??= null
+    row.lane ??= 'arcade'
   }
   return row
 }
@@ -94,7 +123,9 @@ export async function readSeedTables(root = ROOT) {
     readRows(join(seed, 'courses.json'), 'courses', true),
     readRows(join(seed, 'clos.json'), 'clos'),
     readFolder(join(seed, 'exercises'), 'exercises'),
-    readFolder(join(seed, 'drills'), 'items'),
+    readFolder(join(seed, 'drills'), 'items').then(items => [...items, ...playDrillItems()]),
+    readFolder(join(seed, 'lessons'), 'lessons', new Set(['lesson.schema.json'])),
+    Promise.resolve(ACHIEVEMENTS),
   ])
   return Object.keys(COLUMNS).map((name, index) => ({
     name,

@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brogram.dev/schema/lesson.schema.json",
+  "title": "BroGram lesson file",
+  "description": "One file per course: seed/lessons/<COURSE_CODE>.json. Spec section 3.2. This is the single source of truth for lesson shape; seed/validate.mjs reads it, and so does the lesson-authoring workflow (T1.1). Invariants that need data from other seed files (cloId exists, course matches, language matches the CLO's course, no pattern id from seed/patterns.json) are NOT expressible here and are enforced by seed/validate.mjs directly, which loads this schema plus those other files.",
+
+  "type": "object",
+  "required": ["course", "lessons"],
+  "properties": {
+    "$note": { "type": "string" },
+    "course": { "type": "string", "minLength": 1 },
+    "lessons": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/lesson" }
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "language": {
+      "enum": ["python", "javascript", "typescript", "web", "sql", "mongo", "java"]
+    },
+
+    "testCase": {
+      "type": "object",
+      "required": ["id", "input", "expected"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "input": { "type": "string" },
+        "expected": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+
+    "lessonConcept": {
+      "type": "object",
+      "required": ["type", "id", "heading", "body"],
+      "properties": {
+        "type": { "const": "concept" },
+        "id": { "type": "string", "minLength": 1 },
+        "heading": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "body": { "type": "string", "minLength": 1 },
+        "figure": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "lessonSnippet": {
+      "type": "object",
+      "required": ["type", "id", "language", "code", "runnable", "expectedStdout"],
+      "properties": {
+        "type": { "const": "snippet" },
+        "id": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "code": { "type": "string", "minLength": 1 },
+        "runnable": { "type": "boolean" },
+        "expectedStdout": { "type": "string" },
+        "caption": { "type": "string" },
+        "highlight": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 1 },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "packages": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+
+    "lessonWorkedStep": {
+      "type": "object",
+      "required": ["line", "say"],
+      "properties": {
+        "line": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 }
+          ]
+        },
+        "say": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "lessonWorked": {
+      "type": "object",
+      "required": ["type", "id", "language", "code", "steps"],
+      "properties": {
+        "type": { "const": "worked" },
+        "id": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "code": { "type": "string", "minLength": 1 },
+        "steps": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/lessonWorkedStep" }
+        },
+        "caption": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "checkPredictOutput": {
+      "type": "object",
+      "required": ["type", "id", "kind", "prompt", "language", "code", "expected", "normalize", "hint", "explain"],
+      "properties": {
+        "type": { "const": "check" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "predict-output" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "code": { "type": "string", "minLength": 1 },
+        "expected": { "type": "string" },
+        "normalize": { "enum": ["lines", "exact"] },
+        "hint": { "type": "string", "minLength": 1 },
+        "explain": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "checkChoose": {
+      "type": "object",
+      "required": ["type", "id", "kind", "prompt", "options", "correctIndex", "why", "hint", "explain"],
+      "properties": {
+        "type": { "const": "check" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "choose" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "options": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 1 } },
+        "correctIndex": { "type": "integer", "minimum": 0 },
+        "why": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "hint": { "type": "string", "minLength": 1 },
+        "explain": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "checkSpotTheBug": {
+      "type": "object",
+      "required": ["type", "id", "kind", "prompt", "language", "code", "bugLines", "hint", "explain"],
+      "properties": {
+        "type": { "const": "check" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "spot-the-bug" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "code": { "type": "string", "minLength": 1 },
+        "bugLines": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 } },
+        "hint": { "type": "string", "minLength": 1 },
+        "explain": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "checkFillBlank": {
+      "type": "object",
+      "required": ["type", "id", "kind", "prompt", "language", "template", "blanks", "hint", "explain"],
+      "properties": {
+        "type": { "const": "check" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "fill-blank" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "template": { "type": "string", "minLength": 1 },
+        "blanks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "accept"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "accept": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "hint": { "type": "string", "minLength": 1 },
+        "explain": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "checkMicroCode": {
+      "type": "object",
+      "required": ["type", "id", "kind", "prompt", "language", "starterCode", "tests", "referenceSolution", "hint", "explain"],
+      "properties": {
+        "type": { "const": "check" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "micro-code" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "starterCode": { "type": "string" },
+        "tests": { "type": "array", "minItems": 2, "maxItems": 3, "items": { "$ref": "#/$defs/testCase" } },
+        "referenceSolution": { "type": "string", "minLength": 1 },
+        "hint": { "type": "string", "minLength": 1 },
+        "explain": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "lessonCheck": {
+      "oneOf": [
+        { "$ref": "#/$defs/checkPredictOutput" },
+        { "$ref": "#/$defs/checkChoose" },
+        { "$ref": "#/$defs/checkSpotTheBug" },
+        { "$ref": "#/$defs/checkFillBlank" },
+        { "$ref": "#/$defs/checkMicroCode" }
+      ]
+    },
+
+    "lessonRecap": {
+      "type": "object",
+      "required": ["type", "id", "bullets", "remember"],
+      "properties": {
+        "type": { "const": "recap" },
+        "id": { "type": "string", "minLength": 1 },
+        "bullets": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": { "type": "string", "minLength": 1, "maxLength": 90 }
+        },
+        "remember": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "lessonBridge": {
+      "type": "object",
+      "required": ["type", "id", "say"],
+      "properties": {
+        "type": { "const": "bridge" },
+        "id": { "type": "string", "minLength": 1 },
+        "say": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "lessonBlock": {
+      "oneOf": [
+        { "$ref": "#/$defs/lessonConcept" },
+        { "$ref": "#/$defs/lessonSnippet" },
+        { "$ref": "#/$defs/lessonWorked" },
+        { "$ref": "#/$defs/lessonCheck" },
+        { "$ref": "#/$defs/lessonRecap" },
+        { "$ref": "#/$defs/lessonBridge" }
+      ]
+    },
+
+    "lesson": {
+      "type": "object",
+      "required": [
+        "id", "cloId", "course", "language", "version", "title", "hook",
+        "estimatedMinutes", "draft", "tags", "blocks", "exitLine"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "cloId": { "type": "string", "minLength": 1 },
+        "course": { "type": "string", "minLength": 1 },
+        "language": { "$ref": "#/$defs/language" },
+        "version": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "hook": { "type": "string", "minLength": 1 },
+        "estimatedMinutes": { "type": "integer", "minimum": 4, "maximum": 8 },
+        "draft": { "type": "boolean" },
+        "tags": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/lessonBlock" }
+        },
+        "exitLine": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "x-invariants": {
+    "$comment": "Structural invariants seed/validate.mjs applies over `blocks` and over the lesson text, in addition to the JSON Schema shape above. These are cross-cutting (span the whole blocks array or every string in the tree) and are not naturally expressible as plain JSON Schema, so the numbers live here once and the validator reads them from this file rather than hardcoding a second copy.",
+    "blockOrder": ["concept", "worked", "check", "recap", "bridge"],
+    "blockCounts": {
+      "concept": { "min": 1, "max": 1 },
+      "worked": { "min": 1, "max": 1 },
+      "check": { "min": 1, "max": 3 },
+      "recap": { "min": 1, "max": 1 },
+      "bridge": { "min": 1, "max": 1 }
+    },
+    "optionalBlockTypes": ["snippet"],
+    "maxBlocks": 8,
+    "code": { "maxLines": 20, "maxCols": 90 },
+    "estimatedMinutes": { "min": 4, "max": 8 },
+    "bannedTextPattern": "\\b(CLO|learning outcome|syllabus)\\b",
+    "bannedTextFlags": "i",
+    "noEmoji": true,
+    "idEqualsCloId": true,
+    "javaSnippetsNotRunnable": true
+  }
+}
