@@ -5,7 +5,7 @@ export default function Home() {
         <h1 className="text-6xl font-semibold tracking-tight text-emerald-300 sm:text-8xl">
           BroGram
         </h1>
-        <p className="mx-auto mt-6 max-w-md text-lg leading-relaxed text-zinc-300">
+        <p className="mx-auto mt-6 max-w-md text-lg leading-relaxed text-muted-foreground">
           Learn by writing code.
         </p>
       </div>

@@ -25,6 +25,7 @@ let tables: Record<string, Row[]>
 let failWrite: string | null
 let loseStateAck = false
 let store: LearnerState
+let lastOrFilter: string | null = null
 const rowOf = (e: ExercisePublic): Row => ({ ...e, clo_id: e.cloId, starter_code: e.starterCode, verified: true })
 
 function query(table: string) {
@@ -34,7 +35,7 @@ function query(table: string) {
     select: () => builder,
     eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return builder },
     in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return builder },
-    or: (condition: string) => { const timestamp = condition.split('last_attempt_at.lte.')[1]; filters.push(row => row.last_attempt_at == null || String(row.last_attempt_at) <= timestamp); return builder },
+    or: (condition: string) => { lastOrFilter = condition; const raw = condition.split('last_attempt_at.lte.')[1]; const timestamp = raw?.replace(/^"|"$/g, ''); filters.push(row => row.last_attempt_at == null || String(row.last_attempt_at) <= timestamp); return builder },
     order: () => builder,
     limit: (count: number) => { limit = count; return builder },
     maybeSingle: () => { single = true; return builder },
@@ -77,6 +78,7 @@ beforeEach(() => {
   tables = { exercises_public: [rowOf(current), rowOf(candidate)], clos: [clo], courses: [{ code: 'course1', packages: [] }], attempts: [], mastery: [], learner_state: [{ user_id: 'student', state: store, version: 1 }] }
   failWrite = null
   loseStateAck = false
+  lastOrFilter = null
   spies.from.mockImplementation(query)
   spies.warmup.mockResolvedValue(undefined)
   spies.progress.mockImplementation(() => () => {})
@@ -100,6 +102,7 @@ describe('exercise loop triggers and durable progress', () => {
     expect(hook.result.current.partialDiagnosis).toBeNull()
     expect(tables.attempts).toHaveLength(1)
     expect(store.recentMistakes[0].label).toBe('missing-return')
+    expect(lastOrFilter).toBe(`last_attempt_at.is.null,last_attempt_at.lte."${tables.attempts[0].created_at}"`)
     expect(hook.result.current.hintAvailable).toBe(false)
     act(() => hook.result.current.setCode('edited'))
     expect(hook.result.current.hintAvailable).toBe(true)
@@ -133,6 +136,32 @@ describe('exercise loop triggers and durable progress', () => {
     expect(hook.result.current.hintCount).toBe(5)
     expect(spies.stream.mock.calls.filter(([req]) => req.agent === 'coach')).toHaveLength(5)
     expect(hook.result.current.hintAvailable).toBe(false)
+  })
+
+  it('refunds a hint when streamAgent rejects without ever streaming a partial frame', async () => {
+    const hook = await loaded()
+    await act(async () => { await hook.result.current.submit() })
+    act(() => hook.result.current.setCode('edited'))
+    spies.stream.mockImplementationOnce(async () => { throw new Error('network down') })
+    await act(async () => { await hook.result.current.requestHint() })
+    expect(hook.result.current.hintCount).toBe(0)
+    expect(hook.result.current.error).toContain('network down')
+    expect(hook.result.current.hintAvailable).toBe(true)
+    const receipt = JSON.parse(sessionStorage.getItem('brogram:hints:student:e1')!)
+    expect(receipt.count).toBe(0)
+    expect(receipt.calledAt).toBeNull()
+  })
+
+  it('keeps a spent hint charged when streamAgent rejects after streaming a partial frame', async () => {
+    const hook = await loaded()
+    await act(async () => { await hook.result.current.submit() })
+    act(() => hook.result.current.setCode('edited'))
+    spies.stream.mockImplementationOnce((_req, partial) => { partial({ hint: 'partial hint' }); return Promise.reject(new Error('dropped mid-stream')) })
+    await act(async () => { await hook.result.current.requestHint() })
+    expect(hook.result.current.hintCount).toBe(1)
+    expect(hook.result.current.error).toContain('dropped mid-stream')
+    const receipt = JSON.parse(sessionStorage.getItem('brogram:hints:student:e1')!)
+    expect(receipt.count).toBe(1)
   })
 
   it('retries persistence without repeating the attempt or Reviewer and awards points once', async () => {

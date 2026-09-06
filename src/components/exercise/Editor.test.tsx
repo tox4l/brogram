@@ -18,8 +18,10 @@ describe('exercise editor', () => {
     expect(fireEvent.cut(editor)).toBe(false)
     expect(fireEvent.contextMenu(editor)).toBe(false)
     expect(fireEvent.mouseDown(editor, { button: 2 })).toBe(false)
+    expect(fireEvent.dragOver(editor)).toBe(false)
+    expect(fireEvent.drop(editor)).toBe(false)
     expect(logIntegrity.mock.calls.map(([type]) => type)).toEqual([
-      'paste-blocked', 'copy-blocked', 'copy-blocked', 'contextmenu-blocked', 'contextmenu-blocked',
+      'paste-blocked', 'copy-blocked', 'copy-blocked', 'contextmenu-blocked', 'contextmenu-blocked', 'paste-blocked',
     ])
     expect(editor.textContent).toBe('const x = 1')
     expect(onChange).not.toHaveBeenCalled()

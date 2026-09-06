@@ -311,7 +311,7 @@ export function useExerciseLoop(exerciseId: string) {
       const inserted = await client.from('mastery').upsert(row, { onConflict: 'user_id,clo_id', ignoreDuplicates: true })
       if (inserted.error) throw inserted.error
       if (generation.current !== token) return
-      const updated = await client.from('mastery').update(row).eq('user_id', mastery.userId).eq('clo_id', mastery.cloId).or(`last_attempt_at.is.null,last_attempt_at.lte.${mastery.lastAttemptAt ?? attempt.createdAt}`).select('clo_id').maybeSingle()
+      const updated = await client.from('mastery').update(row).eq('user_id', mastery.userId).eq('clo_id', mastery.cloId).or(`last_attempt_at.is.null,last_attempt_at.lte."${mastery.lastAttemptAt ?? attempt.createdAt}"`).select('clo_id').maybeSingle()
       if (updated.error) throw updated.error
       if (!updated.data) throw new Error('Your attempt was saved, but newer mastery exists in another tab. Return to the dashboard to refresh it.')
       operation.masterySaved = true
@@ -386,19 +386,39 @@ export function useExerciseLoop(exerciseId: string) {
     const token = generation.current
     gate.current = true; setBusy(true); setError(null)
     const currentCode = codeRef.current
+    const previousHintCount = spentHints.current
+    const previousCoachAt = lastCoachAt.current
+    const previousHintedFailureId = hintedFailureId.current
+    const previousHintTiming = hintTiming
+    let receivedPartial = false
+    let userId: string | null = null
     try {
       const state = assertAllowed()
+      userId = state.userId
       // Spend and persist before awaiting: a failed request still consumed a call.
       lastCoachAt.current = Date.now(); spentHints.current++; setHintCount(spentHints.current); setClock(Date.now())
       hintedFailureId.current = failureId.current
       setHintTiming(previous => ({ ...previous, coachAt: lastCoachAt.current, first: false }))
       writeHintReceipt(state.userId, item.id, { count: spentHints.current, calledAt: lastCoachAt.current, failureId: hintedFailureId.current, hints: hintsRef.current })
-      const reply = await streamAgent({ agent: 'coach', trigger: 'hint-requested', state, exercise: { id: item.id, cloId: item.cloId, pattern: item.pattern, prompt: item.prompt, language: item.language }, diffSinceLastHint: item.kind === 'code' ? codeDiff(lastHintCode.current, currentCode) : '', currentCode, fixPlan: diagnosis.fixPlan, hintsSoFar: hintsRef.current.map(previous => previous.hint) }, partial => { if (generation.current === token) setPartialHint(partial) })
+      const reply = await streamAgent({ agent: 'coach', trigger: 'hint-requested', state, exercise: { id: item.id, cloId: item.cloId, pattern: item.pattern, prompt: item.prompt, language: item.language }, diffSinceLastHint: item.kind === 'code' ? codeDiff(lastHintCode.current, currentCode) : '', currentCode, fixPlan: diagnosis.fixPlan, hintsSoFar: hintsRef.current.map(previous => previous.hint) }, partial => { receivedPartial = true; if (generation.current === token) setPartialHint(partial) })
       if (generation.current !== token) return
       hintsRef.current = [...hintsRef.current, reply.reply]; setHints(hintsRef.current)
       writeHintReceipt(state.userId, item.id, { count: spentHints.current, calledAt: lastCoachAt.current, failureId: hintedFailureId.current, hints: hintsRef.current })
       lastHintCode.current = currentCode
-    } catch (hintError) { if (generation.current === token) setError(messageOf(hintError)) }
+    } catch (hintError) {
+      if (generation.current === token) {
+        setError(messageOf(hintError))
+        // A transport failure that never streamed a partial frame did not reach the
+        // agent in any observable way; refund the hint rather than stranding the student.
+        if (!receivedPartial) {
+          spentHints.current = previousHintCount; setHintCount(previousHintCount)
+          lastCoachAt.current = previousCoachAt
+          hintedFailureId.current = previousHintedFailureId
+          setHintTiming(previousHintTiming)
+          if (userId) writeHintReceipt(userId, item.id, { count: previousHintCount, calledAt: previousCoachAt, failureId: previousHintedFailureId, hints: hintsRef.current })
+        }
+      }
+    }
     finally { if (generation.current === token) { setPartialHint(null); setBusy(false); gate.current = false } }
   }
 

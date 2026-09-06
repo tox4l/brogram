@@ -57,7 +57,7 @@ function LoginForm() {
         </div>
         {error ? <p role="alert" className="whitespace-pre-wrap text-sm text-foreground">{error}</p> : linkError && !sent ? <p role="alert" className="text-sm text-muted-foreground">{linkError}</p> : null}
         {sent && <p role="status" className="text-sm leading-relaxed text-emerald-300">Check your email for a sign-in link. You can close this tab once it arrives.</p>}
-        <Button type="submit" disabled={sending} className="h-12 w-full bg-emerald-300 text-zinc-950 hover:bg-emerald-200">
+        <Button type="submit" disabled={sending} className="h-12 w-full bg-emerald-300 text-primary-foreground hover:bg-emerald-200">
           {sending ? 'Sending link…' : 'Send magic link'}
         </Button>
       </form>

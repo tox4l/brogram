@@ -16,7 +16,7 @@ export default defineConfig({
   use: { baseURL, trace: 'off', screenshot: 'only-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } }],
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    command: 'npm.cmd run dev -- --hostname 127.0.0.1 --port 3000',
+    command: 'npm run dev -- --hostname 127.0.0.1 --port 3000',
     url: `${baseURL}/login`,
     env: { AGENT_DRY_RUN: 'true' },
     reuseExistingServer: false,

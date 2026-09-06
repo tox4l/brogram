@@ -74,6 +74,8 @@ export function Editor({ value, onChange, language, logIntegrity, disabled = fal
           copy: event => block(event, 'copy-blocked'),
           cut: event => block(event, 'copy-blocked'),
           contextmenu: event => block(event, 'contextmenu-blocked'),
+          drop: event => block(event, 'paste-blocked'),
+          dragover: event => { event.preventDefault(); return true },
         })),
         EditorView.updateListener.of(update => {
           if (update.docChanged && !replacing.current) callbacks.current.onChange(update.state.doc.toString())
