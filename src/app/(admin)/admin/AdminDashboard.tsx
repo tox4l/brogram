@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { AgentUsageTable, BankStatsTable, InvitesTable, MintInviteForm, UsersTable } from '@/components/admin'
+import { AgentUsageTable, BankStatsTable, CreateAccountForm, InvitesTable, MintInviteForm, UsersTable } from '@/components/admin'
 import type { AgentUsageRow, BankStatRow, CloRef, InviteRow, UserRow } from '@/components/admin/types'
 
 interface ErrorBody {
@@ -105,7 +105,15 @@ function InvitesSection() {
   )
 }
 
-function UsersSection() {
+function CreateAccountSection({ onCreated }: { onCreated?: () => void | Promise<void> }) {
+  return (
+    <Section title="Create account" description="Issue a direct sign-in for a learner who was not sent an invite.">
+      <CreateAccountForm onCreated={onCreated} />
+    </Section>
+  )
+}
+
+function UsersSection({ refreshKey }: { refreshKey?: number }) {
   const [users, setUsers] = useState<UserRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -121,7 +129,7 @@ function UsersSection() {
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [load, refreshKey])
 
   async function act(id: string, action: 'lift' | 'restrict' | 'ban') {
     try {
@@ -222,10 +230,13 @@ function AgentsSection() {
 }
 
 export function AdminDashboard() {
+  const [usersRefreshKey, setUsersRefreshKey] = useState(0)
+
   return (
     <div className="flex flex-col gap-8">
       <InvitesSection />
-      <UsersSection />
+      <CreateAccountSection onCreated={() => setUsersRefreshKey((key) => key + 1)} />
+      <UsersSection refreshKey={usersRefreshKey} />
       <BankSection />
       <AgentsSection />
     </div>

@@ -1,5 +1,6 @@
 export { InvitesTable } from './InvitesTable'
 export { MintInviteForm } from './MintInviteForm'
+export { CreateAccountForm } from './CreateAccountForm'
 export { UsersTable } from './UsersTable'
 export { BankStatsTable } from './BankStatsTable'
 export { AgentUsageTable } from './AgentUsageTable'
