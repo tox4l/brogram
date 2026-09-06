@@ -6,6 +6,12 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'
 
 export default defineConfig({
   testDir: './e2e',
+  // e2e/spikes/** holds one-off spike specs (e.g. cheerpj.spec.ts) that are not
+  // part of the normal suite. Playwright applies testIgnore at discovery time,
+  // before CLI file-path filtering, so an excluded file can't be re-included by
+  // naming it on the command line - RUN_SPIKES=1 lifts the exclusion instead:
+  //   RUN_SPIKES=1 npx playwright test e2e/spikes/cheerpj.spec.ts --config playwright.config.ts
+  testIgnore: process.env.RUN_SPIKES ? undefined : '**/spikes/**',
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

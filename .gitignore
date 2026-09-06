@@ -34,6 +34,10 @@ test-results/
 playwright-report/
 coverage/
 
+# CheerpJ spike: GPLv2+CE OpenJDK 8 tools.jar (18 MB), self-hosted, not committed.
+# See docs/research/cheerpj-spike.md for the exact download URL and size.
+public/spikes/cheerpj/tools.jar
+
 # OS
 .DS_Store
 Thumbs.db
