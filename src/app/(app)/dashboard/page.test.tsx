@@ -15,6 +15,10 @@ vi.mock('@/lib/supabase/client', () => ({
         eq: (column: string, value: string) => ({
           maybeSingle: () => mocks.query(table, columns, column, value),
           order: () => mocks.query(table, columns, column, value),
+          eq: (filter: string, expected: boolean) => ({ order: () => {
+            expect([filter, expected]).toEqual(['draft', false])
+            return mocks.query(table, columns, column, value)
+          } }),
         }),
         in: (column: string, value: string[]) => mocks.query(table, columns, column, value),
       }),

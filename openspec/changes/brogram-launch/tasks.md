@@ -14,7 +14,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 
 ## Phase 2: Exercise
 - [x] A3 Runtime adapters (Astra) — SQL review delta applied; 514 tests and production build green; all worker bundles compiled through a temporary entry then removed. Manual browser infinite-loop timing and live Judge0 remain pending for Musa; working tree ready for Claude to commit.
-- [ ] A4 Exercise screen, editor, lockdown (Astra)
+- [x] A4 Exercise screen, editor, lockdown (Astra) — A2 review delta applied first; 574 tests and production build green; Playwright smoke spec/config collected (1 test). Browser execution and seed-load counts explicitly pending Claude C5 with Supabase configuration. Working tree ready for Claude to review and commit; no git mutations by Astra.
 - [x] C3 Seed exercise bank, offline generation (Claude) — 95 exercises at top level (88 verified by execution), 15 Java code exercises in unverified/
 - [x] C4 Drill items and onboarding fallback questions (Claude) — 144 drills (69672c6); profiler-fallback.json shipped inside C1 (5e717fb)
 - [ ] C3b Load the seed to Supabase (Claude)

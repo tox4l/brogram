@@ -71,6 +71,27 @@ describe('Supabase request proxy', () => {
     expect(response.headers.get('location')).toBeNull()
   })
 
+  it('redirects a valid signed-in login visit before the public-path return', async () => {
+    expect((await visit('/login')).headers.get('location')).toBe('https://brogram.test/dashboard')
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('renders account recovery after a failed profile read instead of looping through dashboard', async () => {
+    mocks.maybeSingle.mockResolvedValue({ data: null, error: { message: 'Database unavailable' } })
+    const first = await visit('/dashboard')
+    expect(first.headers.get('location')).toBe('https://brogram.test/login?error=account-unavailable')
+    const recovery = await visit('/login?error=account-unavailable')
+    expect(recovery.headers.get('location')).toBeNull()
+  })
+
+  it('overwrites forged account headers with the single authoritative profile read', async () => {
+    const response = await visit('/dashboard', { 'x-brogram-account-status': 'banned', 'x-brogram-restricted-until': 'forged' })
+    expect(response.headers.get('x-middleware-request-x-brogram-account-status')).toBe('active')
+    expect(response.headers.get('x-middleware-request-x-brogram-restricted-until')).toBe('')
+    expect(mocks.from).toHaveBeenCalledTimes(1)
+    expect(mocks.rpc).toHaveBeenCalledWith('lift_expired_restriction')
+  })
+
   it('retains refreshed cookies and SSR cache headers on a signed-out redirect', async () => {
     mocks.getClaims.mockImplementation(async () => {
       await cookieAdapter.setAll!([
