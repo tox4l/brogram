@@ -2,12 +2,31 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* C1 (review): the shadcn primitives (button, badge, input, tabs) still ship
+ * `dark:` utilities. Deleting this without also stripping every `dark:`
+ * class left them falling back to Tailwind's *default* `dark` variant --
+ * `@media (prefers-color-scheme: dark)` -- so a Paper user on a dark OS (or
+ * a Midnight user on a light OS) got a half-themed component set decided by
+ * the OS, not by `data-theme`. Bound back to the three dark personalities,
+ * by attribute, the same descendant-only shape the old `&:is(.dark *)` had.
+ * `dark-variant.test.ts` guards this from regressing again. */
+@custom-variant dark (&:is([data-theme="midnight"] *, [data-theme="amber"] *, [data-theme="arcade"] *));
+
 /*
  * Theme-invariant tokens: motion (mirrors src/lib/motion/tokens.ts value for
  * value -- see that file's own comment pointing back here) plus the
  * shadcn chart/sidebar palette, which the spec's four theme blocks (below)
  * do not redefine because no shipped screen uses them yet. Nothing here
  * varies by `data-theme`.
+ *
+ * I6 (review): also carries a literal copy of the Midnight palette as the
+ * degrade-to-something-not-nothing fallback for the rare case neither
+ * inline script in `layout.tsx` runs (JS disabled, a strict CSP with no
+ * nonce wired). `layout.tsx` additionally renders `data-theme="midnight"`
+ * on the server-rendered `<html>` -- belt and suspenders, since the
+ * attribute alone already makes `[data-theme="midnight"]` match without any
+ * script at all. `contrast.test.ts`'s "root fallback mirrors Midnight"
+ * check keeps these two copies from drifting apart.
  */
 :root {
   --duration-instant: 100ms;
@@ -33,6 +52,40 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  color-scheme: dark;
+  --background: oklch(0.16 0.014 260);
+  --foreground: oklch(0.96 0.005 260);
+  --card: oklch(0.20 0.016 260);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.23 0.016 260);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.78 0.16 264);
+  --primary-foreground: oklch(0.15 0.02 264);
+  --secondary: oklch(0.27 0.014 260);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.27 0.014 260);
+  --muted-foreground: oklch(0.88 0.02 260);
+  --accent: oklch(0.74 0.14 200);
+  --accent-foreground: oklch(0.15 0.02 200);
+  --destructive: oklch(0.55 0.20 25);
+  --destructive-foreground: oklch(0.98 0.005 260);
+  --success: oklch(0.75 0.16 150);
+  --success-foreground: oklch(0.15 0.02 150);
+  --warning: oklch(0.80 0.15 85);
+  --warning-foreground: oklch(0.16 0.02 85);
+  --celebration: oklch(0.80 0.19 95);
+  --celebration-foreground: oklch(0.16 0.02 95);
+  --glow: oklch(0.78 0.16 264 / 0.35);
+  --border: oklch(0.72 0.02 260);
+  --input: oklch(0.72 0.02 260 / 0.95);
+  --ring: oklch(0.78 0.16 264 / 0.9);
+  --radius: 0.625rem;
+
+  --elevation-xs: inset 0 1px 0 0 oklch(1 0 0 / 4%), 0 1px 2px oklch(0 0 0 / 30%);
+  --elevation-sm: inset 0 1px 0 0 oklch(1 0 0 / 5%), 0 2px 4px oklch(0 0 0 / 34%);
+  --elevation-md: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 4px 10px oklch(0 0 0 / 38%);
+  --elevation-lg: inset 0 1px 0 0 oklch(1 0 0 / 8%), 0 10px 20px oklch(0 0 0 / 42%);
 }
 
 @theme inline {
@@ -90,12 +143,18 @@
 
   /* R8.5: registered the same way `--radius-*` is above, so the generated
      `.shadow-xs`/`.shadow-sm`/`.shadow-md`/`.shadow-lg` utilities reference
-     the runtime custom property (redefined per theme block below) instead
-     of baking in Tailwind's own default black-shadow values at build time. */
-  --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
+     a runtime custom property (redefined per theme block below) instead of
+     baking in Tailwind's own default black-shadow values at build time.
+     Minor 1 (review): named `--elevation-*`, not `--shadow-*`, so the
+     mapping isn't self-referential -- `@layer theme` compiles this to
+     `:root { --shadow-xs: var(--shadow-xs) }` verbatim if the names match,
+     which is a cycle at computed-value time. It only ever worked because
+     the unlayered `[data-theme]` blocks outrank `@layer theme` on the same
+     element; `--elevation-*` removes the need to rely on that. */
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
 
   /* R8.7: BroGram's own type scale on Geist. Additive `--text-*` names --
      none of Tailwind's own text-sm/base/lg/etc. tokens are touched, so
@@ -164,7 +223,7 @@ body {
   --secondary: oklch(0.27 0.014 260);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.27 0.014 260);
-  --muted-foreground: oklch(0.80 0.02 260);
+  --muted-foreground: oklch(0.88 0.02 260);
   --accent: oklch(0.74 0.14 200);
   --accent-foreground: oklch(0.15 0.02 200);
   --destructive: oklch(0.55 0.20 25);
@@ -177,17 +236,17 @@ body {
   --celebration-foreground: oklch(0.16 0.02 95);
   --glow: oklch(0.78 0.16 264 / 0.35);
   --border: oklch(0.72 0.02 260);
-  --input: oklch(0.72 0.02 260 / 0.7);
+  --input: oklch(0.72 0.02 260 / 0.95);
   --ring: oklch(0.78 0.16 264 / 0.9);
   --radius: 0.625rem;
 
   /* Elevation via lightening the surface (§8.5): a black shadow on a
      near-black ground is invisible, so this is a thin light top edge plus
      a soft dark separator, not a deepening shadow. */
-  --shadow-xs: inset 0 1px 0 0 oklch(1 0 0 / 4%), 0 1px 2px oklch(0 0 0 / 30%);
-  --shadow-sm: inset 0 1px 0 0 oklch(1 0 0 / 5%), 0 2px 4px oklch(0 0 0 / 34%);
-  --shadow-md: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 4px 10px oklch(0 0 0 / 38%);
-  --shadow-lg: inset 0 1px 0 0 oklch(1 0 0 / 8%), 0 10px 20px oklch(0 0 0 / 42%);
+  --elevation-xs: inset 0 1px 0 0 oklch(1 0 0 / 4%), 0 1px 2px oklch(0 0 0 / 30%);
+  --elevation-sm: inset 0 1px 0 0 oklch(1 0 0 / 5%), 0 2px 4px oklch(0 0 0 / 34%);
+  --elevation-md: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 4px 10px oklch(0 0 0 / 38%);
+  --elevation-lg: inset 0 1px 0 0 oklch(1 0 0 / 8%), 0 10px 20px oklch(0 0 0 / 42%);
 }
 
 /* Amber -- warm dark. Cozy, lamp-lit desk. */
@@ -204,8 +263,8 @@ body {
   --secondary: oklch(0.28 0.02 55);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.28 0.02 55);
-  --muted-foreground: oklch(0.80 0.02 60);
-  --accent: oklch(0.72 0.13 35);
+  --muted-foreground: oklch(0.88 0.02 60);
+  --accent: oklch(0.80 0.13 35);
   --accent-foreground: oklch(0.16 0.02 35);
   --destructive: oklch(0.55 0.20 25);
   --destructive-foreground: oklch(0.98 0.005 70);
@@ -217,14 +276,14 @@ body {
   --celebration-foreground: oklch(0.16 0.02 80);
   --glow: oklch(0.78 0.16 55 / 0.32);
   --border: oklch(0.72 0.02 60);
-  --input: oklch(0.72 0.02 60 / 0.7);
+  --input: oklch(0.72 0.02 60 / 0.95);
   --ring: oklch(0.78 0.16 55 / 0.9);
   --radius: 0.875rem;
 
-  --shadow-xs: inset 0 1px 0 0 oklch(0.9 0.02 60 / 5%), 0 1px 2px oklch(0 0 0 / 30%);
-  --shadow-sm: inset 0 1px 0 0 oklch(0.9 0.02 60 / 6%), 0 2px 4px oklch(0 0 0 / 34%);
-  --shadow-md: inset 0 1px 0 0 oklch(0.9 0.02 60 / 7%), 0 4px 10px oklch(0 0 0 / 38%);
-  --shadow-lg: inset 0 1px 0 0 oklch(0.9 0.02 60 / 9%), 0 10px 20px oklch(0 0 0 / 42%);
+  --elevation-xs: inset 0 1px 0 0 oklch(0.9 0.02 60 / 5%), 0 1px 2px oklch(0 0 0 / 30%);
+  --elevation-sm: inset 0 1px 0 0 oklch(0.9 0.02 60 / 6%), 0 2px 4px oklch(0 0 0 / 34%);
+  --elevation-md: inset 0 1px 0 0 oklch(0.9 0.02 60 / 7%), 0 4px 10px oklch(0 0 0 / 38%);
+  --elevation-lg: inset 0 1px 0 0 oklch(0.9 0.02 60 / 9%), 0 10px 20px oklch(0 0 0 / 42%);
 }
 
 /* Paper -- light. Daytime, notebook, unhurried. Cream, never stark white. */
@@ -241,7 +300,7 @@ body {
   --secondary: oklch(0.93 0.012 85);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.93 0.012 85);
-  --muted-foreground: oklch(0.45 0.02 70);
+  --muted-foreground: oklch(0.40 0.02 70);
   --accent: oklch(0.55 0.14 35);
   --accent-foreground: oklch(0.98 0.005 85);
   --destructive: oklch(0.55 0.20 25);
@@ -255,15 +314,15 @@ body {
   --glow: oklch(0.42 0.11 220 / 0.18);
   --border: oklch(0.58 0.02 70);
   --input: oklch(0.70 0.015 70);
-  --ring: oklch(0.42 0.11 220 / 0.6);
+  --ring: oklch(0.42 0.11 220 / 0.7);
   --radius: 0.75rem;
 
   /* Elevation via a conventional soft shadow (§8.5): this is the one theme
      where a plain shadow reads correctly. */
-  --shadow-xs: 0 1px 2px oklch(0.4 0.02 70 / 6%);
-  --shadow-sm: 0 2px 6px oklch(0.4 0.02 70 / 8%);
-  --shadow-md: 0 4px 12px oklch(0.4 0.02 70 / 10%);
-  --shadow-lg: 0 10px 24px oklch(0.4 0.02 70 / 14%);
+  --elevation-xs: 0 1px 2px oklch(0.4 0.02 70 / 6%);
+  --elevation-sm: 0 2px 6px oklch(0.4 0.02 70 / 8%);
+  --elevation-md: 0 4px 12px oklch(0.4 0.02 70 / 10%);
+  --elevation-lg: 0 10px 24px oklch(0.4 0.02 70 / 14%);
 }
 
 /* Arcade -- high contrast. Cabinet glow. Maximum legibility. */
@@ -280,8 +339,8 @@ body {
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.24 0 0);
-  --muted-foreground: oklch(0.80 0 0);
-  --accent: oklch(0.75 0.22 350);
+  --muted-foreground: oklch(0.88 0 0);
+  --accent: oklch(0.84 0.22 350);
   --accent-foreground: oklch(0.12 0 0);
   --destructive: oklch(0.55 0.20 25);
   --destructive-foreground: oklch(0.98 0 0);
@@ -293,16 +352,16 @@ body {
   --celebration-foreground: oklch(0.12 0 0);
   --glow: oklch(0.85 0.16 195 / 0.5);
   --border: oklch(0.72 0 0);
-  --input: oklch(0.72 0 0 / 0.7);
+  --input: oklch(0.72 0 0 / 0.95);
   --ring: oklch(0.85 0.16 195 / 0.75);
   --radius: 0.25rem;
 
   /* Elevation via a coloured glow in the hero hue (§8.5), never
      `text-shadow`. */
-  --shadow-xs: 0 0 4px var(--glow);
-  --shadow-sm: 0 0 6px var(--glow), 0 0 14px oklch(0.85 0.16 195 / 15%);
-  --shadow-md: 0 0 8px var(--glow), 0 0 24px oklch(0.85 0.16 195 / 20%);
-  --shadow-lg: 0 0 12px var(--glow), 0 0 36px oklch(0.85 0.16 195 / 25%);
+  --elevation-xs: 0 0 4px var(--glow);
+  --elevation-sm: 0 0 6px var(--glow), 0 0 14px oklch(0.85 0.16 195 / 15%);
+  --elevation-md: 0 0 8px var(--glow), 0 0 24px oklch(0.85 0.16 195 / 20%);
+  --elevation-lg: 0 0 12px var(--glow), 0 0 36px oklch(0.85 0.16 195 / 25%);
 }
 
 /* §8.2: paired with `disableTransitionOnChange` so a switch is a hard cut

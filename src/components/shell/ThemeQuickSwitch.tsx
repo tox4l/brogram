@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useTheme } from 'next-themes'
 import { PaletteIcon } from 'lucide-react'
 import { cn } from 'cn'
@@ -34,6 +35,12 @@ export function ThemeQuickSwitch() {
 
   const active: ThemeName = isThemeName(theme) ? theme : 'midnight'
   const activeIndex = Math.max(0, THEME_IDS.indexOf(active))
+  const switchingTimeoutRef = useRef<number | null>(null)
+  const blurbId = useId()
+
+  useEffect(() => () => {
+    if (switchingTimeoutRef.current !== null) window.clearTimeout(switchingTimeoutRef.current)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -63,20 +70,35 @@ export function ThemeQuickSwitch() {
    *  the popover, matching native radio semantics (arrowing through a
    *  group selects as it goes, without closing anything).
    *
+   *  I4 (review): `setTheme` alone only schedules a state update; next-themes
+   *  applies the `data-theme` attribute in a *passive* effect, which runs
+   *  after `startViewTransition`'s callback has already returned. Left
+   *  alone, the browser's "new" snapshot is captured before the attribute
+   *  changes -- identical to the "old" one -- so the wipe animates nothing
+   *  and the old theme sits frozen on screen until the effect catches up.
+   *  `flushSync` forces the state update *and* its effect to land
+   *  synchronously before the callback returns, which is the documented
+   *  way to drive a view transition from React state.
+   *
    *  §8.2 step 5: marks `<html data-theme-switching>` for the duration of
    *  the switch so `globals.css`'s `[data-theme-switching] * { transition:
    *  none }` catches anything next-themes' own `disableTransitionOnChange`
-   *  style-tag trick misses (in particular, elements re-rendered mid-way
-   *  through a `startViewTransition` callback) -- belt and suspenders, not
-   *  a replacement for it. */
+   *  style-tag trick misses -- belt and suspenders, not a replacement for
+   *  it. Minor 3 (review): one timeout ref, cleared and rescheduled on every
+   *  call, so two switches in quick succession (arrowing through the group)
+   *  can't have the first one's timer strip the attribute mid-transition. */
   function applyTheme(id: ThemeName) {
     if (id === active) return
     const root = document.documentElement
     root.setAttribute('data-theme-switching', '')
     const canAnimate = !reducedMotion && typeof document !== 'undefined' && typeof document.startViewTransition === 'function'
-    if (canAnimate) document.startViewTransition!(() => setTheme(id))
+    if (canAnimate) document.startViewTransition!(() => flushSync(() => setTheme(id)))
     else setTheme(id)
-    window.setTimeout(() => root.removeAttribute('data-theme-switching'), 350)
+    if (switchingTimeoutRef.current !== null) window.clearTimeout(switchingTimeoutRef.current)
+    switchingTimeoutRef.current = window.setTimeout(() => {
+      root.removeAttribute('data-theme-switching')
+      switchingTimeoutRef.current = null
+    }, 350)
   }
 
   /** Click, Enter, Space: choose and dismiss, same as a menu item. */
@@ -134,6 +156,7 @@ export function ThemeQuickSwitch() {
           <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Theme">
             {THEMES.map((entry, index) => {
               const checked = entry.id === active
+              const describedById = `${blurbId}-${entry.id}`
               return (
                 <button
                   key={entry.id}
@@ -142,11 +165,13 @@ export function ThemeQuickSwitch() {
                   role="radio"
                   aria-checked={checked}
                   aria-label={entry.name}
+                  aria-describedby={describedById}
                   tabIndex={checked ? 0 : -1}
                   onClick={() => selectAndClose(entry.id)}
                   onKeyDown={(event) => onRadioKeyDown(event, index)}
                   className={cn(
                     'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover',
                     checked ? 'border-ring ring-2 ring-ring/50' : 'border-border hover:border-ring/50',
                   )}
                 >
@@ -160,6 +185,10 @@ export function ThemeQuickSwitch() {
                     ))}
                   </span>
                   <span className="font-medium text-foreground">{entry.name}</span>
+                  {/* Minor 4 (review): `blurb` existed but was rendered nowhere.
+                      It is the natural `aria-describedby` for the radio -- a
+                      screen reader announces the name, then this. */}
+                  <span id={describedById} className="sr-only">{entry.blurb}</span>
                 </button>
               )
             })}

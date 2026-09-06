@@ -145,6 +145,31 @@ describe('ThemeQuickSwitch', () => {
     expect(startViewTransition).toHaveBeenCalledTimes(1)
     expect(document.documentElement.getAttribute('data-theme')).toBe('arcade')
   })
+
+  it('I4: the attribute is already applied *inside* the startViewTransition callback (flushSync), not only after it returns', () => {
+    // next-themes applies `data-theme` in a passive effect, which without
+    // `flushSync` would not have run yet at the instant this mock's
+    // callback() returns -- only later, once outer `act()` flushes it. This
+    // records the attribute synchronously right there, before anything else
+    // can flush, which is exactly the window a real browser uses to
+    // snapshot the "new" frame for the transition. A bare
+    // `document.startViewTransition(() => setTheme(id))` (no `flushSync`)
+    // would observe the OLD theme here; this is the regression I4 fixes.
+    let attributeWhenCallbackReturns: string | null | undefined
+    const startViewTransition = vi.fn((callback: () => void) => {
+      callback()
+      attributeWhenCallbackReturns = document.documentElement.getAttribute('data-theme')
+      return {} as ViewTransition
+    })
+    document.startViewTransition = startViewTransition as unknown as typeof document.startViewTransition
+
+    renderSwitch()
+    fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
+    expect(document.documentElement.getAttribute('data-theme')).toBe('midnight')
+    fireEvent.click(screen.getByRole('radio', { name: 'Arcade' }))
+
+    expect(attributeWhenCallbackReturns).toBe('arcade')
+  })
 })
 
 interface ViewTransition {

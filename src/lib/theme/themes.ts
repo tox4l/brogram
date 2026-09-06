@@ -3,9 +3,16 @@ import type { ThemeName } from '@/lib/contracts'
 /**
  * The four personalities on next-themes' one axis (R8.1). Order here is
  * the order they render in `ThemeQuickSwitch`. Swatch triples are
- * [background, primary, accent] -- read live from `globals.css`'s own
- * `oklch(...)` values, kept in sync by contrast.test.ts's key-set-parity
- * check (a theme missing a token there would also make its swatch wrong).
+ * [background, primary, accent] -- copied by hand from `globals.css`'s
+ * `oklch(...)` values.
+ *
+ * I5 (review): these literals are pinned against the real tokens by a
+ * dedicated assertion in `contrast.test.ts` ("swatches stay pinned to the
+ * real tokens"), which parses `globals.css` and compares. That assertion,
+ * not the key-set-parity check (a different, unrelated guarantee -- it only
+ * confirms the four `[data-theme]` blocks define the same property
+ * *names*), is what keeps a palette retune from silently leaving a stale
+ * dot in the picker.
  */
 export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swatch: [string, string, string] }[] = [
   {
@@ -18,7 +25,7 @@ export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swat
     id: 'amber',
     name: 'Amber',
     blurb: 'Cozy, warm dark. A lamp-lit desk at midnight.',
-    swatch: ['oklch(0.17 0.02 55)', 'oklch(0.78 0.16 55)', 'oklch(0.72 0.13 35)'],
+    swatch: ['oklch(0.17 0.02 55)', 'oklch(0.78 0.16 55)', 'oklch(0.80 0.13 35)'],
   },
   {
     id: 'paper',
@@ -30,7 +37,7 @@ export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swat
     id: 'arcade',
     name: 'Arcade',
     blurb: 'Cabinet glow. Maximum legibility.',
-    swatch: ['oklch(0.12 0 0)', 'oklch(0.85 0.16 195)', 'oklch(0.75 0.22 350)'],
+    swatch: ['oklch(0.12 0 0)', 'oklch(0.85 0.16 195)', 'oklch(0.84 0.22 350)'],
   },
 ] as const
 

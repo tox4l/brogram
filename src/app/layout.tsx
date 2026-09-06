@@ -27,6 +27,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // I6 (review): a real default, not an absent attribute. This Next
+      // version's own no-flash guide renders exactly this
+      // (`preventing-flash-before-hydration.md`, "Themes"): the static
+      // default lets `[data-theme="midnight"]` match immediately from the
+      // server-rendered markup alone, with `:root`'s mirrored fallback (see
+      // globals.css) as the last resort if that selector somehow can't. The
+      // two inline scripts below still overwrite it with the real stored
+      // choice before paint; this is what the app degrades *to*, not the
+      // no-flash mechanism itself.
+      data-theme="midnight"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
