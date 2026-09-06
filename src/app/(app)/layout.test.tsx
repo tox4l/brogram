@@ -30,9 +30,9 @@ function childArray(element: { props: { children: unknown } }) {
   const children = element.props.children
   return Array.isArray(children) ? children : [children]
 }
-/** Finds the element of `type` among `tree`'s direct children and returns it typed by that component's own props. */
-function findChild<P>(tree: { props: { children: unknown } }, type: unknown): { props: P } {
-  const match = childArray(tree).find((child) => (child as { type?: unknown } | null)?.type === type) as { props: P } | undefined
+/** Finds the element of `type` among `tree`'s direct children and returns it typed by that component's own props (`key` included — React strips it out of `.props`, so it is surfaced separately here). */
+function findChild<P>(tree: { props: { children: unknown } }, type: unknown): { props: P; key: string | null } {
+  const match = childArray(tree).find((child) => (child as { type?: unknown } | null)?.type === type) as { props: P; key: string | null } | undefined
   if (!match) throw new Error('Expected child not found in the tree QueryProvider rendered')
   return match
 }
@@ -55,6 +55,9 @@ describe('app hydration', () => {
     const seed = findChild<Parameters<typeof QuerySeed>[0]>(tree, QuerySeed)
     expect(seed.props.userId).toBe('student')
     expect(seed.props.learnerState?.userId).toBe('student')
+    // Keyed on the user id, like `SessionProvider`'s own key, so a signed-in
+    // user change forces a clean remount instead of reusing this instance.
+    expect(seed.key).toBe('student')
   })
   it('uses the forwarded account without selecting profiles again', async () => {
     const tree = await layout()

@@ -62,7 +62,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <QueryProvider>
-      <QuerySeed userId={user.id} learnerState={learnerState} />
+      <QuerySeed key={user.id} userId={user.id} learnerState={learnerState} />
       <SessionProvider key={`${user.id}:${profile.account_status}:${profile.restricted_until}`} initialState={{ user, profile, learnerState }}>
         <AccountNotice status={profile.account_status} restrictedUntil={profile.restricted_until} />
         <AppShell>{children}</AppShell>

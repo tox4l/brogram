@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { compileLearnerState } from '@/lib/learner/compile'
-import { makeQueryClient } from '@/lib/query/client'
+import { clearQueryClient, getQueryClient, makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { QuerySeed } from './QuerySeed'
 
@@ -72,5 +72,75 @@ describe('QuerySeed', () => {
     expect(client.getQueryData(qk.lessonProgress('student'))).toEqual(lessonProgress)
     expect(client.getQueryData(qk.achievements('student'))).toEqual(achievements)
     expect(client.getQueryData(qk.activityDays('student'))).toEqual(activityDays)
+  })
+
+  it('re-seeds when the same user gets a fresh payload reference (I3)', () => {
+    const client = makeQueryClient()
+    const first = { ...learnerState }
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <QuerySeed userId="student" learnerState={first} />
+      </QueryClientProvider>,
+    )
+    expect(client.getQueryData(qk.learnerState('student'))).toBe(first)
+
+    // A fresh server render always produces a new object, even when nothing
+    // meaningful changed — this is exactly the reference `QuerySeed` compares
+    // (`!==`), never a deep walk. (The cache itself then applies TanStack's
+    // own structural sharing, so the stored value is content-equal to
+    // `second` rather than the exact same reference — `toEqual`, not `toBe`.)
+    const second = { ...learnerState, points: 999 }
+    rerender(
+      <QueryClientProvider client={client}>
+        <QuerySeed userId="student" learnerState={second} />
+      </QueryClientProvider>,
+    )
+    expect(client.getQueryData(qk.learnerState('student'))).toEqual(second)
+  })
+
+  it('does not call setQueryData again when re-rendered with the same prop reference', () => {
+    const client = makeQueryClient()
+    const setQueryDataSpy = vi.spyOn(client, 'setQueryData')
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <QuerySeed userId="student" learnerState={learnerState} />
+      </QueryClientProvider>,
+    )
+    expect(setQueryDataSpy).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <QuerySeed userId="student" learnerState={learnerState} />
+      </QueryClientProvider>,
+    )
+    expect(setQueryDataSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the previous user’s cache and reseeds when the user id changes (I4 integration)', () => {
+    // `resetQueryClientForUser` clears the browser singleton, so this test
+    // deliberately wires QuerySeed to that singleton (exactly how
+    // `QueryProvider` + `(app)/layout.tsx` do it in production) rather than
+    // the isolated `makeQueryClient()` the other tests in this file use.
+    clearQueryClient()
+    const client = getQueryClient()
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <QuerySeed userId="user-a" learnerState={{ ...learnerState, userId: 'user-a' }} />
+      </QueryClientProvider>,
+    )
+    client.setQueryData(['side-channel', 'user-a'], 'leftover')
+    expect(client.getQueryData(qk.learnerState('user-a'))).toBeDefined()
+
+    const learnerStateB = { ...learnerState, userId: 'user-b' }
+    rerender(
+      <QueryClientProvider client={client}>
+        <QuerySeed userId="user-b" learnerState={learnerStateB} />
+      </QueryClientProvider>,
+    )
+
+    expect(client.getQueryData(['side-channel', 'user-a'])).toBeUndefined()
+    expect(client.getQueryData(qk.learnerState('user-a'))).toBeUndefined()
+    expect(client.getQueryData(qk.learnerState('user-b'))).toEqual(learnerStateB)
+    clearQueryClient()
   })
 })
