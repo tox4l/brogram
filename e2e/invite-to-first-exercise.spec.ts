@@ -115,7 +115,15 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
       await expect(exerciseCard).toBeVisible()
       await exerciseCard.getByRole('link').click()
     } else {
-      // No lesson exists yet for the current skill — the first card is already an exercise.
+      // No lesson exists yet for the current skill — the first card is already an exercise. This
+      // branch skips the brief's named "course home -> walkthrough -> rep" leg entirely; it is
+      // exercised deterministically by walkthrough.spec.ts, but a curriculum or nextUp() change
+      // that stops leading with a walkthrough here would otherwise retire this leg silently. Flag
+      // it in the report rather than passing quietly.
+      test.info().annotations.push({
+        type: 'coverage-gap',
+        description: 'first card was an exercise, not a walkthrough — the walkthrough leg of this flow went unexercised this run',
+      })
       await firstCardLink.click()
     }
 

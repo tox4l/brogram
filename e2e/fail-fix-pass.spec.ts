@@ -64,6 +64,16 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     // actual network response for the attempts save against the verdict actually painting: the
     // banner must already be up and reading the right thing while that request is still open.
     const verdict = page.getByTestId('verdict-banner')
+    // Stall the attempts save deliberately rather than racing its natural network latency: a
+    // local Supabase, a warm pool, or an in-process CI database could otherwise let the save
+    // land inside the two `expect.poll`-style checks below and fail a spec that has not
+    // regressed, or let a slow `finishSubmission` fake the ordering without proving anything.
+    // Holding the request open for 3s forces the banner to paint while the save is demonstrably
+    // still in flight, with margin to spare.
+    await page.route('**/rest/v1/attempts', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
+      await route.continue()
+    })
     let firstAttemptSaved = false
     const firstAttemptSave = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith('/rest/v1/attempts') && response.request().method() === 'POST')
@@ -96,6 +106,7 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     await expect(verdict).toContainText('Passed')
     expect(secondAttemptSaved, 'the graded verdict must paint before the second attempts save lands, not after').toBe(false)
     await secondAttemptSave
+    await page.unroute('**/rest/v1/attempts')
 
     await expect(page.getByRole('region', { name: 'Results' })).toContainText('6 / 6 passed')
     // T2.2 round 3 (f703e81): the advance button now reads with the bank's rep wording

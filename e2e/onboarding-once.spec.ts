@@ -105,6 +105,17 @@ test('six questions once, no loading state, then two course switches never reach
     // And the switches themselves genuinely ran the Planner in the background -- this is not
     // passing by having done nothing.
     expect(agentCalls.filter((agent) => agent === 'planner').length).toBeGreaterThanOrEqual(2)
+
+    // A learner who already finished onboarding is never re-asked, ever: Onboarding() redirects
+    // to /courses as soon as it reads a completed profile (src/app/(app)/onboarding/page.tsx:
+    // `if (session.learnerState?.profile.onboardingComplete) redirect('/courses')`). This spec
+    // is the one the brief names as R4.4's assertion, so it has to prove the never-re-ask
+    // guarantee itself, not merely rely on it holding elsewhere: revisit /onboarding directly and
+    // confirm both that the redirect fires and that doing so still does not touch the Profiler.
+    await page.goto('/onboarding')
+    await page.waitForURL('**/courses')
+    await expect(page.getByRole('heading', { name: QUESTIONS[0].text })).toHaveCount(0)
+    expect(agentCalls.filter((agent) => agent === 'profiler')).toHaveLength(1)
   } finally {
     if (userId) await deleteInvitedUser(service, userId, inviteCode)
   }
