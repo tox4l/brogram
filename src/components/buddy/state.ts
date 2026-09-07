@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DrillLane, LearnerState } from '@/lib/contracts'
 import { isArcadeKind, isPlayKind } from '@/app/(app)/derot/lib'
 import { REFUSAL } from '@/lib/agents/buddy'
+import type { WellnessRow } from '@/lib/learner/compile'
 import type { LineKey } from '@/lib/voice/lines'
 
 export const MAX_MESSAGES = 50
@@ -92,8 +93,9 @@ export function handleSuggestionClick(kind: 'exercise' | 'derot' | 'break', onOp
 // ---------------------------------------------------------------------------
 
 export interface DerotSuggestionContext {
-  /** Reuses the exact signal that already triggers the agent's own derot suggestion
-   *  (its system prompt: "three or more fails in the last five attempts"). */
+  /** A *run* the learner is still in the middle of, not a lifetime tally -- see
+   *  `derotContextFrom`'s doc comment for why this needs both a time window and a
+   *  pass-clears-it rule. */
   hardFailure: boolean
   /** Milliseconds since `LearnerState.updatedAt` -- the one timestamp every write to the
    *  learner's state touches, so it is the simplest "time since anything happened" the
@@ -103,6 +105,11 @@ export interface DerotSuggestionContext {
 
 /** Three or more entries in the most-recent-first, capped-at-10 `recentMistakes` list. */
 const HARD_FAILURE_MISTAKE_COUNT = 3
+/** A "run" per R7.6 is a burst of misses close together, not any three fails a learner has ever
+ *  logged -- `recentMistakes` is prepend-only and capped at 10 with no expiry (`trimMistakes`),
+ *  so without a window three fails from six weeks ago would read as a hard failure forever. Round,
+ *  documented; the spec names no exact number. */
+const HARD_FAILURE_WINDOW_MS = 30 * 60 * 1000
 /** "Long gap" per R7.6 -- a round, documented hour; the spec names no exact number. */
 export const LONG_IDLE_GAP_MS = 60 * 60 * 1000
 /** The one Playground game that cannot be failed (spec 7.9) -- literally "step off it". */
@@ -110,9 +117,28 @@ const DEFAULT_PLAY_REF = 'breathe'
 /** A safe Arcade fallback if a future ref is ever neither an Arcade nor a Playground id. */
 const DEFAULT_ARCADE_REF = 'predict-output'
 
+/**
+ * R7.6's "hard failure run" is a burst of misses the learner is still in the middle of, which
+ * `recentMistakes.length >= 3` alone cannot tell apart from three fails logged weeks ago on an
+ * otherwise-thriving account (`recentMistakes` never expires or clears -- `src/lib/learner/trim.ts`
+ * caps it at 10, prepend-only, no time window). Two conditions both have to hold for a mistake to
+ * still count as part of a live run:
+ *
+ * 1. It happened inside `HARD_FAILURE_WINDOW_MS` of `now`.
+ * 2. The learner has not since passed that mistake's skill -- `mastery[cloId].chain` resets to 0 on
+ *    any fail and only moves off zero on a pass (`Mastery.chain`'s own doc comment), and `closed`
+ *    means the skill is mastered outright. Either one means a pass happened after the mistake, so
+ *    the run is over even if the clock has not run out yet.
+ */
 export function derotContextFrom(state: LearnerState, now: number): DerotSuggestionContext {
+  const liveFailures = (state.recentMistakes ?? []).filter(mistake => {
+    if (now - Date.parse(mistake.at) > HARD_FAILURE_WINDOW_MS) return false
+    const mastery = state.mastery?.[mistake.cloId]
+    if (mastery && (mastery.chain > 0 || mastery.closed)) return false
+    return true
+  })
   return {
-    hardFailure: (state.recentMistakes ?? []).length >= HARD_FAILURE_MISTAKE_COUNT,
+    hardFailure: liveFailures.length >= HARD_FAILURE_MISTAKE_COUNT,
     idleGapMs: now - Date.parse(state.updatedAt),
   }
 }
@@ -182,5 +208,29 @@ export async function fetchBuddyHistory(client: SupabaseClient, userId: string):
   } catch (historyError) {
     console.warn('Failed to load buddy history', historyError)
     return []
+  }
+}
+
+/**
+ * Mirrors the private `fetchWellness` in `src/lib/query/hooks.ts` byte-for-shape on purpose: the
+ * drawer reads `wellness.prefs.motion` (I3) through the *same* `qk.wellness(userId)` cache key so
+ * that whichever shell component populates it first (the wellness dock, this drawer, anything
+ * else) is the only network request that ever fires -- both queries return the identical
+ * `WellnessRow` shape, so either can serve the other's cache entry. Never rejects, for the same
+ * reason `fetchBuddyHistory` does not: a motion preference that fails to load should fall back to
+ * `'system'` (via `resolveWellnessPrefs(undefined)`), not spin retry/backoff on a drawer that has
+ * nothing to do with wellness data.
+ */
+export async function fetchWellnessRow(client: SupabaseClient, userId: string): Promise<WellnessRow> {
+  try {
+    const { data } = await client
+      .from('wellness')
+      .select('user_id,prefs,pomodoro_sessions,water_log,drill_results,updated_at')
+      .eq('user_id', userId)
+      .maybeSingle()
+    return (data as WellnessRow | null) ?? {}
+  } catch (wellnessError) {
+    console.warn('Failed to load wellness prefs for motion', wellnessError)
+    return {}
   }
 }

@@ -63,18 +63,13 @@ describe('REFUSAL', () => {
 })
 
 const HOUR = 60 * 60 * 1000
+const NOW = Date.parse('2026-09-07T12:00:00.000Z')
 
-function mistakesFixture(count: number): LearnerState['recentMistakes'] {
-  return Array.from({ length: count }, (_, i) => ({
-    exerciseId: `e${i}`,
-    cloId: 'INFS1101-1',
-    pattern: 'scan',
-    label: 'off-by-one in range',
-    at: '2026-09-05T00:00:00.000Z',
-  }))
+function mistakeAt(at: string, cloId: LearnerState['recentMistakes'][number]['cloId'] = 'INFS1101-1'): LearnerState['recentMistakes'][number] {
+  return { exerciseId: `e-${at}`, cloId, pattern: 'scan', label: 'off-by-one in range', at }
 }
 
-function stateFixture(overrides: { mistakeCount: number; updatedAt: string }): LearnerState {
+function stateFixture(overrides: { recentMistakes: LearnerState['recentMistakes']; updatedAt: string; mastery?: LearnerState['mastery'] }): LearnerState {
   return {
     userId: 'student',
     profile: {
@@ -87,8 +82,8 @@ function stateFixture(overrides: { mistakeCount: number; updatedAt: string }): L
     currentCourse: 'INFS1101',
     path: ['INFS1101-1'],
     nextExerciseIds: [],
-    mastery: {},
-    recentMistakes: mistakesFixture(overrides.mistakeCount),
+    mastery: overrides.mastery ?? {},
+    recentMistakes: overrides.recentMistakes,
     streak: { exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null },
     points: 0,
     integrityScore: 0,
@@ -99,18 +94,66 @@ function stateFixture(overrides: { mistakeCount: number; updatedAt: string }): L
 }
 
 describe('derotContextFrom', () => {
-  it('is not a hard failure below three recent mistakes', () => {
-    expect(derotContextFrom(stateFixture({ mistakeCount: 2, updatedAt: new Date().toISOString() }), Date.now()).hardFailure).toBe(false)
+  it('is not a hard failure below three live mistakes inside the window', () => {
+    const state = stateFixture({
+      recentMistakes: [mistakeAt('2026-09-07T11:55:00.000Z'), mistakeAt('2026-09-07T11:58:00.000Z')],
+      updatedAt: '2026-09-07T11:58:00.000Z',
+    })
+    expect(derotContextFrom(state, NOW).hardFailure).toBe(false)
   })
 
-  it('is a hard failure at three or more recent mistakes', () => {
-    expect(derotContextFrom(stateFixture({ mistakeCount: 3, updatedAt: new Date().toISOString() }), Date.now()).hardFailure).toBe(true)
+  it('is a hard failure at three or more mistakes inside the window (a run in progress)', () => {
+    const state = stateFixture({
+      recentMistakes: [mistakeAt('2026-09-07T11:50:00.000Z'), mistakeAt('2026-09-07T11:55:00.000Z'), mistakeAt('2026-09-07T11:58:00.000Z')],
+      updatedAt: '2026-09-07T11:58:00.000Z',
+    })
+    expect(derotContextFrom(state, NOW).hardFailure).toBe(true)
+  })
+
+  it('three OLD mistakes outside the window are not a hard failure, however many are still on record', () => {
+    // `recentMistakes` is prepend-only and capped at 10 with no expiry -- a fail from six weeks
+    // ago must not read as "a run in progress" forever (C1).
+    const sixWeeksAgo = '2026-07-20T00:00:00.000Z'
+    const state = stateFixture({
+      recentMistakes: [mistakeAt(sixWeeksAgo), mistakeAt(sixWeeksAgo), mistakeAt(sixWeeksAgo)],
+      updatedAt: sixWeeksAgo,
+    })
+    expect(derotContextFrom(state, NOW).hardFailure).toBe(false)
+  })
+
+  it('old mistakes plus a long idle gap reach the Arcade arm, not a permanently-dead override', () => {
+    const sixWeeksAgo = '2026-07-20T00:00:00.000Z'
+    const state = stateFixture({
+      recentMistakes: [mistakeAt(sixWeeksAgo), mistakeAt(sixWeeksAgo), mistakeAt(sixWeeksAgo)],
+      updatedAt: sixWeeksAgo,
+    })
+    const context = derotContextFrom(state, NOW)
+    expect(context.hardFailure).toBe(false)
+    expect(context.idleGapMs).toBeGreaterThanOrEqual(LONG_IDLE_GAP_MS)
+    expect(pickDerotLane('trace', context)).toEqual({ lane: 'arcade', ref: 'trace', lineKey: 'buddy.suggest.arcade' })
+  })
+
+  it('a pass since the mistake (chain moved off zero) clears it even inside the window', () => {
+    const state = stateFixture({
+      recentMistakes: [mistakeAt('2026-09-07T11:50:00.000Z'), mistakeAt('2026-09-07T11:55:00.000Z'), mistakeAt('2026-09-07T11:58:00.000Z')],
+      updatedAt: '2026-09-07T11:59:00.000Z',
+      mastery: { 'INFS1101-1': { userId: 'student', cloId: 'INFS1101-1', score: 60, chain: 1, patternsPassed: ['scan'], closed: false, lastAttemptAt: '2026-09-07T11:59:00.000Z' } },
+    })
+    expect(derotContextFrom(state, NOW).hardFailure).toBe(false)
+  })
+
+  it('a since-closed skill also clears it', () => {
+    const state = stateFixture({
+      recentMistakes: [mistakeAt('2026-09-07T11:50:00.000Z'), mistakeAt('2026-09-07T11:55:00.000Z'), mistakeAt('2026-09-07T11:58:00.000Z')],
+      updatedAt: '2026-09-07T11:59:00.000Z',
+      mastery: { 'INFS1101-1': { userId: 'student', cloId: 'INFS1101-1', score: 100, chain: 0, patternsPassed: ['scan', 'trace', 'loop'], closed: true, lastAttemptAt: '2026-09-07T11:59:00.000Z' } },
+    })
+    expect(derotContextFrom(state, NOW).hardFailure).toBe(false)
   })
 
   it('measures the idle gap from updatedAt to the given instant', () => {
-    const now = Date.parse('2026-09-07T12:00:00.000Z')
-    const context = derotContextFrom(stateFixture({ mistakeCount: 0, updatedAt: '2026-09-07T10:00:00.000Z' }), now)
-    expect(context.idleGapMs).toBe(2 * HOUR)
+    const state = stateFixture({ recentMistakes: [], updatedAt: '2026-09-07T10:00:00.000Z' })
+    expect(derotContextFrom(state, NOW).idleGapMs).toBe(2 * HOUR)
   })
 })
 

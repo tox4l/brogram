@@ -5,8 +5,10 @@ import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, AgentError, BuddyReply, LearnerState } from '@/lib/contracts'
 import { makeQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
 import { line } from '@/lib/voice/lines'
 import { SessionProvider } from '@/components/shell/SessionProvider'
+import { BuddyButton } from '@/components/shell/BuddyButton'
 import { BuddyDrawer } from './Drawer'
 import { buddyMessagesKey, REFUSAL, type BuddyMessage } from './state'
 
@@ -27,6 +29,10 @@ function supabaseBuilder() {
     order: () => builder,
     limit: () => builder,
     insert: (value: Record<string, unknown>) => { action = 'insert'; payload = value; return builder },
+    // The motion-preference read (`fetchWellnessRow`) is the only caller of `.maybeSingle()` in
+    // this drawer -- no wellness row in these tests, so `resolveWellnessPrefs(null)` defaults to
+    // `motion: 'system'`.
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
     then: (resolve: (result: { data: Row[] | null; error: null }) => unknown) => {
       if (action === 'insert') {
         const row: Row = { id: `row-${rows.length}`, role: payload!.role as 'user' | 'assistant', content: String(payload!.content), created_at: new Date(Date.now() + rows.length).toISOString() }
@@ -119,7 +125,10 @@ describe('buddy drawer', () => {
     rerender(<BuddyDrawer open={true} onOpenChange={onOpenChange} />)
     await screen.findByText('hello there')
     expect(spies.from).toHaveBeenCalledWith('buddy_messages')
-    expect(spies.from).toHaveBeenCalledTimes(1)
+    // Plus the motion-preference read (I3), gated on `open` the same way -- still nothing beyond
+    // these two reads, and still no agent call.
+    expect(spies.from).toHaveBeenCalledWith('wellness')
+    expect(spies.from).toHaveBeenCalledTimes(2)
     expect(spies.stream).not.toHaveBeenCalled()
   })
 
@@ -252,6 +261,25 @@ describe('buddy drawer', () => {
     expect(screen.getByText('why does this loop fail')).toBeTruthy()
   })
 
+  it('flips to sending synchronously, before any await, so a second Enter cannot start a second concurrent turn (C2)', async () => {
+    // Never resolves -- if a second `buddy-message` turn started, this mock would be consumed
+    // twice with nothing queued for the second call, which the assertion below rules out directly.
+    spies.stream.mockImplementationOnce(() => new Promise<AgentEnvelope<BuddyReply>>(() => {}))
+    setup()
+    const textarea = screen.getByLabelText('Message your Buddy') as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: 'first question' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    // Disabled and typing immediately -- not after the (fire-and-forget) insert settles.
+    expect(textarea.disabled).toBe(true)
+    expect(screen.getByText('Buddy is typing')).toBeTruthy()
+    fireEvent.change(textarea, { target: { value: 'second question' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    // Let the first turn's own (fire-and-forget) async chain actually reach `streamAgent` before
+    // asserting it was never called a second time.
+    await waitFor(() => expect(spies.stream).toHaveBeenCalled())
+    expect(spies.stream).toHaveBeenCalledTimes(1)
+  })
+
   it('locks the auto-scroll once the learner scrolls away from the bottom mid-stream', async () => {
     let deliverPartial!: (partial: Partial<BuddyReply>) => void
     spies.stream.mockImplementationOnce((_req, onPartial) => {
@@ -272,19 +300,46 @@ describe('buddy drawer', () => {
     expect(scrollEl.scrollTop).toBe(0)
   })
 
+  it('does not yank the learner back to the bottom the instant the reply commits (I1)', async () => {
+    let finish!: (value: AgentEnvelope<BuddyReply>) => void
+    spies.stream.mockImplementationOnce((_req, onPartial) => {
+      onPartial({ onTopic: true, reply: 'streaming in' })
+      return new Promise<AgentEnvelope<BuddyReply>>(resolve => { finish = resolve })
+    })
+    setup()
+    await typeAndSend('why do i keep failing loops')
+    await screen.findByText('streaming in')
+    const scrollEl = screen.getByTestId('buddy-scroll')
+    Object.defineProperty(scrollEl, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(scrollEl, 'clientHeight', { configurable: true, value: 300 })
+    scrollEl.scrollTop = 0 // the learner scrolled up to reread an earlier exchange
+    fireEvent.scroll(scrollEl)
+    await act(async () => { finish(envelope({ onTopic: true, reply: 'the committed reply lands here' })) })
+    await screen.findByText('the committed reply lands here')
+    expect(scrollEl.scrollTop).toBe(0)
+  })
+
   it('paints a cached conversation with no fetch before first paint on a reopened drawer', () => {
     const client = makeQueryClient()
     const cached: BuddyMessage[] = [{ id: 'cached-1', role: 'assistant', content: 'cached reply from a prior open', createdAt: '2026-09-05T00:00:00.000Z' }]
     client.setQueryData(buddyMessagesKey('student'), cached)
+    // Also pre-seed the motion-preference read (I3) so the drawer paints from cache with truly
+    // zero fetches, not just for the conversation.
+    client.setQueryData(qk.wellness('student'), {})
     setup(vi.fn(), { queryClient: client })
     expect(screen.getByText('cached reply from a prior open')).toBeTruthy()
     expect(spies.from).not.toHaveBeenCalled()
   })
 
   it('frames a hard-failure derot suggestion as a Playground card linking straight at the runner', async () => {
+    // A live run per C1: three misses inside the 30-minute window, none of them since cleared by
+    // a pass (no mastery entry for the CLO at all here).
+    const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString()
     const hardFailureState: LearnerState = {
       ...learnerState,
-      recentMistakes: Array.from({ length: 3 }, (_, i) => ({ exerciseId: `e${i}`, cloId: 'INFS1101-1' as const, pattern: 'scan' as const, label: 'off-by-one in range', at: '2026-09-05T00:00:00.000Z' })),
+      recentMistakes: [minutesAgo(20), minutesAgo(10), minutesAgo(2)].map((at, i) => ({ exerciseId: `e${i}`, cloId: 'INFS1101-1' as const, pattern: 'scan' as const, label: 'off-by-one in range', at })),
+      mastery: {},
+      updatedAt: new Date().toISOString(),
     }
     spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'Rough one.', suggestion: { kind: 'derot', ref: 'trace' } }))
     setup(vi.fn(), { learnerState: hardFailureState })
@@ -295,12 +350,77 @@ describe('buddy drawer', () => {
   })
 
   it('frames a long-idle-gap derot suggestion as an Arcade card, keeping the existing deep-link redirect', async () => {
-    const idleGapState: LearnerState = { ...learnerState, recentMistakes: [], updatedAt: '2000-01-01T00:00:00.000Z' }
+    // C1's own failure scenario: three real fails, but from long enough ago (and long enough
+    // since any activity) that this is idle time, not a run in progress -- not the `[]` fixture
+    // that made the original test pass for the wrong reason.
+    const sixWeeksAgo = '2020-01-01T00:00:00.000Z'
+    const idleGapState: LearnerState = {
+      ...learnerState,
+      recentMistakes: [0, 1, 2].map(i => ({ exerciseId: `old-${i}`, cloId: 'INFS1101-1' as const, pattern: 'scan' as const, label: 'off-by-one in range', at: sixWeeksAgo })),
+      updatedAt: sixWeeksAgo,
+    }
     spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'Been a while.', suggestion: { kind: 'derot', ref: 'trace' } }))
     setup(vi.fn(), { learnerState: idleGapState })
     await typeAndSend('what should i do next')
     const link = await screen.findByRole('link')
     expect(link.getAttribute('href')).toBe('/derot?drill=trace')
     expect(link.textContent).toBe(line('buddy.suggest.arcade'))
+  })
+
+  it('has a live region so a landed reply is announced, and an sr-only label while typing', async () => {
+    spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'announced reply' }))
+    setup()
+    expect(screen.getByRole('log')).toBeTruthy()
+    await typeAndSend('why do i keep failing loops')
+    expect(screen.getByText('Buddy is typing')).toBeTruthy()
+    await screen.findByText('announced reply')
+  })
+})
+
+describe('buddy drawer -- keyboard and focus (brief review line: I6)', () => {
+  function renderButton() {
+    const queryClient = makeQueryClient()
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider initialState={{ user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState }}>{children}</SessionProvider>
+      </QueryClientProvider>
+    )
+    return render(<BuddyButton />, { wrapper })
+  }
+
+  it('closes on Escape and returns focus to the header Buddy button', async () => {
+    renderButton()
+    const trigger = screen.getByRole('button', { name: 'Buddy' })
+    // `fireEvent.click` does not simulate a real browser's focus-follows-click, so the trigger
+    // is focused explicitly first -- the focus manager can only remember and restore what was
+    // actually focused when the drawer opened.
+    trigger.focus()
+    fireEvent.click(trigger)
+    await screen.findByRole('dialog')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // Focus restoration rides the popup's own close animation/fallback timer (Base UI's
+    // `FloatingFocusManager`), so this can lag one tick behind the dialog leaving the DOM.
+    await waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 3000 })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('does not trap focus -- an element outside the drawer stays focusable while it is open', async () => {
+    const queryClient = makeQueryClient()
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider initialState={{ user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState }}>{children}</SessionProvider>
+      </QueryClientProvider>
+    )
+    render(
+      <>
+        <button type="button">Outside control</button>
+        <BuddyDrawer open={true} onOpenChange={vi.fn()} />
+      </>,
+      { wrapper },
+    )
+    await screen.findByRole('dialog')
+    const outside = screen.getByRole('button', { name: 'Outside control' })
+    outside.focus()
+    expect(document.activeElement).toBe(outside)
   })
 })
