@@ -100,14 +100,15 @@ export default function CoursesPage() {
     const token = ++switchTokenRef.current
 
     const plan = provisionalPlan({ code, clos: closFor(code), exercises: loadedBundle(code)?.exercises ?? [], mastery: learnerState.mastery })
-    // Store half of the optimistic patch, synchronously, before navigation: the
-    // destination (/course/{code}, the dashboard, De-rot, the Buddy) all read
-    // learner state from this store, not from `qk.learnerState` — only /courses
-    // itself reads the query cache.
+    // Store half of the optimistic patch, synchronously: the destination
+    // (/course/{code}, the dashboard, De-rot, the Buddy) all read learner state
+    // from this store, not from `qk.learnerState` — only /courses itself reads
+    // the query cache. Navigation itself is the `<Link>` this handler is wired
+    // to (wave-1 review I1): only a real `<Link>` gets prefetched on this or any
+    // route, and its own click handler runs its router transition right after
+    // this one returns — so the whole optimistic switch is under way before
+    // the destination route paints.
     setLearnerState(withCoursePlan(learnerState, code, plan))
-    // Step 1 of the switch (spec 4.3 R4.4): optimistic navigation, in the same
-    // frame, before the mutation below has done anything at all.
-    router.push(`/course/${code}`)
     mutation.mutate({ code, plan, token, previousState: learnerState })
   }
 

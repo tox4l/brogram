@@ -159,17 +159,31 @@ afterEach(() => {
 })
 
 describe('/courses — the optimistic switch', () => {
-  it('navigates before the Planner call resolves, and resolves the Planner only afterwards', async () => {
+  it('renders each live course card as a prefetching Link to its course home', () => {
+    const row: Row = { state: learnerState(), version: 1 }
+    renderPage(learnerState(), row)
+
+    const linkOne = screen.getByRole('link', { name: /Course One/ }) as HTMLAnchorElement
+    const linkTwo = screen.getByRole('link', { name: /Course Two/ }) as HTMLAnchorElement
+    expect(linkOne.tagName).toBe('A')
+    expect(linkOne.getAttribute('href')).toBe('/course/C1')
+    expect(linkTwo.getAttribute('href')).toBe('/course/C2')
+  })
+
+  it('runs the optimistic switch synchronously on click, before the Planner call resolves', async () => {
     const pending = deferred<AgentEnvelope<unknown>>()
     mocks.call.mockReturnValue(pending.promise)
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
 
-    // The push already happened, synchronously, before the mutation's own async
-    // chain (bundle load, then the Planner call) has had a chance to settle anything.
-    expect(mocks.push).toHaveBeenCalledWith('/course/C1')
+    // Synchronous: Next composes the click handler as "call the caller's
+    // onClick, then run the route transition" in that order, in the same
+    // handler (next/dist/client/app-dir/link.js) — so by the time this
+    // returns, the store patch below is already in place, ahead of whatever
+    // the route transition itself does.
+    expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ currentCourse: 'C1' }))
 
     // The switch is under way but the Planner call is still pending — resolving
     // it is the next thing this test does, deliberately, after the assertion above.
@@ -183,30 +197,12 @@ describe('/courses — the optimistic switch', () => {
     await waitFor(() => expect(row.state.currentCourse).toBe('C1'))
   })
 
-  it('updates the session store with the new course before navigating (C1) — every other screen reads that store, not the query cache', () => {
-    const row: Row = { state: learnerState(), version: 1 }
-    let pushedBeforeStoreUpdated = true
-    mocks.push.mockImplementation(() => {
-      // Runs synchronously, at the exact moment `router.push` is called — the
-      // store must already reflect the new course by then.
-      const lastCall = mocks.setLearnerState.mock.calls.at(-1) as [LearnerState] | undefined
-      pushedBeforeStoreUpdated = !lastCall || lastCall[0].currentCourse !== 'C1'
-    })
-    renderPage(learnerState(), row)
-
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
-
-    expect(mocks.push).toHaveBeenCalledWith('/course/C1')
-    expect(pushedBeforeStoreUpdated).toBe(false)
-    expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ currentCourse: 'C1' }))
-  })
-
   it('updates the session store again once the switch settles, with the Planner-reconciled plan', async () => {
     mocks.call.mockResolvedValue(envelope({ path: ['C1-1', 'C1-2'], nextExerciseIds: ['e2', 'e1'], focus: 'New focus.' }))
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
     await waitFor(() => expect(row.state.currentCourse).toBe('C1'))
 
     const settledCall = mocks.setLearnerState.mock.calls.at(-1)![0] as LearnerState & { focus?: string }
@@ -220,7 +216,7 @@ describe('/courses — the optimistic switch', () => {
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
     await waitFor(() => expect(row.state.currentCourse).toBe('C1'))
 
     expect(mocks.call).toHaveBeenCalledTimes(1)
@@ -232,7 +228,7 @@ describe('/courses — the optimistic switch', () => {
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
     await waitFor(() => expect(row.state.currentCourse).toBe('C1'))
 
     // The provisional plan for C1 (topological order, first non-closed CLO, two distinct patterns).
@@ -246,12 +242,14 @@ describe('/courses — the optimistic switch', () => {
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    const card = screen.getByRole('button', { name: /Course One/ })
+    const card = screen.getByRole('link', { name: /Course One/ })
     fireEvent.click(card)
     fireEvent.click(card)
 
     await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
-    expect(mocks.push).toHaveBeenCalledTimes(1)
+    // Only the first tap's optimistic store patch landed — the guard blocked
+    // the second before it ever reached `setLearnerState`.
+    expect(mocks.setLearnerState).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       pending.resolve(envelope({ path: ['C1-1', 'C1-2'], nextExerciseIds: ['e1', 'e2'], focus: '' }))
@@ -268,11 +266,11 @@ describe('/courses — the optimistic switch', () => {
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
     // Let Course One's switch reach its Planner call before Course Two is tapped.
     await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(screen.getByRole('button', { name: /Course Two/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course Two/ }))
     await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
 
     // Course Two's round trip resolves FIRST even though it was tapped second.
@@ -300,8 +298,9 @@ describe('/courses — the optimistic switch', () => {
     client.setQueryData(qk.learnerState('student'), state)
     render(<QueryClientProvider client={client}><CoursesPage /></QueryClientProvider>)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
-    expect(mocks.push).toHaveBeenCalledWith('/course/C1') // optimistic navigation still happened
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
+    // The optimistic store patch still happened synchronously on click.
+    expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ currentCourse: 'C1' }))
 
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalled())
@@ -339,11 +338,11 @@ describe('/courses — the optimistic switch', () => {
     const row: Row = { state: learnerState(), version: 1 }
     renderPage(learnerState(), row)
 
-    fireEvent.click(screen.getByRole('button', { name: /Course One/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Course One/ }))
     const chip = await screen.findByRole('status')
     expect(chip.textContent).toMatch(/tuning your path/i)
     // Every course card is still present and interactive — never blocking.
-    expect((screen.getByRole('button', { name: /Course Two/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole('link', { name: /Course Two/ }).getAttribute('aria-disabled')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByRole('status')).toBeNull()

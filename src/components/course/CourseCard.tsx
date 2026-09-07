@@ -1,9 +1,17 @@
 'use client'
 
+import Link from 'next/link'
 import { motion } from 'motion/react'
 import type { CourseCode, Language } from '@/lib/contracts'
 import { STAGGER } from '@/lib/motion/tokens'
 import { cn } from '@/lib/utils'
+
+/** A `<Link>` is what actually gets prefetched (spec 4.3 / wave-1 review I1) —
+ *  a `<button>` with a `router.push` in its `onClick` never does, on this or
+ *  any other route. `motion.create` wraps the real `next/link` component so
+ *  the press-scale (`whileTap`) still animates the element the browser will
+ *  actually navigate from. */
+const MotionLink = motion.create(Link)
 
 const LANGUAGE_LABELS: Record<string, string> = {
   python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', java: 'Java',
@@ -100,8 +108,14 @@ export function CourseCard(props: CourseCardProps) {
 
   return (
     <motion.div {...entrance}>
-      <motion.button
-        type="button"
+      <MotionLink
+        href={`/course/${props.code}`}
+        prefetch
+        // Runs synchronously before Next's own `linkClicked` navigation call
+        // (next/dist/client/app-dir/link.js: the user `onClick` fires, then
+        // the router transition starts, in that order, in the same handler) —
+        // the optimistic switch (store, then the cache via `mutation.mutate`)
+        // is therefore always under way before the destination route paints.
         onClick={() => props.onSelect(props.code)}
         whileTap={props.reducedMotion ? undefined : { scale: 0.98 }}
         aria-current={props.isCurrent ? 'true' : undefined}
@@ -122,7 +136,7 @@ export function CourseCard(props: CourseCardProps) {
           <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language} · Level {props.level}</span>
           <span className="mt-1 block text-xs text-muted-foreground">{props.hasPath ? 'You have a path here.' : 'No path started yet.'}</span>
         </span>
-      </motion.button>
+      </MotionLink>
     </motion.div>
   )
 }
