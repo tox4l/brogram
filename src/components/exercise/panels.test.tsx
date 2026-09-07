@@ -29,6 +29,16 @@ describe('exercise panels', () => {
     expect(container.textContent).not.toContain('secret-')
     expect(container.querySelector('script')).toBeNull()
   })
+  // Fix round 2, N2: the walkthrough's own prose column is capped in rem (`max-w-[34rem]`, 20:48
+  // Doha ruling) so a wide container never stretches it past the family C 55-80 character band --
+  // this brief had no cap at all, so a container the `@[54rem]`/`@[75rem]` grid template does not
+  // reach (a narrower viewport, or any future reuse outside this grid) stacked it full-width and
+  // measured 126 characters on its first line, 1.6x the ceiling.
+  it('caps the brief prose column in rem, the way the walkthrough is capped (fix round 2, N2)', () => {
+    const { container } = render(<PromptPanel exercise={exercise} />)
+    const section = container.querySelector('[aria-label="Rep prompt"]')
+    expect(section?.className).toMatch(/max-w-\[\d+(?:\.\d+)?rem\]/)
+  })
   it('does not disclose the graded answer as a visible non-code example', () => {
     const { container } = render(<PromptPanel exercise={{ ...exercise, kind: 'predict-output', tests: [{ id: 'answer', input: '', expected: 'the-answer', hidden: false }] }} />)
     expect(container.textContent).not.toContain('the-answer')

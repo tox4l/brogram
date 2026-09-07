@@ -200,6 +200,30 @@ describe('exercise screen', () => {
     expect(container?.contains(grid as Node)).toBe(true)
     expect(container).not.toBe(grid)
   })
+  // Fix round 2, N1: the recheck's own measurement of the compiled CSS against the real
+  // `ShellLayout` found that `main` never exceeds 888px at the default 'right' dock placement, at
+  // ANY viewport width -- so the `@[75rem]` (1200px) threshold alone was unreachable there and the
+  // workspace fell straight to the single-column fallback, editor below the fold, on every default
+  // screen. An intermediate `@[54rem]` step (888px comfortably clears it) must put brief and code
+  // side by side there, with results spanning both tracks on the row below, reset to its own track
+  // once the true three-column template (`@[75rem]`) takes over for a learner who has moved the
+  // dock off the rail.
+  it('adds an intermediate two-column step so brief and code stay adjacent at the 888px the default dock affords (fix round 2, N1)', () => {
+    render(<ExercisePage />)
+    const workspace = screen.getByTestId('exercise-workspace')
+    const grid = workspace.querySelector('[class*="grid-cols-\\[22rem_minmax\\(0"]')
+    expect(grid?.className).toContain('@[54rem]:grid-cols-[22rem_minmax(0,1fr)]')
+    expect(grid?.className).toContain('@[75rem]:grid-cols-[22rem_minmax(0,1.6fr)_20rem]')
+  })
+  it('spans the results column across both tracks at the two-column step, resetting to its own track at three columns (fix round 2, N1)', () => {
+    render(<ExercisePage />)
+    const results = screen.getByRole('region', { name: 'Results' })
+    // The results panel and its own ancestor grid cell are the same element here.
+    const cell = results.closest('[class*="col-span-2"]') as HTMLElement | null
+    expect(cell).toBeTruthy()
+    expect(cell?.className).toContain('@[54rem]:col-span-2')
+    expect(cell?.className).toContain('@[75rem]:col-span-1')
+  })
   it('does not remount the workspace when the exercise id changes in place (next())', () => {
     const { rerender } = render(<ExercisePage />)
     const before = screen.getByTestId('exercise-workspace')

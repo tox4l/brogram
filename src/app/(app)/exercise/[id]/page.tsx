@@ -189,18 +189,28 @@ function ExerciseWorkspace({ id }: { id: string }) {
         and rendered a 168px editor. `@container` measures the box this grid itself actually gets,
         not the viewport, so the three-column template only fires once that box can truly afford
         it: 22rem + 20rem fixed columns + two 1.5rem (gap-6) gutters + the 480px editor floor =
-        1200px = 75rem. Below that this is a plain single-column grid, so the brief, the work
-        panel and the results column stack full-width in DOM order -- the plan's own fallback
-        shape -- rather than being squeezed into a three-column template with no room for one of
-        the three. The `@container` context and the `@[75rem]:` grid it gates live on two
+        1200px = 75rem. The `@container` context and the `@[75rem]:` grid it gates live on two
         DIFFERENT elements on purpose: a size container query can never match the element that
         establishes the containment context itself (only its descendants), so `@container` sits
-        on this outer wrapper and the responsive grid is the child inside it. */}
+        on this outer wrapper and the responsive grid is the child inside it.
+        Fix round 2, N1: `main`'s content box never exceeds 888px at the default 'right' dock
+        placement, at ANY viewport width (ShellLayout's `max-w-7xl` outer cap plus its 17.5rem
+        rail and lg:gap-12), so the 75rem threshold above was unreachable there and the workspace
+        fell to the single-column fallback on every default screen -- editor below the fold,
+        brief off-screen the instant it was. 888px does afford a two-column row (22rem fixed +
+        gap-6 + a 512px remainder, comfortably above the 480px floor): the floor is cleared once
+        the container reaches 22rem + gap-6 (1.5rem) + 480px = 53.5rem, so `@[54rem]` fires with a
+        half-rem of margin and puts brief and code side by side at the 888px the default shell
+        actually affords, with the results column spanning both tracks on the row below
+        (`@[54rem]:col-span-2`, reset to `@[75rem]:col-span-1` once the true three-column template
+        takes over for a learner who has moved the dock off the rail). Below 54rem (a narrow
+        viewport, not this task's target configuration) the grid still has no explicit template
+        and stacks full-width in DOM order. */}
     <div className="@container">
-    <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 items-start gap-6 @[75rem]:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
+    <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 items-start gap-6 @[54rem]:grid-cols-[22rem_minmax(0,1fr)] @[75rem]:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
       {/* Step 4: named so an in-place `next()` crossfades only this panel; the editor and its
           warm runtime sit outside it and never re-enter a transition. */}
-      <div className="min-w-0 @[75rem]:max-h-[calc(100dvh-17rem)] @[75rem]:overflow-y-auto @[75rem]:pr-1" style={{ viewTransitionName: 'exercise-prompt' }}><PromptPanel exercise={exercise} clo={loop.clo} /></div>
+      <div className="min-w-0 @[54rem]:max-h-[calc(100dvh-17rem)] @[54rem]:overflow-y-auto @[54rem]:pr-1" style={{ viewTransitionName: 'exercise-prompt' }}><PromptPanel exercise={exercise} clo={loop.clo} /></div>
       <section aria-label="Work" className="min-w-0 self-start overflow-hidden rounded-xl border border-rule bg-background">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-3"><h2 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">{exercise.kind === 'code' || exercise.kind === 'schema' ? 'Code' : 'Answer'}</h2></div>
         {exercise.kind === 'predict-output' || (exercise.kind === 'trace' && traceUnanswerable) ? <PredictOutput snippet={exercise.starterCode} {...answerProps} focusRef={editorFocusRef} />
@@ -225,7 +235,10 @@ function ExerciseWorkspace({ id }: { id: string }) {
               </div>}
         </div>
       </section>
-      <div ref={resultsRef} className="min-w-0 space-y-4 @[75rem]:max-h-[calc(100dvh-17rem)] @[75rem]:overflow-y-auto @[75rem]:pr-1">
+      {/* Fix round 2, N1: at the two-column step (@[54rem]) this is the ONLY row-2 item, so it
+          spans both tracks rather than sitting under the brief alone; the true three-column
+          template (@[75rem]) resets it back to its own single track, alongside brief and work. */}
+      <div ref={resultsRef} className="min-w-0 space-y-4 @[54rem]:col-span-2 @[75rem]:col-span-1 @[75rem]:max-h-[calc(100dvh-17rem)] @[75rem]:overflow-y-auto @[75rem]:pr-1">
         {/* Steps 1, 2 & 8: the verdict, the XP figure and the chain pip render the instant
             grading resolves -- `loop.outcome` flips before any network call, not after the
             eight-stage background chain. The hairline under the number marks it provisional

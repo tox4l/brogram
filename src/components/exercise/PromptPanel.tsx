@@ -31,7 +31,18 @@ function PromptText({ text }: { text: string }) {
 export function PromptPanel({ exercise, clo }: { exercise: ExercisePublic; clo?: Clo | null }) {
   const examples = exercise.kind === 'code' || exercise.kind === 'schema' ? exercise.tests.filter((test) => !test.hidden) : []
   return (
-    <section aria-label="Rep prompt" className="min-w-0 space-y-4">
+    // Fix round 2, N2: capped in rem the way the walkthrough's own prose column is (`max-w-[34rem]`,
+    // 20:48 Doha ruling) -- at both this task's target placements the parent grid's fixed 22rem
+    // brief track (352px) already governs and this cap never binds (30rem/480px is wider), so this
+    // is belt-and-braces against any width the grid template does not, not the primary defence: a
+    // narrower viewport that falls below the `@[54rem]` step stacks this section full-width in DOM
+    // order with nothing else bounding it, which is exactly the shape that measured 126 characters
+    // (1.6x the 55-80 ceiling) before this fix. Measured live at 1280x800 in the DOM (Playwright,
+    // real compiled CSS, real Geist Sans): unlike the walkthrough's `--text-lede` prose, this brief
+    // renders at `--text-body` (1rem/16px, spec section 9's own instruction, not font-prose) in
+    // every palette, so 34rem measured 20-24 characters over the 80 ceiling here -- 30rem (480px)
+    // is where a real single-column brief measures inside the family C band at this smaller size.
+    <section aria-label="Rep prompt" className="min-w-0 max-w-[30rem] space-y-4">
       <div className="space-y-3"><h2 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">The task</h2><PromptText text={exercise.prompt} /></div>
       {examples.length > 0 && <div className="space-y-3 border-t border-rule pt-4">
         <h3 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">Examples</h3>
