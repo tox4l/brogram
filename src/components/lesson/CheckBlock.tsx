@@ -100,10 +100,11 @@ function FillBlankTemplate({ template, values, onChange, disabled }: {
  * in DOM order. `reduced` gates only the shake -- the verdict text itself
  * never changes with motion preference.
  */
-export function CheckBlock({ block, reduced, onAnswered }: {
+export function CheckBlock({ block, reduced, onAnswered, packages }: {
   block: CheckBlockData
   reduced: boolean
   onAnswered: (right: boolean) => void
+  packages: string[]
 }) {
   const [attempts, setAttempts] = useState(0)
   const [verdict, setVerdict] = useState<CheckVerdict | null>(null)
@@ -160,11 +161,15 @@ export function CheckBlock({ block, reduced, onAnswered }: {
       if (event.language === block.language) setRuntimeProgress(event)
     })
     try {
+      // Wave 1 gate fix (C1): a DSAI2201 micro-code check needs the course's
+      // Pyodide packages too, or it throws ModuleNotFoundError exactly like
+      // the free-run snippet did; meaningless for any non-Python language.
       const result: RunResult = await getRuntime(block.language).run({
         language: block.language,
         code,
         tests: block.tests,
         timeoutMs: 5000,
+        packages: block.language === 'python' ? packages : undefined,
       })
       setResults(result.results)
       grade({ kind: 'micro-code', results: result.results })

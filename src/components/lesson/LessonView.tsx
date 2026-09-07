@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type { CloId, CourseCode, LessonProgress, LessonPublic } from '@/lib/contracts'
-import { clo, lessonFor, loadCourseBundle } from '@/lib/curriculum'
+import { clo, course as findCourse, lessonFor, loadCourseBundle } from '@/lib/curriculum'
 import { nextProgress, isStale, type LessonEvent } from '@/lib/lesson/progress'
 import { useLessonProgress, useWellness } from '@/lib/query/hooks'
 import { optimistic } from '@/lib/query/optimistic'
@@ -55,6 +55,19 @@ function useLessonRunner(cloId: CloId) {
   })
 
   const lesson: LessonPublic | null = course && bundleQuery.data ? lessonFor(course, cloId) : null
+
+  // Wave 1 gate fix (C1): a DSAI2201 lesson's runnable snippet or micro-code
+  // check needs the same Pyodide packages (numpy, pandas, ...) the exercise
+  // screen loads for that course, or the run throws ModuleNotFoundError.
+  // `LessonSnippet`/the check kinds carry no per-exercise packages field
+  // (checked `src/lib/contracts.ts` -- Exercise/ExercisePublic has none
+  // either), so "the union across the course's exercises" is, concretely,
+  // the one list already sitting on `Course.packages` in the static
+  // curriculum bundle (`course(code)`, synchronous, zero network -- the same
+  // data `useExerciseLoop.ts` fetches from `courses.packages` over Supabase
+  // for the identical purpose). Computed once per lesson, here, and handed
+  // down to every snippet and check rather than each one re-deriving it.
+  const packages = course ? (findCourse(course)?.packages ?? []) : []
 
   const progressQuery = useLessonProgress()
   const prevRow = progressQuery.data?.find((row) => row.lessonId === cloId) ?? null
@@ -150,7 +163,7 @@ function useLessonRunner(cloId: CloId) {
   }
 
   return {
-    course, lesson, bundleQuery, progress, staleNotice: state?.staleNotice ?? false,
+    course, lesson, bundleQuery, progress, staleNotice: state?.staleNotice ?? false, packages,
     skip, complete, advanceBlock, answerCheck,
   }
 }
@@ -160,7 +173,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
   const reducedMotion = useReducedMotion(prefs.motion)
   const runner = useLessonRunner(cloId)
-  const { course, lesson, bundleQuery, progress, staleNotice, skip, complete, advanceBlock, answerCheck } = runner
+  const { course, lesson, bundleQuery, progress, staleNotice, packages, skip, complete, advanceBlock, answerCheck } = runner
 
   if (!clo(cloId)) {
     return (
@@ -235,9 +248,9 @@ export function LessonView({ cloId }: { cloId: CloId }) {
         {lesson.blocks.map((block, index) => (
           <RevealBlock key={block.id} reduced={reducedMotion} onReveal={() => advanceBlock(index)}>
             {block.type === 'concept' && <ConceptBlock block={block} />}
-            {block.type === 'snippet' && <SnippetBlock block={block} />}
+            {block.type === 'snippet' && <SnippetBlock block={block} packages={packages} />}
             {block.type === 'worked' && <WorkedBlock block={block} reduced={reducedMotion} />}
-            {block.type === 'check' && <CheckBlock block={block} reduced={reducedMotion} onAnswered={answerCheck} />}
+            {block.type === 'check' && <CheckBlock block={block} reduced={reducedMotion} onAnswered={answerCheck} packages={packages} />}
             {block.type === 'recap' && <RecapBlock block={block} />}
             {block.type === 'bridge' && <BridgeBlock block={block} course={course ?? ''} completed={completed} onComplete={complete} />}
           </RevealBlock>

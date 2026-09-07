@@ -21,7 +21,7 @@ function messageOf(error: unknown): string {
  * `runnable: false` at the content layer (the validator rejects otherwise),
  * so the honest one-liner below only ever shows next to static code.
  */
-export function SnippetBlock({ block }: { block: SnippetBlockData }) {
+export function SnippetBlock({ block, packages }: { block: SnippetBlockData; packages: string[] }) {
   const [code, setCode] = useState(block.code)
   const [stdout, setStdout] = useState('')
   const [stderr, setStderr] = useState('')
@@ -41,12 +41,18 @@ export function SnippetBlock({ block }: { block: SnippetBlockData }) {
       if (event.language === block.language) setProgress(event)
     })
     try {
+      // Wave 1 gate fix (C1): the course's Pyodide packages (numpy, pandas, ...
+      // for DSAI2201) only mean anything to the Python runtime -- passing them
+      // to any other language's adapter is meaningless at best. A snippet may
+      // still name its own extra `packages` (the field is "usually omitted"
+      // but not removed) -- union rather than replace, so an author's
+      // explicit choice is never silently dropped.
       const result: RunResult = await getRuntime(block.language).run({
         language: block.language,
         code,
         tests: [],
         timeoutMs: 5000,
-        packages: block.packages,
+        packages: block.language === 'python' ? [...new Set([...packages, ...(block.packages ?? [])])] : undefined,
       })
       setStdout(result.stdout ?? '')
       setStderr(result.stderr ?? '')

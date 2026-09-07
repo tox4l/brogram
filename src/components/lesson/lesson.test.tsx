@@ -57,8 +57,52 @@ const SPOT_THE_BUG_LESSON: LessonPublic = {
   blocks: [ALL_KINDS_LESSON.blocks.find((block) => block.id === 'chk-bug')!],
 }
 
+// --- Wave 1 gate fix (C1): a DSAI2201-shaped lesson, whose course declares
+// Pyodide packages, plus a course with none (INFS1101-shaped) -- kept
+// synthetic rather than pulled from the real seed files so this suite never
+// breaks on someone else's content edit.
+const DSAI_COURSE_PACKAGES = ['numpy', 'pandas', 'matplotlib', 'scikit-learn']
+
+const PACKAGES_LESSON: LessonPublic = {
+  id: 'DSAI2201-1',
+  cloId: 'DSAI2201-1',
+  course: 'DSAI2201',
+  language: 'python',
+  version: 1,
+  title: 'A packages lesson',
+  hook: 'Hook.',
+  estimatedMinutes: 5,
+  draft: false,
+  tags: [],
+  exitLine: 'Done.',
+  blocks: [
+    { type: 'snippet', id: 's1', language: 'python', code: 'import pandas as pd', runnable: true, packages: ['seaborn'] },
+    { type: 'check', id: 'chk-micro', kind: 'micro-code', prompt: 'Write a function.', language: 'python', starterCode: 'def f():\n    pass', tests: [{ id: 't1', input: '', expected: '1', hidden: false }], hint: 'Return 1.', explain: 'f should return 1.' },
+    { type: 'bridge', id: 'b1', say: 'Go try a real one.' },
+  ],
+}
+
+const NO_PACKAGES_LESSON: LessonPublic = {
+  id: 'INFS1101-9',
+  cloId: 'INFS1101-9',
+  course: 'INFS1101',
+  language: 'python',
+  version: 1,
+  title: 'A no-packages lesson',
+  hook: 'Hook.',
+  estimatedMinutes: 5,
+  draft: false,
+  tags: [],
+  exitLine: 'Done.',
+  blocks: [
+    { type: 'snippet', id: 's1', language: 'python', code: 'print(1)', runnable: true },
+    { type: 'bridge', id: 'b1', say: 'Go try a real one.' },
+  ],
+}
+
 const mocks = vi.hoisted(() => ({
   clo: vi.fn(),
+  course: vi.fn(),
   lessonFor: vi.fn(),
   loadCourseBundle: vi.fn(),
   getRuntime: vi.fn(),
@@ -77,6 +121,7 @@ const db = vi.hoisted(() => ({
 
 vi.mock('@/lib/curriculum', () => ({
   clo: mocks.clo,
+  course: mocks.course,
   lessonFor: mocks.lessonFor,
   loadCourseBundle: mocks.loadCourseBundle,
 }))
@@ -141,8 +186,13 @@ class FakeIntersectionObserver implements IntersectionObserver {
   takeRecords(): IntersectionObserverEntry[] { return [] }
 }
 
-function setCurriculum(lesson: LessonPublic) {
+function setCurriculum(lesson: LessonPublic, coursePackages?: string[]) {
   mocks.clo.mockReturnValue({ id: lesson.cloId, course: lesson.course as CourseCode, ordinal: 1, outcome: 'x', topics: [], prerequisites: [], patterns: [], assessableInCode: true })
+  mocks.course.mockReturnValue({
+    code: lesson.course as CourseCode, slug: lesson.course.toLowerCase(), title: lesson.course,
+    language: lesson.language, runtime: 'browser', level: 1, prerequisites: [], topics: [], cloIds: [lesson.cloId],
+    status: 'live', ...(coursePackages ? { packages: coursePackages } : {}),
+  })
   mocks.loadCourseBundle.mockResolvedValue({ code: lesson.course, clos: [], exercises: [], lessons: [lesson] })
   mocks.lessonFor.mockReturnValue(lesson)
 }
@@ -543,5 +593,44 @@ describe('LessonView', () => {
     expect((window as unknown as { __pwned?: boolean }).__pwned).toBeUndefined()
     // Sanitising is surgical, not a bail-to-nothing -- the safe shape survives.
     expect(document.querySelector('svg circle')).not.toBeNull()
+  })
+
+  it('C1: a runnable snippet in a DSAI2201-shaped lesson runs with the union of course and snippet packages', async () => {
+    setCurriculum(PACKAGES_LESSON, DSAI_COURSE_PACKAGES)
+    render(<LessonView cloId={PACKAGES_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(PACKAGES_LESSON.title)
+
+    mocks.run.mockResolvedValueOnce({ ok: true, results: [], passedCount: 0, totalCount: 0, stdout: '', stderr: '', runtime: 'python' })
+    fireEvent.click(screen.getByRole('button', { name: /^run$/i }))
+    await waitFor(() => expect(mocks.run).toHaveBeenCalled())
+
+    const request = mocks.run.mock.calls[0][0] as { packages?: string[] }
+    expect(new Set(request.packages)).toEqual(new Set([...DSAI_COURSE_PACKAGES, 'seaborn']))
+  })
+
+  it('C1: a micro-code check in a DSAI2201-shaped lesson runs its tests with the course packages', async () => {
+    setCurriculum(PACKAGES_LESSON, DSAI_COURSE_PACKAGES)
+    render(<LessonView cloId={PACKAGES_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('Write a function.')
+
+    mocks.run.mockResolvedValueOnce({ ok: true, results: [{ testId: 't1', passed: true, actual: '1', expected: '1', stdout: '', stderr: '', durationMs: 1 }], passedCount: 1, totalCount: 1, runtime: 'python' })
+    fireEvent.click(screen.getByRole('button', { name: /run tests/i }))
+    await waitFor(() => expect(mocks.run).toHaveBeenCalled())
+
+    const request = mocks.run.mock.calls[0][0] as { packages?: string[] }
+    expect(request.packages).toEqual(DSAI_COURSE_PACKAGES)
+  })
+
+  it('C1: a course with no declared packages (INFS1101-shaped) runs a snippet with an empty package list', async () => {
+    setCurriculum(NO_PACKAGES_LESSON)
+    render(<LessonView cloId={NO_PACKAGES_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(NO_PACKAGES_LESSON.title)
+
+    mocks.run.mockResolvedValueOnce({ ok: true, results: [], passedCount: 0, totalCount: 0, stdout: '1\n', stderr: '', runtime: 'python' })
+    fireEvent.click(screen.getByRole('button', { name: /^run$/i }))
+    await waitFor(() => expect(mocks.run).toHaveBeenCalled())
+
+    const request = mocks.run.mock.calls[0][0] as { packages?: string[] }
+    expect(request.packages).toEqual([])
   })
 })
