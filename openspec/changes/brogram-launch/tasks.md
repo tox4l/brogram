@@ -39,7 +39,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T0.7 Shell recomposition (Group C) (9e36834, 5789e7d)
 - [x] T1.1 Lesson generation workflow, verifier, and the first batch (8dd010b, 3c4d110, 92f231b, b6dff4f, 52ac7db)
 - [x] T1.2 Lesson grading and progress (pure) (96663ee, f15b63e)
-- [ ] T1.3 The walkthrough screen (Group B)
+- [x] T1.3 The walkthrough screen (Group B) (8388d71, 9c440dd)
 - [x] T1.4 Course home and the path map (d84680e, a61508f)
 - [x] T1.5 Onboarding once: six local questions (302b44e, 912b94c)
 - [x] T1.6 `/courses`, the optimistic course switch, and the proxy matcher (3adfda2, b94b215)
