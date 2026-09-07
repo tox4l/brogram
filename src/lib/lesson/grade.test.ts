@@ -28,6 +28,32 @@ describe('gradeCheck: predict-output', () => {
     expect(gradeCheck(c, { kind: 'predict-output', text: 'one\ntwo ' }, 1).right).toBe(false)
     expect(gradeCheck(c, { kind: 'predict-output', text: ' one\ntwo' }, 1).right).toBe(false)
   })
+
+  it('normalize: exact ignores the print()-terminal trailing newline in expected (the five shipped checks)', () => {
+    // The exact expected strings shipped in INFS1201-1, INFS1201-3,
+    // DSAI2201-3, DSAI2201-5 and INFS1101-4. Typing the value with no
+    // trailing newline (what a textarea holds) must grade right.
+    const shipped = ['[20, 20, 30]\n', '4 12\n', '3\n', '6 2\n', 'fig\n']
+    for (const expected of shipped) {
+      const c = { ...check('exact'), expected }
+      const typed = expected.slice(0, -1)
+      expect(gradeCheck(c, { kind: 'predict-output', text: typed }, 1).right).toBe(true)
+    }
+  })
+
+  it('normalize: exact also accepts the answer carrying the same single trailing newline, CRLF or LF', () => {
+    const c = { ...check('exact'), expected: '3\n' }
+    expect(gradeCheck(c, { kind: 'predict-output', text: '3\n' }, 1).right).toBe(true)
+    expect(gradeCheck(c, { kind: 'predict-output', text: '3\r\n' }, 1).right).toBe(true)
+  })
+
+  it('normalize: exact still fails an extra blank line inside the output, not just the terminal newline', () => {
+    const c = { ...check('exact'), expected: 'one\ntwo\n' }
+    // A blank line inserted before the end is content, not the stripped
+    // terminal newline -- only one \n (or \r\n) ever comes off.
+    expect(gradeCheck(c, { kind: 'predict-output', text: 'one\n\ntwo' }, 1).right).toBe(false)
+    expect(gradeCheck(c, { kind: 'predict-output', text: 'one\ntwo\n\n' }, 1).right).toBe(false)
+  })
 })
 
 describe('gradeCheck: choose', () => {

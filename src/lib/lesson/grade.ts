@@ -37,11 +37,25 @@ function foldAccept(value: string): string {
   return value.trim().toLowerCase()
 }
 
+/** Strip exactly one trailing newline (\n or \r\n), never more -- a snippet's
+ *  terminal newline from print() is never the learner's job to type, but an
+ *  extra blank line inside (or a second trailing one) is still content. */
+function stripTerminalNewline(value: string): string {
+  return value.replace(/\r?\n$/, '')
+}
+
 function isRight(check: GradableCheck, answer: CheckAnswer): boolean {
   if (check.kind === 'predict-output' && answer.kind === 'predict-output') {
-    return check.normalize === 'exact'
-      ? check.expected === answer.text
-      : gradePredictOutput(answer.text, check.expected)
+    if (check.normalize === 'exact') {
+      // 'exact' is whitespace-sensitive within and between lines, so this
+      // stays a strict === -- but a browser textarea can hand back CRLF, and
+      // the one terminal newline from a print() is never the learner's job
+      // to type, so both are neutralized before the strict compare.
+      const expected = stripTerminalNewline(check.expected)
+      const given = stripTerminalNewline(answer.text.replace(/\r\n/g, '\n'))
+      return expected === given
+    }
+    return gradePredictOutput(answer.text, check.expected)
   }
   if (check.kind === 'choose' && answer.kind === 'choose') {
     return answer.index === check.correctIndex
