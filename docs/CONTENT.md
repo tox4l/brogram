@@ -11,16 +11,18 @@ None of the steps below need a DeepSeek key, a Vercel account, or anyone's
 permission. They need Node and, for the loading step, a Supabase project
 (your own — see `SETUP.md` for a local one).
 
-## 1. The five files that make up a course
+## 1. The files that make up a course
 
 | File | Shape | Purpose |
 |---|---|---|
 | `seed/courses.json` | `{ courses: Course[] }` | One row per course: code, title, language, level, prerequisites, the ordered `clo_ids` that make up its path, `status` (`live`, `coming-soon`, or `draft`). |
 | `seed/clos.json` | `{ clos: CLO[] }` | One row per learning outcome (CLO): which course it belongs to, its `outcome` sentence, the `patterns` it draws from, and its own prerequisite CLOs. |
 | `seed/patterns.json` | `{ patterns: Pattern[] }` | The logic-pattern taxonomy every exercise and lesson tags itself with (`accumulate`, `filter`, `nested-loop`, `refactor-to-class`, `sql-join`, ...). Closing a CLO requires passing exercises with three *different* patterns in a row — see `README.md`'s "how the learning model works" section. |
-| `seed/exercises/<COURSE>.json`, `seed/exercises/by-clo/<cloId>.json` | `{ exercises: Exercise[] }` | The graded practice bank. Each exercise names a `cloId`, a `pattern`, `tests` (visible and hidden), and a `referenceSolution` that must actually pass those tests. |
-| `seed/lessons/<COURSE>.json`, `seed/lessons/by-clo/<cloId>.json` | `{ course, lessons: Lesson[] }` | The walkthroughs: one per CLO, made of `LessonBlock`s (concept prose, a worked example, and checks the learner does inline). Shape is `seed/lessons/lesson.schema.json`. |
-| `seed/drills/<kind>.json` | `DrillItem[]` | De-rot content: reading-and-reasoning items (`predict-output`, `spot-the-bug`, `trace`, `n-back`, `speed-type`, `hold-focus`) that never touch a course's exercise bank. |
+| `seed/exercises/<COURSE>.json` | `{ exercises: Exercise[] }` | The graded practice bank, one file per course — this is what `seed:load` and the verifier read. Each exercise names a `cloId`, a `pattern`, `tests` (visible and hidden), and a `referenceSolution` that must actually pass those tests. Author by hand directly into this file. |
+| `seed/exercises/by-clo/<cloId>.json` | `{ exercises: Exercise[] }` | **Workflow-internal, not a place to author by hand.** A transient scratch path `docs/workflows/exercise-bank-generation.js` writes one file to per CLO before merging them into `seed/exercises/<COURSE>.json` above; the loader only reads `<COURSE>.json` files, so anything left only here is silently never loaded. |
+| `seed/lessons/<COURSE>.json` | `{ course, lessons: Lesson[] }` | The walkthroughs actually read by the app and the loader: one per CLO, made of `LessonBlock`s (concept prose, a worked example, and checks the learner does inline). Shape is `seed/lessons/lesson.schema.json`. Author by hand directly into this file. |
+| `seed/lessons/by-clo/<cloId>.json` | `{ course, lessons: Lesson[] }` | The lesson-generation workflow's per-CLO scratch output, merged into `seed/lessons/<COURSE>.json` above the same way the exercise workflow does. |
+| `seed/drills/<kind>.json` | `{ items: DrillItem[] }` | De-rot content: reading-and-reasoning items (`predict-output`, `spot-the-bug`, `trace`, `n-back`, `speed-type`, `hold-focus`) that never touch a course's exercise bank. |
 
 `Exercise`, `LessonBlock`, `TestCase`, `Course`, `CLO`, and `Pattern` are all
 typed in `src/lib/contracts.ts` — read that file, not this one, for the exact
@@ -153,8 +155,11 @@ manifest plus one JSON file per course and per drill kind, secrets stripped —
 a lesson's or exercise's `referenceSolution` and a lesson check's
 `expectedStdout` never appear in anything under `public/`). `npm run build`
 runs this automatically as its `prebuild` step, so a production build always
-picks up whatever is in `seed/` at build time; running it by hand is only
-for seeing the effect during `npm run dev`, which does not watch `seed/`.
+picks up whatever is in `seed/` at build time. `npm run dev` does **not**
+run it and does not watch `seed/` — on a fresh clone (`public/curriculum/`
+is gitignored and starts out empty) running this by hand is not optional,
+it is the difference between `npm run dev` serving real content and every
+course 404ing; see `SETUP.md`.
 
 `npm run curriculum:check` re-runs the same generation in memory and exits
 non-zero if the result would differ from what is committed — the gate that

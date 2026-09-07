@@ -74,6 +74,9 @@ node scripts/seed-load.mjs   # load courses, CLOs, patterns, exercises, and dril
 npm run dev
 ```
 
+For a fully local setup — your own Supabase project, no Vercel account, and
+(with one setting) no DeepSeek key at all — see `SETUP.md`.
+
 Run the test suites:
 
 ```bash
@@ -84,6 +87,8 @@ npx playwright test          # end-to-end flows; see e2e/README.md for setup
 ## Repository layout
 
 - `docs/` — design notes, frozen contracts reference, and the build log
+  (`docs/CONTENT.md` is the end-to-end guide to authoring a different
+  syllabus)
 - `seed/` — course, CLO, pattern, exercise, and drill content plus its loader/validator
 - `supabase/` — database migrations (schema, RLS policies, functions)
 - `src/` — the Next.js app: routes under `src/app/`, agents under
