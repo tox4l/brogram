@@ -45,7 +45,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T1.6 `/courses`, the optimistic course switch, and the proxy matcher (3adfda2, b94b215)
 - [x] T2.1 Data layer: `(app)/layout.tsx` and the dashboard (aa4db9b, af54860)
 - [x] T2.2 The optimistic submit path (f048f2d, 85a5fa8, cb59389)
-- [ ] T2.3 Data layer: Progress and Account
+- [x] T2.3 Data layer: Progress and Account (b509b0e, a1336ca)
 - [x] T2.4 The wellness dock (ae16661, 6293b9d, e629a97, b9e5393, f56f41e)
 - [x] T2.5 Rewards: XP, levels, streaks, achievement predicates (pure) (e8bc78e, 86ad21b)
 - [x] T2.6 Rewards: celebrations, counters and the trophy shelf (5761cf8, af54860, b3b3558)
