@@ -132,19 +132,19 @@ export function TrophyCard({ achievement, collapsedCount, collapsedAchievements,
   return (
     <motion.div
       {...entrance}
-      className="group pointer-events-auto flex max-w-sm items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-[0_0_0_1px_var(--glow),0_0_32px_var(--glow)]"
+      className="group pointer-events-auto flex max-w-sm items-start gap-3 rounded-xl border border-rule bg-card p-4 shadow-[0_0_0_1px_var(--glow),0_0_32px_var(--glow)]"
     >
-      <TrophyGlyph tier={achievement?.tier} locked={false} className="mt-0.5" />
+      <TrophyGlyph tier={achievement?.tier} locked={false} className="mt-1" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {achievement && <p className="text-[11px] font-medium text-muted-foreground">{TIER_LABEL[achievement.tier]}</p>}
-        <p className="mt-0.5 text-xs text-muted-foreground">{line}</p>
+        <p className="text-small font-medium text-foreground">{title}</p>
+        {achievement && <p className="text-micro text-muted-foreground">{TIER_LABEL[achievement.tier]}</p>}
+        <p className="mt-1 text-micro text-muted-foreground">{line}</p>
         {isCollapsed && (
           <>
             <button
               type="button"
               onClick={onOpenShelf}
-              className="mt-2 text-xs font-medium text-primary underline-offset-4 hover:underline"
+              className="mt-2 text-micro text-primary underline-offset-4 hover:underline"
             >
               Open the shelf
             </button>
@@ -152,7 +152,7 @@ export function TrophyCard({ achievement, collapsedCount, collapsedAchievements,
               <div
                 data-testid="collapsed-reveal"
                 className={cn(
-                  'mt-2 flex max-w-0 gap-1.5 overflow-hidden opacity-0 group-hover:max-w-[240px] group-hover:opacity-100 group-focus-within:max-w-[240px] group-focus-within:opacity-100',
+                  'mt-2 flex max-w-0 gap-2 overflow-hidden opacity-0 group-hover:max-w-[240px] group-hover:opacity-100 group-focus-within:max-w-[240px] group-focus-within:opacity-100',
                   // A11Y-13: `max-width` itself never transitions -- it snaps
                   // both open and closed, keyboard-reachable via
                   // `group-focus-within`, not only on hover. Only opacity

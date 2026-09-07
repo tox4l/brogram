@@ -29,13 +29,13 @@ function bandFor(percentRemaining: number): Band {
 
 const BAND_STROKE: Record<Band, string> = {
   normal: 'stroke-primary',
-  amber: 'stroke-amber-500',
+  amber: 'stroke-warning',
   red: 'stroke-destructive',
 }
 
 const BAND_TEXT: Record<Band, string> = {
   normal: 'text-foreground',
-  amber: 'text-amber-600',
+  amber: 'text-warning',
   red: 'text-destructive',
 }
 
@@ -64,7 +64,7 @@ export function CountdownRing({ remainingMs, percentRemaining, reduced = false, 
 
   if (reduced) {
     return (
-      <div role="timer" className={cn('font-mono text-2xl font-semibold tabular-nums', BAND_TEXT[band])}>
+      <div role="timer" className={cn('font-mono text-h2 tabular-nums', BAND_TEXT[band])}>
         {seconds}s
       </div>
     )
@@ -87,7 +87,7 @@ export function CountdownRing({ remainingMs, percentRemaining, reduced = false, 
           strokeLinecap="round"
         />
       </svg>
-      <span className={cn('absolute font-mono text-sm font-semibold tabular-nums', BAND_TEXT[band])}>{seconds}s</span>
+      <span className={cn('absolute font-mono text-small font-medium tabular-nums', BAND_TEXT[band])}>{seconds}s</span>
     </div>
   )
 }

@@ -120,19 +120,19 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
           ref={containerRef}
           tabIndex={-1}
           aria-label="Reading passage"
-          className="rounded-lg bg-muted p-4 text-sm leading-relaxed outline-none"
+          className="rounded-lg bg-muted p-4 text-body leading-relaxed outline-none"
           style={{ overflow: 'hidden' }}
         >
           {payload.passage}
         </div>
 
         {voided && submitted ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-small">
             <p className="font-medium">Focus lost. The drill was voided.</p>
           </div>
         ) : (
           <>
-            <p className="text-sm font-medium">{payload.question}</p>
+            <p className="text-body font-medium text-foreground">{payload.question}</p>
             <div className="grid gap-2">
               {payload.options.map((option, idx) => {
                 const isAnswer = idx === payload.answerIndex
@@ -144,7 +144,7 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
                     disabled={submitted}
                     onClick={() => finish(idx, false, getElapsedMs())}
                     className={cn(
-                      'rounded-lg border border-border px-4 py-2 text-left text-sm transition-colors disabled:cursor-default',
+                      'rounded-lg border border-border px-4 py-2 text-left text-body transition-colors disabled:cursor-default',
                       !submitted && 'hover:bg-accent',
                       submitted && isAnswer && 'border-primary/30 bg-primary/10',
                       submitted && isSelected && !isAnswer && 'border-destructive/30 bg-destructive/10'
@@ -158,7 +158,7 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
             {submitted && (
               <div
                 className={cn(
-                  'rounded-lg border p-4 text-sm',
+                  'rounded-lg border p-4 text-small',
                   selected === payload.answerIndex ? 'border-primary/30 bg-primary/10' : 'border-destructive/30 bg-destructive/10'
                 )}
               >

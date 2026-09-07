@@ -76,7 +76,7 @@ export function SpeedType({ item, onResult, now = Date.now, paused = false }: Sp
         <CardDescription>Type the snippet exactly. Accuracy matters more than speed; pasting is disabled.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-relaxed">
+        <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-code leading-relaxed">
           <code>{payload.snippet}</code>
         </pre>
 
@@ -93,7 +93,7 @@ export function SpeedType({ item, onResult, now = Date.now, paused = false }: Sp
           rows={4}
           spellCheck={false}
           placeholder="Type the snippet here"
-          className="w-full resize-none rounded-lg border border-input bg-transparent p-3 font-mono text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
+          className="w-full resize-none rounded-lg border border-input bg-transparent p-3 font-mono text-code outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
         />
 
         {!submitted ? (
@@ -103,7 +103,7 @@ export function SpeedType({ item, onResult, now = Date.now, paused = false }: Sp
         ) : (
           <div
             className={cn(
-              'rounded-lg border p-4 text-sm',
+              'rounded-lg border p-4 text-small',
               correct ? 'border-primary/30 bg-primary/10' : 'border-destructive/30 bg-destructive/10'
             )}
           >

@@ -546,6 +546,33 @@ describe('Celebration', () => {
     expect(soundMocks.play).toHaveBeenCalledWith('pass')
   })
 
+  it('T4.8: the level-up path fires all its cues with motion on, and collapses to a cross-fade under reduced motion (haptic drops, sound and the headline text do not)', async () => {
+    // Motion on: the level number and headline text render, the sound cue
+    // fires, and the bonus haptic layer fires (HAPTIC_KINDS has 'level-up').
+    const full = await freshCelebration()
+    render(<full.Celebration />)
+    act(() => full.celebrate('level-up', { level: 4, fromXp: 100, toXp: 220 }))
+    await act(async () => { await Promise.resolve() })
+    expect(soundMocks.play).toHaveBeenCalledWith('level.up')
+    expect(vibrateMock).toHaveBeenCalled()
+    expect(visibleCard().textContent).toContain('Level 4')
+
+    cleanup()
+    vi.clearAllMocks()
+
+    // Reduced motion: the same cue and the same content still land --
+    // "feedback reduces, it never vanishes" -- but the decorative haptic
+    // layer, gated on the resolved boolean, does not fire.
+    installMatchMedia(true)
+    const reduced = await freshCelebration()
+    render(<reduced.Celebration />)
+    act(() => reduced.celebrate('level-up', { level: 5, fromXp: 220, toXp: 340 }))
+    await act(async () => { await Promise.resolve() })
+    expect(soundMocks.play).toHaveBeenCalledWith('level.up')
+    expect(vibrateMock).not.toHaveBeenCalled()
+    expect(visibleCard().textContent).toContain('Level 5')
+  })
+
   it('small round 3: the epic moment renders its text on a `.celebration-plate`, not bare over the scrim', async () => {
     const { Celebration, celebrate } = await freshCelebration()
     render(<Celebration />)

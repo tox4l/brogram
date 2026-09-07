@@ -78,7 +78,7 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
         <CardDescription>After step {payload.stepIndex}, what is each variable&apos;s value?</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-relaxed">
+        <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-code leading-relaxed">
           <code>{payload.snippet}</code>
         </pre>
 
@@ -87,7 +87,7 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
             const isWrong = submitted && !correct && (answers[name] ?? '').trim() !== payload.expected[name].trim()
             return (
               <div key={name} className="flex items-center gap-3">
-                <label htmlFor={`trace-${name}`} className="w-20 shrink-0 font-mono text-sm text-muted-foreground">
+                <label htmlFor={`trace-${name}`} className="w-20 shrink-0 font-mono text-small text-muted-foreground">
                   {name}
                 </label>
                 <Input
@@ -100,7 +100,7 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
                   className="max-w-40 font-mono"
                 />
                 {isWrong && (
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-small text-muted-foreground">
                     expected <span className="font-mono text-foreground">{payload.expected[name]}</span>
                   </span>
                 )}
@@ -116,7 +116,7 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
         ) : (
           <div
             className={cn(
-              'rounded-lg border p-4 text-sm',
+              'rounded-lg border p-4 text-small',
               correct ? 'border-primary/30 bg-primary/10' : 'border-destructive/30 bg-destructive/10'
             )}
           >

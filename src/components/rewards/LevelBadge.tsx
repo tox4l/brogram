@@ -47,12 +47,12 @@ export function LevelBadge({ level, animateEntrance = false, motionPref, classNa
     <div
       ref={ref}
       className={cn(
-        'inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 shadow-[var(--elevation-sm)]',
+        'inline-flex items-center gap-2 rounded-full border border-rule bg-card px-3 py-2 shadow-[var(--elevation-sm)]',
         className,
       )}
     >
-      <span className="tabular text-sm font-semibold text-foreground">Level {level}</span>
-      <span className="text-xs text-muted-foreground">{levelBand(level)}</span>
+      <span className="tabular text-small font-medium text-foreground">Level {level}</span>
+      <span className="text-micro text-muted-foreground">{levelBand(level)}</span>
     </div>
   )
 }

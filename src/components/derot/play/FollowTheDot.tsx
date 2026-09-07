@@ -205,14 +205,14 @@ function FollowTheDotGame({ timeLimitS, onComplete, onAbort }: PlayGameProps) {
           <div
             ref={dotRef}
             data-testid="follow-the-dot-dot"
-            className="absolute size-11 rounded-full bg-primary will-change-transform"
+            className="absolute size-11 rounded-full bg-primary"
             style={{ transform: 'translate3d(0,0,0)' }}
             aria-hidden="true"
           />
           <div
             ref={pointerRef}
             data-testid="follow-the-dot-pointer"
-            className="absolute size-4 rounded-full border-2 border-foreground/60 will-change-transform"
+            className="absolute size-4 rounded-full border-2 border-foreground/60"
             style={{ transform: 'translate3d(0,0,0)' }}
             aria-hidden="true"
           />
@@ -234,15 +234,15 @@ function FollowTheDotSubstitute({ onPlayAnyway }: { onPlayAnyway: () => void }) 
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-small text-muted-foreground">
           {DRILL_META['memory-grid'].title} or {DRILL_META.reaction.title} make a good substitute — same sixty to
           ninety second break, no screen motion required.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Link href="/derot/play/memory-grid" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+          <Link href="/derot/play/memory-grid" className="text-small font-medium text-primary underline-offset-4 hover:underline">
             Play {DRILL_META['memory-grid'].title} instead
           </Link>
-          <Link href="/derot/play/reaction" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+          <Link href="/derot/play/reaction" className="text-small font-medium text-primary underline-offset-4 hover:underline">
             Play {DRILL_META.reaction.title} instead
           </Link>
         </div>

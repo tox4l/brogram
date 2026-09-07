@@ -215,6 +215,26 @@ describe('the de-rot hub', () => {
     expect(screen.getByText("Couldn't load that. Try again.")).toBeTruthy()
   })
 
+  it('T4.8: renders exactly one filled Start across the whole grid, the rest ghost (spec section 4)', async () => {
+    wellnessRow = {
+      drill_results: [result({ drillId: 't1', kind: 'trace', score: 90, at: '2026-09-04T10:00:00.000Z' })],
+    }
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Call It')).toBeTruthy())
+    const starts = screen.getAllByRole('link', { name: /Start/ })
+    expect(starts).toHaveLength(6)
+    // The filled ("default") button variant carries `bg-primary`; the ghost
+    // ("outline") variant never does -- see src/components/ui/button.tsx.
+    const filled = starts.filter((el) => el.className.includes('bg-primary'))
+    expect(filled).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Playground' }))
+    await waitFor(() => expect(screen.getByText('Follow the Dot')).toBeTruthy())
+    const playStarts = screen.getAllByRole('link', { name: /Start/ })
+    const playFilled = playStarts.filter((el) => el.className.includes('bg-primary'))
+    expect(playFilled).toHaveLength(1)
+  })
+
   it('redirects ?drill=trace straight to the Arcade runner', () => {
     mocks.searchParams.mockReturnValue(new URLSearchParams('drill=trace'))
     render(<DerotPage />)

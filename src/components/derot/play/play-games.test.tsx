@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 
@@ -7,6 +9,17 @@ vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: m
 import ColorBack from './ColorBack'
 import Breathe from './Breathe'
 import MemoryGrid from './MemoryGrid'
+
+// W4 spec section 9 (/derot): "Playground stays DOM and CSS" -- no WebGL,
+// no canvas, anywhere in the two games the plan names explicitly (T4.8's
+// acceptance block). A source scan, not a runtime spy: proof that the call
+// is absent from the file entirely, not merely unobserved on one render path.
+describe('T4.8: Playground stays DOM and CSS, not canvas', () => {
+  it.each(['./Breathe.tsx', './FollowTheDot.tsx'])('%s contains no getContext call', (relPath) => {
+    const source = readFileSync(fileURLToPath(new URL(relPath, import.meta.url)), 'utf8')
+    expect(source).not.toMatch(/getContext/)
+  })
+})
 
 /** Fake timers cascade recursive setTimeout/setInterval chains inside one advance, same as NBack.test.tsx. */
 function advance(ms: number) {

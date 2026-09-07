@@ -1,8 +1,9 @@
 'use client'
 
-import type { KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 import type { DrillLane } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
+import { useFlipIndicator } from '@/components/motion/useFlipIndicator'
 
 export interface LaneSwitchProps {
   lane: DrillLane
@@ -25,7 +26,12 @@ const LANES: { value: DrillLane; label: string }[] = [
  * and a click on either tab works exactly the same way.
  */
 export function LaneSwitch({ lane, onChange, reduced = false }: LaneSwitchProps) {
-  const activeIndex = LANES.findIndex((entry) => entry.value === lane)
+  const containerRef = useRef<HTMLDivElement>(null)
+  // W4 spec section 5.4 / plan T4.8: the sliding indicator moves through the
+  // shared useFlipIndicator hook (T4.2), not a hand-rolled translateX --
+  // `data-flip-indicator` on the pill, `data-flip-key={lane.value}` on each
+  // tab below.
+  useFlipIndicator(containerRef, lane, reduced)
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
@@ -41,33 +47,21 @@ export function LaneSwitch({ lane, onChange, reduced = false }: LaneSwitchProps)
   }
 
   return (
-    <div role="tablist" aria-label="De-rot lane" className="relative inline-flex rounded-full border border-border bg-muted p-1">
-      <div
-        aria-hidden="true"
-        className="absolute inset-y-1 left-1 rounded-full bg-background shadow-sm"
-        style={{
-          width: `calc(50% - 4px)`,
-          // fix round 1, I6: the indicator's own width is already exactly one
-          // tab's width (half the padding box minus the shared 4px gap), so
-          // translating by 100% alone lands it flush on the second tab -- an
-          // extra `+ activeIndex * 8px` (the old value here) pushed it 8px
-          // past the container's own right edge on the second tab.
-          transform: `translateX(${activeIndex * 100}%)`,
-          transition: reduced ? 'none' : 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
-        }}
-      />
+    <div ref={containerRef} role="tablist" aria-label="De-rot lane" className="relative inline-flex rounded-full border border-rule bg-muted p-1">
+      <div aria-hidden="true" data-flip-indicator className="absolute inset-y-1 left-1 rounded-full bg-background shadow-sm" />
       {LANES.map((entry, index) => (
         <button
           key={entry.value}
           type="button"
           role="tab"
           data-lane-tab={entry.value}
+          data-flip-key={entry.value}
           aria-selected={lane === entry.value}
           tabIndex={lane === entry.value ? 0 : -1}
           onClick={() => onChange(entry.value)}
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
-            'relative z-10 min-w-24 rounded-full px-4 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+            'relative z-10 min-w-24 rounded-full px-4 py-2 text-small font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring',
             lane === entry.value ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
         >

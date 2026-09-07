@@ -75,7 +75,7 @@ export function SpotTheBug({ item, onResult, now = Date.now, paused = false }: S
         <CardDescription>Click the line that causes the bug.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="overflow-x-auto rounded-lg bg-muted font-mono text-sm">
+        <div className="overflow-x-auto rounded-lg bg-muted font-mono text-code">
           {lines.map((line, idx) => {
             const lineNumber = idx + 1
             const isBugLine = payload.bugLines.includes(lineNumber)
@@ -105,7 +105,7 @@ export function SpotTheBug({ item, onResult, now = Date.now, paused = false }: S
         {submitted && (
           <div
             className={cn(
-              'rounded-lg border p-4 text-sm',
+              'rounded-lg border p-4 text-small',
               correct ? 'border-primary/30 bg-primary/10' : 'border-destructive/30 bg-destructive/10'
             )}
           >

@@ -168,7 +168,7 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
         <CardTitle>{DRILL_META.breathe.title}</CardTitle>
         <CardDescription>A four-seven-eight pace. This one cannot be failed — tap along or just watch.</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col items-center gap-6 py-10">
+      <CardContent className="flex flex-col items-center gap-6 py-12">
         {/* Fix round 1 (B-I2): announce phase transitions only (3x per 19s
             cycle) plus completion -- not the count, which changed every
             second and queued roughly ninety announcements across a run. This
@@ -181,24 +181,31 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
           <>
             {reducedMotion ? (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
-                <p className="text-xl font-medium">{phase.label}</p>
-                <p role="timer" aria-live="off" className="font-mono text-4xl font-semibold tabular-nums text-primary">
+                <p className="text-h3 text-foreground">{phase.label}</p>
+                <p role="timer" aria-live="off" className="font-mono text-h1 tabular-nums text-primary">
                   {secondsLeft}
                 </p>
               </div>
             ) : (
               <div
-                className="relative flex size-48 items-center justify-center rounded-full bg-primary/15"
+                // W4 spec section 9 (/derot): "Breathe keeps its transform-only
+                // pacer and gains a static radial-gradient aura on the
+                // existing scaleFor transform for 0 KB" -- the gradient is a
+                // static paint layer riding the same `transform`/`opacity`
+                // the pacer already animates; it adds no animated property of
+                // its own.
+                className="relative flex size-48 items-center justify-center rounded-full bg-primary/10"
                 style={{
                   transform: `scale(${scale})`,
                   opacity: 0.7 + 0.3 * (snapshot.phaseIndex === 1 ? 1 : progress),
                   transition: `transform ${TICK_MS}ms linear, opacity ${TICK_MS}ms linear`,
+                  backgroundImage: 'radial-gradient(circle at 50% 50%, var(--glow), transparent 70%)',
                 }}
                 aria-hidden="true"
               >
                 <div className="flex flex-col items-center gap-1 rounded-full bg-primary/25 px-6 py-6 text-center">
-                  <span className="text-sm font-medium text-primary-foreground">{phase.label}</span>
-                  <span role="timer" aria-live="off" className="font-mono text-2xl font-semibold tabular-nums text-primary-foreground">
+                  <span className="text-small font-medium text-primary-foreground">{phase.label}</span>
+                  <span role="timer" aria-live="off" className="font-mono text-h2 tabular-nums text-primary-foreground">
                     {secondsLeft}
                   </span>
                 </div>
@@ -216,13 +223,13 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
             >
               Tap to breathe with it
             </Button>
-            <p className="text-xs text-muted-foreground">Optional — hold or tap space, or just let it run.</p>
-            <button type="button" onClick={onAbort} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+            <p className="text-micro text-muted-foreground">Optional — hold or tap space, or just let it run.</p>
+            <button type="button" onClick={onAbort} className="text-micro text-muted-foreground underline-offset-2 hover:underline">
               Quit
             </button>
           </>
         ) : (
-          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-sm">
+          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-small">
             <p className="font-medium">Run complete.</p>
           </div>
         )}

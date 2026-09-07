@@ -61,7 +61,7 @@ export function DrillRunner({ item, onResult, now = Date.now, paused = false }: 
 function DrillPlaceholder() {
   return (
     <Card className="mx-auto w-full max-w-2xl">
-      <CardContent className="py-8 text-center text-sm text-muted-foreground">
+      <CardContent className="py-8 text-center text-small text-muted-foreground">
         This one is coming in the next update.
       </CardContent>
     </Card>

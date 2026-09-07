@@ -15,6 +15,7 @@ import {
   type CelebrationDetail, type CelebrationItem, type CelebrationKind,
 } from '@/lib/rewards/useCelebration'
 import { Button } from '@/components/ui/button'
+import { Reveal } from '@/components/motion/Reveal'
 import { fireConfetti } from './Confetti'
 import { LevelBadge } from './LevelBadge'
 import { StreakFlame } from './StreakFlame'
@@ -310,7 +311,7 @@ function CelebrationPresentation(props: {
         // Fix round 2: anchored below the shell header instead of `top-4`
         // sitting directly over it (the achievement lane was the one tier
         // M9's fix round 1 pass missed).
-        <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4 sm:top-24 sm:justify-end sm:pr-6">
+        <div className="pointer-events-none fixed inset-x-0 top-16 z-50 flex justify-center px-4 sm:justify-end sm:pr-6">
           <TrophyCard
             achievement={item.collapsedCount ? null : achievementRecord(item.detail.skill) ?? null}
             collapsedCount={item.collapsedCount}
@@ -399,7 +400,7 @@ function EpicCelebration({ text, reducedMotion, onDismiss }: { text: string; red
     >
       <motion.div
         {...entrance}
-        className="celebration-plate max-w-[min(90vw,42rem)] rounded-3xl bg-celebration px-8 py-7 shadow-[0_0_0_1px_var(--glow),0_24px_64px_rgba(0,0,0,0.35)]"
+        className="celebration-plate max-w-[min(90vw,42rem)] rounded-2xl bg-celebration px-8 py-8 shadow-[0_0_0_1px_var(--glow),0_24px_64px_rgba(0,0,0,0.35)]"
       >
         <p
           className="text-center font-semibold leading-tight tracking-tight text-celebration-foreground"
@@ -440,10 +441,15 @@ function LevelUpCelebration({
         <Button type="button" variant="ghost" size="icon" aria-label="Dismiss" onClick={onDismiss} className="absolute right-2 top-2">
           <X aria-hidden="true" />
         </Button>
-        <span className="text-5xl font-semibold tabular text-foreground">{item.detail.level ?? 1}</span>
-        <LevelBadge level={item.detail.level ?? 1} animateEntrance motionPref={motionPref} className="text-base" />
+        <span className="font-display text-hero tabular text-foreground">{item.detail.level ?? 1}</span>
+        <LevelBadge level={item.detail.level ?? 1} animateEntrance motionPref={motionPref} />
         <LevelUpXpBar detail={item.detail} reducedMotion={reducedMotion} />
-        <p className="text-sm font-medium text-foreground">{text}</p>
+        {/* W4.14: the level-up headline is the second and last surface
+            licensed for a character reveal (the first is the onboarding
+            hook line, src/app/(app)/onboarding/page.tsx). */}
+        <p className="text-small font-medium text-foreground">
+          <Reveal mode="chars" reduced={reducedMotion} surface="level-up">{text}</Reveal>
+        </p>
       </motion.div>
     </div>
   )
@@ -490,7 +496,7 @@ function LevelUpXpBar({ detail, reducedMotion }: { detail: CelebrationDetail; re
   }, [detail.fromXp, detail.toXp, finalLevel, startLevel, hasXp, reducedMotion])
 
   return (
-    <div className="flex w-48 flex-col items-center gap-1.5">
+    <div className="flex w-48 flex-col items-center gap-2">
       <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
         <div ref={barRef} className="h-full w-full origin-left rounded-full bg-celebration" style={{ transform: 'scaleX(0)' }} />
       </div>
@@ -546,7 +552,7 @@ function MajorCelebration({
         ) : (
           <LockGlyph className="size-10 text-celebration" />
         )}
-        <p className="text-sm font-semibold text-foreground">{text}</p>
+        <p className="text-small font-medium text-foreground">{text}</p>
       </motion.div>
     </div>
   )
@@ -577,11 +583,11 @@ function MinorCelebration({
     <div className="pointer-events-none fixed z-50" style={style}>
       <motion.div
         {...entrance}
-        className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow-[var(--elevation-sm)]"
+        className="pointer-events-auto flex items-center gap-2 rounded-full border border-rule bg-card px-3 py-2 text-micro shadow-[var(--elevation-sm)]"
       >
         <p className="font-medium text-foreground">{text}</p>
         <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss" onClick={onDismiss} className="shrink-0">
-          <X aria-hidden="true" className="size-3" />
+          <X aria-hidden="true" className="size-4" />
         </Button>
       </motion.div>
     </div>

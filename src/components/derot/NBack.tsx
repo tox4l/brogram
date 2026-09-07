@@ -141,19 +141,19 @@ export function NBack({ item, onResult, now = Date.now, paused = false }: NBackP
       <CardContent className="flex flex-col items-center gap-6 py-8">
         {!submitted ? (
           <>
-            <p className="text-xs tabular-nums text-muted-foreground">
+            <p className="text-micro tabular-nums text-muted-foreground">
               Token {Math.min(index + 1, total)} of {total}
             </p>
-            <div className="flex h-24 w-full items-center justify-center rounded-lg bg-muted font-mono text-3xl">
+            <div className="flex h-24 w-full items-center justify-center rounded-lg bg-muted font-mono text-h1">
               {currentToken}
             </div>
             <Button autoFocus size="lg" onClick={respond}>
               Match
             </Button>
-            <p className="text-xs text-muted-foreground">or press space</p>
+            <p className="text-micro text-muted-foreground">or press space</p>
           </>
         ) : (
-          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-sm">
+          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-small">
             <p className="font-medium">Drill complete.</p>
           </div>
         )}

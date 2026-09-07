@@ -297,35 +297,35 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
   const isPersonalBest = runner.previousBest !== null && runner.runResult !== null && runner.runResult.score > runner.previousBest
 
   return (
-    <div className="relative min-w-0 space-y-5">
+    <div className="relative min-w-0 space-y-6">
       <div className="space-y-3">
-        <Link href="/derot" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          <ArrowLeft className="size-3" aria-hidden="true" />Back to de-rot
+        <Link href="/derot" className="inline-flex items-center gap-2 rounded-lg text-micro text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          <ArrowLeft className="size-4" aria-hidden="true" />Back to de-rot
         </Link>
-        <h1 className="text-2xl font-medium tracking-tight">{meta.title}</h1>
+        <h1 className="font-display text-h1 text-foreground">{meta.title}</h1>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-6">
         {runner.saveError && (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-small">
             <p className="min-w-0 flex-1">{runner.saveError}</p>
             <Button variant="outline" onClick={runner.retrySave}>Retry save</Button>
           </div>
         )}
 
-        {runner.phase === 'loading' && <p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}
+        {runner.phase === 'loading' && <p role="status" className="text-small text-muted-foreground">Opening your drill.</p>}
 
         {runner.phase === 'error' && (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-            <p className="text-sm text-foreground">{runner.error}</p>
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule p-4">
+            <p className="text-small text-foreground">{runner.error}</p>
             <Button variant="outline" onClick={runner.retry}>Try again</Button>
           </div>
         )}
 
         {runner.phase === 'empty' && (
-          <div className="rounded-xl border border-dashed border-input p-6">
-            <p className="text-sm font-medium">No items yet</p>
-            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">This drill is still being prepared. Choose another kind from de-rot.</p>
+          <div className="rounded-xl border border-rule bg-card p-6">
+            <p className="text-body font-medium text-foreground">No items yet</p>
+            <p className="mt-2 max-w-md text-small leading-relaxed text-muted-foreground">This drill is still being prepared. Choose another kind from de-rot.</p>
             <Link href="/derot" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}>Back to de-rot</Link>
           </div>
         )}
@@ -334,10 +334,10 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
           <div className="mx-auto w-full max-w-2xl space-y-3">
             {/* Composed header (fix round 1, item 12): ring, item counter and combo live in one strip
                 directly above the card they belong to, instead of spread across the full page width. */}
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-rule bg-card px-4 py-3">
               <div className="flex items-center gap-3">
                 <ItemCountdown key={runner.current.id} timeLimitS={runner.current.timeLimitS} reduced={reduced} paused={paused} />
-                <p className="font-mono text-xs text-muted-foreground">Item {Math.min(runner.run.answers.length + 1, RUN_SIZE)} of {RUN_SIZE}</p>
+                <p className="font-mono text-micro text-muted-foreground">Item {Math.min(runner.run.answers.length + 1, RUN_SIZE)} of {RUN_SIZE}</p>
               </div>
               {runner.run.streak > 0 && <ComboMeter streak={runner.run.streak} multiplier={comboMultiplier(runner.run.streak)} reduced={reduced} />}
             </div>
@@ -401,9 +401,9 @@ function ItemCountdown({ timeLimitS, reduced, paused }: { timeLimitS: number; re
 
 function InvalidKind() {
   return (
-    <div className="space-y-4 py-10">
-      <h1 className="text-2xl font-medium tracking-tight">This drill could not open</h1>
-      <p className="text-sm text-muted-foreground">Choose a drill kind from the de-rot section.</p>
+    <div className="space-y-4 py-12">
+      <h1 className="font-display text-h1 text-foreground">This drill could not open</h1>
+      <p className="text-small text-muted-foreground">Choose a drill kind from the de-rot section.</p>
       <Link href="/derot" className={buttonVariants({ variant: 'outline' })}>Back to de-rot</Link>
     </div>
   )
@@ -412,5 +412,5 @@ function InvalidKind() {
 export default function DerotArcadeRunnerPage() {
   const { kind } = useParams<{ kind: string }>()
   if (!isDrillKind(kind)) return <InvalidKind />
-  return <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}><RunnerBody key={kind} kind={kind} /></Suspense>
+  return <Suspense fallback={<p role="status" className="text-small text-muted-foreground">Opening your drill.</p>}><RunnerBody key={kind} kind={kind} /></Suspense>
 }

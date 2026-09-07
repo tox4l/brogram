@@ -321,8 +321,8 @@ function ThreeTwoOne({ reduced, onDone }: { reduced: boolean; onDone: () => void
   }, [step, reduced, onDone])
 
   return (
-    <div role="status" aria-live="polite" className="flex h-72 w-full items-center justify-center rounded-xl border border-border bg-muted/40">
-      <span className="font-mono text-6xl font-semibold tabular-nums text-foreground">{labels[step]}</span>
+    <div role="status" aria-live="polite" className="flex h-72 w-full items-center justify-center rounded-xl border border-rule bg-muted/40">
+      <span className="font-mono text-hero tabular-nums text-foreground">{labels[step]}</span>
     </div>
   )
 }
@@ -369,25 +369,25 @@ function RunnerBody({ game }: { game: PlayGameId }) {
   const isPersonalBest = runner.previousBest !== null && runner.runResult !== null && runner.runResult.score > runner.previousBest
 
   return (
-    <div className="relative min-w-0 space-y-5">
+    <div className="relative min-w-0 space-y-6">
       <div className="space-y-3">
-        <Link href="/derot" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          <ArrowLeft className="size-3" aria-hidden="true" />Back to de-rot
+        <Link href="/derot" className="inline-flex items-center gap-2 rounded-lg text-micro text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          <ArrowLeft className="size-4" aria-hidden="true" />Back to de-rot
         </Link>
-        <h1 className="text-2xl font-medium tracking-tight">{meta.title}</h1>
+        <h1 className="font-display text-h1 text-foreground">{meta.title}</h1>
       </div>
 
-      {runner.phase === 'loading' && <p role="status" className="text-sm text-muted-foreground">Opening your game.</p>}
+      {runner.phase === 'loading' && <p role="status" className="text-small text-muted-foreground">Opening your game.</p>}
 
       {runner.phase === 'error' && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-          <p className="text-sm text-foreground">{runner.error}</p>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule p-4">
+          <p className="text-small text-foreground">{runner.error}</p>
           <Button variant="outline" onClick={runner.retry}>Try again</Button>
         </div>
       )}
 
       {runner.saveError && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-small">
           <p className="min-w-0 flex-1">{runner.saveError}</p>
           <Button variant="outline" onClick={runner.retrySave}>Retry save</Button>
         </div>
@@ -427,14 +427,14 @@ function RunnerBody({ game }: { game: PlayGameId }) {
 export default function DerotPlayRunnerPage() {
   const { game } = useParams<{ game: string }>()
   if (!isPlayKind(game)) return <InvalidGame />
-  return <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Opening your game.</p>}><RunnerBody key={game} game={game as PlayGameId} /></Suspense>
+  return <Suspense fallback={<p role="status" className="text-small text-muted-foreground">Opening your game.</p>}><RunnerBody key={game} game={game as PlayGameId} /></Suspense>
 }
 
 function InvalidGame() {
   return (
-    <div className="space-y-4 py-10">
-      <h1 className="text-2xl font-medium tracking-tight">This game could not open</h1>
-      <p className="text-sm text-muted-foreground">Choose a game from the de-rot Playground lane.</p>
+    <div className="space-y-4 py-12">
+      <h1 className="font-display text-h1 text-foreground">This game could not open</h1>
+      <p className="text-small text-muted-foreground">Choose a game from the de-rot Playground lane.</p>
       <Link href="/derot" className={buttonVariants({ variant: 'outline' })}>Back to de-rot</Link>
     </div>
   )

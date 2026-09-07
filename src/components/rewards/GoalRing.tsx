@@ -64,7 +64,7 @@ export function GoalRing({ wins, goal, motionPref, className }: GoalRingProps) {
           className="fill-none stroke-celebration"
         />
       </svg>
-      <span className="absolute tabular text-xs font-medium text-foreground">{Math.max(0, wins)}/{goal}</span>
+      <span className="absolute tabular text-micro text-foreground">{Math.max(0, wins)}/{goal}</span>
     </span>
   )
 }

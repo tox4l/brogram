@@ -40,7 +40,7 @@ export function ComboMeter({ streak, multiplier, reduced = false }: ComboMeterPr
   return (
     <div role="status" aria-label={`Combo ${streak}, ${multiplier} times multiplier`} className="inline-flex">
       <PopBadge key={streak} reduced={reduced}>
-        <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs font-medium', TIER_STYLES[tier])}>
+        <span className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 font-mono text-micro', TIER_STYLES[tier])}>
           <span>{streak > 0 ? `${streak}x combo` : 'No combo'}</span>
           <span className="tabular-nums">{multiplier.toFixed(1)}×</span>
         </span>

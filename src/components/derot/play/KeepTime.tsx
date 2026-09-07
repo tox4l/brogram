@@ -216,7 +216,7 @@ export default function KeepTime({ timeLimitS, soundOn, reducedMotion, onComplet
           <div
             ref={pulseRef}
             data-testid="rhythm-pulse"
-            className="size-16 rounded-full bg-primary will-change-transform"
+            className="size-16 rounded-full bg-primary"
             style={{ transform: 'scale(1)' }}
             aria-hidden="true"
           />
@@ -225,13 +225,13 @@ export default function KeepTime({ timeLimitS, soundOn, reducedMotion, onComplet
           <div
             ref={markerRef}
             data-testid="rhythm-marker"
-            className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-foreground will-change-transform"
+            className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-foreground"
             style={{ transform: 'translateX(0px)' }}
             aria-hidden="true"
           />
         </div>
         <Button size="lg" onClick={tap} data-testid="rhythm-tap">Tap</Button>
-        <p className="text-xs text-muted-foreground">or press space / enter</p>
+        <p className="text-micro text-muted-foreground">or press space / enter</p>
       </CardContent>
     </Card>
   )

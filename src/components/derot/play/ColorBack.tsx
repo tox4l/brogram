@@ -197,7 +197,7 @@ export default function ColorBack({ timeLimitS, soundOn, reducedMotion, onComple
       <CardContent className="flex flex-col items-center gap-6 py-8">
         {!submitted ? (
           <>
-            <p className="text-xs tabular-nums text-muted-foreground">
+            <p className="text-micro tabular-nums text-muted-foreground">
               Shape {Math.min(index + 1, total)} of {total}
             </p>
             <div
@@ -215,13 +215,13 @@ export default function ColorBack({ timeLimitS, soundOn, reducedMotion, onComple
             <Button size="lg" onClick={respond}>
               Match
             </Button>
-            <p className="text-xs text-muted-foreground">or press space</p>
-            <button type="button" onClick={onAbort} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+            <p className="text-micro text-muted-foreground">or press space</p>
+            <button type="button" onClick={onAbort} className="text-micro text-muted-foreground underline-offset-2 hover:underline">
               Quit
             </button>
           </>
         ) : (
-          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-sm">
+          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-small">
             <p className="font-medium">Run complete.</p>
           </div>
         )}

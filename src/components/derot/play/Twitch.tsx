@@ -197,7 +197,7 @@ export default function Twitch({ timeLimitS, soundOn, reducedMotion, onComplete,
           <Button variant="ghost" size="sm" onClick={onAbort}>Quit</Button>
         </div>
         <CardDescription>Tap the instant the shape lights up. Tapping too soon voids the round.</CardDescription>
-        <p className="text-xs tabular-nums text-muted-foreground">Round {round} of {ROUNDS}</p>
+        <p className="text-micro tabular-nums text-muted-foreground">Round {round} of {ROUNDS}</p>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-6 py-8">
         <button
@@ -205,7 +205,7 @@ export default function Twitch({ timeLimitS, soundOn, reducedMotion, onComplete,
           data-testid="twitch-target"
           onClick={respond}
           className={cn(
-            'flex size-32 items-center justify-center rounded-2xl border-2 text-sm font-medium outline-none',
+            'flex size-32 items-center justify-center rounded-2xl border-2 text-small font-medium outline-none',
             !reducedMotion && 'transition-colors',
             phase === 'lit' && 'border-primary bg-primary text-primary-foreground',
             phase === 'waiting' && 'border-border bg-muted text-muted-foreground',
@@ -216,7 +216,7 @@ export default function Twitch({ timeLimitS, soundOn, reducedMotion, onComplete,
         >
           {phase === 'lit' ? 'Tap now' : phase === 'waiting' ? 'Wait for it' : voided ? 'Too soon' : 'Got it'}
         </button>
-        <p className="text-xs text-muted-foreground">or press space / enter</p>
+        <p className="text-micro text-muted-foreground">or press space / enter</p>
       </CardContent>
     </Card>
   )

@@ -91,21 +91,25 @@ function ScoreRing({ score, reduced }: { score: number; reduced: boolean }) {
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="font-mono text-4xl font-semibold tabular-nums">
+        {/* W4 spec section 9 (/derot): "Score and best in --text-h1 tabular
+            numerals" -- the run's headline number. */}
+        <span className="font-mono text-h1 tabular-nums text-foreground">
           <span ref={glyphRef} aria-hidden="true">{initialText}</span>
           <span className="sr-only">{score}</span>
         </span>
-        <span className="text-xs text-muted-foreground">score</span>
+        <span className="text-micro text-muted-foreground">score</span>
       </div>
     </div>
   )
 }
 
-function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function Stat({ label, value, highlight, emphasis }: { label: string; value: string; highlight?: boolean; emphasis?: boolean }) {
   return (
     <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn('mt-1 font-mono text-2xl font-medium tabular-nums', highlight && 'text-primary')}>{value}</p>
+      <p className="text-micro text-muted-foreground">{label}</p>
+      {/* Score and best both carry the run's headline weight (spec section 9);
+          accuracy, combo peak and delta stay one tier down. */}
+      <p className={cn('mt-1 font-mono tabular-nums text-foreground', emphasis ? 'text-h1' : 'text-h2', highlight && 'text-primary')}>{value}</p>
     </div>
   )
 }
@@ -145,39 +149,39 @@ export function RunSummary({
       <CardHeader className="gap-2">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Run complete</p>
-            <p className="text-2xl font-medium tracking-tight">{title}</p>
+            <p className="text-micro text-muted-foreground uppercase">Run complete</p>
+            <p className="text-h2 text-foreground">{title}</p>
           </div>
           {isPersonalBest && <Badge className="bg-primary text-primary-foreground">New best</Badge>}
           {!isPersonalBest && isFirstRun && <Badge variant="outline">First run logged</Badge>}
         </div>
-        <p className="text-sm leading-relaxed text-muted-foreground">{voiceLine}</p>
+        <p className="text-small leading-relaxed text-muted-foreground">{voiceLine}</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-8 py-4">
-        <div className="flex flex-wrap items-center justify-center gap-10 sm:justify-start">
+        <div className="flex flex-wrap items-center justify-center gap-8 sm:justify-start">
           <div className="flex flex-col items-center gap-2 sm:items-start">
             <ScoreRing score={score} reduced={reduced} />
             {/* fix round 2, item 5: prose, not a number -- kept out of the Stat grid below, which is built for values on the same footing as each other. */}
-            {rawLabel && <p className="max-w-40 text-center text-xs text-muted-foreground sm:text-left">{rawLabel}</p>}
+            {rawLabel && <p className="max-w-40 text-center text-micro text-muted-foreground sm:text-left">{rawLabel}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-x-10 gap-y-6">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             <Stat label="Accuracy" value={`${Math.round(accuracy * 100)}%`} />
             {typeof bestCombo === 'number' && <Stat label="Combo peak" value={`${bestCombo}x`} />}
-            {previousBest !== null && <Stat label="Best" value={`${Math.max(previousBest, score)}`} highlight={isPersonalBest} />}
+            {previousBest !== null && <Stat label="Best" value={`${Math.max(previousBest, score)}`} highlight={isPersonalBest} emphasis />}
             {delta !== null && <Stat label="Delta" value={delta === 0 ? '0' : delta > 0 ? `+${delta}` : `${delta}`} highlight={delta > 0} />}
           </div>
         </div>
 
         {itemResults && itemResults.length > 0 && (
           <div>
-            <p className="text-xs text-muted-foreground">Where it went</p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
+            <p className="text-micro text-muted-foreground">Where it went</p>
+            <ul className="mt-2 flex flex-wrap gap-2">
               {itemResults.map((correct, index) => (
                 <li
                   key={index}
                   aria-label={`Item ${index + 1}: ${correct ? 'correct' : 'missed'}`}
                   className={cn(
-                    'flex size-7 items-center justify-center rounded-md border',
+                    'flex size-7 items-center justify-center rounded-lg border',
                     correct ? 'border-primary/30 bg-primary/10 text-primary' : 'border-destructive/30 bg-destructive/10 text-destructive'
                   )}
                 >
@@ -190,13 +194,13 @@ export function RunSummary({
 
         {lastRuns.length > 1 && (
           <div>
-            <p className="text-xs text-muted-foreground">Last {lastRuns.length} runs</p>
+            <p className="text-micro text-muted-foreground">Last {lastRuns.length} runs</p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {lastRuns.map((run, index) => (
                 <li
                   key={`${run.at}-${index}`}
                   className={cn(
-                    'rounded-md border border-border px-2 py-1 font-mono text-xs tabular-nums',
+                    'rounded-lg border border-rule px-2 py-1 font-mono text-micro tabular-nums',
                     index === 0 ? 'border-primary/40 bg-primary/10 text-primary' : 'text-muted-foreground'
                   )}
                 >

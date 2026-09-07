@@ -53,8 +53,8 @@ export function TrophyShelf({ motionPref, unlockedThisSession }: TrophyShelfProp
 
   return (
     <div className="space-y-3">
-      {query.isError && <p className="text-xs text-muted-foreground">{line('error.load')}</p>}
-      {showEmpty && <p className="text-sm text-muted-foreground">{line('empty.trophies')}</p>}
+      {query.isError && <p className="text-micro text-muted-foreground">{line('error.load')}</p>}
+      {showEmpty && <p className="text-small text-muted-foreground">{line('empty.trophies')}</p>}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {sorted.map((achievement, index) => {
           const unlockedAt = unlockedMap.get(achievement.id)
@@ -69,8 +69,12 @@ export function TrophyShelf({ motionPref, unlockedThisSession }: TrophyShelfProp
               animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
               transition={reducedMotion ? undefined : { delay, duration: 0.2 }}
               className={cn(
-                'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center',
-                isUnlocked ? 'border-border bg-card' : 'border-dashed border-input opacity-70',
+                'flex flex-col items-center gap-2 rounded-xl border p-3 text-center',
+                // W4 spec section 8 ("never a dashed box") / section 9's
+                // repeated "the dashed borders go": a locked trophy is a
+                // designed, quieter fill on the same --rule edge, not a
+                // dashed placeholder.
+                isUnlocked ? 'border-rule bg-card' : 'border-rule bg-muted/50',
               )}
             >
               <motion.span
@@ -79,8 +83,8 @@ export function TrophyShelf({ motionPref, unlockedThisSession }: TrophyShelfProp
               >
                 <TrophyGlyph tier={achievement.tier} locked={!isUnlocked} className="size-7" />
               </motion.span>
-              <p className="text-xs font-medium text-foreground">{achievement.name}</p>
-              <p className="text-[11px] leading-snug text-muted-foreground">
+              <p className="text-micro font-medium text-foreground">{achievement.name}</p>
+              <p className="text-micro leading-snug text-muted-foreground">
                 {isUnlocked ? formatUnlockedDate(unlockedAt) : achievement.how}
               </p>
             </motion.li>

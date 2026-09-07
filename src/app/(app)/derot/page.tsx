@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowUpRight, Bug, Eye, Grid3x3, Keyboard, Music2, RotateCcw, Route, Shapes, Target, Terminal, Wind, Zap } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ShaderSurface } from '@/components/visual/ShaderSurface'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
@@ -150,37 +151,42 @@ function useCardInView(reduced: boolean): [(node: HTMLElement | null) => void, b
   return [setNode, inView && !reduced]
 }
 
-function DrillCard({ kind, lane, stats, available, reduced }: { kind: DrillKind; lane: DrillLane; stats: KindStats; available: boolean; reduced: boolean }) {
+function DrillCard({
+  kind, lane, stats, available, reduced, primary,
+}: { kind: DrillKind; lane: DrillLane; stats: KindStats; available: boolean; reduced: boolean; primary: boolean }) {
   const meta = DRILL_META[kind]
   const Glyph = DRILL_GLYPHS[kind]
   const [setNode, animate] = useCardInView(reduced)
   return (
     <Card ref={setNode} className="h-full">
       <CardHeader>
-        <div className="flex items-center gap-2.5">
-          <span
-            aria-hidden="true"
-            className={cn('inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary', animate && 'animate-pulse')}
-          >
-            <Glyph className="size-4" />
-          </span>
+        {/* W4 spec section 4 / plan T4.8: the icon chip (a filled circle
+            behind the glyph) is gone -- one 20px glyph optically aligned to
+            the title's cap-height, decorative only (aria-hidden). */}
+        <div className="flex items-center gap-2">
+          <Glyph aria-hidden="true" className={cn('size-5 shrink-0 text-primary', animate && 'animate-pulse')} />
           <CardTitle>{meta.title}</CardTitle>
         </div>
         <CardDescription>{meta.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-4">
         {!available ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">No items yet. This drill is still being prepared.</p>
+          <p className="text-micro text-muted-foreground">No items yet. This drill is still being prepared.</p>
         ) : stats.attempted ? (
           <div>
-            <p className="text-xs text-muted-foreground">Best</p>
-            <p className="mt-1 font-mono text-3xl font-semibold tabular-nums">{stats.best}</p>
+            <p className="text-micro text-muted-foreground">Best</p>
+            <p className="mt-1 font-mono text-h1 tabular-nums text-foreground">{stats.best}</p>
           </div>
         ) : (
-          <p className="text-sm leading-relaxed text-muted-foreground">Not attempted yet. Give it a try.</p>
+          <p className="text-micro text-muted-foreground">Not attempted yet. Give it a try.</p>
         )}
         {available ? (
-          <Link href={hrefFor(lane, kind)} className={buttonVariants({ variant: 'default', className: 'w-fit' })}>
+          // W4 spec section 4: one filled Start on the whole hub, five ghost --
+          // `primary` names the single card this render promotes to the
+          // filled variant (the design-discipline gate counts filled buttons
+          // per route file, not per rendered card, so this is the fix the
+          // markup itself owns).
+          <Link href={hrefFor(lane, kind)} className={buttonVariants({ variant: primary ? 'default' : 'outline', className: 'w-fit' })}>
             Start<ArrowUpRight aria-hidden="true" />
           </Link>
         ) : (
@@ -202,73 +208,93 @@ function DerotSection() {
   const todaysRuns = todayKey ? overview.results.filter((result) => dateKey(result.at) === todayKey).length : 0
   const kindsForLane = lane === 'arcade' ? DRILL_KINDS : PLAY_KINDS
 
+  // W4 spec section 4 ("one filled primary action per screen") / plan T4.8:
+  // the hub goes from six filled Starts to one filled and five ghost. The
+  // single filled card is the one recommendation a learner would actually
+  // want -- the first available, not-yet-attempted kind in the lane on
+  // screen -- falling back to the lane's first kind once everything has been
+  // tried at least once. Recomputed per lane so switching lanes still shows
+  // exactly one filled Start, never zero and never two.
+  const cardsForLane = kindsForLane.map((kind) => ({
+    kind,
+    stats: statsForKind(overview.results, kind),
+    available: isPlayKind(kind) || overview.availableKinds.has(kind),
+  }))
+  const primaryKind = (cardsForLane.find((c) => c.available && !c.stats.attempted) ?? cardsForLane[0])?.kind
+
   return (
-    <div className="space-y-7">
-      <Suspense fallback={null}><DrillQueryRedirect /></Suspense>
+    <div className="relative">
+      {/* Low-amplitude ambient field, Eclipse only (spec section 6.1's per-
+          screen table; W4.18's settle-and-freeze contract lives entirely
+          inside ShaderSurface/ShaderField, T4.3's owned files). Every text-
+          bearing block below carries its own opaque `bg-background` (the
+          page's own ground colour, painted as a solid fill rather than left
+          to show the animated canvas through) so the field is only ever
+          visible in the gaps between them -- rule 6.2.6: no text, icon or
+          control ever sits directly over live shader pixels. */}
+      <ShaderSurface motionPref={overview.motionPref} className="opacity-60" />
+      <div className="relative space-y-8">
+        <Suspense fallback={null}><DrillQueryRedirect /></Suspense>
 
-      <div>
-        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">De-rot</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Short drills and games to keep your attention sharp between reps.</p>
-      </div>
+        <div className="bg-background">
+          <h1 className="font-display text-h1 text-foreground">De-rot</h1>
+          <p className="mt-2 text-small text-muted-foreground">Short drills and games to keep your attention sharp between reps.</p>
+        </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
-        <div className="flex flex-wrap gap-8">
-          <div>
-            <p className="text-xs text-muted-foreground">De-rot streak</p>
-            <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{streakDays} {streakDays === 1 ? 'day' : 'days'}</p>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rule bg-background pb-6">
+          <div className="flex flex-wrap gap-8">
+            <div>
+              <p className="text-micro text-muted-foreground">De-rot streak</p>
+              <p className="mt-2 font-mono text-h3 tabular-nums text-foreground">{streakDays} {streakDays === 1 ? 'day' : 'days'}</p>
+            </div>
+            <div>
+              <p className="text-micro text-muted-foreground">Today&apos;s runs</p>
+              <p className="mt-2 font-mono text-h3 tabular-nums text-foreground">{todaysRuns}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Today&apos;s runs</p>
-            <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{todaysRuns}</p>
+          <div className="flex flex-col items-end gap-2">
+            <LaneSwitch lane={lane} onChange={setLane} reduced={reduced} />
+            {/* fix round 1, I7: the Playground's "no code in here" promise, made where the switch actually is. */}
+            <p className="text-micro text-muted-foreground">{line(lane === 'arcade' ? 'derot.arcade.enter' : 'derot.play.enter')}</p>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <LaneSwitch lane={lane} onChange={setLane} reduced={reduced} />
-          {/* fix round 1, I7: the Playground's "no code in here" promise, made where the switch actually is. */}
-          <p className="text-xs text-muted-foreground">{line(lane === 'arcade' ? 'derot.arcade.enter' : 'derot.play.enter')}</p>
+
+        {overview.loading && <p role="status" className="bg-background text-small text-muted-foreground">Loading your de-rot progress.</p>}
+        {overview.failed && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule bg-background p-4">
+            <p className="text-small text-foreground">{line('error.load')}</p>
+            <Button variant="outline" onClick={overview.retry}>Try again</Button>
+          </div>
+        )}
+
+        {lane === 'arcade' && (
+          // fix round 2, N5 (controller ruling, preamble): four of the six
+          // Arcade kinds (scored by scoreTimedCorrect) can never actually
+          // reach 100 -- only an instant, zero-elapsed-time answer would, and
+          // no human plays that fast -- while the other two (Hands, Two Back)
+          // can. Six "Best" numbers sit in one row on this screen; without
+          // this line, a learner reading 95 next to 100 has no way to know
+          // that gap is the ruler, not their play. Plain string pending a
+          // voice-bank key -- listed in the T2.9a report for T2.7b.
+          <p className="-mt-2 bg-background text-micro text-muted-foreground">
+            Best scores don&apos;t line up evenly across drills — four of them cap out near 95 by design.
+          </p>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {cardsForLane.map(({ kind, stats, available }, index) => (
+            <FadeInCard key={kind} index={index} reduced={reduced}>
+              <DrillCard
+                kind={kind}
+                lane={lane}
+                stats={stats}
+                available={available}
+                reduced={reduced}
+                primary={kind === primaryKind}
+              />
+            </FadeInCard>
+          ))}
         </div>
-      </div>
-
-      {overview.loading && <p role="status" className="text-sm text-muted-foreground">Loading your de-rot progress.</p>}
-      {overview.failed && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-          <p className="text-sm text-foreground">{line('error.load')}</p>
-          <Button variant="outline" onClick={overview.retry}>Try again</Button>
-        </div>
-      )}
-
-      {lane === 'arcade' && (
-        // fix round 2, N5 (controller ruling, preamble): four of the six
-        // Arcade kinds (scored by scoreTimedCorrect) can never actually
-        // reach 100 -- only an instant, zero-elapsed-time answer would, and
-        // no human plays that fast -- while the other two (Hands, Two Back)
-        // can. Six "Best" numbers sit in one row on this screen; without
-        // this line, a learner reading 95 next to 100 has no way to know
-        // that gap is the ruler, not their play. Plain string pending a
-        // voice-bank key -- listed in the T2.9a report for T2.7b.
-        <p className="-mt-2 text-xs text-muted-foreground">
-          Best scores don&apos;t line up evenly across drills — four of them cap out near 95 by design.
-        </p>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {kindsForLane.map((kind, index) => (
-          <FadeInCard key={kind} index={index} reduced={reduced}>
-            <DrillCard
-              kind={kind}
-              lane={lane}
-              stats={statsForKind(overview.results, kind)}
-              // W2G-1: a Playground game is code, not a seeded `drills` row (R7.5) --
-              // gating it on `availableKinds` (built purely from that table) disables
-              // all six the moment migration 0009 (which writes their marker rows)
-              // has not been applied, even though the games themselves already ship in
-              // the bundle and run correctly when reached directly. Arcade kinds still
-              // need a real seeded row, so they stay gated on `availableKinds` alone.
-              available={isPlayKind(kind) || overview.availableKinds.has(kind)}
-              reduced={reduced}
-            />
-          </FadeInCard>
-        ))}
       </div>
     </div>
   )

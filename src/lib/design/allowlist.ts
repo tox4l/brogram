@@ -47,7 +47,9 @@ const T4_4_LESSON = ['src/components/lesson', 'src/app/(app)/lesson']
 // prefix constant -- remains.
 // T4_7_EXERCISE (src/app/(app)/exercise, src/components/exercise): every rule below cleared to
 // zero for T4.7's own paths, so no allowlist entry -- and therefore no prefix constant -- remains.
-const T4_8_DEROT = ['src/app/(app)/derot', 'src/components/derot', 'src/components/rewards', 'src/components/play']
+// T4_8_DEROT (src/app/(app)/derot, src/components/derot, src/components/rewards, src/components/play):
+// every rule below cleared to zero for T4.8's own paths, so no allowlist entry -- and therefore no
+// prefix constant -- remains.
 // T4_9_SCREENS (src/app/(app)/reports, src/components/report, src/app/(auth), src/app/(app)/onboarding,
 // src/app/page.tsx): every rule below cleared to zero for T4.9's own paths, so no allowlist entry --
 // and therefore no prefix constant -- remains.
@@ -84,7 +86,10 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // now hold zero raw type-scale classes.
     // T4.7's entry deleted: exercise/exercise-components now hold zero raw
     // type-scale classes.
-    ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
+    // T4.8's entry deleted: derot/derot-components/rewards now hold zero raw
+    // type-scale classes -- every site maps to the additive scale
+    // (--text-micro|small|body|lede|h1..h3, --text-hero for the run screens'
+    // headline numerals and the level-up celebration's big number).
     // T4.9's entry deleted: reports/report/(auth)/onboarding/page.tsx now
     // hold zero raw type-scale classes.
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
@@ -101,7 +106,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // icon, results row/review-praise text, the fix-plan hint accent, the
     // spot-the-bug pressed line) moved to --primary/--success/--rule per
     // the role each one actually plays, not its old hue.
-    ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
+    // T4.8's entry deleted: the one hit (CountdownRing.tsx's amber urgency
+    // band) moved to --warning -- the semantic token for the same role.
     // T4.9's entry deleted: every emerald/neutral hit in reports, report
     // sections, login and the landing page moved to a semantic token.
   ],
@@ -130,7 +136,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // now sit on the eight-step rhythm.
     // T4.7's entry deleted: exercise/exercise-components now sit on the
     // eight-step rhythm.
-    ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
+    // T4.8's entry deleted: derot/derot-components/rewards now sit on the
+    // eight-step rhythm.
     // T4.9's entry deleted: every owned path now sits on the eight-step rhythm.
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
@@ -153,7 +160,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // now sit on rounded-(lg|xl|2xl|full).
     // T4.7's entry deleted: exercise/exercise-components now sit on
     // rounded-(lg|xl|2xl|full).
-    ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
+    // T4.8's entry deleted: derot/derot-components/rewards now sit on
+    // rounded-(lg|xl|2xl|full).
     // T4.9's entry deleted: every owned path now sits on rounded-(lg|xl|2xl|full).
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
@@ -169,16 +177,22 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // larger.
     // T4.7's entry deleted: the back-link chevron and the pass/fail glyphs
     // (both previously size-3/size-3.5) now render at size-4.
-    ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
+    // T4.8's entry deleted: the arcade/play back-link chevrons and
+    // Celebration.tsx's dismiss glyph (all previously size-3) now render at
+    // size-4.
   ],
   'motion-css': [
     // src/components/ui/* (badge, button, progress, tabs: transition-all)
     // and src/components/ui/drawer.tsx (an animated height in its own
-    // arbitrary transition-property list) are T4.5's; src/components/
-    // rewards/* (ease-in on celebration timing, pre-T4.2-registerEases)
-    // is T4.8's per the ownership map.
+    // arbitrary transition-property list) are T4.5's.
+    // T4.8's entry deleted: src/components/rewards had no genuine
+    // `transition: all`/`ease-in`/animated-width-height-top-left hit --
+    // the rule's own comment ("ease-in on celebration timing, pre-T4.2-
+    // registerEases") described a `power1/2.out` GSAP ease string, which
+    // this rule's regex never matched in the first place (it looks for the
+    // CSS/Tailwind `ease-in` token); the real fix for that mismatch is
+    // T4.2's `registerEases()` (already landed), not a source change here.
     ...entriesFor('T4.5', ['src/components/ui'], ALL_SCREENS_NOTE('T4.5')),
-    ...entriesFor('T4.8', ['src/components/rewards'], ALL_SCREENS_NOTE('T4.8')),
   ],
   // 'filled-buttons-per-route': T4.7's only entry (exercise/[id]/page.tsx's
   // two filled-variant Buttons -- Submit and Next rep, both mounted at once

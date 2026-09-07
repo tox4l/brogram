@@ -120,7 +120,7 @@ export function StreakFlame({ state, days, motionPref, announce = true, size = '
     <span className={cn('relative inline-flex items-center justify-center', hero && 'size-16')}>
       <FlameGlyph filled={filled} glyphRef={glyphRef} hero={hero} />
       {SPARK_STATES.has(state) && (
-        <Sparks trigger={`${state}-${days}`} motionPref={motionPref} layout={hero ? 'burst' : 'row'} className={hero ? undefined : 'ml-1.5'} />
+        <Sparks trigger={`${state}-${days}`} motionPref={motionPref} layout={hero ? 'burst' : 'row'} className={hero ? undefined : 'ml-2'} />
       )}
     </span>
   )
@@ -129,16 +129,16 @@ export function StreakFlame({ state, days, motionPref, announce = true, size = '
     return (
       <span className={cn('flex flex-col items-center gap-1', filled ? 'text-celebration' : 'text-muted-foreground', className)}>
         {glyphAndSparks}
-        <span className="tabular text-2xl font-semibold text-foreground">{days}</span>
+        <span className="tabular text-h2 text-foreground">{days}</span>
         {announce && <span className="sr-only" aria-live="polite">{announcement(state, days)}</span>}
       </span>
     )
   }
 
   return (
-    <span className={cn('inline-flex items-center gap-1.5', filled ? 'text-celebration' : 'text-muted-foreground', className)}>
+    <span className={cn('inline-flex items-center gap-2', filled ? 'text-celebration' : 'text-muted-foreground', className)}>
       {glyphAndSparks}
-      <span className="tabular text-sm font-medium text-foreground">{days}</span>
+      <span className="tabular text-small font-medium text-foreground">{days}</span>
       {announce && <span className="sr-only" aria-live="polite">{announcement(state, days)}</span>}
     </span>
   )

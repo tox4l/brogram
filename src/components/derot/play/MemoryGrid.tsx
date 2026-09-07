@@ -254,10 +254,10 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
         <CardDescription>Watch the pattern, then reproduce it in the same order before it grows.</CardDescription>
         <Progress value={percentRemaining} />
       </CardHeader>
-      <CardContent className="flex flex-col items-center gap-5 py-8">
+      <CardContent className="flex flex-col items-center gap-6 py-8">
         {phase !== 'done' ? (
           <>
-            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+            <p role="status" aria-live="polite" className="text-small text-muted-foreground">
               {statusText}
             </p>
             <div
@@ -293,13 +293,13 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
                 )
               })}
             </div>
-            <p className="text-xs tabular-nums text-muted-foreground">{roundsCleared} cleared</p>
-            <button type="button" onClick={onAbort} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+            <p className="text-micro tabular-nums text-muted-foreground">{roundsCleared} cleared</p>
+            <button type="button" onClick={onAbort} className="text-micro text-muted-foreground underline-offset-2 hover:underline">
               Quit
             </button>
           </>
         ) : (
-          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-sm">
+          <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-4 text-center text-small">
             <p className="font-medium">Run complete.</p>
           </div>
         )}

@@ -31,5 +31,5 @@ export default function LegacyDerotKindRedirect() {
     router.replace('/derot')
   }, [params.kind, router, searchParams])
 
-  return <p role="status" className="text-sm text-muted-foreground">Taking you to the new de-rot page.</p>
+  return <p role="status" className="text-small text-muted-foreground">Taking you to the new de-rot page.</p>
 }
