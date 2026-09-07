@@ -181,6 +181,23 @@ describe('the de-rot hub', () => {
     expect(within(cardFor('Run It in Your Head')).getByRole('link', { name: /Start/ })).toBeTruthy()
   })
 
+  it('W2G-1: every Playground Start stays enabled at schema 0005, when the drills table holds only Arcade kinds', async () => {
+    // The live `drills` table at 0005 never carries the six Playground marker
+    // rows -- `lane` and the seed loader's write of them only exist from
+    // migration 0009 -- so `availableKinds` here is Arcade-only, exactly the
+    // production shape this fix must survive.
+    drillKinds = [...arcadeKinds]
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Call It')).toBeTruthy())
+    fireEvent.click(screen.getByRole('tab', { name: 'Playground' }))
+    await waitFor(() => expect(screen.getByText('Follow the Dot')).toBeTruthy())
+    for (const title of ['Follow the Dot', 'Match Back', 'Twitch', 'Keep Time', 'Breathe', 'Grid']) {
+      const start = within(cardFor(title)).getByRole('link', { name: /Start/ })
+      expect(start).toBeTruthy()
+      expect(within(cardFor(title)).queryByRole('button', { name: 'Start' })).toBeNull()
+    }
+  })
+
   it('links each card to the right lane path', async () => {
     render(<DerotPage />)
     await waitFor(() => expect(screen.getByText('Call It')).toBeTruthy())

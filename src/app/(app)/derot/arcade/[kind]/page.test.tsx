@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DrillItem, DrillResult, LearnerState } from '@/lib/contracts'
+import { LINE_BANK } from '@/lib/voice/lines'
 import DerotArcadeRunnerPage from './page'
 
 // A full six-item run waits out six real 650ms pauses (~4s); give this file's
@@ -28,6 +29,10 @@ const mocks = vi.hoisted(() => ({
   setLearnerState: vi.fn(),
   learnerState: null as LearnerState | null,
   play: vi.fn(),
+  invalidate: vi.fn(),
+  getQueryData: vi.fn((): unknown => undefined),
+  recordGoalDay: vi.fn(),
+  recordAchievements: vi.fn(),
 }))
 vi.mock('next/navigation', () => ({ useParams: () => mocks.params(), useSearchParams: () => mocks.searchParams() }))
 vi.mock('@/store/session', () => ({
@@ -35,6 +40,13 @@ vi.mock('@/store/session', () => ({
     selector({ user: { id: 'student' }, learnerState: mocks.learnerState, setLearnerState: mocks.setLearnerState }),
 }))
 vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (run: () => void) => run() }))
+// X2/X7/X1: the query-cache invalidate and the two reward writers are unit-tested
+// against real implementations in their own lanes (record.test.ts, useCelebration
+// etc.) -- this file only proves the de-rot runner *calls* them, with a context
+// built from the run it just saved, so real supabase table shapes for
+// `user_achievements` / the prefs write never need mocking here.
+vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: mocks.invalidate, getQueryData: mocks.getQueryData }) }))
+vi.mock('@/lib/rewards/record', () => ({ recordGoalDay: mocks.recordGoalDay, recordAchievements: mocks.recordAchievements }))
 vi.mock('@/components/derot', () => ({
   DrillRunner: ({ item, onResult, paused }: { item: DrillItem; onResult: (result: DrillResult) => void; paused?: boolean }) => (
     <div>
@@ -348,7 +360,13 @@ describe('Arcade runner', () => {
 
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent!.length).toBeGreaterThan(0)
+    // TI-3: a non-empty check survives replacing line('error.save') with the
+    // raw thrown error itself (`String(err)`) -- pinning against the bank's
+    // own three variants is the only assertion a mutation like that trips.
+    // The message text is the alert's own <p> only -- the alert region also
+    // wraps the "Retry save" button, so a whole-region textContent check
+    // would never equal one bare variant string.
+    expect(LINE_BANK['error.save'].variants).toContain(alert.querySelector('p')!.textContent)
 
     rpcError = null
     fireEvent.click(screen.getByRole('button', { name: 'Retry save' }))
@@ -366,6 +384,68 @@ describe('Arcade runner', () => {
     const next = mocks.setLearnerState.mock.calls[0][0] as LearnerState
     expect(next.streak.derotDays).toBe(1)
     expect(next.streak.lastDerotDate).toBe('2026-09-06')
+  })
+
+  it('invalidates the shared wellness cache once a save succeeds, and not when it fails (X2)', async () => {
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] }))
+  })
+
+  it('does not invalidate the wellness cache, or record a goal day / achievements, when the save fails (X2)', async () => {
+    rpcError = { code: '42501', message: 'permission denied' }
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    expect(mocks.invalidate).not.toHaveBeenCalled()
+    expect(mocks.recordGoalDay).not.toHaveBeenCalled()
+    expect(mocks.recordAchievements).not.toHaveBeenCalled()
+  })
+
+  it("calls recordGoalDay with a context whose drillResults carry the run just saved (X7)", async () => {
+    // The server's own returned array is what the ctx is built from -- give the
+    // RPC mock a realistic response (the appended run) rather than the default `[]`.
+    rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1))
+    const [, calledUserId, ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { drillResults: DrillResult[] }]
+    expect(calledUserId).toBe('student')
+    expect(ctx.drillResults.some((r) => r.kind === 'trace' && r.lane === 'arcade')).toBe(true)
+  })
+
+  it("calls recordAchievements with a context whose drillResults carry the run just saved (X1)", async () => {
+    rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(mocks.recordAchievements).toHaveBeenCalledTimes(1))
+    const [, calledUserId, ctx, held] = mocks.recordAchievements.mock.calls[0] as [unknown, string, { drillResults: DrillResult[] }, readonly string[]]
+    expect(calledUserId).toBe('student')
+    expect(ctx.drillResults.some((r) => r.kind === 'trace' && r.lane === 'arcade')).toBe(true)
+    expect(held).toEqual([])
+  })
+
+  it('plays drill.hit at run end on top of the per-item hits, and best only when this run genuinely beats a real previous best (X8)', async () => {
+    wellnessRow = { drill_results: [result({ drillId: 'd7', kind: 'trace', score: 10, at: '2026-09-01T00:00:00.000Z' })] }
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    const hitCalls = mocks.play.mock.calls.filter(([kind]) => kind === 'drill.hit').length
+    expect(hitCalls).toBe(7) // six per-item hits (onItemResult) plus one run-end hit (finishRun)
+    expect(mocks.play.mock.calls.some(([kind]) => kind === 'best')).toBe(true)
+  })
+
+  it('never plays best on a first run of a kind, even with a perfect run', async () => {
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    expect(mocks.play.mock.calls.some(([kind]) => kind === 'best')).toBe(false)
   })
 
   it('shows a designed empty state when the kind has no drill items', async () => {

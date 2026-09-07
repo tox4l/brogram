@@ -17,7 +17,12 @@ import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { play, withInterfaceSounds } from '@/lib/sound/manager'
 import { line, lineWith } from '@/lib/voice/lines'
 import { useSession } from '@/store/session'
-import type { DrillItem, DrillKind, DrillResult, MotionPreference } from '@/lib/contracts'
+import { getQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
+import { buildRewardContext } from '@/lib/rewards/context'
+import { recordAchievements, recordGoalDay } from '@/lib/rewards/record'
+import { isPersonalBest as computeIsPersonalBest } from '@/lib/rewards/bestRun'
+import type { DrillItem, DrillKind, DrillResult, MotionPreference, UserAchievement, WellnessPrefs } from '@/lib/contracts'
 import { comboMultiplier } from '@/components/derot/scoring'
 import { DRILL_META, computeDerotStreak, dateKey, isDrillKind, lastResultsForKind, mapDrillRow, pickDrillItem, statsForKind } from '../../lib'
 import { EMPTY_RUN, RUN_SIZE, buildRunResult, isRunComplete, recordRunAnswer, summarizeRun, type RunState } from '../run'
@@ -48,12 +53,14 @@ interface RunnerState {
   runResult: DrillResult | null
   previousBest: number | null
   motionPref: MotionPreference
+  /** The full resolved row, not just `.motion` -- X7/X1 need it (dailyGoal, goalDays, sound) to build a `RewardContext` after a save. */
+  prefs: WellnessPrefs
   error: string | null
   saveError: string | null
 }
 
 const INITIAL_STATE: RunnerState = {
-  phase: 'loading', items: [], allResults: [], sessionResults: [], current: null, run: EMPTY_RUN, runResult: null, previousBest: null, motionPref: 'system', error: null, saveError: null,
+  phase: 'loading', items: [], allResults: [], sessionResults: [], current: null, run: EMPTY_RUN, runResult: null, previousBest: null, motionPref: 'system', prefs: resolveWellnessPrefs(undefined), error: null, saveError: null,
 }
 
 /**
@@ -92,11 +99,11 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
         if (cancelled) return
         const items = (drills.data ?? []).map(mapDrillRow)
         const allResults = (wellness.data?.drill_results ?? []) as DrillResult[]
-        const motionPref = resolveWellnessPrefs(wellness.data?.prefs).motion
-        if (items.length === 0) { setState({ ...INITIAL_STATE, phase: 'empty', allResults, motionPref }); return }
+        const prefs = resolveWellnessPrefs(wellness.data?.prefs)
+        if (items.length === 0) { setState({ ...INITIAL_STATE, phase: 'empty', allResults, motionPref: prefs.motion, prefs }); return }
         const forKind = allResults.filter((result) => result.kind === kind)
         const current = pickDrillItem(items, forKind, new Date(), explicitId)
-        setState({ ...INITIAL_STATE, phase: 'ready', items, allResults, motionPref, current })
+        setState({ ...INITIAL_STATE, phase: 'ready', items, allResults, motionPref: prefs.motion, prefs, current })
       } catch (err) {
         if (!cancelled) setState({ ...INITIAL_STATE, phase: 'error', error: err instanceof Error ? err.message : 'This drill could not open.' })
       }
@@ -125,6 +132,40 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
           updatedAt: new Date().toISOString(),
         })
       }
+
+      // X2: the dashboard's goal ring and de-rot scores read `wellness` through
+      // qk.wellness (staleTime/gcTime Infinity, seeded once server-side, never
+      // refetched on navigation) -- without this the ring stays at its pre-run
+      // count until a hard reload, mirroring useExerciseLoop.ts's own
+      // qk.wellness invalidate on its pass path. Only reached once the save
+      // above actually succeeded; the catch block below never runs this line,
+      // so a failed save invalidates nothing.
+      void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
+
+      // X7 / X1: a finished de-rot run is a win (spec 7.4) and a source for
+      // sharp / touch-grass / beat-yourself (7.5) -- neither had a producer.
+      // attempts/lessonProgress stay empty and courseLessonCounts stays {}:
+      // this hook fetches none of them, so a context built from what it does
+      // not have would just be wrong rather than honest. This can only ever
+      // delay a goal day or an achievement to whichever caller (exercise
+      // loop, lesson) next builds a fuller context, never over-fire one --
+      // the same convention useExerciseLoop.ts's own recordGoalAndStreak
+      // already established for the fields it cannot see either.
+      if (learner) {
+        const held = (getQueryClient().getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map((a) => a.achievementId)
+        const ctx = buildRewardContext({
+          state: learner,
+          attempts: [],
+          activityDays: [],
+          lessonProgress: [],
+          drillResults: serverResults,
+          prefs: stateRef.current.prefs,
+          courseLessonCounts: {},
+          now: new Date(runResult.at),
+        })
+        void recordGoalDay(client, userId, ctx)
+        void recordAchievements(client, userId, ctx, held)
+      }
     } catch {
       setState((prev) => ({ ...prev, saveError: line('error.save') }))
     }
@@ -133,20 +174,26 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
   const finishRun = useCallback((run: RunState) => {
     const runResult = buildRunResult(run)
     if (!runResult) return
-    setState((prev) => {
-      const previousBest = statsForKind(prev.allResults, kind).best
+    const previousBest = statsForKind(stateRef.current.allResults, kind).best
+    // X8: run-end audio. `withInterfaceSounds` gates `drill.hit` on the
+    // interface-sounds toggle (Arcade already forces the same sound on
+    // mid-run for itself, spec R7.8); `best` is a reward-tier sound and
+    // always plays when it fires. The null guard inside `computeIsPersonalBest`
+    // is the same one RunSummary's own badge uses (fix round 1, C2) -- a
+    // first run of a kind never earns it.
+    withInterfaceSounds(() => play('drill.hit'))
+    if (computeIsPersonalBest(previousBest, runResult.score)) play('best')
+    setState((prev) => ({
+      ...prev,
+      phase: 'run-complete',
+      run,
+      runResult,
+      previousBest,
       // Optimistic: this run's own result is folded in immediately so the
       // summary (last runs, personal best) never waits on the network.
-      return {
-        ...prev,
-        phase: 'run-complete',
-        run,
-        runResult,
-        previousBest,
-        allResults: [...prev.allResults, runResult],
-        sessionResults: [...prev.sessionResults, ...run.answers.map((a) => a.result)],
-      }
-    })
+      allResults: [...prev.allResults, runResult],
+      sessionResults: [...prev.sessionResults, ...run.answers.map((a) => a.result)],
+    }))
     void submitFinishedRun(runResult)
   }, [kind, submitFinishedRun])
 

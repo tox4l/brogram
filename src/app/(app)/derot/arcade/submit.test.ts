@@ -38,10 +38,12 @@ describe('submitRunResult', () => {
     const rpcSpy = vi.fn().mockResolvedValue(rpcError ? { data: null, error: rpcError } : { data: rpcData, error: null })
     const updateSpy = vi.fn()
     const insertSpy = vi.fn()
+    const eqSpy = vi.fn()
     return {
       rpcSpy,
       updateSpy,
       insertSpy,
+      eqSpy,
       client: {
         rpc: rpcSpy,
         from: (table: string) => {
@@ -50,7 +52,12 @@ describe('submitRunResult', () => {
             select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: wellnessRow, error: null }) }) }),
             update: (payload: Record<string, unknown>) => {
               updateSpy(payload)
-              return { eq: () => ({ select: () => ({ maybeSingle: () => Promise.resolve(updateAffectsRow ? { data: { user_id: 'u1' }, error: null } : { data: null, error: null }) }) }) }
+              return {
+                eq: (...args: unknown[]) => {
+                  eqSpy(...args)
+                  return { select: () => ({ maybeSingle: () => Promise.resolve(updateAffectsRow ? { data: { user_id: 'u1' }, error: null } : { data: null, error: null }) }) }
+                },
+              }
             },
             insert: (payload: Record<string, unknown>) => {
               insertSpy(payload)
@@ -73,7 +80,7 @@ describe('submitRunResult', () => {
   })
 
   it('falls back to the direct read-modify-write when the RPC is missing (pre-0009 schema)', async () => {
-    const { client: c, rpcSpy, updateSpy } = client({
+    const { client: c, rpcSpy, updateSpy, eqSpy } = client({
       rpcError: { code: '42883', message: 'function public.append_drill_result(jsonb) does not exist' },
       wellnessRow: { drill_results: [result({ drillId: 'earlier' })] },
     })
@@ -83,6 +90,11 @@ describe('submitRunResult', () => {
     const payload = updateSpy.mock.calls[0][0] as { drill_results: DrillResult[] }
     expect(payload.drill_results).toHaveLength(2)
     expect(out).toHaveLength(2)
+    // TI-2: the two safety assertions the old runner test carried, restored here --
+    // the fallback writes exactly one column (never prefs, water_log or
+    // pomodoro_sessions, all sharing this same row), scoped to this user's own row.
+    expect(Object.keys(payload)).toEqual(['drill_results'])
+    expect(eqSpy).toHaveBeenCalledWith('user_id', 'u1')
   })
 
   it('inserts a wellness row in the fallback when the update affects no rows', async () => {

@@ -32,7 +32,13 @@ import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { line } from '@/lib/voice/lines'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useSession } from '@/store/session'
-import type { DrillResult, WellnessPrefs } from '@/lib/contracts'
+import { getQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
+import { buildRewardContext } from '@/lib/rewards/context'
+import { recordAchievements, recordGoalDay } from '@/lib/rewards/record'
+import { isPersonalBest as computeIsPersonalBest } from '@/lib/rewards/bestRun'
+import { play, withInterfaceSounds } from '@/lib/sound/manager'
+import type { DrillResult, UserAchievement, WellnessPrefs } from '@/lib/contracts'
 import { DRILL_META, computeDerotStreak, dateKey, isPlayKind, lastResultsForKind, statsForKind } from '../../lib'
 import { submitRunResult } from '../../arcade/submit'
 import type { PlayGameComponent, PlayGameId, PlayGameResult } from '@/components/derot/play/types'
@@ -205,6 +211,33 @@ function usePlayRun(game: PlayGameId, userId: string | null) {
           updatedAt: new Date().toISOString(),
         })
       }
+
+      // X2: mirrors Arcade's own fix -- without this, the dashboard's goal
+      // ring and de-rot scores (both read through qk.wellness, seeded once
+      // and never refetched on navigation) stay at the pre-run count until a
+      // hard reload. Only reached once the save above actually succeeded.
+      void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
+
+      // X7 / X1: mirrors Arcade's own fix -- a finished Playground run is a
+      // win (spec 7.4) and a source for touch-grass / beat-yourself (7.5).
+      // attempts/lessonProgress/courseLessonCounts stay empty/{}: this hook
+      // fetches none of them, so this can only ever delay a goal day or an
+      // achievement to a fuller-context caller, never over-fire one.
+      if (learner) {
+        const held = (getQueryClient().getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map((a) => a.achievementId)
+        const ctx = buildRewardContext({
+          state: learner,
+          attempts: [],
+          activityDays: [],
+          lessonProgress: [],
+          drillResults: serverResults,
+          prefs: stateRef.current.prefs,
+          courseLessonCounts: {},
+          now: new Date(runResult.at),
+        })
+        void recordGoalDay(client, userId, ctx)
+        void recordAchievements(client, userId, ctx, held)
+      }
     } catch {
       setState((prev) => ({ ...prev, saveError: line('error.save') }))
     }
@@ -212,12 +245,17 @@ function usePlayRun(game: PlayGameId, userId: string | null) {
 
   const finishGame = useCallback((result: PlayGameResult) => {
     const runResult = buildDrillResult(game, result)
-    setState((prev) => {
-      const previousBest = statsForKind(prev.allResults, game).best
+    const previousBest = statsForKind(stateRef.current.allResults, game).best
+    // X8: mirrors Arcade's own fix -- run-end audio that was missing on
+    // every Playground game. Same null guard as the "New best" badge (fix
+    // round 1, C2): a first run of a kind never earns `best`.
+    withInterfaceSounds(() => play('drill.hit'))
+    if (computeIsPersonalBest(previousBest, runResult.score)) play('best')
+    setState((prev) => (
       // Optimistic, exactly like Arcade: this run's own row is folded in immediately so the
       // summary (last runs, personal best) never waits on the network.
-      return { ...prev, phase: 'complete', runResult, previousBest, allResults: [...prev.allResults, runResult] }
-    })
+      { ...prev, phase: 'complete', runResult, previousBest, allResults: [...prev.allResults, runResult] }
+    ))
     void submitFinishedRun(runResult)
   }, [game, submitFinishedRun])
 

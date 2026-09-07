@@ -254,7 +254,19 @@ function DerotSection() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kindsForLane.map((kind, index) => (
           <FadeInCard key={kind} index={index} reduced={reduced}>
-            <DrillCard kind={kind} lane={lane} stats={statsForKind(overview.results, kind)} available={overview.availableKinds.has(kind)} reduced={reduced} />
+            <DrillCard
+              kind={kind}
+              lane={lane}
+              stats={statsForKind(overview.results, kind)}
+              // W2G-1: a Playground game is code, not a seeded `drills` row (R7.5) --
+              // gating it on `availableKinds` (built purely from that table) disables
+              // all six the moment migration 0009 (which writes their marker rows)
+              // has not been applied, even though the games themselves already ship in
+              // the bundle and run correctly when reached directly. Arcade kinds still
+              // need a real seeded row, so they stay gated on `availableKinds` alone.
+              available={isPlayKind(kind) || overview.availableKinds.has(kind)}
+              reduced={reduced}
+            />
           </FadeInCard>
         ))}
       </div>
