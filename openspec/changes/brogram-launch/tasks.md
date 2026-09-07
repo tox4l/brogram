@@ -71,9 +71,9 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T4.3 ShaderSurface and the settle-and-freeze field (e2bf740, fix 5b5415e, approved 2026-09-07)
 - [x] T4.4 CodeGuide, the lesson reading surface, and the verifier (a14a3a8, fixes 0068251, f51a92b, d922130, approved 2026-09-07)
 - [x] T4.5 Shell, dock, Buddy, shared UI, Account (e755493, fix 8c062bd, approved 2026-09-07)
-- [ ] T4.6 Dashboard, Courses, Course home
+- [x] T4.6 Dashboard, Courses, Course home (f2f9026, fixes ae8d670, 9c92c87, approved 2026-09-07)
 - [x] T4.7 Exercise and the editor theme (a0da527, fixes 14b6ca8, 011ea85, approved by ruling 2026-09-07)
-- [ ] T4.8 De-rot, Playground and the reward surfaces
+- [x] T4.8 De-rot, Playground and the reward surfaces (1b335f8, fixes 732bf2b, 10be9b9, approved 2026-09-07)
 - [x] T4.9 Reports, Login, Onboarding, landing (853aa16, fix f63d6b4, approved 2026-09-07)
 - [ ] T4.10 The bundle budget script and the e2e battery (after Wave 3 Group A)
 - [ ] T4.11 Wave review, build log, ledger
