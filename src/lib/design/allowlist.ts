@@ -227,34 +227,9 @@ export const FONT_WEIGHT_RATIO_ALLOWANCE = {
     'deleted, once T4.4 through T4.9 have all landed and the ratio clears 1:3 on its own.',
 }
 
-// Fix round (review C1): the will-change budget is Step 2's one *hard* cap
-// -- "at most three selectors," no allowlist by design -- but the original
-// regex could not see the Tailwind utility form at all, so the CLI reported
-// zero against a real count of five. Fixing the regex turns the gate
-// honestly red, and the honest fix is not to raise the cap to five: it is
-// this recorded ceiling, the same shape as FONT_WEIGHT_RATIO_ALLOWANCE,
-// naming the two tasks whose own sweeps drop the count back under the cap.
-export const WILL_CHANGE_TRANSFORM_ALLOWANCE = {
-  // T4.5's fix round (review finding M4) drops its own occurrence:
-  // src/components/ui/drawer.tsx's DrawerContent already promotes itself
-  // via its own transform-[translate3d(...)] utility, so will-change-
-  // transform there was a redundant hint, not load-bearing behaviour --
-  // removed rather than allowlisted. T4.8 is the sole remaining owner.
-  owners: ['T4.8'],
-  /** Measured after T4.5's fix round: src/components/derot/play/
-   *  FollowTheDot.tsx + KeepTime.tsx (2 each) = 4 against Step 2's cap of 3.
-   *  The gate never accepts a count *above* this -- only at or below it,
-   *  tightening to 3 as T4.8 drops one of the four in its own sweep. */
-  baselineCount: 4,
-  // Deliberately does not spell out the literal utility or CSS forms this
-  // allowance is about: this file is itself scanned by scopeAllSrc() (rule
-  // 6 and the will-change budget cover all of src/, allowlist.ts included),
-  // and a string literal is never stripped the way a real comment is --
-  // naming the class here verbatim would make this very note count as one
-  // more occurrence against its own budget.
-  note:
-    "4 selectors against Step 2's hard cap of 3 (FollowTheDot.tsx x2, KeepTime.tsx x2) use the will-change shorthand for " +
-    "the transform property (drawer.tsx's single occurrence was dropped in T4.5's fix round — redundant next to its own " +
-    'transform-[translate3d(...)] utility). Cleared, and this allowance deleted, once T4.8 has dropped its share and the ' +
-    'CLI reports <= 3 on its own.',
-}
+// The will-change budget (Step 2's one *hard* cap -- "at most three
+// selectors," no allowlist by design) is cleared: T4.5 dropped drawer.tsx's
+// occurrence and T4.8 dropped its own four (FollowTheDot.tsx x2,
+// KeepTime.tsx x2), so the CLI reports 0 <= 3 on its own and
+// WILL_CHANGE_TRANSFORM_ALLOWANCE (the recorded ceiling that tracked this
+// while it was red) and discipline.test.ts's matching canary are deleted.

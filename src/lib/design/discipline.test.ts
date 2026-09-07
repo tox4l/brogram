@@ -31,9 +31,8 @@ import {
   stripComments,
   RULES,
   ruleFontWeightRatio,
-  ruleWillChangeBudget,
 } from '../../../scripts/check-design-tokens.mjs'
-import { ALLOWLIST, FONT_WEIGHT_RATIO_ALLOWANCE, WILL_CHANGE_TRANSFORM_ALLOWANCE, type AllowlistEntry } from './allowlist'
+import { ALLOWLIST, FONT_WEIGHT_RATIO_ALLOWANCE, type AllowlistEntry } from './allowlist'
 
 type Entry = { file: string; content: string }
 
@@ -385,22 +384,6 @@ describe('the real-tree gate: zero violations outside the allowlist', () => {
 })
 
 describe('the real-tree gate: single-number budgets', () => {
-  // Fix round (review C1): the will-change regex fix turns this honestly
-  // red (5 against a cap of 3). The cap itself does not move -- `budget.ok`
-  // stays a true hard-cap check, still printed as VIOLATION by the CLI --
-  // but the *test* now tracks WILL_CHANGE_TRANSFORM_ALLOWANCE's recorded
-  // ceiling instead of asserting the cap is already met. The final
-  // assertion is a canary, not a tautology (review M2's fix applied here
-  // too): it pins today's known-bad state (`ok` is false) and breaks the
-  // day T4.5/T4.8 clear it, forcing the allowance and this branch to be
-  // deleted rather than silently going stale.
-  it('will-change: transform has not regressed past the recorded baseline (T4.5/T4.8 own clearing it to the cap of 3)', () => {
-    const budget = ruleWillChangeBudget()
-    const regressed = budget.count > WILL_CHANGE_TRANSFORM_ALLOWANCE.baselineCount
-    expect(regressed).toBe(false)
-    expect(budget.ok, 'will-change-transform cleared the cap of 3; delete WILL_CHANGE_TRANSFORM_ALLOWANCE and this branch').toBe(false)
-  })
-
   // Fix round (review M2): the old assertion here (`owners.length` against a
   // hard-coded array literal) could never fail while its comment claimed it
   // "starts failing loudly the day the allowance should be deleted." Made
