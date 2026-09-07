@@ -4,7 +4,8 @@ import { useEffect, useRef } from 'react'
 import { useTheme } from 'next-themes'
 import { useWellnessPrefsMutation } from '@/app/(app)/account/prefsMutation'
 import { useWellness } from '@/lib/query/hooks'
-import { THEMES } from './themes'
+import { DEFAULT_WELLNESS } from '@/lib/contracts'
+import { THEME_SEED_MARKER_KEY, THEMES } from './themes'
 import type { ThemeName } from '@/lib/contracts'
 
 const THEME_IDS = THEMES.map((entry) => entry.id)
@@ -41,28 +42,50 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  *    wins and is applied here (a learner who picked Folio on another device
  *    sees Folio the next time they sign in elsewhere);
  *  - a row with no stored theme at all keeps whatever is applied locally
- *    (the OS-seeded value, or a theme picked before this ever ran) and
- *    writes it back, so the first device to make a choice becomes the
- *    cross-device source of truth from then on.
+ *    and writes it back -- UNLESS that local value is still exactly what
+ *    `seedInitialTheme` guessed (G2, fix round) or equals
+ *    `DEFAULT_WELLNESS.theme` (G3, fix round; see the gap note below), in
+ *    which case nothing is written. Only a value the learner actually chose,
+ *    that differs from the seeded default, becomes the cross-device source
+ *    of truth.
  *
  * Mounted once, from `ShellHeaderControls` (rendered on every authenticated
  * route via `AppShell`) -- not from `ThemeQuickSwitch` or the Account page,
  * so it reconciles regardless of which screen a learner happens to land on
  * first after signing in.
  *
- * Known, deliberately unclosed gap (needs a file this fix lane does not
- * own): `prefsPatch` (`src/lib/wellness/prefs.ts`) strips any key that
+ * G2 (fix round, wave 2 review section 6): a learner who never opened the
+ * theme picker had their OS-seeded palette written to `wellness.prefs.theme`
+ * on first sign-in as though it were a decision -- a light-OS laptop's seed
+ * ('paper') then overrode a dark-OS phone's own seed ('midnight') the next
+ * time this hook ran there. `seedInitialTheme` (`src/lib/theme/themes.ts`)
+ * now marks exactly what it wrote (`THEME_SEED_MARKER_KEY`); this hook skips
+ * the write-back while the local theme still equals that mark, so an
+ * unconfirmed guess never leaves the device it was guessed on. Both
+ * `applyTheme` paths (`ThemeQuickSwitch.tsx`, `account/page.tsx`) clear the
+ * mark the instant the learner makes a real pick, so that pick still
+ * round-trips normally.
+ *
+ * G3 (fix round, wave 2 review section 6) -- interim mitigation only, gap
+ * still open: `prefsPatch` (`src/lib/wellness/prefs.ts`) strips any key that
  * equals `DEFAULT_WELLNESS` before a write reaches Postgres, and
- * `DEFAULT_WELLNESS.theme` is `'midnight'` -- the very value `seedInitialTheme`
- * seeds most devices with. So an *explicit* re-pick of Midnight, on a device
- * that previously had something else, is written as an absent key,
- * indistinguishable from "never chosen" the next time this hook runs
- * elsewhere. Every non-default choice (Amber, Eclipse, Folio, Arcade) round-
- * trips correctly; only "explicitly choosing the seeded default" is affected.
- * Closing it needs a presence field (e.g. a `themeSetAt` timestamp) or a
- * `theme`-specific carve-out in `prefsPatch`/`DEFAULT_WELLNESS`
+ * `DEFAULT_WELLNESS.theme` is `'midnight'`. Before this fix round, an
+ * *explicit* re-pick of Midnight on a device that previously had something
+ * else was written as an absent key -- indistinguishable from "never
+ * chosen" -- and the learner's real Amber/Eclipse/Folio/Arcade choice on
+ * another device would then overwrite Midnight right back on the next
+ * sign-in there, repeatedly; separately, every learner sitting on the
+ * default fired a full select+update+refetch of `qk.wellness` on every cold
+ * load, to store nothing. This hook now also skips the write-back whenever
+ * the local theme equals `DEFAULT_WELLNESS.theme`, which stops the pointless
+ * write and therefore the revert loop -- but an explicit re-pick of Midnight
+ * is now simply never written at all, same as before. Closing that properly
+ * needs a presence field (e.g. a `themeSetAt` timestamp) or a `theme`-
+ * specific carve-out in `prefsPatch`/`DEFAULT_WELLNESS`
  * (`src/lib/wellness/prefs.ts`, `src/lib/contracts.ts`) -- both outside this
- * lane's owned paths, so this is flagged rather than fixed here.
+ * lane's owned paths, so this is flagged rather than fixed here; see the
+ * W2FIX-G report for the routing this needs (prefs.ts's owner, or X5 held
+ * open).
  */
 export function useThemeSync(userId: string | null): void {
   const { theme, setTheme } = useTheme()
@@ -81,7 +104,16 @@ export function useThemeSync(userId: string | null): void {
     if (isThemeName(storedTheme)) {
       if (storedTheme !== theme) setTheme(storedTheme)
     } else if (isThemeName(theme)) {
-      prefsMutation.mutate(() => ({ theme }))
+      // G2: skip when the local value is still exactly the OS-derived guess
+      // `seedInitialTheme` wrote, unconfirmed by any real pick.
+      let seededValue: string | null = null
+      try { seededValue = window.localStorage.getItem(THEME_SEED_MARKER_KEY) } catch { /* no storage access */ }
+      const isUnchosenSeed = seededValue === theme
+      // G3 (interim): skip the default too, so a learner sitting on Midnight
+      // does not fire a select+update+refetch cycle on every cold load to
+      // store nothing (`prefsPatch` would strip the key right back out).
+      const isDefault = theme === DEFAULT_WELLNESS.theme
+      if (!isUnchosenSeed && !isDefault) prefsMutation.mutate(() => ({ theme }))
     }
     // prefsMutation.mutate is stable (useCallback keyed on queryClient/userId,
     // src/app/(app)/account/prefsMutation.ts) but is intentionally excluded

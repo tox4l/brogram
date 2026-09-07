@@ -8,6 +8,7 @@ import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { resetWellnessPrefsWriterForTests } from '@/app/(app)/account/prefsMutation'
+import { THEME_SEED_MARKER_KEY } from './themes'
 import { useThemeSync } from './useThemeSync'
 
 const db = vi.hoisted(() => ({ row: null as { prefs?: unknown } | null }))
@@ -134,6 +135,56 @@ describe('useThemeSync', () => {
       'user_id',
       'learner-one',
     )
+  })
+
+  // G2 (W2FIX-G fix round, wave 2 review section 6): before this fix, an
+  // OS-seeded palette nobody had chosen was written to the server as though
+  // it were a decision on the very first sign-in, then overrode a second
+  // device's own seed the next time this hook ran there. `seedInitialTheme`
+  // marks exactly what it wrote; a local theme that still equals that mark
+  // must never round-trip.
+  it('G2: a local theme that still equals its own unconfirmed OS seed writes nothing back, even with no stored theme at all', async () => {
+    window.localStorage.setItem(THEME_SEED_MARKER_KEY, 'paper')
+    renderHook(() => useHarness('learner-one'), {
+      wrapper: wrapper('learner-one', 'paper', {}),
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.insert).not.toHaveBeenCalled()
+  })
+
+  // G2, other direction: once the marker is gone (a real pick clears it --
+  // `ThemeQuickSwitch.tsx`, `account/page.tsx`), the exact same local value
+  // is treated as a real choice and does round-trip. The un-marked 'eclipse'
+  // case above already covers this; this one proves the marker itself, not
+  // just its absence, is what gates the skip -- a stale mark left over from a
+  // theme the learner has since moved away from must not suppress anything.
+  it('G2: a local theme that differs from a stale seed marker (an unrelated device once seeded a different palette) still writes back', async () => {
+    window.localStorage.setItem(THEME_SEED_MARKER_KEY, 'midnight')
+    renderHook(() => useHarness('learner-one'), {
+      wrapper: wrapper('learner-one', 'eclipse', {}),
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(mocks.update).toHaveBeenCalledWith(
+      'wellness',
+      expect.objectContaining({ prefs: expect.objectContaining({ theme: 'eclipse' }) }),
+      'user_id',
+      'learner-one',
+    )
+  })
+
+  // G3 (interim mitigation only -- the real gap needs `prefs.ts`, outside
+  // this lane's owned paths; see the header comment above `useThemeSync`).
+  // Before this, every learner sitting on the seeded default fired a full
+  // select+update+settle-invalidate+refetch of `qk.wellness` on every cold
+  // load, to store a patch `prefsPatch` would immediately strip back out.
+  it('G3: a local theme equal to DEFAULT_WELLNESS.theme writes nothing back, even when nothing marks it as an unconfirmed seed', async () => {
+    renderHook(() => useHarness('learner-one'), {
+      wrapper: wrapper('learner-one', 'midnight', {}),
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.insert).not.toHaveBeenCalled()
   })
 
   it('an unresolved wellness row (still loading) does neither -- no premature write before the server has been heard from', () => {

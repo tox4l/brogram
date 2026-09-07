@@ -653,7 +653,14 @@ describe('surface: de-rot Playground', () => {
 
 describe('surface: theme switch', () => {
   it('cycles through every available theme without ever calling an agent', () => {
-    render(<ThemeQuickSwitch />)
+    // G1 (W2FIX-G fix round): `ThemeQuickSwitch` reads `useSession()` (throws
+    // with no `SessionContext`) and `useWellness()` (needs a
+    // `QueryClientProvider`) since this lane's X5 work -- a bare mount here
+    // crashed this whole describe block on `main`. `withProviders()` is the
+    // same QueryClientProvider + SessionProvider pair every other block in
+    // this file already wraps its surface in; no assertion below changes.
+    const { Wrapper } = withProviders()
+    renderWith(<ThemeQuickSwitch />, Wrapper)
     fireEvent.click(screen.getByRole('button', { name: 'Choose theme' }))
     const radios = screen.getAllByRole('radio')
     expect(radios.length).toBe(THEMES.length)
@@ -671,21 +678,44 @@ describe('surface: theme switch', () => {
   it('applies the chosen theme for real -- next-themes unmocked -- and still calls no agent', async () => {
     vi.resetModules()
     vi.doUnmock('next-themes')
+    // G1 (fix round): `vi.resetModules()` gives every subsequent `import()`
+    // a fresh module graph -- `RealThemeQuickSwitch` below transitively pulls
+    // in a fresh `@/store/session` (a new `SessionContext` from a new
+    // `createContext()` call) and a fresh `@tanstack/react-query`. Wrapping
+    // it in the top-of-file `SessionProvider`/`QueryClientProvider` (from the
+    // OLD module graph) would build a context object the fresh component can
+    // never see and throw exactly the same `useSession requires
+    // SessionProvider` this fix round closes. Every provider below is
+    // therefore re-imported inside this same reset epoch, same as
+    // `ThemeProvider` and `ThemeQuickSwitch` already are.
     const { ThemeProvider } = await import('next-themes')
+    const { QueryClientProvider } = await import('@tanstack/react-query')
+    const { makeQueryClient } = await import('@/lib/query/client')
+    const { SessionProvider: RealSessionProvider } = await import('@/components/shell/SessionProvider')
     const { ThemeQuickSwitch: RealThemeQuickSwitch } = await import('@/components/shell/ThemeQuickSwitch')
     const { THEMES: realThemes, THEME_STORAGE_KEY } = await import('@/lib/theme/themes')
 
+    const client = makeQueryClient()
+
     render(
-      <ThemeProvider
-        attribute="data-theme"
-        themes={realThemes.map((entry) => entry.id)}
-        defaultTheme="midnight"
-        enableSystem={false}
-        storageKey={THEME_STORAGE_KEY}
-        disableTransitionOnChange
-      >
-        <RealThemeQuickSwitch />
-      </ThemeProvider>
+      <QueryClientProvider client={client}>
+        <RealSessionProvider initialState={{
+          user: { id: 'student' } as import('@supabase/supabase-js').User,
+          profile: { id: 'student', account_status: 'active', restricted_until: null },
+          learnerState: null,
+        }}>
+          <ThemeProvider
+            attribute="data-theme"
+            themes={realThemes.map((entry) => entry.id)}
+            defaultTheme="midnight"
+            enableSystem={false}
+            storageKey={THEME_STORAGE_KEY}
+            disableTransitionOnChange
+          >
+            <RealThemeQuickSwitch />
+          </ThemeProvider>
+        </RealSessionProvider>
+      </QueryClientProvider>
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Choose theme' }))

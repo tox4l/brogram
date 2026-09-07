@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 import { PaletteIcon } from 'lucide-react'
 import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
-import { THEMES } from '@/lib/theme/themes'
+import { THEME_SEED_MARKER_KEY, THEMES } from '@/lib/theme/themes'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { useSession } from '@/store/session'
 import { useWellness } from '@/lib/query/hooks'
@@ -111,6 +111,11 @@ export function ThemeQuickSwitch() {
     if (id === active) return
     const root = document.documentElement
     root.setAttribute('data-theme-switching', '')
+    // G2 (wave 2 review, section 6): a real pick from here is no longer an
+    // unconfirmed device seed -- clear the marker `seedInitialTheme` wrote
+    // so `useThemeSync`'s write-back skip stops applying and this choice
+    // reaches `wellness.prefs` like any other.
+    try { window.localStorage.removeItem(THEME_SEED_MARKER_KEY) } catch { /* no storage access */ }
     const canAnimate = !reducedMotion && typeof document !== 'undefined' && typeof document.startViewTransition === 'function'
     if (canAnimate) document.startViewTransition!(() => flushSync(() => setTheme(id)))
     else setTheme(id)

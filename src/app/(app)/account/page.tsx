@@ -10,7 +10,7 @@ import { useSession } from '@/store/session'
 import { useLearnerState, useWellness } from '@/lib/query/hooks'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
-import { THEMES } from '@/lib/theme/themes'
+import { THEME_SEED_MARKER_KEY, THEMES } from '@/lib/theme/themes'
 import { IntegrityPanel } from '@/components/account/IntegrityPanel'
 import { cn } from '@/lib/utils'
 import type { DockPlacement, LearnerProfile, MotionPreference, ThemeName, Tone, Verbosity } from '@/lib/contracts'
@@ -153,7 +153,7 @@ function RadioPills<T extends string>({ label, options, value, onChange }: {
               onClick={() => onChange(option.value)}
               onKeyDown={(event) => roving.onKeyDown(event, index)}
               className={cn(
-                'rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 checked ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
               )}
             >
@@ -182,7 +182,7 @@ function SettingToggle({ id, label, checked, onChange, reducedMotion }: {
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={cn('relative h-6 w-11 shrink-0 rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring', checked ? 'bg-primary' : 'bg-muted')}
+        className={cn('relative h-6 w-11 shrink-0 rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background', checked ? 'bg-primary' : 'bg-muted')}
       >
         {/* Spec 10.11: "toggles animate their own knob and nothing else." */}
         <span
@@ -252,6 +252,11 @@ export default function AccountPage() {
     if (!mounted || id === activeTheme) return
     const root = document.documentElement
     root.setAttribute('data-theme-switching', '')
+    // G2 (wave 2 review, section 6): a real pick from here is no longer an
+    // unconfirmed device seed -- clear the marker `seedInitialTheme` wrote
+    // so `useThemeSync`'s write-back skip stops applying and this choice
+    // reaches `wellness.prefs` like any other.
+    try { window.localStorage.removeItem(THEME_SEED_MARKER_KEY) } catch { /* no storage access */ }
     const canAnimate = !reducedMotion && typeof document.startViewTransition === 'function'
     if (canAnimate) document.startViewTransition!(() => flushSync(() => setTheme(id)))
     else setTheme(id)
@@ -332,7 +337,7 @@ export default function AccountPage() {
                   onClick={() => applyTheme(entry.id)}
                   onKeyDown={(event) => themeRoving.onKeyDown(event, index)}
                   className={cn(
-                    'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                     checked ? 'border-ring ring-1 ring-ring/50' : 'border-border hover:border-ring/50',
                   )}
                 >

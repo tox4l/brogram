@@ -779,12 +779,25 @@ body {
  *     false` is documented as the load-bearing case a bare media query
  *     cannot honour: a learner who opted back into motion on a reduce-OS
  *     must not get frozen skeletons.
- *   - Neither attribute written yet (the gap between a server-rendered
- *     skeleton's first paint and this app's client hydration, since the
- *     attribute is written from a mount effect, not a pre-hydration script
- *     the way `data-theme` is) still resolves correctly for both an OS that
- *     asks for less and one that does not, because `:not([data-motion=
- *     'full'])` matches an attribute-less root too.
+ *   - G4 (W2FIX-G fix round, wave 2 review section 5): the gap between a
+ *     server-rendered skeleton's first paint and this app's client hydration
+ *     -- `MotionAttribute` (`src/components/motion/MotionAttribute.tsx`)
+ *     writes `data-motion` from a `useEffect` gated behind a Supabase auth
+ *     round trip and a wellness query, not a pre-hydration script the way
+ *     `data-theme` is -- is CORRECTLY covered ONLY when the learner's in-app
+ *     choice agrees with their OS signal (both want motion, or both want
+ *     less). It is NOT covered, and this was not fixed in this fix round,
+ *     for the one case the whole three-state design exists for: a learner
+ *     who set Reduced in-app on an OS that reports no preference (or Full
+ *     in-app on a reduce-OS) sees full-amplitude looping skeletons on every
+ *     cold load of every route with one, until hydration plus that round
+ *     trip completes. Closing it needs stamping `data-motion` from the same
+ *     pre-hydration inline script `layout.tsx` already runs for
+ *     `THEME_SEED_SCRIPT`, mirroring `wellness.prefs.motion` into
+ *     `localStorage` on every write the way theme already is -- both
+ *     `src/app/layout.tsx` and `MotionAttribute.tsx` are outside this lane's
+ *     owned paths, so this is flagged rather than fixed here; see the
+ *     W2FIX-G report for the grant this needs (or routing to T4.2).
  *
  * Deliberately targets the three *looping* utilities by class, not a bare
  * `*` selector: `animate-spin` is excluded on purpose. Every current use of

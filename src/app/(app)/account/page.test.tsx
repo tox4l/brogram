@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import type { LearnerState } from '@/lib/contracts'
+import { THEME_SEED_MARKER_KEY } from '@/lib/theme/themes'
 import { resetWellnessPrefsWriterForTests } from './prefsMutation'
 import AccountPage from './page'
 
@@ -222,6 +223,17 @@ describe('Account page', () => {
       await waitFor(() => expect(mocks.wellnessUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ prefs: expect.objectContaining({ theme: 'amber' }) }),
       ))
+    })
+
+    // G2 (W2FIX-G fix round, wave 2 review section 6): a real pick from here
+    // is no longer an unconfirmed device seed -- the marker `seedInitialTheme`
+    // wrote must be cleared, or `useThemeSync`'s write-back skip would go on
+    // suppressing this exact choice on some other device's next reconcile.
+    it('G2: clears the OS-seed marker on a real pick', () => {
+      window.localStorage.setItem(THEME_SEED_MARKER_KEY, 'midnight')
+      render(<AccountPage />, { wrapper: wrapper().Wrapper })
+      fireEvent.click(screen.getByRole('radio', { name: 'Amber' }))
+      expect(window.localStorage.getItem(THEME_SEED_MARKER_KEY)).toBeNull()
     })
 
     // I2, fix round 1: `next-themes` reports `theme: undefined` on the

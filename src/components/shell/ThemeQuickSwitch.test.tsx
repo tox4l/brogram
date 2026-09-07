@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { resetWellnessPrefsWriterForTests } from '@/app/(app)/account/prefsMutation'
+import { THEME_SEED_MARKER_KEY } from '@/lib/theme/themes'
 import { ThemeQuickSwitch } from './ThemeQuickSwitch'
 
 const STORAGE_KEY = 'brogram:theme'
@@ -271,6 +272,18 @@ describe('ThemeQuickSwitch', () => {
       'user_id',
       USER_ID,
     )
+  })
+
+  // G2 (W2FIX-G fix round, wave 2 review section 6): a real pick from here
+  // is no longer an unconfirmed device seed -- the marker `seedInitialTheme`
+  // wrote must be cleared, or `useThemeSync`'s write-back skip would go on
+  // suppressing this exact choice on some other device's next reconcile.
+  it('G2: clears the OS-seed marker on a real pick', () => {
+    window.localStorage.setItem(THEME_SEED_MARKER_KEY, 'midnight')
+    renderSwitch()
+    fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Amber' }))
+    expect(window.localStorage.getItem(THEME_SEED_MARKER_KEY)).toBeNull()
   })
 })
 

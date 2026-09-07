@@ -87,7 +87,7 @@
 //    (`bg-accent` + `text-accent-foreground`) regardless of whether the
 //    gate was checking it.
 
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -457,6 +457,10 @@ describe('A11Y-01: the shell header, Account, dashboard, courses, onboarding, re
     ['components', 'shell', 'AppShell.tsx'],
     ['components', 'shell', 'ShellHeaderControls.tsx'],
     ['app', '(app)', 'account', 'page.tsx'],
+    // G6 (W2FIX-G fix round): the server half of the route -- still real
+    // markup at b67d9b7 (this lane's own commit), and one of the review's 15
+    // named A11Y-01 sites -- was missing from this list entirely.
+    ['app', '(app)', 'courses', 'page.tsx'],
     // A concurrent lane (V7, wave 2 review) split this route's markup out of
     // `page.tsx` into `CoursesClient.tsx` (a server/client split so the seed
     // JSON's authoring note stays server-only) partway through this fix
@@ -479,13 +483,26 @@ describe('A11Y-01: the shell header, Account, dashboard, courses, onboarding, re
   const RAW_PALETTE_RE =
     /\b(ring|bg|text|border|fill|stroke)-(emerald|amber|red|green|blue|slate|zinc|gray|neutral|stone|sky|violet|rose|orange|yellow|lime|teal|cyan|indigo|purple|fuchsia|pink)-\d+\b/g
 
-  it('every scanned file is clean', () => {
+  // G6 (fix round): `CoursesClient.tsx` did not exist at this lane's own
+  // commit -- a concurrent split landed it two commits later -- so a plain
+  // `readFileSync` here threw `ENOENT` on that exact commit, and would throw
+  // again the moment any Wave 4 screen sweep (several are mid-flight on
+  // `Dock.tsx`/`CourseCard.tsx` right now) renames or deletes an entry.
+  // Missing files are now skipped and counted instead of thrown on, so a
+  // rename is a legible failed assertion (a stale path in this list) rather
+  // than an exception that aborts the whole file's tests, and the count is
+  // asserted at zero so a genuine rename can't silently drop coverage either.
+  it('every scanned file that exists is clean, and none of them are missing', () => {
     const violations: string[] = []
+    const missing: string[] = []
     for (const segments of SCANNED_FILES) {
-      const content = readFileSync(join(SRC_DIR, ...segments), 'utf8')
+      const path = join(SRC_DIR, ...segments)
+      if (!existsSync(path)) { missing.push(segments.join('/')); continue }
+      const content = readFileSync(path, 'utf8')
       const matches = content.match(RAW_PALETTE_RE)
       if (matches) violations.push(`${segments.join('/')}: ${matches.join(', ')}`)
     }
+    expect(missing, 'scanned path no longer exists -- update SCANNED_FILES').toEqual([])
     expect(violations).toEqual([])
   })
 })

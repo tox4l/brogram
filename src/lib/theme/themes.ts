@@ -56,6 +56,19 @@ export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swat
 export const THEME_STORAGE_KEY = 'brogram:theme'
 
 /**
+ * G2 (W2FIX-G fix round, wave 2 review section 6): `seedInitialTheme` writes
+ * an OS-derived guess into the exact same storage key an explicit choice
+ * uses, with no marker -- `useThemeSync` could not tell "the OS picked this"
+ * apart from "the learner picked this," so the very first sign-in wrote the
+ * seed to `wellness.prefs.theme` as though it were a decision, and a second
+ * device's own seed then got overwritten by it. This suffix key records
+ * exactly what `seedInitialTheme` wrote, so a reconcile can skip the
+ * write-back while the local value still equals its own seed. Cleared the
+ * moment a real pick is made (`ThemeQuickSwitch.tsx`, `account/page.tsx`).
+ */
+export const THEME_SEED_MARKER_KEY = `${THEME_STORAGE_KEY}:seeded`
+
+/**
  * §8.2 (critic addendum): the empty-storage accessibility seed. Runs as a
  * plain function so it reads like real code (and can be unit-tested by
  * calling it directly), then is serialized via `.toString()` into an inline
@@ -68,6 +81,10 @@ export const THEME_STORAGE_KEY = 'brogram:theme'
  * Only acts when storage is empty -- an explicit choice is never
  * overridden, and `enableSystem` stays `false` on the provider: this seeds
  * the *stored* value once, it does not make the app follow the OS ongoing.
+ *
+ * G2 (fix round): also stamps `${storageKey}:seeded` with the same value, so
+ * `useThemeSync` can recognise this write as a guess nobody has confirmed
+ * yet, rather than a choice to round-trip through `wellness.prefs`.
  */
 export function seedInitialTheme(storageKey: string): void {
   try {
@@ -76,6 +93,7 @@ export function seedInitialTheme(storageKey: string): void {
     if (window.matchMedia('(prefers-contrast: more)').matches) next = 'arcade'
     else if (window.matchMedia('(prefers-color-scheme: light)').matches) next = 'paper'
     window.localStorage.setItem(storageKey, next)
+    window.localStorage.setItem(`${storageKey}:seeded`, next)
   } catch {
     // No storage access (locked-down browser, disabled cookies): next-themes'
     // own script falls back to `defaultTheme="midnight"` either way.
