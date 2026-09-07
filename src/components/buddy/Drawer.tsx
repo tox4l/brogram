@@ -309,7 +309,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
             className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
           >
             {messages.length === 0 && !sending && (
-              <p className="text-sm leading-relaxed text-muted-foreground">Ask about the code you are stuck on, or why a pattern keeps failing.</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">Ask about the code you are stuck on, or why an angle keeps failing.</p>
             )}
             {messages.map(message => (
               <motion.div

@@ -106,7 +106,7 @@ describe('buddy drawer', () => {
       return rejectingBuilder
     })
     setup()
-    await screen.findByText('Ask about the code you are stuck on, or why a pattern keeps failing.')
+    await screen.findByText('Ask about the code you are stuck on, or why an angle keeps failing.')
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })

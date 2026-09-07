@@ -208,7 +208,7 @@ function DerotSection() {
 
       <div>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">De-rot</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Short drills and games to keep your attention sharp between exercises.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Short drills and games to keep your attention sharp between reps.</p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">

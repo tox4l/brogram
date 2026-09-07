@@ -178,7 +178,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   if (!clo(cloId)) {
     return (
       <section className="mx-auto max-w-xl space-y-4 py-12">
-        <h1 className="text-2xl font-medium tracking-tight">This lesson could not open</h1>
+        <h1 className="text-2xl font-medium tracking-tight">This walkthrough could not open</h1>
         <p className="text-sm text-muted-foreground">That skill was not found. Choose a course to keep going.</p>
         <Link href="/courses" className="text-sm font-medium text-primary underline-offset-4 hover:underline">Back to courses</Link>
       </section>
@@ -202,7 +202,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
     if (bundleQuery.isPending || !bundleQuery.data) return <LessonSkeleton />
     return (
       <section className="mx-auto max-w-xl space-y-4 py-12">
-        <h1 className="text-2xl font-medium tracking-tight">This lesson isn&apos;t ready yet</h1>
+        <h1 className="text-2xl font-medium tracking-tight">This walkthrough isn&apos;t ready yet</h1>
         <p className="text-sm text-muted-foreground">There is no walkthrough for this skill yet. Practice reps are still open.</p>
         <Link href={course ? `/course/${course}` : '/courses'} className="text-sm font-medium text-primary underline-offset-4 hover:underline">Back to your path</Link>
       </section>

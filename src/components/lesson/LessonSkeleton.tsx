@@ -3,7 +3,7 @@
  *  prefetching for a dynamic route with no other Suspense boundary. */
 export function LessonSkeleton() {
   return (
-    <div role="status" aria-label="Loading your lesson" className="mx-auto flex max-w-3xl gap-6 py-10">
+    <div role="status" aria-label="Loading your walkthrough" className="mx-auto flex max-w-3xl gap-6 py-10">
       <div aria-hidden="true" className="hidden w-4 shrink-0 flex-col gap-2 pt-2 sm:flex">
         {Array.from({ length: 5 }, (_, index) => <div key={index} className="size-1.5 rounded-full bg-muted" />)}
       </div>
@@ -18,7 +18,7 @@ export function LessonSkeleton() {
         </div>
         <div className="h-40 w-full animate-pulse rounded-xl bg-muted" />
       </div>
-      <span className="sr-only">Loading your lesson.</span>
+      <span className="sr-only">Loading your walkthrough.</span>
     </div>
   )
 }

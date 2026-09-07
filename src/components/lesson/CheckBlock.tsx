@@ -257,7 +257,7 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
 
       {block.kind === 'micro-code' && (
         <div className="overflow-hidden rounded-lg border border-border">
-          <DynamicEditor value={code} onChange={setCode} language={block.language} logIntegrity={() => {}} disabled={locked} />
+          <DynamicEditor value={code} onChange={setCode} language={block.language} logIntegrity={() => {}} disabled={locked} label="Code" />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
             <p className="text-xs text-muted-foreground">{block.tests.length} visible {block.tests.length === 1 ? 'test' : 'tests'}</p>
             {!locked && <Button type="button" size="sm" onClick={() => void runMicroCode()} disabled={running}>{running ? 'Running…' : 'Run tests'}</Button>}

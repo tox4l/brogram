@@ -277,7 +277,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-3 gap-3 border-b border-border pb-5 sm:gap-6">
-        <div role="group" aria-label="Exercise streak" className="min-w-0 py-1">
+        <div role="group" aria-label="Rep streak" className="min-w-0 py-1">
           <p className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Flame className="size-3" aria-hidden="true" />{flameCopy.label}</p>
           <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{exerciseDays} {exerciseDays === 1 ? 'day' : 'days'}</p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{flameCopy.note}</p>

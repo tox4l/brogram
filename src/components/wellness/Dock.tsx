@@ -148,7 +148,7 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
           </select>
         </label>
         <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>Collapse on exercises and walkthroughs</span>
+          <span>Collapse on reps and walkthroughs</span>
           <input
             type="checkbox"
             checked={prefs.dock.compactOnExercise}

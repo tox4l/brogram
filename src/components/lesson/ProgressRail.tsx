@@ -5,7 +5,7 @@
 export function ProgressRail({ total, current }: { total: number; current: number }) {
   const position = Math.min(current + 1, Math.max(total, 1))
   return (
-    <nav aria-label="Lesson progress" className="hidden w-4 shrink-0 flex-col items-center gap-2 pt-2 sm:flex">
+    <nav aria-label="Walkthrough progress" className="hidden w-4 shrink-0 flex-col items-center gap-2 pt-2 sm:flex">
       <p className="sr-only" role="status">Block {position} of {total}</p>
       <ol className="flex flex-col gap-2" aria-hidden="true">
         {Array.from({ length: total }, (_, index) => (

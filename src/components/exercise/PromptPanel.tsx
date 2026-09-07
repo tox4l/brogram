@@ -20,7 +20,7 @@ function PromptText({ text }: { text: string }) {
 export function PromptPanel({ exercise, clo }: { exercise: ExercisePublic; clo?: Clo | null }) {
   const examples = exercise.kind === 'code' || exercise.kind === 'schema' ? exercise.tests.filter((test) => !test.hidden) : []
   return (
-    <section aria-label="Exercise prompt" className="min-w-0 space-y-5">
+    <section aria-label="Rep prompt" className="min-w-0 space-y-5">
       <div className="space-y-3"><h2 className="text-sm font-medium">The task</h2><PromptText text={exercise.prompt} /></div>
       {examples.length > 0 && <div className="space-y-3 border-t border-border pt-4">
         <h3 className="text-xs font-medium text-muted-foreground">Examples</h3>
