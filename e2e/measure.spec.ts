@@ -160,6 +160,11 @@ test.describe('measure: reading columns, panel geometry, targets (1280x800)', ()
     // intro -- the one reports paragraph that is genuinely a reading column (`max-w-[34rem]`), as
     // opposed to the printed report's own fixed-width A4 page (794px, a print-page convention with
     // its own wider, deliberately different measure -- out of scope for this reading-column band).
+    // Ruling (fix round, T410-06): "the reports intro" in spec family C names this empty-state
+    // prose, not the printed page -- with a course selected, `/reports` renders an `<h1>` and two
+    // tabs and no intro prose at all (`page.tsx:179-193`), so this empty state is the only reading
+    // column that route has, in any state. The printed report's own prose (`FocusLine.tsx`, a
+    // fixed 794px A4 page width) is a T4.9 surface this selector was never meant to reach.
     const svc = serviceClient(env as E2eEnv)
     const email = `brogram-measure-reports-${randomUUID()}@test.edu.qa`
     const inviteCode = randomUUID()

@@ -18,13 +18,26 @@ import { readEnv, hasEnv, serviceClient, mintSession, deleteInvitedUser, type E2
  * `getAnimations()` read on `/dashboard` came back empty at rest while the same read on `/course/
  * [code]` mid-entrance caught the path map's own 200ms node stagger -- proof this is reading a real,
  * populated list rather than an API that always reports nothing.
+ *
+ * Fix round (2026-09-08, review findings T410-03/T410-07):
+ * - The three "zero animations" enforcement surfaces named above are the lockdown overlay, the
+ *   account-status banner *and* `IntegrityPanel.tsx` (Account's permanent "Integrity, explained"
+ *   section) -- the third was missing a test entirely; it has one now.
+ * - A fixed `waitForTimeout` after a `goto` is not a guarantee an entrance animation has actually
+ *   started (a cold route under `next dev` can still be compiling/hydrating when the clock fires);
+ *   the course-home stagger check now waits for the node list to render, then polls for a
+ *   non-empty animation list, rather than assuming 100ms was enough.
+ * - `getByRole('status').first()` on /dashboard could resolve to any of several `role="status"`
+ *   nodes on that route (a loading placeholder, Buddy's own status span), not necessarily
+ *   `AccountNotice`'s frame sentence; the account-status check now scopes into the banner's own
+ *   wrapping element first.
  */
 
 const env = readEnv()
 
-function learnerState(currentCourse: string | null, nextExerciseIds: string[] = []) {
+function learnerState(currentCourse: string | null, nextExerciseIds: string[] = [], profileExtra: Record<string, unknown> = {}) {
   return {
-    profile: { onboardingComplete: true, displayName: 'Motion' },
+    profile: { onboardingComplete: true, displayName: 'Motion', ...profileExtra },
     currentCourse,
     path: currentCourse ? ['INFS2101-3'] : [],
     nextExerciseIds,
@@ -32,6 +45,18 @@ function learnerState(currentCourse: string | null, nextExerciseIds: string[] = 
     streak: { exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null },
     version: 0,
   }
+}
+
+/** `/account`'s own "How the Bro talks" section reads `profile.motivation.depth` unconditionally
+ *  once `profile` is truthy -- every other route this file visits never renders that section, so
+ *  `learnerState`'s minimal profile (missing `motivation`/`tone`/`verbosity`) is enough for them
+ *  but throws there. Only the integrity-panel test below needs this fuller shape. */
+const ACCOUNT_PROFILE_EXTRA = {
+  learningStyle: 'mixed',
+  styleVector: { visual: 0.25, verbal: 0.25, example: 0.25, theory: 0.25 },
+  tone: 'direct',
+  verbosity: 'short',
+  motivation: { why: '', beyondCourses: false, depth: 'understand', wantsAgenticCoding: false },
 }
 
 async function mintMotionUser(service: ReturnType<typeof serviceClient>, tag: string, state: ReturnType<typeof learnerState>) {
@@ -73,10 +98,17 @@ test.describe('motion budget (spec family D/E)', () => {
       // The path map's own node-entrance stagger (`NodeItem.tsx`) is this app's one reliable,
       // always-present entrance animation -- asserted non-empty so this test is proven to have
       // actually sampled something, not vacuously passed over an empty list.
+      //
+      // Fix round (T410-07): a fixed 100ms `waitForTimeout` from `goto`'s `load` is not a
+      // guarantee -- on a cold route under `next dev` (compile, then hydrate) the entrance
+      // animation can still not have started by the time the clock fires, which fails this
+      // assertion for a timing reason that has nothing to do with a real regression. Waiting for
+      // the node list to actually be visible, then polling for a non-empty animation list, waits
+      // on real evidence instead of a clock.
       await page.goto('/course/INFS2101')
-      await page.waitForTimeout(100)
+      await expect(page.locator('li[id^="clo-node-"]').first()).toBeVisible()
+      await expect.poll(async () => (await runningAnimations(page)).length, 'expected the course-home node stagger to be running at least once').toBeGreaterThan(0)
       const courseAnims = await runningAnimations(page)
-      expect(courseAnims.length, 'expected the course-home node stagger to be running at least once').toBeGreaterThan(0)
       for (const a of courseAnims) {
         expect(a.duration, 'a running animation on /course/[code] has no duration').not.toBeNull()
         expect(a.duration!, 'a running animation on /course/[code] exceeds the 900ms ceiling').toBeLessThanOrEqual(900)
@@ -206,12 +238,63 @@ test.describe('motion budget (spec family D/E)', () => {
         // `AccountNotice` renders a `role="status"` frame sentence for a warned/restricted account
         // (`src/components/shell/AccountNotice.tsx`) -- waiting on it also proves this test
         // exercised the real banner, not a page that quietly stayed in its normal state.
-        await expect(page.getByRole('status').first()).toBeVisible()
+        //
+        // Fix round (T410-07): `getByRole('status').first()` could resolve to any other
+        // `role="status"` node on /dashboard (a loading placeholder, the Buddy drawer's own status
+        // span -- both exist on this route) rather than this banner's frame sentence. Scoped to
+        // `Banner`'s own wrapping element (`div.border-b.border-rule.bg-muted`, unique to it on
+        // this route -- every other `bg-muted` use on /dashboard carries the `/40` opacity
+        // variant, a distinct Tailwind class) and to the frame sentence specifically: the banner
+        // also nests `IntegrityPanel`'s own `role="status"` loading placeholder underneath it
+        // (`DynamicIntegrityReceipt`), so `.first()` -- the frame sentence renders first in DOM
+        // order -- picks the right one of the two.
+        const banner = page.locator('div.border-b.border-rule.bg-muted')
+        await expect(banner.getByRole('status').first()).toBeVisible()
         await page.waitForTimeout(60)
         expect(await runningAnimations(page), `account-status banner must carry zero animations (reduced=${reduced})`).toHaveLength(0)
       } finally {
         await context.close()
         await service.from('profiles').update({ account_status: 'active', restricted_until: null }).eq('id', u.userId)
+        await deleteInvitedUser(service, u.userId, u.inviteCode)
+      }
+    }
+  })
+
+  test('integrity panel (Account): zero animations in both motion modes', async ({ browser }) => {
+    // Fix round (T410-03): plan step 2 and spec family E both say, word for word, "lockdown,
+    // integrity and account-status show zero animations in both modes". The lockdown overlay and
+    // the account-status banner above cover two of those three surfaces; `IntegrityPanel.tsx`
+    // (`src/app/(app)/account/page.tsx`'s permanent "Integrity, explained" section) was the third,
+    // uncovered one -- a later polish pass could give it an entrance fade or a count-up on the
+    // strike tally, in violation of standing constraint 11 ("enforcement surfaces get no
+    // personality and no juice"), and nothing in this file would have caught it.
+    test.skip(!hasEnv(env), 'Pending C5: configure Supabase and run node scripts/seed-load.mjs first.')
+    const service = serviceClient(env as E2eEnv)
+
+    for (const reduced of [false, true] as const) {
+      const u = await mintMotionUser(service, `integrity-${reduced}`, learnerState('INFS2101', [], ACCOUNT_PROFILE_EXTRA))
+      // The same `integrity_events` insert `e2e/blur-overlay.spec.ts` relies on -- not required
+      // for the panel to render (schema 0005 has no `my_integrity_breakdown()` RPC yet, so it
+      // falls back to this browser's own, empty local log either way), but it exercises the real
+      // query path rather than an account with no integrity history at all.
+      const event = await service.from('integrity_events').insert({ user_id: u.userId, type: 'blur' })
+      if (event.error) throw event.error
+      const context = await browser.newContext(reduced ? { reducedMotion: 'reduce' } : {})
+      const page = await context.newPage()
+      try {
+        const base = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'
+        await mintSession(env as E2eEnv, context, base, u.link)
+        await page.goto(`${base}/account`)
+        const heading = page.getByRole('heading', { name: 'Integrity, explained' })
+        await expect(heading).toBeVisible()
+        // The receipt loads its own breakdown asynchronously (`useIntegrityBreakdown`) -- wait for
+        // its loading placeholder to clear before measuring, the same way the lockdown and banner
+        // tests above wait for their own surface's real content rather than a fixed clock alone.
+        await expect(page.getByText('Loading the record.')).toHaveCount(0)
+        await page.waitForTimeout(60)
+        expect(await runningAnimations(page), `integrity panel must carry zero animations (reduced=${reduced})`).toHaveLength(0)
+      } finally {
+        await context.close()
         await deleteInvitedUser(service, u.userId, u.inviteCode)
       }
     }

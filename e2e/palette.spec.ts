@@ -21,84 +21,93 @@ import { readEnv, hasEnv, serviceClient, mintSession, deleteInvitedUser, type E2
  * theme-defining chrome (wordmark, nav, the swatch trigger) actually lives.
  *
  * The focus-ring contrast check reads `--ring` and `--background` through a throwaway probe
- * element's own `background-color` (never a focused element's cascaded style) so both values pass
- * through the same CSS color-serialization path: Chromium returns registered custom properties in
+ * element's own `background-color` (never a focused element's cascaded style), then paints that
+ * resolved value onto a second, throwaway 1x1 `<canvas>` and reads the pixel back, rather than
+ * parsing the resolved value's own text at all: Chromium returns registered custom properties in
  * different colour-function notations depending on which real CSS property resolves them
- * (`lab()` for `background-color`, `oklab()` for `outline-color` -- confirmed live), and reading
- * both off one property keeps this file to one small, generic Lab-to-linear-sRGB conversion instead
- * of two colour-space parsers.
+ * (`lab()` for `background-color`, `oklab()` for `outline-color` -- confirmed live), and a
+ * colour-function-specific parser (this file used to hard-fail on anything but `lab()`) breaks on
+ * the next Chromium release that changes which notation a given property serializes to.
+ * `fillStyle`'s own *getter* turned out not to be the stable middleman the obvious fix reaches
+ * for -- confirmed live against this tree that a `lab(... / 0.9)` alpha value round-trips through
+ * `ctx.fillStyle = raw; ctx.fillStyle` completely unchanged (Chromium's canvas serializer keeps a
+ * wide-gamut colour in its own notation rather than forcing it through lossy legacy `rgba()`), so
+ * that string would still need a `lab()`-shaped parser, the exact fragility this fix removes.
+ * `getImageData` has no such escape hatch: it is spec-guaranteed to return plain 8-bit sRGB bytes
+ * for a default canvas regardless of what functional notation `fillStyle` was assigned (fix round,
+ * T410-08) -- the same approach `ShaderField.tsx`'s own `readTokenColor` already uses, for the
+ * same reason. Everything downstream of that round-trip is therefore plain sRGB byte math, never
+ * colour-space conversion or string parsing.
+ *
+ * "No half-themed component" is checked two ways (fix round, T410-02): the original intra-theme
+ * settle check (two captures of the *same*, now-settled theme, 200ms apart, byte-identical) proves
+ * a component is not still mid-transition -- but it can never catch a component whose colour never
+ * changes with the theme at all, since two captures of an unchanging thing are trivially identical
+ * regardless of whether theming ever ran. The plan's own risk table names this exact gap ("A
+ * screenshot looks the same in two palettes"). The second check closes it: one capture per theme is
+ * kept, and every one of the ten distinct pairs is asserted to differ -- a hard-coded colour that
+ * never varies with `data-theme` is stable within a theme (passes the first check) but identical
+ * across all five (fails the second).
  */
 
 const env = readEnv()
 
-function parseLab(value: string): { l: number; a: number; b: number; alpha: number } {
-  const match = /^lab\(\s*([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s*(?:\/\s*([\d.]+)\s*)?\)$/.exec(value.trim())
-  if (!match) throw new Error(`palette.spec.ts: not a lab() colour -- "${value}"`)
-  return { l: Number(match[1]), a: Number(match[2]), b: Number(match[3]), alpha: match[4] !== undefined ? Number(match[4]) : 1 }
+interface SrgbColor { r: number; g: number; b: number; alpha: number }
+
+function compositeOver(fg: SrgbColor, bg: SrgbColor): SrgbColor {
+  if (fg.alpha >= 1) return fg
+  return {
+    r: fg.r * fg.alpha + bg.r * (1 - fg.alpha),
+    g: fg.g * fg.alpha + bg.g * (1 - fg.alpha),
+    b: fg.b * fg.alpha + bg.b * (1 - fg.alpha),
+    alpha: 1,
+  }
 }
 
-/** CIE Lab (D50) -> XYZ (D50) -> Bradford-adapted XYZ (D65) -> linear sRGB. Standard, public colour
- *  math (the same reference algorithm behind the CSS Color 4 `lab()` conversion), not BroGram
- *  business logic -- kept local rather than imported from `src/lib/theme/contrast.ts`, whose
- *  `wcagRatio`/`oklchToSrgb` only ever accept `oklch()` strings, the wrong colour function for what
- *  the browser hands back here. */
-function labToLinearSrgb(l: number, a: number, b: number): [number, number, number] {
-  const delta = 6 / 29
-  const finv = (t: number) => (t > delta ? t ** 3 : 3 * delta * delta * (t - 4 / 29))
-  const fy = (l + 16) / 116
-  const fx = fy + a / 500
-  const fz = fy - b / 200
-  const [xn, yn, zn] = [0.9642956764295677, 1, 0.8251046025104602] // D50 white point
-  const x = finv(fx) * xn
-  const y = finv(fy) * yn
-  const z = finv(fz) * zn
-  const xd = 0.9555766 * x - 0.0230393 * y + 0.0631636 * z
-  const yd = -0.0282895 * x + 1.0099416 * y + 0.0210077 * z
-  const zd = 0.0122982 * x - 0.020483 * y + 1.3299098 * z
-  const clamp = (v: number) => Math.min(1, Math.max(0, v))
-  return [
-    clamp(3.2404542 * xd - 1.5371385 * yd - 0.4985314 * zd),
-    clamp(-0.969266 * xd + 1.8760108 * yd + 0.041556 * zd),
-    clamp(0.0556434 * xd - 0.2040259 * yd + 1.0572252 * zd),
-  ]
-}
-
-function srgbGammaEncode(linear: number): number {
-  return linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055
-}
-
-function compositeOver(fg: [number, number, number], alpha: number, bg: [number, number, number]): [number, number, number] {
-  return [fg[0] * alpha + bg[0] * (1 - alpha), fg[1] * alpha + bg[1] * (1 - alpha), fg[2] * alpha + bg[2] * (1 - alpha)]
-}
-
-function linearizeWcag(channel: number): number {
+function linearizeWcag(byte: number): number {
+  const channel = byte / 255
   return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
 }
 
-function relativeLuminance([r, g, b]: [number, number, number]): number {
-  return 0.2126 * linearizeWcag(r) + 0.7152 * linearizeWcag(g) + 0.0722 * linearizeWcag(b)
+function relativeLuminance(c: SrgbColor): number {
+  return 0.2126 * linearizeWcag(c.r) + 0.7152 * linearizeWcag(c.g) + 0.0722 * linearizeWcag(c.b)
 }
 
-function wcagRatioFromLab(fgLab: string, bgLab: string): number {
-  const fg = parseLab(fgLab)
-  const bg = parseLab(bgLab)
-  const bgSrgb = labToLinearSrgb(bg.l, bg.a, bg.b).map(srgbGammaEncode) as [number, number, number]
-  let fgSrgb = labToLinearSrgb(fg.l, fg.a, fg.b).map(srgbGammaEncode) as [number, number, number]
-  if (fg.alpha < 1) fgSrgb = compositeOver(fgSrgb, fg.alpha, bgSrgb)
-  const lighter = Math.max(relativeLuminance(fgSrgb), relativeLuminance(bgSrgb))
-  const darker = Math.min(relativeLuminance(fgSrgb), relativeLuminance(bgSrgb))
+/** Standard WCAG contrast ratio (plain sRGB byte math -- no colour-space conversion needed once
+ *  both inputs have already been normalized to sRGB by `readRingAndBackground`'s canvas
+ *  round-trip). Not imported from `src/lib/theme/contrast.ts`: that file's `wcagRatio` only ever
+ *  accepts parsed `oklch()` tuples, the wrong shape for the plain sRGB bytes this file works with. */
+function wcagRatio(fg: SrgbColor, bg: SrgbColor): number {
+  const fgOverBg = compositeOver(fg, bg)
+  const lighter = Math.max(relativeLuminance(fgOverBg), relativeLuminance(bg))
+  const darker = Math.min(relativeLuminance(fgOverBg), relativeLuminance(bg))
   return (lighter + 0.05) / (darker + 0.05)
 }
 
-async function readRingAndBackground(page: Page): Promise<{ ring: string; background: string }> {
+async function readRingAndBackground(page: Page): Promise<{ ring: SrgbColor; background: SrgbColor }> {
   return page.evaluate(() => {
-    function probe(varName: string): string {
+    function normalizeToSrgb(raw: string): { r: number; g: number; b: number; alpha: number } {
+      // See the file header's "Fix round, T410-08": `getImageData` always returns plain 8-bit
+      // sRGB bytes for a default canvas, regardless of which CSS Color 4 notation `fillStyle` was
+      // assigned -- unlike `fillStyle`'s own getter, which can hand a wide-gamut colour straight
+      // back in its original notation.
+      const canvas = document.createElement('canvas')
+      canvas.width = 1
+      canvas.height = 1
+      const ctx = canvas.getContext('2d')!
+      ctx.clearRect(0, 0, 1, 1)
+      ctx.fillStyle = raw
+      ctx.fillRect(0, 0, 1, 1)
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
+      return { r, g, b, alpha: a / 255 }
+    }
+    function probe(varName: string) {
       const div = document.createElement('div')
       div.style.backgroundColor = `var(${varName})`
       document.body.appendChild(div)
-      const color = getComputedStyle(div).backgroundColor
+      const raw = getComputedStyle(div).backgroundColor
       div.remove()
-      return color
+      return normalizeToSrgb(raw)
     }
     return { ring: probe('--ring'), background: probe('--background') }
   })
@@ -141,23 +150,41 @@ test.describe('palette (spec family G, five applied in turn)', () => {
       await page.waitForLoadState('networkidle')
 
       let lastAppliedId: string | undefined
+      const headerShots = new Map<string, Buffer>()
       for (const theme of THEMES) {
         await chooseTheme(page, theme.name)
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme.id)
         lastAppliedId = theme.id
 
-        // No half-themed component: two captures of the same, now-settled state should be
-        // pixel-identical with animations forced to their end state.
+        // No half-themed component, part one: two captures of the same, now-settled state should
+        // be pixel-identical with animations forced to their end state -- proves nothing is still
+        // mid-transition, but says nothing about whether the theme actually applied (T410-02).
         await page.waitForTimeout(300)
         const shotA = await page.screenshot({ animations: 'disabled', clip: HEADER_CLIP })
         await page.waitForTimeout(200)
         const shotB = await page.screenshot({ animations: 'disabled', clip: HEADER_CLIP })
         expect(shotA.equals(shotB), `"${theme.name}" header band still differs 200ms apart -- a component may still be mid-transition or off-theme`).toBe(true)
+        headerShots.set(theme.id, shotA)
 
         // Focus ring contrast >= 3:1 against the background.
         const { ring, background } = await readRingAndBackground(page)
-        const ratio = wcagRatioFromLab(ring, background)
+        const ratio = wcagRatio(ring, background)
         expect(ratio, `"${theme.name}": --ring vs --background measured ${ratio.toFixed(2)}:1, below the 3:1 floor`).toBeGreaterThanOrEqual(MIN_FOCUS_RING_CONTRAST)
+      }
+
+      // No half-themed component, part two (fix round, T410-02): every one of the ten distinct
+      // pairs of palettes must render the header band differently from every other. A component
+      // whose colour never actually changes with `data-theme` (a hard-coded literal instead of a
+      // token) passes the intra-theme check above -- it never fails to be "pixel-identical to
+      // itself" -- but is caught here, since it is then pixel-identical across *every* theme.
+      for (const a of THEMES) {
+        for (const b of THEMES) {
+          if (a.id >= b.id) continue
+          expect(
+            headerShots.get(a.id)!.equals(headerShots.get(b.id)!),
+            `"${a.name}" and "${b.name}" render the header band identically -- a palette did not apply`,
+          ).toBe(false)
+        }
       }
 
       // The choice survives a reload (next-themes' own client-only localStorage read, the same

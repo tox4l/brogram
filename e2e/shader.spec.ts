@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { test, expect, type Page } from '@playwright/test'
+import { readEnv, hasEnv, serviceClient, mintSession, deleteInvitedUser, type E2eEnv } from './support/session'
 
 /**
  * Wave 4 spec §10 family F (plan T4.10 step 4). `[data-shader-surface]` must never appear on
@@ -28,6 +30,23 @@ import { test, expect, type Page } from '@playwright/test'
  *    gone from the tree by then. `HTMLCanvasElement.prototype.getContext` is patched (an
  *    `addInitScript`, before any app code runs) to keep the one `webgl2` context object this page
  *    ever creates, so `isContextLost()` stays callable long after its canvas has been swapped out.
+ *
+ * Fix round (2026-09-08, review finding T410-01): the "visibly non-uniform" pixel read had two bugs.
+ * It stepped one byte at a time across an RGBA buffer, folding the always-255 alpha byte into `max` --
+ * the metric degenerated to `255 - darkestRGBchannel`, which reads as real variation on any dark, flat
+ * fill. And a bare `max - min` range lets one antialiased edge pixel carry the whole assertion. Both
+ * are fixed below: the scan skips every 4th (alpha) byte, and the assertion is on the sample's
+ * *variance*, not its range. Proven live against this tree: a probe div forced to a flat
+ * `rgb(9,9,12)` fill scores range 246 under the old, alpha-inclusive metric (and would have passed
+ * `> 10`) but a real, near-zero variance (0.89) under the fixed one.
+ *
+ * The clip rectangle is also no longer a hard-coded `{0,0,200,200}` -- that square was shader-only
+ * only because the login card happens to be centred and `max-w-[34rem]`; a wider or repositioned
+ * card (T4.9's call, not this file's) could silently start clipping into it with nobody noticing.
+ * It is now derived from two real, live bounding boxes (the shader surface's own, and the login
+ * card's) at test time: a square anchored at the surface's top-left corner, sized to the smaller of
+ * the two real margins around the card. That square is geometrically guaranteed to never overlap the
+ * card, at any viewport or card size, rather than assumed to.
  */
 
 /** A unique property key from `ShaderField.tsx`'s own `SHADER_CONTEXT_ATTRIBUTES` object literal --
@@ -42,6 +61,25 @@ const SHADER_CHUNK_MARKER = 'failIfMajorPerformanceCaveat'
 const SETTLE_MS = 4500
 const SAMPLE_AT_MS = 6000
 const RECHECK_AT_MS = 12000
+
+/** Smallest square worth reading a variance from -- below this, a viewport or card change has
+ *  eaten so much of the margin that the sample would be noise-dominated regardless of the shader. */
+const MIN_CLIP_PX = 40
+const MAX_CLIP_PX = 200
+/** A truly flat single-colour fill measures variance under ~1 (PNG re-encode noise only, confirmed
+ *  live: a probe div forced to `rgb(9,9,12)` scored 0.89); a real, painted frame on this tree
+ *  measures in the tens. 15 sits with real margin above the former and below the latter. */
+const MIN_NONUNIFORM_VARIANCE = 15
+
+/** A square clip guaranteed to sit entirely outside `cardBox`, anchored at `surfaceBox`'s own
+ *  top-left corner -- see the file header's "Fix round" note. Derived from live geometry so a
+ *  resized or repositioned card (T4.9's call) can never silently start bleeding into the sample. */
+function shaderOnlyClip(surfaceBox: { x: number; y: number }, cardBox: { x: number; y: number }) {
+  const marginX = cardBox.x - surfaceBox.x
+  const marginY = cardBox.y - surfaceBox.y
+  const size = Math.min(MAX_CLIP_PX, marginX, marginY)
+  return { size, clip: { x: Math.round(surfaceBox.x), y: Math.round(surfaceBox.y), width: Math.round(size), height: Math.round(size) } }
+}
 
 async function armShaderProbes(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -97,6 +135,57 @@ test.describe('shader containment (spec family F)', () => {
     expect(grep.trim(), `ShaderSurface must never be imported by dashboard, lesson, exercise or an enforcement surface; found: ${grep}`).toBe('')
   })
 
+  test('[data-shader-surface] has zero count on real dashboard/lesson/exercise navigations, and under lockdown', async ({ page, context, baseURL }) => {
+    // Fix round (T410-04): the git-grep test above pins the *source-level* fact that only three
+    // files ever import `ShaderSurface`, but it never actually loads dashboard/lesson/exercise --
+    // a shell- or layout-level `<ShaderSurface>` (e.g. `AppShell.tsx` or `(app)/layout.tsx`, neither
+    // named in that grep's path list) would slip past it silently. This test mints a real learner
+    // and checks the DOM directly on each route, plus under a real lockdown overlay.
+    const env = readEnv()
+    test.skip(!hasEnv(env), 'Pending C5: configure Supabase and run node scripts/seed-load.mjs first.')
+    const service = serviceClient(env as E2eEnv)
+    const seeded = await service.from('exercises').select('id').eq('clo_id', 'INFS2101-3').eq('title', 'Username check').single()
+    if (seeded.error) throw new Error('Load the smoke seed before running shader.spec.ts.', { cause: seeded.error })
+    const exerciseId: string = seeded.data.id
+    const email = `brogram-shader-${randomUUID()}@test.edu.qa`
+    const inviteCode = randomUUID()
+    const invite = await service.from('invites').insert({ code: inviteCode, email })
+    if (invite.error) throw invite.error
+    const link = await service.auth.admin.generateLink({ type: 'magiclink', email })
+    if (link.error) throw link.error
+    const userId = link.data.user.id
+    const state = {
+      profile: { onboardingComplete: true, displayName: 'Shader' },
+      currentCourse: 'INFS2101',
+      path: ['INFS2101-3'],
+      nextExerciseIds: [exerciseId],
+      mastery: {},
+      streak: { exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null },
+      version: 0,
+    }
+    const inserted = await service.from('learner_state').insert({ user_id: userId, state, version: 0 })
+    if (inserted.error) throw inserted.error
+
+    try {
+      await mintSession(env as E2eEnv, context, baseURL!, link.data)
+      for (const path of ['/dashboard', '/lesson/INFS2101-3', `/exercise/${exerciseId}`]) {
+        await page.goto(path)
+        await page.waitForLoadState('networkidle')
+        await expect(page.locator('[data-shader-surface]'), `${path} rendered a shader surface`).toHaveCount(0)
+      }
+
+      // The lockdown overlay too, the same synthetic-blur technique motion.spec.ts and
+      // blur-overlay.spec.ts already use, independent of the OS actually switching windows.
+      await page.goto(`/exercise/${exerciseId}`)
+      await expect(page.getByTestId('exercise-workspace')).toBeVisible()
+      await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+      await expect(page.getByTestId('lockdown-overlay')).toBeVisible()
+      await expect(page.locator('[data-shader-surface]'), 'lockdown overlay rendered a shader surface').toHaveCount(0)
+    } finally {
+      await deleteInvitedUser(service, userId, inviteCode)
+    }
+  })
+
   test('live (Eclipse, motion on): one context ever, RAF flat after settle, context lost and the frozen surface still visibly non-uniform', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
     const page = await context.newPage()
@@ -112,6 +201,16 @@ test.describe('shader containment (spec family F)', () => {
     await expect(page.locator('canvas[data-shader-field]')).toBeVisible()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'eclipse')
 
+    // Two live boxes to derive a shader-only clip from -- see the file header's "Fix round" note.
+    // `main > div` nth(1) is the login card (the surface itself is `main > div` nth(0), matching
+    // `ShaderSurface`'s and `LoginPage`'s own sibling order in `src/app/(auth)/login/page.tsx`).
+    const surfaceBox = await page.locator('[data-shader-surface]').boundingBox()
+    const cardBox = await page.locator('main > div').nth(1).boundingBox()
+    expect(surfaceBox, 'shader surface box').not.toBeNull()
+    expect(cardBox, 'login card box').not.toBeNull()
+    const { size, clip } = shaderOnlyClip(surfaceBox!, cardBox!)
+    expect(size, 'no shader-only margin left around the login card to sample -- viewport or card size changed').toBeGreaterThanOrEqual(MIN_CLIP_PX)
+
     await page.waitForTimeout(Math.max(0, SAMPLE_AT_MS - (Date.now() - startedAt)))
     const glCount = await page.evaluate(() => (window as unknown as { __glContexts: unknown[] }).__glContexts.length)
     expect(glCount, 'exactly one live webgl2 context for the whole page load').toBe(1)
@@ -120,14 +219,11 @@ test.describe('shader containment (spec family F)', () => {
     await expect(page.locator('canvas[data-shader-frozen="true"]')).toBeVisible()
     const rafAtSample = await page.evaluate(() => (window as unknown as { __rafCount: number }).__rafCount)
 
-    // Screenshot the visible margin outside the centred login card (the shader canvas spans the
-    // whole `<main>`; the card sits on top of most of it) and decode it back inside the page --
-    // this reads what the compositor painted, sidestepping the getContext('2d') lock this file's
-    // own header documents.
-    const clip = { x: 0, y: 0, width: 200, height: 200 }
+    // Screenshot the shader-only margin and decode it back inside the page -- this reads what the
+    // compositor painted, sidestepping the getContext('2d') lock this file's own header documents.
     const shot = await page.screenshot({ clip })
     const dataUrl = `data:image/png;base64,${shot.toString('base64')}`
-    const range = await page.evaluate(async (src) => {
+    const variance = await page.evaluate(async (src) => {
       const img = new Image()
       img.src = src
       await img.decode()
@@ -137,16 +233,23 @@ test.describe('shader containment (spec family F)', () => {
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0)
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-      let min = 255
-      let max = 0
+      // Every 4th byte is alpha, always 255 for an opaque page render -- folding it into a
+      // min/max scan degenerates the metric into "255 minus the darkest colour channel", which
+      // reads as real variation on any dark, perfectly flat fill (fix round, T410-01).
+      let sum = 0
+      let sumSq = 0
+      let n = 0
       for (let i = 0; i < data.length; i += 1) {
+        if (i % 4 === 3) continue
         const value = data[i]
-        if (value < min) min = value
-        if (value > max) max = value
+        sum += value
+        sumSq += value * value
+        n += 1
       }
-      return max - min
+      const mean = sum / n
+      return sumSq / n - mean * mean
     }, dataUrl)
-    expect(range, 'the frozen surface should still show real byte-level variation, not a flat fill').toBeGreaterThan(10)
+    expect(variance, 'the frozen surface should still show real pixel variance, not a flat fill').toBeGreaterThan(MIN_NONUNIFORM_VARIANCE)
 
     await page.waitForTimeout(Math.max(0, RECHECK_AT_MS - (Date.now() - startedAt)))
     const rafAtRecheck = await page.evaluate(() => (window as unknown as { __rafCount: number }).__rafCount)
