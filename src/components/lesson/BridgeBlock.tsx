@@ -38,7 +38,7 @@ export function BridgeBlock({ block, course, completed, onComplete }: {
 
   return (
     <section aria-label="Next" className="space-y-4 rounded-xl border border-border bg-card p-4">
-      <p className="text-sm leading-relaxed">{block.say}</p>
+      <p className="text-body">{block.say}</p>
       {completed ? (
         <Link ref={linkRef} href={`/course/${course}`} className={buttonVariants({ variant: 'default' })}>
           Back to your path<ArrowRight aria-hidden="true" />

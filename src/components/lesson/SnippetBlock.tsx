@@ -96,22 +96,22 @@ export function SnippetBlock({ block, packages, reduced }: { block: SnippetBlock
           />
         )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
-        {block.caption && <p className="text-xs text-muted-foreground" aria-describedby={block.runnable ? undefined : idPrefix}>{block.caption}</p>}
+        {block.caption && <p className="text-micro text-muted-foreground" aria-describedby={block.runnable ? undefined : idPrefix}>{block.caption}</p>}
         {block.runnable && (
           <Button type="button" variant="outline" size="sm" onClick={() => void run()} disabled={running}>
             <Play aria-hidden="true" />{running ? 'Running…' : 'Run'}
           </Button>
         )}
       </div>
-      {isJavaStatic && <p role="note" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">This one&apos;s read-only for now — Java runs land soon.</p>}
+      {isJavaStatic && <p role="note" className="border-t border-border px-3 py-2 text-micro text-muted-foreground">This one&apos;s read-only for now — Java runs land soon.</p>}
       {running && progress?.phase === 'loading' && (
-        <p role="status" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Loading {progress.packageName}…</p>
+        <p role="status" className="border-t border-border px-3 py-2 text-micro text-muted-foreground">Loading {progress.packageName}…</p>
       )}
-      {error && <p role="alert" className="border-t border-border px-3 py-2 text-xs text-destructive">{error}</p>}
+      {error && <p role="alert" className="border-t border-border px-3 py-2 text-small text-destructive">{error}</p>}
       {(stdout || stderr) && (
         <div className="space-y-2 border-t border-border p-3">
-          {stdout && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{stdout}</pre>}
-          {stderr && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-destructive/40 p-2 font-mono text-xs">{stderr}</pre>}
+          {stdout && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-code">{stdout}</pre>}
+          {stderr && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-destructive/40 p-2 font-mono text-code">{stderr}</pre>}
         </div>
       )}
     </section>

@@ -110,10 +110,10 @@ export function CreateAccountForm({ onCreated }: CreateAccountFormProps) {
           {busy ? 'Creating…' : 'Create account'}
         </Button>
       </form>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-small text-destructive">{error}</p>}
       {created && (
         <div role="status" className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
-          <div className="space-y-1 text-sm leading-relaxed">
+          <div className="space-y-1 text-body">
             <p>
               Account created for {created.email}. Temporary password: <span className="font-mono">{created.password}</span> — hand this to the learner now, it will not be shown again.
             </p>
@@ -122,7 +122,7 @@ export function CreateAccountForm({ onCreated }: CreateAccountFormProps) {
           <button
             type="button"
             onClick={() => setCreated(null)}
-            className="shrink-0 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            className="shrink-0 text-micro text-muted-foreground underline underline-offset-4 hover:text-foreground"
           >
             Dismiss
           </button>

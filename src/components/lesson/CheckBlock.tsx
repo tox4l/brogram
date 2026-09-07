@@ -67,9 +67,9 @@ function SpotTheBugLines({ code, selected, onToggle, disabled }: {
             onFocus={() => setFocusIndex(index)}
             onKeyDown={(event) => onKeyDown(event, index)}
             onClick={() => onToggle(lineNumber)}
-            className={`flex w-full items-baseline gap-3 px-3 py-1 text-left font-mono text-sm outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60 ${checked ? 'bg-primary/10 text-primary' : ''}`}
+            className={`flex w-full items-baseline gap-3 px-3 py-1 text-left font-mono text-code outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60 ${checked ? 'bg-primary/10 text-primary' : ''}`}
           >
-            <span aria-hidden="true" className="w-6 shrink-0 text-right text-xs text-muted-foreground">{lineNumber}</span>
+            <span aria-hidden="true" className="w-6 shrink-0 text-right text-muted-foreground">{lineNumber}</span>
             <code className="whitespace-pre">{line || ' '}</code>
           </button>
         )
@@ -86,7 +86,7 @@ function FillBlankTemplate({ template, values, onChange, disabled }: {
 }) {
   const parts = template.split(/__(\d+)__/g)
   return (
-    <p className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-4 font-mono text-sm">
+    <p className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-4 font-mono text-code">
       {parts.map((part, index) => (
         index % 2 === 1
           ? <Input key={index} aria-label={`Blank ${part}`} value={values[part] ?? ''} disabled={disabled} className="inline-flex w-28 font-mono" onChange={(event) => onChange(part, event.target.value)} />
@@ -190,13 +190,13 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
 
   return (
     <section aria-label="Check" className="space-y-4 rounded-xl border border-border p-4">
-      <p className="text-sm font-medium">{block.prompt}</p>
+      <p className="text-body font-medium">{block.prompt}</p>
 
       {block.kind === 'predict-output' && (
         <div className="space-y-3">
-          <pre className="overflow-x-auto rounded-md bg-muted/50 p-3 font-mono text-xs leading-6"><code>{block.code}</code></pre>
-          <label className="block space-y-1.5">
-            <span className="text-xs text-muted-foreground">What does this print?</span>
+          <pre className="overflow-x-auto rounded-lg bg-muted/50 p-3 font-mono text-code"><code>{block.code}</code></pre>
+          <label className="block space-y-2">
+            <span className="text-micro text-muted-foreground">What does this print?</span>
             <textarea
               value={predictText}
               onChange={(event) => setPredictText(event.target.value)}
@@ -206,7 +206,7 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
               autoCorrect="off"
               autoCapitalize="off"
               rows={3}
-              className="w-full resize-y rounded-lg border border-input bg-background p-2.5 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+              className="w-full resize-y rounded-lg border border-input bg-background p-3 font-mono text-code outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
             />
           </label>
           {!locked && <Button type="button" size="sm" onClick={() => grade({ kind: 'predict-output', text: predictText })}>Check answer</Button>}
@@ -225,11 +225,11 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
                   aria-checked={picked}
                   disabled={locked}
                   onClick={() => { setChosenIndex(index); grade({ kind: 'choose', index }) }}
-                  className={`w-full rounded-lg border p-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${picked ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}
+                  className={`w-full rounded-lg border p-3 text-left text-body outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${picked ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}
                 >
                   {option}
                 </button>
-                {picked && verdict?.why && <p className="mt-1.5 px-1 text-xs text-muted-foreground">{verdict.why}</p>}
+                {picked && verdict?.why && <p className="mt-2 px-1 text-micro text-muted-foreground">{verdict.why}</p>}
               </div>
             )
           })}
@@ -264,15 +264,15 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
         <div className="overflow-hidden rounded-lg border border-border">
           <DynamicEditor value={code} onChange={setCode} language={block.language} logIntegrity={() => {}} disabled={locked} label="Code" />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
-            <p className="text-xs text-muted-foreground">{block.tests.length} visible {block.tests.length === 1 ? 'test' : 'tests'}</p>
+            <p className="text-micro text-muted-foreground">{block.tests.length} visible {block.tests.length === 1 ? 'test' : 'tests'}</p>
             {!locked && <Button type="button" size="sm" onClick={() => void runMicroCode()} disabled={running}>{running ? 'Running…' : 'Run tests'}</Button>}
           </div>
           {running && runtimeProgress?.phase === 'loading' && (
-            <p role="status" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Loading {runtimeProgress.packageName}…</p>
+            <p role="status" className="border-t border-border px-3 py-2 text-micro text-muted-foreground">Loading {runtimeProgress.packageName}…</p>
           )}
-          {runError && <p role="alert" className="border-t border-border px-3 py-2 text-xs text-destructive">{runError}</p>}
+          {runError && <p role="alert" className="border-t border-border px-3 py-2 text-small text-destructive">{runError}</p>}
           {results.length > 0 && (
-            <ul className="divide-y divide-border border-t border-border text-xs">
+            <ul className="divide-y divide-border border-t border-border text-small">
               {block.tests.map((test, index) => {
                 const result = results.find((item) => item.testId === test.id)
                 return (
@@ -297,7 +297,7 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
         <p
           ref={verdictRef}
           tabIndex={-1}
-          className={`flex items-center gap-2 text-sm font-medium outline-none ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}
+          className={`flex items-center gap-2 text-body font-semibold outline-none ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}
         >
           {verdict.right ? <Check aria-hidden="true" className="size-4" /> : <X aria-hidden="true" className="size-4" />}
           {verdict.right ? line('lesson.verdict.right') : line('lesson.verdict.notYet')}
@@ -313,8 +313,8 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
             when `gradeCheck` pins `reveal` to 'explain' for every attempt
             after the first and the explain paragraph itself stops changing. */}
         {verdict && !verdict.right && <span className="sr-only">Attempt {attempts}</span>}
-        {verdict?.reveal === 'hint' && <p className="text-sm text-muted-foreground">{block.hint}</p>}
-        {verdict?.reveal === 'explain' && <p className="text-sm text-muted-foreground">{block.explain}</p>}
+        {verdict?.reveal === 'hint' && <p className="text-small text-muted-foreground">{block.hint}</p>}
+        {verdict?.reveal === 'explain' && <p className="text-small text-muted-foreground">{block.explain}</p>}
       </div>
     </section>
   )

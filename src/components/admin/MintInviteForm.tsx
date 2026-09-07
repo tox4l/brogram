@@ -43,7 +43,7 @@ export function MintInviteForm({ onMint, busy = false }: MintInviteFormProps) {
           aria-invalid={error ? true : undefined}
           className="w-72"
         />
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {error && <p className="text-small text-destructive">{error}</p>}
       </div>
       <Button type="submit" disabled={busy}>
         {busy ? 'Minting...' : 'Mint invite'}

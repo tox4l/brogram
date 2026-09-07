@@ -238,9 +238,9 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   if (!clo(cloId)) {
     return (
       <section className="mx-auto max-w-xl space-y-4 py-12">
-        <h1 className="text-2xl font-medium tracking-tight">This walkthrough could not open</h1>
-        <p className="text-sm text-muted-foreground">That skill was not found. Choose a course to keep going.</p>
-        <Link href="/courses" className="text-sm font-medium text-primary underline-offset-4 hover:underline">Back to courses</Link>
+        <h1 className="text-h1 font-display text-foreground">This walkthrough could not open</h1>
+        <p className="text-body text-muted-foreground">That skill was not found. Choose a course to keep going.</p>
+        <Link href="/courses" className="text-body font-medium text-primary underline-offset-4 hover:underline">Back to courses</Link>
       </section>
     )
   }
@@ -262,9 +262,9 @@ export function LessonView({ cloId }: { cloId: CloId }) {
     if (bundleQuery.isPending || !bundleQuery.data) return <LessonSkeleton />
     return (
       <section className="mx-auto max-w-xl space-y-4 py-12">
-        <h1 className="text-2xl font-medium tracking-tight">This walkthrough isn&apos;t ready yet</h1>
-        <p className="text-sm text-muted-foreground">There is no walkthrough for this skill yet. Practice reps are still open.</p>
-        <Link href={course ? `/course/${course}` : '/courses'} className="text-sm font-medium text-primary underline-offset-4 hover:underline">Back to your path</Link>
+        <h1 className="text-h1 font-display text-foreground">This walkthrough isn&apos;t ready yet</h1>
+        <p className="text-body text-muted-foreground">There is no walkthrough for this skill yet. Practice reps are still open.</p>
+        <Link href={course ? `/course/${course}` : '/courses'} className="text-body font-medium text-primary underline-offset-4 hover:underline">Back to your path</Link>
       </section>
     )
   }
@@ -275,7 +275,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   const skipped = progress?.status === 'skipped'
 
   return (
-    <div className="mx-auto flex max-w-5xl gap-6 py-10">
+    <div className="mx-auto flex max-w-5xl gap-6 py-12">
       <style>{SHAKE_STYLE}</style>
       <ProgressRail total={total} current={currentBlockIndex} />
       {/* Fix round 3 (I3, controller ruling 2026-09-07 20:48 Doha): `ch` is
@@ -291,16 +291,16 @@ export function LessonView({ cloId }: { cloId: CloId }) {
        *  structural wrapper. */}
       <div className="min-w-0 max-w-[34rem] flex-1 space-y-6">
         <div className="flex items-center justify-between gap-3">
-          <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-            <ArrowLeft className="size-3" aria-hidden="true" />Path map
+          <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-2 rounded-lg text-micro text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <ArrowLeft className="size-4" aria-hidden="true" />Path map
           </Link>
           <SkipButton onSkip={skip} disabled={skipped} />
         </div>
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-medium tracking-tight">{lesson.title}</h1>
-            {lesson.draft && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Draft</span>}
+            <h1 className="text-h1 font-display text-foreground">{lesson.title}</h1>
+            {lesson.draft && <span className="rounded-full border border-border px-2 py-1 text-micro text-muted-foreground">Draft</span>}
           </div>
           <p className="font-prose text-lede leading-[1.6] text-lesson-foreground">
             <Reveal mode="lines" reduced={reducedMotion}>{lesson.hook}</Reveal>
@@ -308,12 +308,12 @@ export function LessonView({ cloId }: { cloId: CloId }) {
         </div>
 
         {staleNotice && (
-          <p role="status" className="rounded-lg border border-dashed border-input p-3 text-xs text-muted-foreground">
+          <p role="status" className="rounded-lg border border-dashed border-input p-3 text-micro text-muted-foreground">
             This walkthrough was updated since you last opened it.
           </p>
         )}
         {skipped && (
-          <p role="status" className="rounded-lg border border-dashed border-input p-3 text-xs text-muted-foreground">
+          <p role="status" className="rounded-lg border border-dashed border-input p-3 text-micro text-muted-foreground">
             Marked as skipped. You can still read through if you want.
           </p>
         )}

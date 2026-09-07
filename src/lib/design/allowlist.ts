@@ -36,7 +36,10 @@ export type AllowlistEntry = {
   note: string
 }
 
-const T4_4_LESSON = ['src/components/lesson', 'src/app/(app)/lesson']
+// T4_4_LESSON deleted (W4FIX-D): src/components/lesson and src/app/(app)/lesson
+// now hold zero violations under every rule that used to name this constant
+// (raw-text-scale, spacing-scale, radii, icon-size) -- the whole point of a
+// path-prefix allowlist entry per its own file-header comment.
 // T4_5_SHELL (src/components/shell, src/components/wellness, src/components/buddy, src/components/ui,
 // src/app/(app)/account, src/components/account): every rule cleared to zero across the whole row
 // except two narrow, load-bearing exceptions -- see the individual 'src/components/wellness' (spacing-
@@ -62,14 +65,21 @@ const T4_4_LESSON = ['src/components/lesson', 'src/app/(app)/lesson']
 // owner at all), so they are tracked here under **T4.11** -- the wave-
 // review task -- as carried debt pending a ruling, not silently reported as
 // clean and not silently reported as somebody else's job.
-const T4_11_CARRIED_DEBT = ['src/app/(admin)', 'src/components/admin', 'src/app/layout.tsx', 'src/app/error.tsx']
+// W4FIX-D narrowed this to `layout.tsx` alone: `(admin)`, `components/admin`
+// and `error.tsx` were swept (their fix lane owned exactly those paths) and
+// now hold zero violations under every rule that named this constant.
+// `layout.tsx` is the second bundle lane's file this same round, still
+// carried here rather than fixed by a lane that does not own it.
+const T4_11_CARRIED_DEBT = ['src/app/layout.tsx']
 
 function entriesFor(owner: string, prefixes: string[], note: string): AllowlistEntry[] {
   return prefixes.map((pathPrefix) => ({ pathPrefix, owner, note }))
 }
 
-const ALL_SCREENS_NOTE = (task: string) =>
-  `Pre-existing debt measured before ${task}'s own screen sweep (plan section "Group B") lands; ${task} deletes this entry once its owned paths hold zero.`
+// ALL_SCREENS_NOTE (the "pre-existing debt measured before this task's own
+// screen sweep lands" helper) is deleted: every entry that used it (T4.4's
+// four rule rows, T4.5's motion-css row) is gone now that those paths hold
+// zero, and it had no other caller left.
 
 const CARRIED_DEBT_NOTE =
   'No Wave 4 sweep owns this path (plan section 4 omits it). Flagged by the T4.1 fix round (review finding I3) rather than ' +
@@ -78,7 +88,9 @@ const CARRIED_DEBT_NOTE =
 
 export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
   'raw-text-scale': [
-    ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
+    // T4.4's entry deleted (W4FIX-D): src/components/lesson now holds zero
+    // raw type-scale classes -- every site maps to the additive scale
+    // (--text-micro|small|body|lede|h1..h3|code).
     // T4.5's entry deleted: shell/wellness/buddy/account (ui is out of this
     // rule's scope by design) now hold zero raw type-scale classes -- every
     // site maps to the additive scale (--text-micro|small|body|lede|h1..h3).
@@ -92,6 +104,9 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // headline numerals and the level-up celebration's big number).
     // T4.9's entry deleted: reports/report/(auth)/onboarding/page.tsx now
     // hold zero raw type-scale classes.
+    // T4.11's entry narrowed (W4FIX-D): `(admin)`, `components/admin` and
+    // `error.tsx` were swept and now hold zero -- `T4_11_CARRIED_DEBT` is
+    // just `layout.tsx` (the second bundle lane's file this same round).
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
   'palette-classes': [
@@ -112,7 +127,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // sections, login and the landing page moved to a semantic token.
   ],
   'spacing-scale': [
-    ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
+    // T4.4's entry deleted (W4FIX-D): src/components/lesson now sits on the
+    // eight-step rhythm.
     // T4.5's entry narrowed from the whole shell/wellness/buddy/ui/account
     // row to one component: `src/components/wellness/PrayerTimes.tsx`'s
     // toggle-switch knob is inset `top-0.5 left-0.5` (2px) inside a `h-4`
@@ -139,10 +155,15 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // T4.8's entry deleted: derot/derot-components/rewards now sit on the
     // eight-step rhythm.
     // T4.9's entry deleted: every owned path now sits on the eight-step rhythm.
+    // T4.11's entry narrowed (W4FIX-D): `(admin)` and `components/admin`
+    // were swept and now sit on the rhythm too (`error.tsx` never carried a
+    // spacing hit under this rule) -- `T4_11_CARRIED_DEBT` is just
+    // `layout.tsx` now.
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
   radii: [
-    ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
+    // T4.4's entry deleted (W4FIX-D): src/components/lesson now sits on
+    // rounded-(lg|xl|2xl|full).
     // T4.5's entry narrowed from the whole shell/wellness/buddy/ui/account
     // row to one component: `src/components/buddy/Drawer.tsx`'s full-height
     // side panel is flush with three screen edges (`inset-y-0 right-0`), so
@@ -163,10 +184,16 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // T4.8's entry deleted: derot/derot-components/rewards now sit on
     // rounded-(lg|xl|2xl|full).
     // T4.9's entry deleted: every owned path now sits on rounded-(lg|xl|2xl|full).
+    // T4.11's entry narrowed (W4FIX-D): `(admin)` was swept (`AdminDashboard.tsx`'s
+    // three `rounded-md` skeleton bars) and now sits on rounded-(lg|xl|2xl|full)
+    // (`components/admin` and `error.tsx` never carried a radii hit) --
+    // `T4_11_CARRIED_DEBT` is just `layout.tsx` now.
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
+  // 'icon-size': T4.4's entry deleted (W4FIX-D): src/components/lesson's one
+  // hit (LessonView.tsx's back-link ArrowLeft) now renders at size-4 -- no
+  // allowlist entry, and therefore no prefix constant, remains for this rule.
   'icon-size': [
-    ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
     // T4.5's entry deleted: every lucide icon under shell/wellness/buddy/ui/
     // account now renders at size-4 (16px) or larger -- the wellness rail's
     // five inline size-3.5 glyphs (Dock, Pomodoro, PrayerTimes,
@@ -181,19 +208,22 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // Celebration.tsx's dismiss glyph (all previously size-3) now render at
     // size-4.
   ],
-  'motion-css': [
-    // src/components/ui/* (badge, button, progress, tabs: transition-all)
-    // and src/components/ui/drawer.tsx (an animated height in its own
-    // arbitrary transition-property list) are T4.5's.
-    // T4.8's entry deleted: src/components/rewards had no genuine
-    // `transition: all`/`ease-in`/animated-width-height-top-left hit --
-    // the rule's own comment ("ease-in on celebration timing, pre-T4.2-
-    // registerEases") described a `power1/2.out` GSAP ease string, which
-    // this rule's regex never matched in the first place (it looks for the
-    // CSS/Tailwind `ease-in` token); the real fix for that mismatch is
-    // T4.2's `registerEases()` (already landed), not a source change here.
-    ...entriesFor('T4.5', ['src/components/ui'], ALL_SCREENS_NOTE('T4.5')),
-  ],
+  // 'motion-css': T4.5's entry deleted (W4FIX-D): `progress.tsx` fills with
+  // `transform: scaleX()` (its own `style.width` pinned to 100%, overriding
+  // base-ui's inline percentage width) instead of an animated width behind
+  // `transition-all`, and `drawer.tsx` no longer lists `height` in its
+  // `transition-[...]` arbitrary value (this tree's one consumer never sets
+  // `snapPoints`, so `--drawer-content-height` never actually changes value
+  // for it) -- both now animate transform/opacity only. No allowlist entry,
+  // and therefore no prefix constant, remains for this rule.
+  // T4.8's entry deleted: src/components/rewards had no genuine
+  // `transition: all`/`ease-in`/animated-width-height-top-left hit --
+  // the rule's own comment ("ease-in on celebration timing, pre-T4.2-
+  // registerEases") described a `power1/2.out` GSAP ease string, which
+  // this rule's regex never matched in the first place (it looks for the
+  // CSS/Tailwind `ease-in` token); the real fix for that mismatch is
+  // T4.2's `registerEases()` (already landed), not a source change here.
+  'motion-css': [],
   // 'filled-buttons-per-route': T4.7's only entry (exercise/[id]/page.tsx's
   // two filled-variant Buttons -- Submit and Next rep, both mounted at once
   // once a rep is passed) is deleted: Submit now steps down to

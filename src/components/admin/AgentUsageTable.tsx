@@ -33,7 +33,7 @@ interface TokenTotal {
 export function AgentUsageTable({ rows }: { rows: AgentUsageRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-body text-muted-foreground">
         No agent calls recorded yet.
       </div>
     )
@@ -72,7 +72,7 @@ export function AgentUsageTable({ rows }: { rows: AgentUsageRow[] }) {
     <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
       <table className="w-full border-collapse text-[13px] tabular-nums">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-b border-border text-left text-micro text-muted-foreground">
             <th className="px-3 py-2 font-medium">Agent</th>
             {days.map((day) => (
               <th key={day} className="px-3 py-2 font-medium whitespace-nowrap">
@@ -99,18 +99,18 @@ export function AgentUsageTable({ rows }: { rows: AgentUsageRow[] }) {
             return (
               <Fragment key={agent}>
                 <tr data-agent-row={agent} className="border-b border-border/30">
-                  <td className="px-3 py-1.5 font-medium capitalize">{agent}</td>
+                  <td className="px-3 py-2 font-medium capitalize">{agent}</td>
                   {cells.map(({ day, calls, fallback }) => (
-                    <td key={day} data-day={day} className="px-3 py-1.5">
+                    <td key={day} data-day={day} className="px-3 py-2">
                       {calls} <span className="text-muted-foreground">({fallback})</span>
                     </td>
                   ))}
-                  <td className="px-3 py-1.5 font-medium">
+                  <td className="px-3 py-2 font-medium">
                     {agentCalls} <span className="text-muted-foreground">({agentFallback})</span>
                   </td>
                 </tr>
                 <tr className="border-b border-border/60">
-                  <td colSpan={days.length + 2} data-agent-tokens={agent} className="px-3 pt-0 pb-1.5 text-xs text-muted-foreground">
+                  <td colSpan={days.length + 2} data-agent-tokens={agent} className="px-3 pt-0 pb-2 text-micro text-muted-foreground">
                     tokens: {compactNumber(tokens.prompt)} prompt · {compactNumber(tokens.completion)} completion ·{' '}
                     {compactNumber(tokens.cache)} cache
                   </td>

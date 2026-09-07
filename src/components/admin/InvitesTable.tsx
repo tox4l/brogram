@@ -27,7 +27,7 @@ function sortInvites(rows: InviteRow[]): InviteRow[] {
 export function InvitesTable({ rows, onRevoke }: InvitesTableProps) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-body text-muted-foreground">
         No invites yet. Mint one above.
       </div>
     )
@@ -39,7 +39,7 @@ export function InvitesTable({ rows, onRevoke }: InvitesTableProps) {
     <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
       <table className="w-full border-collapse text-[13px] tabular-nums">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-b border-border text-left text-micro text-muted-foreground">
             <th className="px-3 py-2 font-medium">Email</th>
             <th className="px-3 py-2 font-medium">Code</th>
             <th className="px-3 py-2 font-medium">Created</th>
@@ -53,7 +53,7 @@ export function InvitesTable({ rows, onRevoke }: InvitesTableProps) {
             return (
               <tr key={invite.code} className="border-b border-border/60 last:border-0">
                 <td className="px-3 py-2">{invite.email}</td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{invite.code}</td>
+                <td className="px-3 py-2 font-mono text-code text-muted-foreground">{invite.code}</td>
                 <td className="px-3 py-2 text-muted-foreground">{formatDate(invite.created_at)}</td>
                 <td className="px-3 py-2">
                   {open ? (

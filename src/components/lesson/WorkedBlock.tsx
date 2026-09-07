@@ -91,7 +91,7 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
               tabIndex={isLastCallout ? -1 : undefined}
               aria-current={isActive ? 'step' : undefined}
               aria-describedby={isActive ? idPrefix : undefined}
-              className="rounded-lg border border-border bg-card p-3 text-sm leading-relaxed outline-none"
+              className="rounded-lg border border-border bg-card p-3 text-body outline-none"
               style={{ opacity: isActive ? 1 : 0.4, transition: reduced ? 'none' : 'opacity 200ms var(--ease-move)' }}
             >
               <span className="sr-only">{stepLabel(index, block.steps.length, step.line)}</span>
@@ -100,7 +100,7 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
           )
         })}
       </div>
-      {block.caption && <p className="text-xs text-muted-foreground">{block.caption}</p>}
+      {block.caption && <p className="text-micro text-muted-foreground">{block.caption}</p>}
       {!isLast && (
         <Button type="button" variant="outline" size="sm" onClick={() => setStepIndex((index) => Math.min(index + 1, block.steps.length - 1))}>
           Next step

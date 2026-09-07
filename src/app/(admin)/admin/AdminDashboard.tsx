@@ -23,16 +23,16 @@ async function getJson<T extends { ok: true }>(url: string, init?: RequestInit):
 function SectionSkeleton() {
   return (
     <div role="status" aria-label="Loading" className="space-y-2">
-      <div className="h-9 w-full animate-pulse rounded-md bg-muted" />
-      <div className="h-9 w-full animate-pulse rounded-md bg-muted" />
-      <div className="h-9 w-2/3 animate-pulse rounded-md bg-muted" />
+      <div className="h-9 w-full animate-pulse rounded-lg bg-muted" />
+      <div className="h-9 w-full animate-pulse rounded-lg bg-muted" />
+      <div className="h-9 w-2/3 animate-pulse rounded-lg bg-muted" />
     </div>
   )
 }
 
 function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-small text-destructive">
       <span>{message}</span>
       <button type="button" onClick={onRetry} className="shrink-0 underline underline-offset-4 hover:no-underline">
         Retry

@@ -23,7 +23,13 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-1 text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  // Fix round (W4FIX-D, radii rule): `data-[variant=line]:rounded-none`
+  // dropped -- the "line" variant's list has no fill/border of its own
+  // (`bg-transparent`), so its corners were never visible either way; no
+  // consumer in this tree passes variant="line" today (reports/page.tsx
+  // uses the default variant only), so the base `rounded-lg` above is a
+  // no-op change for every real render.
+  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-1 text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col",
   {
     variants: {
       variant: {

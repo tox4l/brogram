@@ -16,7 +16,7 @@ function cellLabel(seedCount: number, verifiedCount: number, generatedCount: num
 export function BankStatsTable({ rows, clos }: BankStatsTableProps) {
   if (clos.length === 0 || rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-body text-muted-foreground">
         No bank data yet. Seed or generate exercises to see coverage.
       </div>
     )
@@ -43,7 +43,7 @@ export function BankStatsTable({ rows, clos }: BankStatsTableProps) {
     <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
       <table className="w-full border-collapse text-[13px] tabular-nums">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-b border-border text-left text-micro text-muted-foreground">
             <th className="px-3 py-2 font-medium">CLO</th>
             {patterns.map((pattern) => (
               <th key={pattern} className="px-3 py-2 font-medium whitespace-nowrap">
@@ -59,7 +59,7 @@ export function BankStatsTable({ rows, clos }: BankStatsTableProps) {
             return (
               <Fragment key={course}>
                 <tr>
-                  <td colSpan={patterns.length + 2} className="bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                  <td colSpan={patterns.length + 2} className="bg-muted/40 px-3 py-2 text-micro font-medium text-muted-foreground">
                     {course}
                   </td>
                 </tr>

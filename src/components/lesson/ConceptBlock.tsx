@@ -67,7 +67,7 @@ export function ConceptBlock({ block }: { block: ConceptBlockData }) {
   const safeFigure = useMemo(() => (block.figure ? sanitizeSvg(block.figure) : null), [block.figure])
   return (
     <section aria-label="Concept" className="space-y-3">
-      <h2 className="text-xl font-medium tracking-tight">{block.heading}</h2>
+      <h2 className="text-h3 text-foreground">{block.heading}</h2>
       {/* Fix round 1 (I3): this is the lesson's actual reading prose, which
        *  step 7 says "moves to --text-lede / 1.6 in --lesson-foreground,
        *  never --muted-foreground" -- matches LessonView's hook exactly, so

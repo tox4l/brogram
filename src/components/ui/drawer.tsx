@@ -121,7 +121,19 @@ function DrawerContent({
           data-snap-points={hasSnapPoints ? "" : undefined}
           className={cn(
             // Base.
-            "group/drawer-popup pointer-events-auto fixed z-50 m-(--drawer-inset,0px) flex h-(--drawer-content-height) max-h-(--drawer-content-max-height,none) min-h-0 w-(--drawer-content-width,auto) transform-[translate3d(var(--translate-x,0px),var(--translate-y,0px),0)_scale(var(--stack-scale))] flex-col bg-popover text-sm text-popover-foreground shadow-md transition-[transform,height,opacity,filter] duration-450 ease-[cubic-bezier(0.22,1,0.36,1)] outline-none select-none [interpolate-size:allow-keywords] data-[swipe-direction=down]:rounded-t-xl data-[swipe-direction=down]:border-t data-[swipe-direction=left]:rounded-r-xl data-[swipe-direction=left]:border-r data-[swipe-direction=right]:rounded-l-xl data-[swipe-direction=right]:border-l data-[swipe-direction=up]:rounded-b-xl data-[swipe-direction=up]:border-b",
+            // Fix round (W4FIX-D, motion-css rule): `height` dropped from this
+            // list -- the design gate bans an animated height outright, and
+            // this codebase's one consumer (buddy/Drawer.tsx) sets no
+            // `snapPoints`, so `--drawer-content-height` never actually
+            // changes value at runtime for it (an x-axis swipe drawer's
+            // height comes from `inset-y-0`, not this var). Transform,
+            // opacity and filter are the only properties this tree's Drawer
+            // ever needs to animate; a future snap-point (y-axis, multi-
+            // height) consumer would need its own measured-height technique
+            // (a CSS grid-rows trick, or `interpolate-size` sized by a
+            // ResizeObserver-driven custom property) rather than restoring
+            // this.
+            "group/drawer-popup pointer-events-auto fixed z-50 m-(--drawer-inset,0px) flex h-(--drawer-content-height) max-h-(--drawer-content-max-height,none) min-h-0 w-(--drawer-content-width,auto) transform-[translate3d(var(--translate-x,0px),var(--translate-y,0px),0)_scale(var(--stack-scale))] flex-col bg-popover text-sm text-popover-foreground shadow-md transition-[transform,opacity,filter] duration-450 ease-[cubic-bezier(0.22,1,0.36,1)] outline-none select-none [interpolate-size:allow-keywords] data-[swipe-direction=down]:rounded-t-xl data-[swipe-direction=down]:border-t data-[swipe-direction=left]:rounded-r-xl data-[swipe-direction=left]:border-r data-[swipe-direction=right]:rounded-l-xl data-[swipe-direction=right]:border-l data-[swipe-direction=up]:rounded-b-xl data-[swipe-direction=up]:border-b",
             // Nested.
             "data-nested-drawer-open:overflow-hidden data-nested-drawer-open:brightness-95",
             // Bleed.

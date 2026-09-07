@@ -11,10 +11,10 @@ type RecapBlockData = Extract<LessonPublicBlock, { type: 'recap' }>
 export function RecapBlock({ block, reduced }: { block: RecapBlockData; reduced: boolean }) {
   return (
     <section aria-label="Recap" className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
-      <ul className="list-disc space-y-1.5 pl-4 text-sm leading-relaxed">
+      <ul className="list-disc space-y-2 pl-4 text-body">
         {block.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
       </ul>
-      <p className="text-sm font-medium">
+      <p className="text-body font-medium">
         <Reveal mode="lines" reduced={reduced}>{block.remember}</Reveal>
       </p>
     </section>

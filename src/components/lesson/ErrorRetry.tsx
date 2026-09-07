@@ -25,7 +25,7 @@ export function ErrorRetry({ message = line('error.load'), onRetry, secondaryHre
 }) {
   return (
     <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-4">
-      <p className="min-w-0 flex-1 text-sm">{message}</p>
+      <p className="min-w-0 flex-1 text-body">{message}</p>
       <div className="flex items-center gap-2">
         {secondaryHref && secondaryLabel && (
           <Link href={secondaryHref} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{secondaryLabel}</Link>
