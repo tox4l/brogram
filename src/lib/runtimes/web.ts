@@ -1,7 +1,10 @@
 import type { RunRequest, RunResult, RuntimeAdapter, TestResult } from '@/lib/contracts'
 import { publishRuntimeProgress } from './progress'
-import { makeTestResult, prepareTimeoutOutput, summarizeResults, testTimeoutOutput, type ExecutionOutput } from './shared'
+import { browserTimeout, makeTestResult, prepareTimeoutOutput, summarizeResults, testTimeoutOutput, type ExecutionOutput } from './shared'
 import { webFrameDocument } from './web-frame'
+
+/** WebAdapter's own prepare/startup deadline — distinct from WorkerAdapter's DEFAULT_PREPARE_BUDGET_MS. */
+const STARTUP_BUDGET_MS = 15_000
 
 type Frame = {
   element: HTMLIFrameElement
@@ -22,8 +25,11 @@ type PendingRun = {
 
 // One honest timeout line, shared with WorkerAdapter's languages (./shared) -
 // a per-test deadline reads as a stopped test the same way in every runtime.
-function timeoutOutput(): ExecutionOutput {
-  return testTimeoutOutput
+// `timeoutMs` is the request's own field, so the budget it states is always
+// the real one, computed by the same `browserTimeout()` clamp the actual
+// per-test timer below is built from.
+function timeoutOutput(timeoutMs: number): ExecutionOutput {
+  return testTimeoutOutput(browserTimeout(timeoutMs))
 }
 
 /** DOM exercises run in an opaque-origin iframe with no access to parent storage. */
@@ -98,10 +104,10 @@ export class WebAdapter implements RuntimeAdapter {
       // Same wording WorkerAdapter uses for its own prepare-phase deadline (./shared):
       // the runtime itself never came up, so this must never read as the student's
       // own code timing out.
-      frame.error = prepareTimeoutOutput.stderr
+      frame.error = prepareTimeoutOutput(STARTUP_BUDGET_MS).stderr
       publishRuntimeProgress({ language: 'web', phase: 'error', packageName: 'DOM sandbox', message: frame.error })
       frame.dispose()
-    }, 15_000)
+    }, STARTUP_BUDGET_MS)
     window.addEventListener('message', onMessage)
     element.srcdoc = webFrameDocument(nonce)
     document.body.appendChild(element)
@@ -157,8 +163,8 @@ export class WebAdapter implements RuntimeAdapter {
             resolve(result)
           }
           const limit = Number.isFinite(request.timeoutMs) ? Math.max(1, Math.min(5_000, request.timeoutMs)) : 5_000
-          const timer = setTimeout(() => complete(timeoutOutput()), limit)
-          pending.cancelTest = () => complete(timeoutOutput())
+          const timer = setTimeout(() => complete(timeoutOutput(request.timeoutMs)), limit)
+          pending.cancelTest = () => complete(timeoutOutput(request.timeoutMs))
           frame.deliver = complete
           frame.element.contentWindow!.postMessage({
             type: 'run', nonce: frame.nonce, code: request.code,
@@ -171,7 +177,7 @@ export class WebAdapter implements RuntimeAdapter {
           pending.results.push(makeTestResult(test, output, performance.now() - started))
           if (output.failureKind === 'timeout') {
             for (const remaining of request.tests.slice(pending.results.length)) {
-              pending.results.push(makeTestResult(remaining, timeoutOutput(), 0))
+              pending.results.push(makeTestResult(remaining, timeoutOutput(request.timeoutMs), 0))
             }
             break
           }
@@ -199,9 +205,9 @@ export class WebAdapter implements RuntimeAdapter {
     pending.cancelled = true
     pending.cancelTest?.()
     for (const test of pending.request.tests.slice(pending.results.length)) {
-      pending.results.push(makeTestResult(test, timeoutOutput(), 0))
+      pending.results.push(makeTestResult(test, timeoutOutput(pending.request.timeoutMs), 0))
     }
-    pending.finish({ ...summarizeResults(pending.results), ok: false, stderr: timeoutOutput().stderr })
+    pending.finish({ ...summarizeResults(pending.results), ok: false, stderr: timeoutOutput(pending.request.timeoutMs).stderr })
     this.promote()
   }
 }

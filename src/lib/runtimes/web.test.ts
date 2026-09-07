@@ -236,7 +236,8 @@ describe('WebAdapter', () => {
     // Matches the shared prepare-phase timeout line every adapter in the
     // bank uses (./shared's prepareTimeoutOutput) - the runtime itself never
     // came up, so this must read the same as WorkerAdapter's own load failure.
-    expect(await failure).toMatchObject({ message: 'The runtime failed to load in time. Try again.' })
+    // States the real 15s startup budget (T2.7b follow-up pass).
+    expect(await failure).toMatchObject({ message: "The runtime didn't finish loading within 15 seconds. Try again." })
     vi.useRealTimers()
     options.stallReady = false
     await adapter.warmup()

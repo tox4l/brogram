@@ -29,7 +29,10 @@ describe('voice rule 1 — length caps', () => {
   // ruling 1: APPROVE, condition recorded in docs/build-log.md.
   // Fix round 2, N1: `guard.warned.local` is the same panel-body surface as
   // `guard.warned` (the local-fallback wording, not a different kind of key).
-  const PANEL_BODY_KEYS = new Set<LineKey>(['welcome', 'guard.printscreen', 'guard.warned', 'guard.warned.local', 'guard.paste.why', 'guard.restricted.paste'])
+  // T2.7b follow-up pass: `rep.stale.attempt`/`rep.stale.mastery` (useExerciseLoop's
+  // save-conflict notices) name a real conflict precisely enough to reassure the
+  // learner nothing was lost -- the same panel-body shape as the guard.* lines above.
+  const PANEL_BODY_KEYS = new Set<LineKey>(['welcome', 'guard.printscreen', 'guard.warned', 'guard.warned.local', 'guard.paste.why', 'guard.restricted.paste', 'rep.stale.attempt', 'rep.stale.mastery'])
   // Fix round 1, ruling 2: a full-screen policy surface is not a panel body
   // (the same argument the spec already accepted for guard.why) — extended
   // from guard.why alone to guard.restricted and guard.banned, both of
@@ -320,7 +323,11 @@ describe('LineKey coverage', () => {
     // collapsed trophy-shelf announcement) and the four De-rot Playground
     // run-summary tiers (derot.play.best/sharp/solid/rough). +2 from T2.8
     // fix round 2 (N1/N3): guard.warned.local and guard.restricted.local.
-    expect(ALL_KEYS.length).toBe(62)
+    // +18 from T2.7b's runtime/loop follow-up pass (after d4e9b70 landed):
+    // 6 runtime.* keys (shared.ts/web.ts/worker-adapter.ts's timeout and
+    // failure notices) and 12 rep.*/skill.unavailable/session.unavailable
+    // keys (useExerciseLoop.ts's notices and error lines).
+    expect(ALL_KEYS.length).toBe(80)
   })
 })
 

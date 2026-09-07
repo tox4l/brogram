@@ -86,7 +86,8 @@ describe('worker runtime lifecycle', () => {
     const result = await run
     expect(result.results.map(r => r.failureKind)).toEqual(['timeout', 'timeout'])
     // The message must not say "Execution timed out": the student's code never ran.
-    expect(result.results[0].stderr).toMatch(/failed to load/i)
+    // States the real 30s prepare budget (T2.7b follow-up pass).
+    expect(result.results[0].stderr).toMatch(/didn't finish loading/i)
     expect(workers[0].terminated).toBe(true)
   })
 

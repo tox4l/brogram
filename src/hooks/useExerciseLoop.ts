@@ -25,6 +25,7 @@ import { prefsPatch, resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { getQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
+import { line } from '@/lib/voice/lines'
 
 type Status = 'loading' | 'ready' | 'running' | 'graded' | 'submitting' | 'failed' | 'passed' | 'error'
 /** The durable pass/fail fact, known the instant local grading resolves. Never rolled back by a
@@ -239,13 +240,13 @@ export function useExerciseLoop(exerciseId: string) {
         try {
           const client = clientRef.current ??= createClient()
           const userId = sessionRef.current.user?.id
-          if (!userId) throw new Error('Sign in to open an exercise.')
+          if (!userId) throw new Error(line('rep.signin'))
           const { data: row, error: readError } = await client.from('exercises_public').select('*').eq('id', exerciseId).eq('verified', true).maybeSingle()
           if (readError) throw readError
-          if (!row) throw new Error('This exercise is unavailable. Choose another from your dashboard.')
+          if (!row) throw new Error(line('rep.unavailable'))
           const item = toExercisePublic(row)
           const staticOutcome = staticClo(item.cloId)
-          if (!staticOutcome) throw new Error('This learning outcome is unavailable.')
+          if (!staticOutcome) throw new Error(line('skill.unavailable'))
           if (!active()) return
           applyLoadedExercise(item, staticOutcome, staticCourse(staticOutcome.course)?.packages ?? [], token)
         } catch (loadError) { if (active()) { setError(messageOf(loadError)); setStatus('error'); setExercise(null); setClo(null) } }
@@ -285,9 +286,9 @@ export function useExerciseLoop(exerciseId: string) {
   }
   const assertAllowed = () => {
     const currentSession = sessionRef.current
-    if (!currentSession.user || !currentSession.learnerState) throw new Error('Your session is unavailable. Sign in again.')
+    if (!currentSession.user || !currentSession.learnerState) throw new Error(line('session.unavailable'))
     const profile = currentSession.profile
-    if (profile?.account_status === 'banned' || profile?.account_status === 'restricted' && (!profile.restricted_until || Date.parse(profile.restricted_until) >= Date.now())) throw new Error('Exercises are paused for this account. Return to your dashboard.')
+    if (profile?.account_status === 'banned' || profile?.account_status === 'restricted' && (!profile.restricted_until || Date.parse(profile.restricted_until) >= Date.now())) throw new Error(line('rep.paused'))
     return currentSession.learnerState
   }
 
@@ -295,7 +296,7 @@ export function useExerciseLoop(exerciseId: string) {
     const client = clientRef.current!; const local = assertAllowed()
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: row, error: readError } = await client.from('learner_state').select('state,version').eq('user_id', local.userId).maybeSingle()
-      if (generation.current !== token) throw new Error('Exercise changed before progress could be saved.')
+      if (generation.current !== token) throw new Error(line('rep.changed.presave'))
       if (readError) throw readError
       const base = row?.state && row.state.mastery && row.state.profile && row.state.streak ? { ...row.state, version: row.version } as LearnerState : { ...local, version: row?.version ?? 0 }
       const changed = delta(base)
@@ -310,11 +311,11 @@ export function useExerciseLoop(exerciseId: string) {
         throw write.error
       }
       if (!write.data) continue
-      if (generation.current !== token) throw new Error('Exercise changed while progress was saved.')
+      if (generation.current !== token) throw new Error(line('rep.changed.postsave'))
       sessionRef.current.setLearnerState(nextState)
       return nextState
     }
-    throw new Error('Progress changed in another tab. Try saving again.')
+    throw new Error(line('rep.retry.elsewhere'))
   }
 
   async function queueNext(operation: Submission, token: number) {
@@ -393,7 +394,7 @@ export function useExerciseLoop(exerciseId: string) {
           const nearby = (await Promise.all(closFor(operation.clo.course).map(item => fetchBank(client, { cloId: item.id })))).flat()
           chosen = nearby.filter(item => item.id !== operation.exercise.id && item.pattern !== operation.exercise.pattern).sort((a, b) => Math.abs(a.difficulty - DEFAULT_DIFFICULTY) - Math.abs(b.difficulty - DEFAULT_DIFFICULTY))[0] ?? null
         }
-        if (!chosen) throw new Error('You passed. The next exercise is still being prepared; return to the dashboard.')
+        if (!chosen) throw new Error(line('rep.next.preparing'))
       }
     }
     if (generation.current !== token) return
@@ -478,7 +479,7 @@ export function useExerciseLoop(exerciseId: string) {
         const previous = base.mastery[operation.exercise.cloId] ?? emptyMastery(base.userId, operation.exercise.cloId)
         // A retried response after a lost network acknowledgement must not award twice.
         if (previous.lastAttemptAt === attempt.createdAt) return base
-        if (previous.lastAttemptAt && Date.parse(previous.lastAttemptAt) > Date.parse(attempt.createdAt)) throw new Error('Your attempt was saved, but newer progress exists in another tab. Return to the dashboard before continuing; this older result has not been applied again.')
+        if (previous.lastAttemptAt && Date.parse(previous.lastAttemptAt) > Date.parse(attempt.createdAt)) throw new Error(line('rep.stale.attempt'))
         const scored = attempt.passed ? applyPass(previous, operation.exercise.difficulty, operation.exercise.pattern, operation.review!.quality, attempt.hintCount) : { mastery: applyFail(previous, operation.exercise.difficulty), points: 0 }
         const mastery = { ...scored.mastery, lastAttemptAt: attempt.createdAt }
         const mistakes = operation.diagnosis ? [{ exerciseId: attempt.exerciseId, cloId: operation.exercise.cloId, pattern: operation.exercise.pattern, label: operation.diagnosis.mistakeLabel, at: attempt.createdAt }, ...base.recentMistakes].slice(0, 10) : base.recentMistakes
@@ -503,7 +504,7 @@ export function useExerciseLoop(exerciseId: string) {
       if (generation.current !== token) return
       const updated = await client.from('mastery').update(row).eq('user_id', mastery.userId).eq('clo_id', mastery.cloId).or(`last_attempt_at.is.null,last_attempt_at.lte."${mastery.lastAttemptAt ?? attempt.createdAt}"`).select('clo_id').maybeSingle()
       if (updated.error) throw updated.error
-      if (!updated.data) throw new Error('Your attempt was saved, but newer mastery exists in another tab. Return to the dashboard to refresh it.')
+      if (!updated.data) throw new Error(line('rep.stale.mastery'))
       operation.masterySaved = true
     }
     if (generation.current !== token) return
@@ -605,7 +606,7 @@ export function useExerciseLoop(exerciseId: string) {
       setOutcome(null); setResults([])
       const state = assertAllowed(); const submittedCode = codeRef.current; const submittedAt = Date.now()
       const durationMs = Math.max(0, submittedAt - (startedAt.current ?? submittedAt))
-      if (!item.tests.length) throw new Error('This exercise has no grading tests. Choose another exercise.')
+      if (!item.tests.length) throw new Error(line('rep.notests'))
       if (submittedCode.length > 20_000) throw new Error('Keep your solution under 20,000 characters before submitting.')
       const request = exerciseRunRequest(item, submittedCode, true, packages.current)
       const result: RunResult = usesAnswerForm(item) ? gradeAnswer(item, submittedCode) : await getRuntime(request.language).run(request)

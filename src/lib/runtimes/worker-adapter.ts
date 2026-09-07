@@ -1,5 +1,5 @@
 import type { Language, RunRequest, RunResult, RuntimeAdapter, TestResult } from '@/lib/contracts'
-import { browserTimeout, errorOutput, makeTestResult, prepareTimeoutOutput, summarizeResults, testTimeoutOutput, type ExecutionOutput } from './shared'
+import { browserTimeout, errorOutput, makeTestResult, prepareTimeoutOutput, summarizeResults, testTimeoutOutput, workerLoadFailedOutput, workerOutputMissingOutput, workerTerminatedOutput, workerUnavailableOutput, type ExecutionOutput } from './shared'
 import { publishRuntimeProgress } from './progress'
 import type { WorkerCommand, WorkerReply } from './worker-host'
 
@@ -62,11 +62,11 @@ export class WorkerAdapter implements RuntimeAdapter {
       if (data.type === 'error') pending.reject(new Error(data.message))
       else pending.resolve(data.type === 'result' ? data.output : undefined)
     }
-    slot.worker.onerror = event => this.terminate(slot, new Error(event.message || 'Runtime worker failed to load.'))
+    slot.worker.onerror = event => this.terminate(slot, new Error(event.message || workerLoadFailedOutput()))
     return slot
   }
 
-  private terminate(slot: Slot, error = new Error('Worker terminated')): void {
+  private terminate(slot: Slot, error = new Error(workerTerminatedOutput())): void {
     slot.dead = true
     slot.worker.terminate()
     for (const pending of slot.pending.values()) pending.reject(error)
@@ -90,7 +90,7 @@ export class WorkerAdapter implements RuntimeAdapter {
   }
 
   private send(slot: Slot, command: Omit<Extract<WorkerCommand, { type: 'prepare' }>, 'id'> | Omit<Extract<WorkerCommand, { type: 'compile' }>, 'id'> | Omit<Extract<WorkerCommand, { type: 'run' }>, 'id'>): Promise<ExecutionOutput | undefined> {
-    if (slot.dead) return Promise.reject(new Error('Runtime worker is unavailable.'))
+    if (slot.dead) return Promise.reject(new Error(workerUnavailableOutput()))
     return new Promise((resolve, reject) => {
       const id = ++this.sequence
       slot.pending.set(id, { resolve, reject })
@@ -179,7 +179,11 @@ export class WorkerAdapter implements RuntimeAdapter {
   private finishAsTimedOut(): boolean {
     const run = this.current
     if (!run || run.done) return false
-    const output = run.phase === 'prepare' ? prepareTimeoutOutput : testTimeoutOutput
+    // The message states the budget that was actually active for `run.phase` --
+    // recomputed the same way `execute()` set the timer for it, never a guess.
+    const output = run.phase === 'prepare'
+      ? prepareTimeoutOutput(this.phaseBudgetMs('prepare', run.request) ?? DEFAULT_PREPARE_BUDGET_MS)
+      : testTimeoutOutput((run.phase === 'compile' ? this.phaseBudgetMs('compile', run.request) : null) ?? this.phaseBudgetMs('test', run.request) ?? browserTimeout(run.request.timeoutMs))
     const remaining = run.request.tests.slice(run.results.length).map(t => makeTestResult(t, output, browserTimeout(run.request.timeoutMs)))
     const result = summarizeResults([...run.results, ...remaining])
     if (!run.request.tests.length) Object.assign(result, { ok: false, stdout: '', stderr: output.stderr })
@@ -260,7 +264,7 @@ export class WorkerAdapter implements RuntimeAdapter {
         const output = await this.send(this.active!, { type: 'run', request: run.request, test })
         clearTimeout(run.timer)
         if (run.done) return
-        if (!output) throw new Error('Runtime worker returned no output.')
+        if (!output) throw new Error(workerOutputMissingOutput())
         if (output.fatal) this.unhealthy = true
         if (test) run.results.push(makeTestResult(test, output, performance.now() - start))
         else {

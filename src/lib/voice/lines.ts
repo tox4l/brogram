@@ -27,6 +27,10 @@ export type LineKey =
   | 'dock.prayer' | 'dock.water' | 'dock.stretch' | 'dock.pomodoro' | 'dock.collapse' | 'dock.restore'
   | 'achievement.collapsed'
   | 'derot.play.best' | 'derot.play.sharp' | 'derot.play.solid' | 'derot.play.rough'
+  | 'runtime.timeout' | 'runtime.prepare.timeout' | 'runtime.load.failed' | 'runtime.terminated' | 'runtime.unavailable' | 'runtime.output.missing'
+  | 'rep.signin' | 'rep.unavailable' | 'skill.unavailable' | 'session.unavailable' | 'rep.paused'
+  | 'rep.changed.presave' | 'rep.changed.postsave' | 'rep.stale.attempt' | 'rep.stale.mastery'
+  | 'rep.retry.elsewhere' | 'rep.notests' | 'rep.next.preparing'
 
 export type Frequency = 'rare' | 'session' | 'hot'
 
@@ -471,6 +475,96 @@ const BANK: Readonly<Record<LineKey, BankEntry>> = {
   'derot.play.rough': {
     frequency: 'session',
     variants: ['Rough one. Shake it off and go again.'],
+  },
+
+  // Runtime bank notices (T2.7b follow-up pass, after d4e9b70's web-runtime
+  // fix landed): one honest line per failure mode, shared by every adapter
+  // (src/lib/runtimes/shared.ts, web.ts, worker-adapter.ts) exactly the way
+  // testTimeoutOutput/prepareTimeoutOutput already were before this pass --
+  // relocated onto the bank, not reworded in substance. `{n}` is always a
+  // whole number of seconds, computed from the adapter's own real budget
+  // (browserTimeout()/phaseBudgetMs()), never a guess. The runtime's own
+  // error message body (a student's traceback, a compiler diagnostic) is
+  // never routed through here -- only the frame around a bank-owned failure
+  // (a timeout, a dead worker, a missing reply) is copy.
+  'runtime.timeout': {
+    frequency: 'rare',
+    variants: ['Stopped without a result after {n} seconds.'],
+  },
+  'runtime.prepare.timeout': {
+    frequency: 'rare',
+    variants: ["The runtime didn't finish loading within {n} seconds. Try again."],
+  },
+  'runtime.load.failed': {
+    frequency: 'rare',
+    variants: ['The runtime failed to load. Try again.'],
+  },
+  'runtime.terminated': {
+    frequency: 'rare',
+    variants: ['The runtime shut down before answering.'],
+  },
+  'runtime.unavailable': {
+    frequency: 'rare',
+    variants: ["The runtime isn't available right now. Try again."],
+  },
+  'runtime.output.missing': {
+    frequency: 'rare',
+    variants: ["The runtime didn't return a result. Try again."],
+  },
+
+  // useExerciseLoop notices (same follow-up pass): every defensive guard and
+  // save-conflict message the hook can throw, glossary-clean and "Your"-free.
+  // Each is a single, precise fact -- no rotation, matching the timeout keys
+  // just above.
+  'rep.signin': {
+    frequency: 'rare',
+    variants: ['Sign in to open a rep.'],
+  },
+  'rep.unavailable': {
+    frequency: 'rare',
+    variants: ['This rep is unavailable. Choose another from your dashboard.'],
+  },
+  'skill.unavailable': {
+    frequency: 'rare',
+    variants: ['This skill is unavailable.'],
+  },
+  'session.unavailable': {
+    frequency: 'rare',
+    variants: ['The session is unavailable. Sign in again.'],
+  },
+  'rep.paused': {
+    frequency: 'rare',
+    variants: ['Reps are paused for this account. Return to your dashboard.'],
+  },
+  'rep.changed.presave': {
+    frequency: 'rare',
+    variants: ['Rep changed before progress could be saved.'],
+  },
+  'rep.changed.postsave': {
+    frequency: 'rare',
+    variants: ['Rep changed while progress was saved.'],
+  },
+  // Panel-body length (rule 1 EXEMPT set in lines.test.ts): both name a real
+  // save-conflict precisely enough for the learner to know nothing was lost.
+  'rep.stale.attempt': {
+    frequency: 'rare',
+    variants: ['This attempt was saved, but newer progress exists in another tab. Return to the dashboard before continuing; this older result has not been applied again.'],
+  },
+  'rep.stale.mastery': {
+    frequency: 'rare',
+    variants: ['This attempt was saved, but newer progress exists in another tab. Return to the dashboard to refresh it.'],
+  },
+  'rep.retry.elsewhere': {
+    frequency: 'rare',
+    variants: ['Progress changed in another tab. Try saving again.'],
+  },
+  'rep.notests': {
+    frequency: 'rare',
+    variants: ['This rep has no grading tests. Choose another rep.'],
+  },
+  'rep.next.preparing': {
+    frequency: 'rare',
+    variants: ['Passed. The next rep is still being prepared; head to the dashboard.'],
   },
 }
 

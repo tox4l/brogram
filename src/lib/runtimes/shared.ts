@@ -1,4 +1,5 @@
 import type { RunResult, Runtime, TestCase, TestResult } from '@/lib/contracts'
+import { line, lineWith } from '@/lib/voice/lines'
 
 export interface ExecutionOutput {
   actual: string
@@ -47,6 +48,22 @@ export function browserTimeout(ms: number): number {
  * as a hang: a per-test deadline names itself as a stopped test, a prepare
  * deadline names itself as the runtime failing to load, and neither leaks
  * adapter-specific wording a student would have to learn to recognize twice.
+ *
+ * T2.7b follow-up pass: both are now bank-backed (`runtime.timeout` /
+ * `runtime.prepare.timeout`) and take the actual budget in milliseconds, so
+ * the line states the real number instead of staying vague — every caller
+ * already has its own budget in scope (`browserTimeout(request.timeoutMs)`
+ * for a test, `phaseBudgetMs('prepare', …)` for a warmup), so this is a pure
+ * display computation, never a new deadline.
  */
-export const testTimeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'Execution timed out or was aborted.', failureKind: 'timeout' }
-export const prepareTimeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'The runtime failed to load in time. Try again.', failureKind: 'timeout' }
+export function testTimeoutOutput(budgetMs: number): ExecutionOutput {
+  return { actual: '', stdout: '', stderr: lineWith('runtime.timeout', { n: Math.round(budgetMs / 1000) }), failureKind: 'timeout' }
+}
+export function prepareTimeoutOutput(budgetMs: number): ExecutionOutput {
+  return { actual: '', stdout: '', stderr: lineWith('runtime.prepare.timeout', { n: Math.round(budgetMs / 1000) }), failureKind: 'timeout' }
+}
+/** The runner's own precise infrastructure failures — never a student's code error. */
+export function workerLoadFailedOutput(): string { return line('runtime.load.failed') }
+export function workerTerminatedOutput(): string { return line('runtime.terminated') }
+export function workerUnavailableOutput(): string { return line('runtime.unavailable') }
+export function workerOutputMissingOutput(): string { return line('runtime.output.missing') }
