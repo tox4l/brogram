@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useQueryClient } from '@tanstack/react-query'
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import type { CourseCode, LessonProgress } from '@/lib/contracts'
-import { course as courseMeta, loadCourseBundle, type CourseBundle } from '@/lib/curriculum'
+import { course as courseMeta, loadCourseBundle, loadedBundle, type CourseBundle } from '@/lib/curriculum'
 import { buildMap, currentCloId, nextUp } from '@/lib/course/map'
 import { qk } from '@/lib/query/keys'
 import type { WellnessRow } from '@/lib/learner/compile'
@@ -32,26 +32,48 @@ interface BundleState {
 /**
  * The static curriculum bundle, memoised per course in `@/lib/curriculum`
  * already (`loadCourseBundle`'s own module-level map dedupes an
- * already-loaded or already-in-flight request instantly) -- this hook is
- * just the local render-state wrapper (loading / loaded / failed), the same
- * shape `dashboard/page.tsx`'s `useCurriculum` uses for its own Supabase
- * reads. This is the only fetch this screen makes (R5.1: zero Supabase round
- * trips; the static bundle is served from the CDN, cached with `?v=<hash>`,
- * and shared with every other screen that loads the same course in the same
- * session). `setState` only ever runs inside the promise callbacks below --
- * never synchronously in the effect body itself.
+ * already-loaded or already-in-flight request instantly). This is the only
+ * fetch this screen makes (R5.1: zero Supabase round trips; the static
+ * bundle is served from the CDN, cached with `?v=<hash>`, and shared with
+ * every other screen that loads the same course in the same session).
+ *
+ * Wave-1-gate fix (I1): a switch from `/courses` or a hover/focus prefetch
+ * already warms `loadedBundle(code)` before this component ever mounts --
+ * the original version of this hook ignored that synchronous accessor and
+ * always paid for one microtask through `loadCourseBundle`'s promise before
+ * painting, which is exactly the "picks a course, course home paints
+ * immediately" promise the plan names. The lazy `useState` initializer below
+ * reads the synchronous cache on the very first render; the `if` block right
+ * after re-checks it whenever `code` or `attempt` changes across renders of
+ * the *same* mount (React's documented "adjust state during render" pattern
+ * -- not a synchronous `setState` inside `useEffect`, which the standing
+ * lint rule forbids). The effect below only ever calls `setState` inside the
+ * promise callbacks, i.e. asynchronously.
  */
 function useCourseBundle(code: CourseCode) {
-  const [state, setState] = useState<BundleState | null>(null)
+  const [state, setState] = useState<BundleState | null>(() => {
+    const cached = loadedBundle(code)
+    return cached ? { code, bundle: cached, failed: false } : null
+  })
+  const [seenCode, setSeenCode] = useState(code)
   const [attempt, setAttempt] = useState(0)
+  const [seenAttempt, setSeenAttempt] = useState(0)
+
+  if (code !== seenCode || attempt !== seenAttempt) {
+    setSeenCode(code)
+    setSeenAttempt(attempt)
+    const cached = loadedBundle(code)
+    setState(cached ? { code, bundle: cached, failed: false } : null)
+  }
 
   useEffect(() => {
+    if (state && state.code === code) return
     let cancelled = false
     loadCourseBundle(code)
       .then((bundle) => { if (!cancelled) setState({ code, bundle, failed: false }) })
       .catch(() => { if (!cancelled) setState({ code, bundle: null, failed: true }) })
     return () => { cancelled = true }
-  }, [code, attempt])
+  }, [code, state, attempt])
 
   const current = state && state.code === code ? state : null
   return {
@@ -90,12 +112,27 @@ export default function CoursePage() {
   const { learnerState } = useSession()
   const queryClient = useQueryClient()
   const userId = learnerState?.userId
-  const lessonProgress = (userId ? queryClient.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) : undefined) ?? []
-  // Same passive, non-fetching cache peek as `lessonProgress`: `wellness` is
-  // not seeded by the layout either, so a subscribing `useWellness()` would
-  // fire a Supabase read on mount. Standing constraint 12 -- the learner's
-  // own `motion` choice, not the raw `prefers-reduced-motion` media query --
-  // must gate every animating component here.
+  // Wave-1-gate fix (I2): a passive `getQueryData` peek here never re-rendered
+  // when something else wrote this key, so a completed walkthrough kept
+  // showing as card 1 after every reload. `queryFn: skipToken` keeps this a
+  // subscription with no fetcher -- it never calls Supabase itself (T2.1 is
+  // adding the server-side seed through `QuerySeed`; until then this reads
+  // whatever `LessonView`'s own optimistic mutation already wrote into the
+  // shared `QueryClient`) but DOES re-render this screen the moment the seed
+  // or a later write lands, which a one-shot peek structurally cannot.
+  const lessonProgressQuery = useQuery<LessonProgress[]>({
+    queryKey: qk.lessonProgress(userId ?? ''),
+    queryFn: skipToken,
+    enabled: Boolean(userId),
+  })
+  const lessonProgress = lessonProgressQuery.data ?? []
+  // A passive, non-fetching cache peek, same as `lessonProgress` used to be:
+  // `wellness` is not seeded by the layout either, so a subscribing
+  // `useWellness()` would fire a Supabase read on mount. Out of this fix
+  // round's scope (only `lessonProgress` was named); left as a peek.
+  // Standing constraint 12 -- the learner's own `motion` choice, not the raw
+  // `prefers-reduced-motion` media query -- must still gate every animating
+  // component here.
   const wellnessRow = userId ? queryClient.getQueryData<WellnessRow>(qk.wellness(userId)) : undefined
   const motionPref = resolveWellnessPrefs(wellnessRow?.prefs).motion
   const reducedMotion = useReducedMotion(motionPref)

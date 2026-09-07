@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LearnerState } from '@/lib/contracts'
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   course: vi.fn(),
   loadCourseBundle: vi.fn(),
+  loadedBundle: vi.fn(),
   prefetch: vi.fn(),
   push: vi.fn(),
   supabaseFrom: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('@/store/session', () => ({ useSession: () => mocks.session() }))
 vi.mock('@/lib/curriculum', () => ({
   course: (code: string) => mocks.course(code),
   loadCourseBundle: (code: string) => mocks.loadCourseBundle(code),
+  loadedBundle: (code: string) => mocks.loadedBundle(code),
 }))
 // Every hook in this tree that could read the network goes through `createClient`
 // (never a bare global `fetch`), so a spy here is what "no Supabase read fires on
@@ -82,6 +84,9 @@ beforeEach(() => {
   mocks.session.mockReturnValue({ learnerState: learnerState() })
   mocks.course.mockReturnValue(courseFixture())
   mocks.loadCourseBundle.mockResolvedValue(bundleFixture())
+  // Not warm by default -- most tests exercise the async `loadCourseBundle`
+  // path. The I1 test below overrides this to prove the synchronous one.
+  mocks.loadedBundle.mockReturnValue(null)
 })
 afterEach(cleanup)
 
@@ -168,5 +173,69 @@ describe('course home', () => {
     await screen.findByText('Demo Course')
     const link = within(screen.getByRole('list', { name: 'Skill path' })).getAllByRole('link')[0]
     expect(link.className).not.toContain('hover:-translate-y-0.5')
+  })
+
+  it('wave-1-gate I1: paints from an already-loaded bundle synchronously on first render, no loading frame', () => {
+    // A switch from /courses, or a hover/focus prefetch, already warms
+    // `loadedBundle(code)` before this component ever mounts.
+    mocks.loadedBundle.mockReturnValue(bundleFixture())
+    renderPage()
+    // Deliberately no `await` / `findBy*` here: the plan's own promise is
+    // "picking a course paints the course home immediately with a map", so
+    // this must all be present on the very first synchronous render.
+    expect(screen.getByText('Demo Course')).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Skill path' })).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(mocks.loadCourseBundle).not.toHaveBeenCalled()
+  })
+
+  it('wave-1-gate I1: still falls back to the async load and shows the loading shape when nothing is warm', () => {
+    mocks.loadedBundle.mockReturnValue(null)
+    renderPage()
+    expect(screen.getByRole('status').textContent).toContain('Opening Demo Course')
+  })
+
+  it('wave-1-gate I2: subscribes to lesson progress -- a seeded completed row demotes the walkthrough card, with no fetch', async () => {
+    const lessonForCloOne = {
+      id: 'DEMO101-1', cloId: 'DEMO101-1', course: 'DEMO101', language: 'python', version: 1,
+      title: 'Walkthrough one', hook: 'hook', estimatedMinutes: 5, draft: false, tags: [], blocks: [], exitLine: 'exit',
+    }
+    mocks.loadCourseBundle.mockResolvedValue({ ...bundleFixture(), lessons: [lessonForCloOne] })
+    const client = makeQueryClient()
+    client.setQueryData(qk.lessonProgress('learner-one'), [{
+      userId: 'learner-one', lessonId: 'DEMO101-1', cloId: 'DEMO101-1', status: 'completed',
+      blockIndex: 4, checksPassed: 2, checksFailed: 0, lessonVersion: 1,
+      startedAt: '2026-09-05T00:00:00Z', completedAt: '2026-09-05T00:10:00Z', updatedAt: '2026-09-05T00:10:00Z',
+    }])
+    renderPage(client)
+    await screen.findByText('Demo Course')
+    const region = screen.getByRole('region', { name: 'Next up' })
+    expect(within(region).queryByText('Walkthrough')).toBeNull()
+    expect(screen.queryByRole('link', { name: /walkthrough ready/ })).toBeNull()
+    expect(mocks.supabaseFrom).not.toHaveBeenCalled()
+  })
+
+  it('wave-1-gate I2: a later write into the shared cache (as LessonView already makes) updates the map without a remount', async () => {
+    const lessonForCloOne = {
+      id: 'DEMO101-1', cloId: 'DEMO101-1', course: 'DEMO101', language: 'python', version: 1,
+      title: 'Walkthrough one', hook: 'hook', estimatedMinutes: 5, draft: false, tags: [], blocks: [], exitLine: 'exit',
+    }
+    mocks.loadCourseBundle.mockResolvedValue({ ...bundleFixture(), lessons: [lessonForCloOne] })
+    const client = makeQueryClient()
+    renderPage(client)
+    await screen.findByText('Demo Course')
+    expect(within(screen.getByRole('region', { name: 'Next up' })).getByText('Walkthrough')).toBeTruthy()
+
+    act(() => {
+      client.setQueryData(qk.lessonProgress('learner-one'), [{
+        userId: 'learner-one', lessonId: 'DEMO101-1', cloId: 'DEMO101-1', status: 'completed',
+        blockIndex: 4, checksPassed: 2, checksFailed: 0, lessonVersion: 1,
+        startedAt: '2026-09-05T00:00:00Z', completedAt: '2026-09-05T00:10:00Z', updatedAt: '2026-09-05T00:10:00Z',
+      }])
+    })
+
+    await waitFor(() => {
+      expect(within(screen.getByRole('region', { name: 'Next up' })).queryByText('Walkthrough')).toBeNull()
+    })
   })
 })
