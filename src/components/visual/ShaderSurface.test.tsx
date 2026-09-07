@@ -1,4 +1,4 @@
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FRAGMENT_SHADER, VERTEX_SHADER } from './field.glsl'
 import { resetShaderContextForTests } from './context'
@@ -130,6 +130,23 @@ describe('ShaderSurface (spec §6.1, plan T4.3 step 1: the always-safe wrapper)'
     const { container } = render(<ShaderSurface motionPref="full" className="rounded-xl" />)
     expect(container.querySelector('[data-shader-surface]')?.className).toContain('rounded-xl')
   })
+
+  it('the CSS floor\'s two gradient stops name two distinct custom properties (T43-I2)', () => {
+    // Before this fix, the second stop was `var(--shader-a)` fading to
+    // `transparent` -- the same token as the element's own background
+    // colour, a no-op in every palette. `--glow` carries a real low-alpha
+    // value in all five palette blocks, so the floor now shows a genuine
+    // second stop everywhere, not only where `--shader-a` happens to
+    // differ from what it sits on.
+    const { container } = render(<ShaderSurface motionPref="reduced" />)
+    const floor = container.querySelector('[data-shader-surface] > div') as HTMLElement
+    expect(floor).not.toBeNull()
+    const backgroundImage = floor.style.backgroundImage
+    const names = [...backgroundImage.matchAll(/var\(--([\w-]+)\)/g)].map((m) => m[1])
+    expect(new Set(names).size).toBe(2)
+    expect(backgroundImage).toContain('var(--shader-b)')
+    expect(backgroundImage).toContain('var(--glow)')
+  })
 })
 
 // --- ShaderField, mounted directly (not through the mocked `next/dynamic`),
@@ -197,11 +214,10 @@ function installFakeCanvasContexts() {
     if (type === 'webgl2') return makeFakeGl()
     if (type === '2d') {
       // Only readTokenColor's 1x1 probe and the frozen-canvas paint use
-      // '2d' in this component; neither is exercised by these tests
-      // (the probe short-circuits on an empty computed value in jsdom,
-      // and freezing needs SETTLE_MS of real elapsed rAF time), but a
-      // permissive stub keeps this fake honest about what real browsers
-      // support rather than returning null and forcing a silent bail.
+      // '2d' in this component; a permissive stub keeps this fake honest
+      // about what real browsers support (assigning `fillStyle` always
+      // "succeeds" here, same as a real 2D context given a valid colour
+      // string) rather than returning null and forcing a silent bail.
       return {
         fillStyle: '',
         fillRect: () => {},
@@ -219,23 +235,70 @@ function installFakeCanvasContexts() {
   }
 }
 
+/**
+ * Fix round (T43-M3 test coverage): `readTokenColor` reads `--shader-a`/
+ * `--shader-b` via `getComputedStyle(document.documentElement)
+ *   .getPropertyValue(varName)`. jsdom resolves no real CSS cascade for
+ * custom properties, so without this stub every token reads as `''` --
+ * exactly the "empty token" path T43-M3 is about, which is why it must be
+ * installed with *real* values by default (matching the tests' intent
+ * before this fix round) and overridable to empty for the one test that
+ * exercises the bail itself.
+ */
+function stubShaderTokens(overrides: Partial<Record<'--shader-a' | '--shader-b', string>> = {}) {
+  const values: Record<string, string> = {
+    '--shader-a': 'oklch(0.09 0.008 285)',
+    '--shader-b': 'oklch(0.16 0.045 305)',
+    ...overrides,
+  }
+  const original = CSSStyleDeclaration.prototype.getPropertyValue
+  CSSStyleDeclaration.prototype.getPropertyValue = function (name: string) {
+    if (name in values) return values[name] ?? ''
+    return original.call(this, name)
+  }
+  return () => {
+    CSSStyleDeclaration.prototype.getPropertyValue = original
+  }
+}
+
 describe('ShaderField (spec §6.2: the context contract, direct mount against a fake WebGL2)', () => {
   let fakeCanvas: ReturnType<typeof installFakeCanvasContexts>
+  let restoreTokens: () => void
 
   beforeEach(() => {
     resetShaderContextForTests()
     fakeCanvas = installFakeCanvasContexts()
+    restoreTokens = stubShaderTokens() // real values by default
   })
 
   afterEach(() => {
     fakeCanvas.restore()
+    restoreTokens()
   })
 
   it('requests webgl2 with exactly the context-attribute object spec §6.2 specifies', () => {
     render(<ShaderField preset="aurora" />)
     const webglCalls = fakeCanvas.getContextSpy.mock.calls.filter(([type]) => type === 'webgl2')
     expect(webglCalls).toHaveLength(1)
-    expect(webglCalls[0]?.[1]).toEqual(SHADER_CONTEXT_ATTRIBUTES)
+    // Fix round (T43-M1): assert the literal spec §6.2 shape, not
+    // `SHADER_CONTEXT_ATTRIBUTES` itself -- comparing against the very
+    // object the component passed is `x === x` and cannot catch a real
+    // regression (e.g. `preserveDrawingBuffer` flipped to `false`, which
+    // would make the frozen snapshot blank while this assertion still
+    // passed).
+    expect(webglCalls[0]?.[1]).toEqual({
+      alpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: true,
+      powerPreference: 'low-power',
+      failIfMajorPerformanceCaveat: true,
+    })
+    // The component's own exported constant must also match that literal
+    // shape -- keeps the two assertions from drifting apart silently.
+    expect(SHADER_CONTEXT_ATTRIBUTES).toEqual(webglCalls[0]?.[1])
   })
 
   it('mounting two concurrently renders exactly one <canvas> -- the module counter denies the second', () => {
@@ -282,6 +345,93 @@ describe('ShaderField (spec §6.2: the context contract, direct mount against a 
       expect(canvas.height).toBe(Math.round(cssHeight * 0.5))
     } finally {
       globalThis.ResizeObserver = originalResizeObserver
+    }
+  })
+
+  it('bails before requesting a webgl2 context when a colour token is empty or unparseable (T43-M3)', () => {
+    restoreTokens()
+    restoreTokens = stubShaderTokens({ '--shader-a': '', '--shader-b': 'oklch(0.16 0.045 305)' })
+    render(<ShaderField preset="aurora" />)
+    const webglCalls = fakeCanvas.getContextSpy.mock.calls.filter(([type]) => type === 'webgl2')
+    // An empty token must fail to the CSS floor `ShaderSurface` already
+    // painted -- never to an opaque black rectangle drawn by a live GL
+    // context with a black uniform.
+    expect(webglCalls).toHaveLength(0)
+  })
+
+  it('accumulates only drawn time toward the 4500ms settle -- scrolling the field off-screen and back does not skip the gesture (T43-I3)', () => {
+    let rafCallback: ((now: number) => void) | null = null
+    const originalRaf = globalThis.requestAnimationFrame
+    const originalCancelRaf = globalThis.cancelAnimationFrame
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      rafCallback = cb as (now: number) => void
+      return 1
+    }) as typeof globalThis.requestAnimationFrame
+    globalThis.cancelAnimationFrame = (() => {}) as typeof globalThis.cancelAnimationFrame
+
+    let intersectionCallback: IntersectionObserverCallback | null = null
+    class FakeIntersectionObserver {
+      constructor(cb: IntersectionObserverCallback) {
+        intersectionCallback = cb
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return []
+      }
+    }
+    const originalIO = globalThis.IntersectionObserver
+    globalThis.IntersectionObserver = FakeIntersectionObserver as unknown as typeof IntersectionObserver
+
+    function tick(now: number) {
+      act(() => {
+        rafCallback?.(now)
+      })
+    }
+    function setIntersecting(value: boolean) {
+      act(() => {
+        intersectionCallback?.([{ isIntersecting: value } as IntersectionObserverEntry], {} as IntersectionObserver)
+      })
+    }
+
+    try {
+      const { container } = render(<ShaderField preset="aurora" />)
+      expect(rafCallback).not.toBeNull()
+
+      tick(50) // the first drawn frame
+      expect(container.querySelector('[data-shader-frozen]')).toBeNull()
+
+      setIntersecting(false) // scrolled off-screen
+      tick(10050) // 10s of real time pass while hidden -- must not count
+      expect(container.querySelector('[data-shader-frozen]')).toBeNull()
+
+      setIntersecting(true) // scrolled back into view
+      tick(10100)
+      // Wall-clock time since the first frame is now >10s -- comfortably
+      // past SETTLE_MS. If the settle clock were wall-clock (the T43-I3
+      // bug), this frame would already freeze. It must not: almost none of
+      // that time was spent actually drawing.
+      expect(container.querySelector('[data-shader-frozen]')).toBeNull()
+      expect(container.querySelector('[data-shader-field]')).not.toBeNull()
+
+      // Drive real, visible frames until the accumulated *drawn* time
+      // actually reaches SETTLE_MS, proving the settle still happens on
+      // its own budget rather than never firing at all.
+      let now = 10100
+      for (let i = 0; i < 200 && !container.querySelector('[data-shader-frozen]'); i++) {
+        now += 40
+        tick(now)
+      }
+      expect(container.querySelector('[data-shader-frozen]')).not.toBeNull()
+      // The frozen canvas keeps the same `data-shader-field` marker the
+      // live one carried -- T43-M4 -- so one selector spans the whole
+      // lifecycle instead of going dark the moment the field settles.
+      expect(container.querySelector('[data-shader-field]')).not.toBeNull()
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf
+      globalThis.cancelAnimationFrame = originalCancelRaf
+      globalThis.IntersectionObserver = originalIO
     }
   })
 })

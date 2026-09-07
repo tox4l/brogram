@@ -56,9 +56,16 @@ export function ShaderSurface({ preset = 'aurora', motionPref, className }: Shad
         className="absolute inset-0"
         style={{
           backgroundColor: 'var(--shader-a)',
+          // Fix round (T43-I2): the second stop was `var(--shader-a)` fading
+          // to `transparent` -- a gradient in the same colour as the
+          // background it sits on, a no-op everywhere. `--glow` carries a
+          // real low-alpha value in all five palette blocks (spec §2.3), so
+          // this stop is now actually visible in every palette, including
+          // Eclipse, where the CSS floor is meant to be "the same finished
+          // look" as the live field, not an invisible one.
           backgroundImage:
             'radial-gradient(circle at 24% 18%, var(--shader-b), transparent 60%), ' +
-            'radial-gradient(circle at 76% 82%, var(--shader-a), transparent 65%)',
+            'radial-gradient(circle at 76% 82%, var(--glow), transparent 65%)',
         }}
       />
       {live ? <ShaderField preset={preset} /> : null}

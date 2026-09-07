@@ -66,15 +66,16 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram | null {
  * with `getImageData`, which is 8-bit sRGB everywhere. Read once at init
  * only (spec rule 3), never on a timer, never per frame.
  */
-function readTokenColor(varName: string): [number, number, number] {
+function readTokenColor(varName: string): [number, number, number] | null {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
-  if (!raw) return [0, 0, 0]
+  if (!raw) return null
   const probe = document.createElement('canvas')
   probe.width = 1
   probe.height = 1
   const ctx2d = probe.getContext('2d')
-  if (!ctx2d) return [0, 0, 0]
+  if (!ctx2d) return null
   ctx2d.fillStyle = raw
+  if (!ctx2d.fillStyle) return null // the token failed to parse; fail to the CSS floor, not to black
   ctx2d.fillRect(0, 0, 1, 1)
   const [r, g, b] = ctx2d.getImageData(0, 0, 1, 1).data
   return [r / 255, g / 255, b / 255]
@@ -150,13 +151,38 @@ export default function ShaderField({ preset }: ShaderFieldProps) {
 
   useEffect(() => {
     if (!acquired || frozen) return
-    if (prefersLessData()) return // bail before creating anything (spec rule 8)
+    if (prefersLessData()) {
+      // Fix round: release the singleton slot the moment this instance
+      // decides it will never render, so a denied second mount can retry.
+      acquiredRef.current = false
+      releaseShaderContext()
+      return // bail before creating anything (spec rule 8)
+    }
 
     const canvas = glCanvasRef.current
     if (!canvas) return
 
+    // Fix round (T43-M3): resolve both colours *before* touching `getContext`.
+    // An empty or unparseable token means the field must never draw at all --
+    // bailing here, rather than after acquiring a GL context, keeps the CSS
+    // floor `ShaderSurface` already painted as the final look instead of an
+    // opaque black rectangle on top of it.
+    const colorA = readTokenColor('--shader-a')
+    const colorB = readTokenColor('--shader-b')
+    if (!colorA || !colorB) {
+      acquiredRef.current = false
+      releaseShaderContext()
+      return
+    }
+
     const gl = canvas.getContext('webgl2', SHADER_CONTEXT_ATTRIBUTES)
-    if (!gl) return // -> the CSS floor is the final look; no layout branch
+    if (!gl) {
+      // Fix round (T43-M2): same slot release as the save-data bail above --
+      // a context this app will never get must not keep the singleton held.
+      acquiredRef.current = false
+      releaseShaderContext()
+      return // -> the CSS floor is the final look; no layout branch
+    }
 
     const program = createProgram(gl)
     if (!program) return
@@ -166,8 +192,8 @@ export default function ShaderField({ preset }: ShaderFieldProps) {
     const uTime = gl.getUniformLocation(program, 'uTime')
     const uColorA = gl.getUniformLocation(program, 'uColorA')
     const uColorB = gl.getUniformLocation(program, 'uColorB')
-    gl.uniform3fv(uColorA, readTokenColor('--shader-a'))
-    gl.uniform3fv(uColorB, readTokenColor('--shader-b'))
+    gl.uniform3fv(uColorA, colorA)
+    gl.uniform3fv(uColorB, colorB)
 
     let width = 0
     let height = 0
@@ -210,8 +236,15 @@ export default function ShaderField({ preset }: ShaderFieldProps) {
     let raf = 0
     let running = true
     let contextLost = false
-    let start = 0
+    // Fix round (T43-I3): `elapsed` accumulates only the time actual frames
+    // were drawn, not wall-clock time since the first frame. Drawing is
+    // gated on intersection/visibility above, so a learner who scrolls the
+    // field off-screen and back must not have that gap count toward
+    // `SETTLE_MS` -- otherwise the settle fires the instant they scroll back,
+    // with the whole 4.5s gesture having played out unseen while hidden.
+    let elapsed = 0
     let lastFrame = 0
+    let lastDrawn = 0
     let firstFrameDrawn = false
 
     function loseContext() {
@@ -229,17 +262,36 @@ export default function ShaderField({ preset }: ShaderFieldProps) {
       snapshot.getContext('2d')?.drawImage(canvas!, 0, 0)
       snapshotRef.current = snapshot
       setFrozen(true) // -> unmounts the GL canvas; the ref callback below paints `snapshot` in
-      loseContext()
+      // Fix round (T43-I1): do NOT call `loseContext()` here. `setFrozen(true)`
+      // only *schedules* the re-render; this callback is still running inside
+      // the frame that drew the live canvas, which is still mounted and
+      // composited. Losing the context now paints one blank (transparent
+      // black) frame before React ever swaps in the snapshot canvas -- the
+      // exact flash spec 6.2 rule 7 forbids. This effect's own cleanup below
+      // calls the same `loseContext()`, and because `frozen` is a dependency
+      // of this effect, that cleanup runs only after React has already
+      // unmounted this GL canvas and painted the frozen one in its place.
+      //
+      // Fix round (T43-M2): release the singleton slot the moment this
+      // instance stops being a live shader, so a denied second mount isn't
+      // stuck forever behind an instance that will never render again.
+      acquiredRef.current = false
+      releaseShaderContext()
     }
 
     function frame(now: number) {
       if (!running) return
       raf = requestAnimationFrame(frame)
-      if (!intersecting || document.visibilityState !== 'visible') return
+      if (!intersecting || document.visibilityState !== 'visible') {
+        lastDrawn = 0 // drop the accumulator anchor -- this gap must not count
+        return
+      }
       if (now - lastFrame < FRAME_BUDGET_MS) return
       lastFrame = now
-      if (!start) start = now
-      const elapsed = now - start
+      // Clamp a single gap to 100ms so one long stall (a slow tab, a big
+      // scroll-away-and-back) cannot itself consume the whole settle budget.
+      if (lastDrawn) elapsed += Math.min(now - lastDrawn, 100)
+      lastDrawn = now
       gl!.uniform2f(uResolution, width, height)
       gl!.uniform1f(uTime, elapsed / 1000)
       gl!.drawArrays(gl!.TRIANGLES, 0, 3)
@@ -262,11 +314,21 @@ export default function ShaderField({ preset }: ShaderFieldProps) {
 
   if (!acquired) return null
 
+  // Fix round (T43-M5): the frozen snapshot is a fixed-resolution bitmap
+  // captured once at freeze time -- its `ResizeObserver` is gone (this
+  // effect's cleanup disconnected it along with everything else), so a
+  // window resize after `SETTLE_MS` CSS-stretches whatever was captured.
+  // Accepted as-is (documented here per the review's own two options):
+  // the settle-and-freeze gesture only spends a single GPU frame's worth of
+  // detail either way, and re-observing + re-painting a *static* snapshot
+  // on every subsequent resize is more machinery than a frame nobody is
+  // meant to keep looking at closely once it has stopped moving warrants.
   if (frozen) {
     return (
       <canvas
         aria-hidden="true"
-        data-shader-field-frozen={preset}
+        data-shader-field={preset}
+        data-shader-frozen="true"
         className="absolute inset-0 h-full w-full"
         style={{ opacity: 1 }}
         ref={(node) => {
