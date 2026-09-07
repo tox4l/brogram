@@ -16,6 +16,12 @@ export function TimeSpent({ data }: TimeSpentProps) {
           {data.totalLabel} total · {data.daysActive} active day{data.daysActive === 1 ? '' : 's'}
         </span>
       </div>
+      {/* I5, fix round 1: the 1000-row report query cap (spec 5.6) means
+          "total" above can silently under-report a prolific learner's real
+          lifetime figure. This is the one place that ever needed to say so. */}
+      {data.truncated && (
+        <p className="text-[10px] leading-relaxed text-muted-foreground">Based on the most recent 1000 attempts, not the full history.</p>
+      )}
       {data.days.length === 0 ? (
         <p className="text-sm text-muted-foreground">No attempts logged yet. Time spent appears after the first exercise.</p>
       ) : (

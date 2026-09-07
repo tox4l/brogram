@@ -109,11 +109,16 @@ export function useProfileMutation(userId: string | null): ProfileMutation {
     void persistProfilePatch(userId, latest)
       .then(() => {
         consecutiveFailuresRef.current = 0
-        // Reconcile with the server only on success -- see prefsMutation.ts's
-        // matching comment: invalidating unconditionally would refetch the
-        // server's still-unwritten value straight back over a failed
-        // optimistic write, a delayed revert brief Step 4 forbids.
-        void queryClient.invalidateQueries({ queryKey: key })
+        // Reconcile with the server only on success, and only when nothing
+        // newer has been queued in the meantime -- fix round 1 (Opus review
+        // of b509b0e, C1): invalidating unconditionally would refetch and
+        // could land the server's still-incomplete snapshot over a change
+        // made *after* this write started, a delayed revert brief Step 4
+        // forbids. Only one call site uses this hook today, so this guards
+        // against a self-race across two of this hook's own debounce
+        // cycles, the same class of bug `prefsMutation.ts` had across two
+        // *different* hooks writing the same blob.
+        if (pendingRef.current === null && timerRef.current === null) void queryClient.invalidateQueries({ queryKey: key })
       })
       .catch(() => {
         consecutiveFailuresRef.current += 1
@@ -128,6 +133,11 @@ export function useProfileMutation(userId: string | null): ProfileMutation {
 
   const mutate = useCallback((change: ProfileChange) => {
     if (!userId) return
+    const key = qk.learnerState(userId)
+    // Cancel before the optimistic write: an in-flight refetch left over
+    // from an earlier write's settle must not resolve after this newer
+    // `setQueryData` and overwrite it.
+    void queryClient.cancelQueries({ queryKey: key })
     const resolved = applyToCache(queryClient, userId, change)
     pendingRef.current = mergeOneLevel(pendingRef.current ?? {}, resolved)
     if (timerRef.current !== null) clearTimeout(timerRef.current)

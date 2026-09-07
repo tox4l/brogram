@@ -6,7 +6,7 @@
  * out. This is what derive.test.ts exercises directly.
  */
 
-import type { Attempt, Clo, CloId, DrillKind, DrillResult, LearnerState, PatternId } from '@/lib/contracts'
+import type { Attempt, Clo, CloId, DrillKind, DrillLane, DrillResult, LearnerState, PatternId } from '@/lib/contracts'
 
 // ---------------------------------------------------------------------------
 // Caps. Every list on the report is bounded so a section never overflows its
@@ -227,10 +227,23 @@ export interface TimeSpentData {
   daysActive: number
   /** Most recent MAX_TIME_SPENT_DAYS active days, oldest first. */
   days: DayTime[]
+  /**
+   * I5, fix round 1 (Opus review of `b509b0e`): true when `attempts` is the
+   * capped, narrow report query at its cap (`REPORT_ATTEMPTS_CAP` in
+   * `src/app/(app)/reports/data.ts`) rather than the learner's complete
+   * history. `totalMs`/`totalLabel` read as lifetime figures ("{n} total");
+   * once the fetch itself is capped, that claim is no longer necessarily
+   * true, so the section needs to say so rather than silently under-report.
+   */
+  truncated: boolean
 }
 
-/** Sum of attempts[].durationMs per UTC calendar day, plus the grand total. */
-export function deriveTimeSpent(attempts: Attempt[], limit = MAX_TIME_SPENT_DAYS): TimeSpentData {
+/** Sum of attempts[].durationMs per UTC calendar day, plus the grand total.
+ *  `truncated` (the caller already knows whether the attempts it passed in
+ *  hit the report query's row cap) rides straight into `TimeSpentData` --
+ *  this function has no way to tell a genuinely-complete short history from
+ *  a capped one on its own. */
+export function deriveTimeSpent(attempts: Attempt[], limit = MAX_TIME_SPENT_DAYS, truncated = false): TimeSpentData {
   const byDay = new Map<string, number>()
   let totalMs = 0
 
@@ -252,7 +265,7 @@ export function deriveTimeSpent(attempts: Attempt[], limit = MAX_TIME_SPENT_DAYS
     durationLabel: formatDuration(ms),
   }))
 
-  return { totalMs, totalLabel: formatDuration(totalMs), daysActive: byDay.size, days }
+  return { totalMs, totalLabel: formatDuration(totalMs), daysActive: byDay.size, days, truncated }
 }
 
 // ---------------------------------------------------------------------------
@@ -266,15 +279,54 @@ export interface DrillKindSummary {
   count: number
 }
 
-/** drillResults grouped by kind, best/mean/count. All six kinds are always present, even with zero results. */
-export function deriveDrillScores(drillResults: DrillResult[]): DrillKindSummary[] {
-  return DRILL_KIND_ORDER.map(kind => {
-    const scores = drillResults.filter(r => r.kind === kind).map(r => r.score)
-    if (scores.length === 0) return { kind, best: 0, mean: 0, count: 0 }
-    const best = Math.max(...scores)
-    const mean = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
-    return { kind, best, mean, count: scores.length }
-  })
+export interface LaneDrillScores {
+  lane: DrillLane
+  /** Only kinds this learner has actually run, in DRILL_KIND_ORDER. */
+  rows: DrillKindSummary[]
+}
+
+/** Display order: Arcade before Playground, matching every other de-rot
+ *  surface (the hub, the run screen). */
+const LANE_ORDER: DrillLane[] = ['arcade', 'play']
+
+/**
+ * `drillResults` grouped by lane, then by kind, best/mean/count -- fix round
+ * 1, I6 (Wave 0 review I3, routed here): the previous version always
+ * rendered all twelve kinds, most of them "Not attempted" forever for a
+ * learner who has not touched a given kind or an entire lane yet. This now
+ * shows only kinds with at least one real result, and a lane with zero
+ * attempted kinds is omitted entirely rather than shown as an empty group --
+ * "render only lanes and kinds with data" (fix round 1 dispatch), literally.
+ * The lane itself is read from each `DrillResult.lane`, never a static
+ * kind-to-lane table: a kind's actual results already say which lane they
+ * were run in, so nothing here needs to duplicate `DRILL_META`'s mapping
+ * (`src/app/(app)/derot/lib.ts`, outside this file's ownership).
+ */
+export function deriveDrillScores(drillResults: DrillResult[]): LaneDrillScores[] {
+  const byLaneThenKind = new Map<DrillLane, Map<DrillKind, number[]>>()
+  for (const result of drillResults) {
+    const byKind = byLaneThenKind.get(result.lane) ?? new Map<DrillKind, number[]>()
+    const scores = byKind.get(result.kind) ?? []
+    scores.push(result.score)
+    byKind.set(result.kind, scores)
+    byLaneThenKind.set(result.lane, byKind)
+  }
+
+  const groups: LaneDrillScores[] = []
+  for (const lane of LANE_ORDER) {
+    const byKind = byLaneThenKind.get(lane)
+    if (!byKind || byKind.size === 0) continue
+    const rows: DrillKindSummary[] = DRILL_KIND_ORDER
+      .filter(kind => byKind.has(kind))
+      .map(kind => {
+        const scores = byKind.get(kind)!
+        const best = Math.max(...scores)
+        const mean = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+        return { kind, best, mean, count: scores.length }
+      })
+    groups.push({ lane, rows })
+  }
+  return groups
 }
 
 // ---------------------------------------------------------------------------

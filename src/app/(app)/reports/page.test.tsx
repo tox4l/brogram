@@ -102,7 +102,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-09-06T12:00:00.000Z'))
   mocks.session.mockReturnValue(session())
-  mocks.fetchReportData.mockReset().mockResolvedValue({ clos, attempts, drillResults })
+  mocks.fetchReportData.mockReset().mockResolvedValue({ clos, attempts, drillResults, attemptsTruncated: false })
   mocks.downloadReportPdf.mockReset().mockResolvedValue(undefined)
 })
 afterEach(() => {
@@ -140,6 +140,23 @@ describe('reports page', () => {
     await waitFor(() => expect(mocks.fetchReportData).toHaveBeenCalledWith(expect.anything(), 'learner-1', 'INFS1101'))
   })
 
+  // I4, fix round 1 (Opus review of b509b0e): `TabsContent` genuinely
+  // unmounts the inactive panel, so switching away and back recreates this
+  // query's component -- with no staleTime that refetched clos/wellness/up
+  // to 1000 attempts on every single toggle.
+  it('does not refetch on a Trophies -> Report -> Trophies -> Report round trip within the stale window', async () => {
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
+    await screen.findByTestId('report-preview')
+    expect(mocks.fetchReportData).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Trophies' }))
+    await openReportTab()
+    await screen.findByTestId('report-preview')
+
+    expect(mocks.fetchReportData).toHaveBeenCalledTimes(1)
+  })
+
   it('loads clos, attempts, and drill results for the current course and passes them through to the report', async () => {
     render(<ReportsPage />, { wrapper: wrapper() })
     await openReportTab()
@@ -171,12 +188,32 @@ describe('reports page', () => {
   })
 
   it('renders the report even with zero attempts and zero drill results', async () => {
-    mocks.fetchReportData.mockResolvedValue({ clos, attempts: [], drillResults: [] })
+    mocks.fetchReportData.mockResolvedValue({ clos, attempts: [], drillResults: [], attemptsTruncated: false })
     render(<ReportsPage />, { wrapper: wrapper() })
     await openReportTab()
     const preview = await screen.findByTestId('report-preview')
     expect(within(preview).getByText('No attempts logged yet. Time spent appears after the first exercise.')).toBeTruthy()
-    expect(within(preview).getAllByText('Not attempted').length).toBeGreaterThan(0)
+    // I6, fix round 1: no permanent "Not attempted" rows -- a lane nobody
+    // has touched does not render at all.
+    expect(within(preview).getByText('No de-rot runs yet. Scores appear here after the first one.')).toBeTruthy()
+  })
+
+  // I5, fix round 1 (Opus review of b509b0e): the report query's 1000-row
+  // cap can silently under-report a prolific learner's lifetime total; the
+  // Time spent section must say so when the cap was actually hit.
+  it('shows the truncation caveat in Time spent when the attempts cap was hit', async () => {
+    mocks.fetchReportData.mockResolvedValue({ clos, attempts, drillResults, attemptsTruncated: true })
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
+    const preview = await screen.findByTestId('report-preview')
+    expect(within(preview).getByText('Based on the most recent 1000 attempts, not the full history.')).toBeTruthy()
+  })
+
+  it('never shows the truncation caveat when the cap was not hit', async () => {
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
+    const preview = await screen.findByTestId('report-preview')
+    expect(within(preview).queryByText(/Based on the most recent 1000/)).toBeNull()
   })
 
   it('wires the download button to the unscaled report container and a dated file name', async () => {

@@ -5,6 +5,11 @@ export interface ReportData {
   clos: Clo[]
   attempts: Attempt[]
   drillResults: DrillResult[]
+  /** I5, fix round 1 (Opus review): true when `attempts.length` hit the cap
+   *  exactly, the honest (if imperfect) signal that more history likely
+   *  exists beyond what this narrow query fetched -- threaded through to the
+   *  Time spent section so a lifetime-looking total can say it might not be. */
+  attemptsTruncated: boolean
 }
 
 /**
@@ -93,5 +98,6 @@ export async function fetchReportData(client: SupabaseClient, userId: string, co
     clos: ((clos.data as Record<string, unknown>[] | null) ?? []).map(mapClo),
     attempts,
     drillResults: (wellness.data?.drill_results as DrillResult[] | null) ?? [],
+    attemptsTruncated: attempts.length === REPORT_ATTEMPTS_CAP,
   }
 }

@@ -6,6 +6,7 @@ import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { resetDockPrefsCacheForTests } from '@/lib/wellness/dock'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { resetWellnessPrefsWriterForTests, useWellnessPrefsMutation } from '@/app/(app)/account/prefsMutation'
 import type { WellnessRow } from '@/lib/learner/compile'
 import { useDockPrefsMutation } from './useDockPrefs'
 
@@ -45,6 +46,7 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.useRealTimers()
   resetDockPrefsCacheForTests()
+  resetWellnessPrefsWriterForTests()
 })
 
 function wrapper() {
@@ -147,5 +149,57 @@ describe('useDockPrefsMutation', () => {
       'user_id',
       'learner-one',
     )
+  })
+
+  // C1, fix round 1 (Opus review of b509b0e): the dock widget (this hook)
+  // and the Account page's own sound/motion/goal controls
+  // (`useWellnessPrefsMutation`) used to keep entirely independent debounce
+  // timers over the same `wellness.prefs` blob -- a dock change could
+  // silently drop an unflushed sound change, and vice versa. Both now
+  // delegate to the same module-level writer, so a change on either "hook"
+  // shares one queue.
+  it('C1 (fix round 1): a dock change and a sound change made moments apart share one write, and both survive', async () => {
+    db.row = {
+      prefs: {
+        sound: { enabled: true, volume: 0.6, interface: false },
+        dock: { placement: 'right', collapsed: false, compactOnExercise: true, corner: 'br' },
+      },
+    }
+    const { Wrapper, client } = wrapper()
+    const { result } = renderHook(() => ({
+      dock: useDockPrefsMutation('learner-one'),
+      prefs: useWellnessPrefsMutation('learner-one'),
+    }), { wrapper: Wrapper })
+
+    act(() => { result.current.dock.mutate(() => ({ placement: 'left' })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    act(() => { result.current.prefs.mutate((current) => ({ sound: { ...current.sound, enabled: false } })) })
+
+    // The second mutate() re-arms the *same* shared timer -- nothing has
+    // reached the network yet at what would have been the dock-only deadline.
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+    expect(mocks.update).not.toHaveBeenCalled()
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(mocks.update).toHaveBeenCalledTimes(1)
+    const written = mocks.update.mock.calls[0][1] as { prefs: { dock?: Record<string, unknown>; sound?: Record<string, unknown> } }
+    expect(written.prefs.dock).toEqual(expect.objectContaining({ placement: 'left' }))
+    expect(written.prefs.sound).toEqual(expect.objectContaining({ enabled: false }))
+
+    // No flip-back: the cache reflects both changes, not just the last one
+    // written and not a stale server snapshot from either hook alone.
+    const cached = resolveWellnessPrefs(client.getQueryData<WellnessRow>(qk.wellness('learner-one'))?.prefs)
+    expect(cached.dock.placement).toBe('left')
+    expect(cached.sound.enabled).toBe(false)
+  })
+
+  it('C1 (fix round 1): cancels any in-flight fetch for this key before applying a new optimistic write', () => {
+    const { Wrapper, client } = wrapper()
+    const cancelSpy = vi.spyOn(client, 'cancelQueries')
+    const { result } = renderHook(() => useDockPrefsMutation('learner-one'), { wrapper: Wrapper })
+
+    act(() => result.current.mutate(() => ({ placement: 'top' })))
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: qk.wellness('learner-one') })
   })
 })

@@ -246,8 +246,8 @@ describe('deriveMistakeTrend', () => {
 })
 
 describe('deriveTimeSpent', () => {
-  it('renders zeroes without throwing when there are no attempts', () => {
-    expect(deriveTimeSpent([])).toEqual({ totalMs: 0, totalLabel: '0m', daysActive: 0, days: [] })
+  it('renders zeroes without throwing when there are no attempts, and defaults truncated to false', () => {
+    expect(deriveTimeSpent([])).toEqual({ totalMs: 0, totalLabel: '0m', daysActive: 0, days: [], truncated: false })
   })
 
   it('sums durationMs per UTC day and reports the grand total and active day count', () => {
@@ -273,29 +273,58 @@ describe('deriveTimeSpent', () => {
     expect(data.days).toHaveLength(14)
     expect(data.days[13].date).toBe('2026-08-20')
   })
+
+  // I5, fix round 1 (Opus review of b509b0e): the caller (reports/data.ts,
+  // via ReportPages) knows whether the attempts it fetched hit the report
+  // query's 1000-row cap -- this function has no way to tell that from the
+  // list alone, so the flag rides straight through.
+  it('carries the truncated flag straight through, defaulting to false when omitted', () => {
+    const attempts = [makeAttempt({ createdAt: '2026-09-01T00:00:00.000Z' })]
+    expect(deriveTimeSpent(attempts).truncated).toBe(false)
+    expect(deriveTimeSpent(attempts, undefined, true).truncated).toBe(true)
+    expect(deriveTimeSpent(attempts, 14, false).truncated).toBe(false)
+  })
 })
 
 describe('deriveDrillScores', () => {
-  it('always returns all twelve kinds, zeroed and non-throwing, when there is no history', () => {
-    const rows = deriveDrillScores([])
-    expect(rows).toHaveLength(12)
-    expect(rows.every(r => r.count === 0 && r.best === 0 && r.mean === 0)).toBe(true)
-    expect(rows.map(r => r.kind)).toEqual([
-      'predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type',
-      'follow-the-dot', 'color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid',
-    ])
+  // I6, fix round 1 (Wave 0 review I3, routed here): the previous version
+  // always returned all twelve kinds, most permanently "Not attempted" --
+  // now a kind with no results does not appear at all, and neither does a
+  // lane (Arcade / Playground) with nothing run in it.
+  it('returns no groups at all when there is no history, rather than twelve zeroed rows', () => {
+    expect(deriveDrillScores([])).toEqual([])
   })
 
-  it('computes best, mean, and count per kind', () => {
+  it('computes best, mean, and count per kind, grouped by lane, in DRILL_KIND_ORDER, omitting anything never run', () => {
     const results: DrillResult[] = [
-      makeDrill({ kind: 'trace', score: 60 }),
-      makeDrill({ kind: 'trace', score: 90 }),
-      makeDrill({ kind: 'n-back', score: 50 }),
+      makeDrill({ kind: 'trace', score: 60, lane: 'arcade' }),
+      makeDrill({ kind: 'trace', score: 90, lane: 'arcade' }),
+      makeDrill({ kind: 'n-back', score: 50, lane: 'arcade' }),
     ]
-    const rows = deriveDrillScores(results)
-    expect(rows.find(r => r.kind === 'trace')).toMatchObject({ best: 90, mean: 75, count: 2 })
-    expect(rows.find(r => r.kind === 'n-back')).toMatchObject({ best: 50, mean: 50, count: 1 })
-    expect(rows.find(r => r.kind === 'speed-type')).toMatchObject({ best: 0, mean: 0, count: 0 })
+    const groups = deriveDrillScores(results)
+    expect(groups).toEqual([
+      {
+        lane: 'arcade',
+        rows: [
+          { kind: 'trace', best: 90, mean: 75, count: 2 },
+          { kind: 'n-back', best: 50, mean: 50, count: 1 },
+        ],
+      },
+    ])
+    // 'speed-type' (arcade, never run) and the whole 'play' lane (never
+    // touched) are both absent -- not present as a zeroed row or an empty group.
+    expect(groups.flatMap(g => g.rows).some(r => r.kind === 'speed-type')).toBe(false)
+    expect(groups.some(g => g.lane === 'play')).toBe(false)
+  })
+
+  it('groups by lane using each result\'s own lane, one group per lane actually played, Arcade before Playground', () => {
+    const results: DrillResult[] = [
+      makeDrill({ kind: 'reaction', score: 70, lane: 'play' }),
+      makeDrill({ kind: 'trace', score: 80, lane: 'arcade' }),
+    ]
+    const groups = deriveDrillScores(results)
+    expect(groups.map(g => g.lane)).toEqual(['arcade', 'play'])
+    expect(groups.find(g => g.lane === 'play')?.rows).toEqual([{ kind: 'reaction', best: 70, mean: 70, count: 1 }])
   })
 })
 

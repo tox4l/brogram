@@ -44,6 +44,15 @@ function useReportData(userId: string | null, courseCode: string | null) {
     queryKey: [...qk.reportAttempts(userId ?? ''), courseCode ?? ''],
     queryFn: () => fetchReportData(createClient(), userId as string, courseCode as string),
     enabled: needed,
+    // I4, fix round 1 (Opus review of b509b0e): `TabsContent`'s default
+    // `keepMounted={false}` genuinely unmounts the inactive panel (the same
+    // fact Step 1's "does not fire until opened" guarantee relies on), so
+    // this query -- and its component -- is destroyed and recreated on every
+    // Trophies <-> Report toggle. With no staleTime that recreation refetches
+    // the whole bundle (clos, wellness, up to 1000 attempts) every single
+    // time, for data that cannot have changed mid-session.
+    staleTime: 60_000,
+    gcTime: 300_000,
   })
   return {
     data: query.data ?? null,
@@ -113,6 +122,7 @@ function ReportTab({ userId, courseCode, learnerState }: { userId: string | null
                   focus={focus}
                   generatedAt={generatedAt}
                   displayName={displayName}
+                  attemptsTruncated={report.data.attemptsTruncated}
                 />
               </div>
             </div>
@@ -128,6 +138,7 @@ function ReportTab({ userId, courseCode, learnerState }: { userId: string | null
                 focus={focus}
                 generatedAt={generatedAt}
                 displayName={displayName}
+                attemptsTruncated={report.data.attemptsTruncated}
               />
             </div>
           </div>

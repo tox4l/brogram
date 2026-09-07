@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
 import { useLearnerState, useWellness } from '@/lib/query/hooks'
-import { useDockPrefsMutation } from '@/components/wellness/useDockPrefs'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { THEMES } from '@/lib/theme/themes'
@@ -20,6 +19,23 @@ import { useProfileMutation } from './profileMutation'
 import { useDiagnostics, type DiagnosticMetric } from './diagnostics'
 
 const MIN_PASSWORD_LENGTH = 8
+
+/**
+ * `true` once the client has painted at least once; `false` on the server
+ * render and the first client render (identical output, no hydration
+ * mismatch). `useSyncExternalStore` with a `getServerSnapshot` that differs
+ * from `getSnapshot` is the documented way to get this one, cascade-render
+ * flag without the `useState(false)` + `useEffect(() => setState(true))`
+ * pattern the React Compiler lint (`react-hooks/set-state-in-effect`) now
+ * rejects outright -- the same trick `useReducedMotion`
+ * (`src/lib/motion/useReducedMotion.ts`) already uses for its own
+ * server/client snapshot split. There is nothing to subscribe to (this never
+ * changes again after the first paint), so `subscribe` is a no-op.
+ */
+function subscribeNever(): () => void { return () => {} }
+function useMounted(): boolean {
+  return useSyncExternalStore(subscribeNever, () => true, () => false)
+}
 
 const THEME_IDS = THEMES.map((entry) => entry.id)
 function isThemeName(value: string | undefined): value is ThemeName {
@@ -80,25 +96,62 @@ function Section({ id, title, children }: { id: string; title: string; children:
   )
 }
 
+/** WAI-ARIA radiogroup arrow-key handling, shared by every `RadioPills`
+ *  instance and the theme grid below (mirrors `ThemeQuickSwitch`'s own
+ *  `moveTo`/`onRadioKeyDown` -- fix round 1, I3: without this every option
+ *  here was a plain button with default tabIndex and no keydown handler, so
+ *  arrow keys did nothing and Tab walked every option individually instead
+ *  of the roving-tabindex model a "radio group" announces). Right/Down move
+ *  to the next option, Left/Up to the previous, Home/End jump to the ends;
+ *  moving also selects, matching native radio semantics. */
+function useRovingRadioGroup<T>(values: readonly T[], activeIndex: number, onChange: (next: T) => void) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([])
+
+  function moveTo(index: number) {
+    const wrapped = (index + values.length) % values.length
+    refs.current[wrapped]?.focus()
+    onChange(values[wrapped])
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); moveTo(index + 1) }
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); moveTo(index - 1) }
+    else if (event.key === 'Home') { event.preventDefault(); moveTo(0) }
+    else if (event.key === 'End') { event.preventDefault(); moveTo(values.length - 1) }
+  }
+
+  return {
+    ref: (index: number) => (el: HTMLButtonElement | null) => { refs.current[index] = el },
+    tabIndex: (index: number) => (index === Math.max(0, activeIndex) ? 0 : -1),
+    onKeyDown,
+  }
+}
+
 function RadioPills<T extends string>({ label, options, value, onChange }: {
   label: string
   options: readonly { value: T; label: string }[]
   value: T
   onChange: (next: T) => void
 }) {
+  const activeIndex = options.findIndex((option) => option.value === value)
+  const roving = useRovingRadioGroup(options.map((option) => option.value), activeIndex, onChange)
+
   return (
     <div className="space-y-1.5">
       <span className="text-sm font-medium text-foreground">{label}</span>
       <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
-        {options.map((option) => {
+        {options.map((option, index) => {
           const checked = option.value === value
           return (
             <button
               key={option.value}
+              ref={roving.ref(index)}
               type="button"
               role="radio"
               aria-checked={checked}
+              tabIndex={roving.tabIndex(index)}
               onClick={() => onChange(option.value)}
+              onKeyDown={(event) => roving.onKeyDown(event, index)}
               className={cn(
                 'rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
                 checked ? 'border-emerald-300 bg-emerald-300/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
@@ -152,8 +205,12 @@ export default function AccountPage() {
   const wellnessQuery = useWellness()
   const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
   const reducedMotion = useReducedMotion(prefs.motion)
+  // C1, fix round 1 (Opus review of b509b0e): a single writer for
+  // `wellness.prefs` -- the dock controls below call this same mutation
+  // (`useDockPrefsMutation`, used elsewhere by the persistent dock widget,
+  // now itself delegates here) rather than a second, independent debounced
+  // hook racing this one over the same JSONB blob.
   const prefsMutation = useWellnessPrefsMutation(userId)
-  const dockMutation = useDockPrefsMutation(userId)
 
   const learnerStateQuery = useLearnerState()
   const profile = learnerStateQuery.data?.profile ?? null
@@ -168,10 +225,21 @@ export default function AccountPage() {
   const [success, setSuccess] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
-  const activeTheme: ThemeName = isThemeName(theme) ? theme : 'midnight'
+  // I2, fix round 1: `useTheme().theme` is `undefined` on the server render
+  // and on the very first client render, before next-themes hydrates from
+  // storage/the DOM attribute. Falling back to `'midnight'` in that window
+  // (the previous behaviour) rings the Midnight swatch even when the actual
+  // applied theme is something else entirely, and makes Midnight itself
+  // unselectable (the old `id === activeTheme` early-return fires on a false
+  // match). `mounted` is false on both server and first client render
+  // (identical output, no hydration mismatch) and flips true on its own the
+  // next paint -- until then no swatch is marked checked and clicks are
+  // ignored outright, rather than silently comparing against a guessed value.
+  const mounted = useMounted()
+  const activeTheme: ThemeName | null = mounted && isThemeName(theme) ? theme : null
 
   function applyTheme(id: ThemeName) {
-    if (id === activeTheme) return
+    if (!mounted || id === activeTheme) return
     const root = document.documentElement
     root.setAttribute('data-theme-switching', '')
     const canAnimate = !reducedMotion && typeof document.startViewTransition === 'function'
@@ -179,6 +247,8 @@ export default function AccountPage() {
     else setTheme(id)
     window.setTimeout(() => root.removeAttribute('data-theme-switching'), 350)
   }
+
+  const themeRoving = useRovingRadioGroup(THEME_IDS, Math.max(0, THEME_IDS.indexOf(activeTheme ?? THEME_IDS[0])), applyTheme)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -238,15 +308,18 @@ export default function AccountPage() {
         <div className="space-y-1.5">
           <span className="text-sm font-medium text-foreground">Theme</span>
           <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {THEMES.map((entry) => {
-              const checked = entry.id === activeTheme
+            {THEMES.map((entry, index) => {
+              const checked = mounted && entry.id === activeTheme
               return (
                 <button
                   key={entry.id}
+                  ref={themeRoving.ref(index)}
                   type="button"
                   role="radio"
                   aria-checked={checked}
+                  tabIndex={themeRoving.tabIndex(index)}
                   onClick={() => applyTheme(entry.id)}
+                  onKeyDown={(event) => themeRoving.onKeyDown(event, index)}
                   className={cn(
                     'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
                     checked ? 'border-emerald-300 ring-1 ring-emerald-300/50' : 'border-border hover:border-ring/50',
@@ -268,20 +341,20 @@ export default function AccountPage() {
           label="Dock placement"
           options={DOCK_PLACEMENTS}
           value={prefs.dock.placement}
-          onChange={(placement) => dockMutation.mutate(() => ({ placement }))}
+          onChange={(placement) => prefsMutation.mutate((current) => ({ dock: { ...current.dock, placement } }))}
         />
         <SettingToggle
           id="dock-collapse"
           label="Collapse the dock"
           checked={prefs.dock.collapsed}
-          onChange={(collapsed) => dockMutation.mutate(() => ({ collapsed }))}
+          onChange={(collapsed) => prefsMutation.mutate((current) => ({ dock: { ...current.dock, collapsed } }))}
           reducedMotion={reducedMotion}
         />
         <SettingToggle
           id="dock-compact-exercise"
           label="Compact on rep and walkthrough screens"
           checked={prefs.dock.compactOnExercise}
-          onChange={(compactOnExercise) => dockMutation.mutate(() => ({ compactOnExercise }))}
+          onChange={(compactOnExercise) => prefsMutation.mutate((current) => ({ dock: { ...current.dock, compactOnExercise } }))}
           reducedMotion={reducedMotion}
         />
 
@@ -362,9 +435,16 @@ export default function AccountPage() {
         </Section>
       )}
 
-      <Section id="integrity-heading" title="Integrity explained">
-        <IntegrityPanel />
-      </Section>
+      {/* I1, fix round 1: IntegrityPanel's `full` variant already renders its
+          own <h2 id="integrity-heading">, so this is a plain bordered wrapper
+          for visual consistency with the other sections -- not a `Section`,
+          which would duplicate both the heading text and the DOM id.
+          `crossedAt={null}`: the plain Account view has no single threshold
+          being explained (unlike a warned/restricted notice), per the
+          prop's own doc comment. */}
+      <div className="rounded-xl border border-border p-5">
+        <IntegrityPanel crossedAt={null} />
+      </div>
 
       <Section id="diagnostics-heading" title="Diagnostics">
         <p className="text-xs leading-relaxed text-muted-foreground">Local performance signals from this device, this tab, this session only. Nothing here is uploaded.</p>

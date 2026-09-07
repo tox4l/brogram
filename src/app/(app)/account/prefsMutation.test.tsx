@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
-import { useWellnessPrefsMutation } from './prefsMutation'
+import { resetWellnessPrefsWriterForTests, useWellnessPrefsMutation } from './prefsMutation'
 
 const db = vi.hoisted(() => ({ row: null as { prefs?: unknown } | null }))
 const mocks = vi.hoisted(() => ({ select: vi.fn(), update: vi.fn(), insert: vi.fn(), toast: vi.fn() }))
@@ -46,6 +46,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
+  // The module-level writer store (module-level so every component instance
+  // shares one queue in production, see prefsMutation.ts's doc comment)
+  // would otherwise leak pending/timer/failure state across test cases.
+  resetWellnessPrefsWriterForTests()
 })
 
 function wrapper() {

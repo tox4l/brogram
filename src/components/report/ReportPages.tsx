@@ -16,6 +16,12 @@ export interface ReportPagesProps {
   focus: string
   generatedAt: string
   displayName: string
+  /** I5, fix round 1 (Opus review of T2.3's `b509b0e`, not this file's own
+   *  ownership -- edited only because `derive.ts`'s `deriveTimeSpent` signature
+   *  changed underneath it): true when `attempts` is the report query's
+   *  1000-row cap rather than the learner's complete history. Optional so
+   *  every other, unrelated caller of this component keeps compiling. */
+  attemptsTruncated?: boolean
 }
 
 /**
@@ -24,12 +30,12 @@ export interface ReportPagesProps {
  * lays sections out. pdf.ts turns the rendered `[data-report-page]`
  * children into a PDF, one page per container, in DOM order.
  */
-export function ReportPages({ state, clos, attempts, drillResults, focus, generatedAt, displayName }: ReportPagesProps) {
+export function ReportPages({ state, clos, attempts, drillResults, focus, generatedAt, displayName, attemptsTruncated = false }: ReportPagesProps) {
   const focusLine = deriveFocusLine(focus, displayName, generatedAt)
   const masteryRows = deriveMasteryRows(state, clos)
   const patterns = derivePatternsPassed(state, clos)
   const mistakes = deriveMistakeTrend(state, attempts, generatedAt)
-  const time = deriveTimeSpent(attempts)
+  const time = deriveTimeSpent(attempts, undefined, attemptsTruncated)
   const drills = deriveDrillScores(drillResults)
 
   return (
@@ -44,7 +50,7 @@ export function ReportPages({ state, clos, attempts, drillResults, focus, genera
       </ReportPage>
       <ReportPage>
         <TimeSpent data={time} />
-        <DrillScores rows={drills} />
+        <DrillScores groups={drills} />
       </ReportPage>
     </div>
   )
