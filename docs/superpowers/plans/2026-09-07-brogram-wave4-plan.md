@@ -525,3 +525,5 @@ Plus one manual pass the owner runs on a fresh profile against the deployed buil
 4. Open an exercise. Nothing moves while you type. Submit: everything fires.
 5. Open `/derot`. There is exactly one filled button on the screen, and a run is still loud.
 6. Open Account. Switch palette. Nothing flashes, nothing stays the old colour, and every swatch says its own name.
+
+Ruling added 12:05 Doha, 2026-09-07 (controller, after T4.0's review): T4.0's fix round may edit src/components/ui/sonner.tsx, src/components/shell/ThemeQuickSwitch.test.tsx, src/app/(app)/account/page.test.tsx and src/lib/wellness/prefs.ts (THEME_NAMES) for the eclipse and Folio entries, additions and selector updates only, no assertion deleted; T4.5 keeps those files afterwards. Fonts: the 320 KB budget is met by self-hosting latin-subset static instances of Archivo and Newsreader through next/font/local (only the weights and widths the spec uses, subset with fonttools, OFL licence files beside them, total measured at or under 320 KB), not through next/font/google's variable downloads.
