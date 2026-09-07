@@ -22,7 +22,9 @@ import { SHELL_READY, ROUTE_READY, GRADED, CHECK_VERDICT } from '../src/lib/perf
  * `AGENT_DRY_RUN=true` (above) means no assertion here can ever say anything about DeepSeek
  * latency, so "hint click → first token < 1.5s" is not written as a test at all — it is a
  * field-only observation read from Account → Diagnostics (`useVitals()`, `src/lib/perf/
- * vitals.ts`) and Speed Insights. Likewise "the first Run of a session on a cold language is
+ * vitals.ts`), the only field surface this product ships (`@vercel/speed-insights` was struck
+ * from the plan — R9, standing constraint 9 — so there is no second surface here). Likewise
+ * "the first Run of a session on a cold language is
  * not user-visible" is contradicted by the very throttled profile the plan measures against
  * (a 10 MB Pyodide fetch is not hidden by 3-8 seconds of dashboard idle) and is not asserted
  * here either. A budget nobody can measure is a claim, and this file does not ship one.
@@ -113,7 +115,25 @@ const env = readEnv()
 // traceable to the one place its number came from.
 // ---------------------------------------------------------------------------------------
 const PAINT = { lcpMsStandard: 1500, lcpMsExercise: 1800, clsMax: 0.05, inpMaxMs: 200 } as const
-const INTERACTION = { courseTileClickToPaintMs: 100, submitToVerdictMs: 300, lessonCheckToVerdictMs: 120 } as const
+// Fix round 3 (N2-1, controller-granted amendment): the plan's original 100ms row assumed
+// `/course/[code]`'s own render was the cost to cut -- it reads zero Supabase rows itself
+// (`useCourseBundle` reads only the static curriculum bundle already warm from the dashboard
+// load), so there was nothing left to move client-side or stream behind a Suspense boundary.
+// The real, measured cost is upstream of this task's file grant: `src/proxy.ts` ->
+// `src/lib/supabase/middleware.ts`'s `updateSession` runs `rpc('lift_expired_restriction')`
+// then a `profiles` select **in series**, both real network round trips against the production
+// Supabase project, on every request the proxy matches -- before `(app)/layout.tsx`'s own
+// six-way `Promise.all` even starts. Adding `prefetch` to the dashboard's course link (tried
+// first) made this *worse* (857ms, 863ms across two production runs) by racing a second,
+// concurrent full-route prefetch against that same serial path instead of moving it off the
+// critical path; reverted (`src/app/(app)/dashboard/page.tsx`'s own comment carries the
+// numbers). Three production runs at the honest baseline (no prefetch, `next build` + `next
+// start`, real Supabase): 503.8ms, 697.1ms, 503.9ms -- worst of three, 697.1, rounded up to the
+// next 50ms is 700. `docs/superpowers/plans/2026-09-06-brogram-v2-plan.md`'s Wave-3 T3.2 row is
+// amended to match. The real fix is parallelizing (or otherwise shortening) the two serial
+// round trips in `src/lib/supabase/middleware.ts` -- out of this task's file grant; flagged in
+// the T3.2 report, Fix round 3, for whoever owns that file next.
+const INTERACTION = { courseTileClickToPaintMs: 700, submitToVerdictMs: 300, lessonCheckToVerdictMs: 120 } as const
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
@@ -193,9 +213,9 @@ async function armPaintObservers(page: Page): Promise<void> {
     const supported = new Set(PerformanceObserver.supportedEntryTypes ?? [])
     perf.lcpSupported = supported.has('largest-contentful-paint')
     perf.inpSupported = supported.has('event')
-    function observe(type: string, onEntries: (list: PerformanceObserverEntryList) => void) {
+    function observe(type: string, onEntries: (list: PerformanceObserverEntryList) => void, extra?: { durationThreshold: number }) {
       if (!supported.has(type)) return
-      try { new PerformanceObserver(onEntries).observe({ type, buffered: true }) } catch { /* best-effort */ }
+      try { new PerformanceObserver(onEntries).observe({ type, buffered: true, ...extra }) } catch { /* best-effort */ }
     }
     observe('largest-contentful-paint', (list) => {
       const last = list.getEntries().at(-1)
@@ -206,11 +226,27 @@ async function armPaintObservers(page: Page): Promise<void> {
         if (!entry.hadRecentInput) perf.cls += entry.value
       }
     })
+    // Fix round 3, N2-2 (controller-granted): registered with no
+    // `durationThreshold`, the Event Timing API's own default is 104ms -- an
+    // `event` entry only ever surfaces for an interaction slower than that,
+    // so a fast, healthy app produced zero entries here, `perf.inp` stayed
+    // `null` forever, and `not.toBeNull()` below could only pass when some
+    // interaction was already over budget. The controller's ruling named 40
+    // (the `web-vitals` library's own registration threshold) as the value to
+    // try; measured against a real production run of this exact flow
+    // (`AGENT_DRY_RUN=true`, this app's own editor-click and Submit-click),
+    // 40 still produced zero entries -- both interactions genuinely finish
+    // under 40ms here, so `perf.inp` stayed `null` at that threshold too.
+    // Lowered to 0, which the Event Timing spec clamps to its own mandatory
+    // 16ms floor (there is no lower value the browser will honour): a real
+    // run then recorded `inp: 16`, comfortably inside the 200ms budget --
+    // proof this now measures a genuine interaction rather than manufacturing
+    // one, on the fastest threshold the browser exposes.
     observe('event', (list) => {
       for (const entry of list.getEntries() as (PerformanceEntry & { duration: number; interactionId?: number })[]) {
         if (entry.interactionId && (perf.inp === null || entry.duration > perf.inp)) perf.inp = entry.duration
       }
-    })
+    }, { durationThreshold: 0 })
   })
 }
 
@@ -473,13 +509,10 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     // waited for grading. Waits on the verdict banner's own "Needs work" text instead
     // (`page.tsx` renders it only once `loop.outcome` is set).
     //
-    // Fix round 2 (controller ruling): `brogram:graded`'s own call site lives in
-    // `src/hooks/useExerciseLoop.ts`, owned this session by the exercise lane mid-flight --
-    // not touched here. Rather than a hard `requireMark` failure (which would read as this
-    // task's own bug), a missing mark is reported as a named, printed pending delta and this
-    // one budget is skipped; every other assertion in this block (and the rest of the test)
-    // still runs. The controller lands the one `markPerf(GRADED)` line after that lane, and
-    // this reverts to a hard assertion the moment the mark exists.
+    // Fix round 3 (controller ruling): `brogram:graded`'s call site landed in `d1caaec`
+    // (`src/hooks/useExerciseLoop.ts`, the exercise lane's own commit) -- the pending-delta
+    // skip round 2 shipped as a stand-in for that gap is no longer honest and is removed;
+    // this is a hard assertion again.
     // -------------------------------------------------------------------------------
     {
       const editor = page.getByRole('textbox', { name: 'Code editor' })
@@ -490,15 +523,7 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       await markInteractionStart(page)
       await page.getByRole('button', { name: 'Submit' }).click()
       await expect(page.getByText('Needs work').first()).toBeVisible()
-      const gradedMark = await readMark(page, GRADED)
-      if (gradedMark === null) {
-        test.info().annotations.push({
-          type: 'pending-delta',
-          description: 'brogram:graded is not yet emitted -- src/hooks/useExerciseLoop.ts (the exercise lane\'s own file, mid-flight this session) owns the one markPerf(GRADED) call site. Submit -> verdict budget (< 300ms) cannot be measured until the controller lands it.',
-        })
-      } else {
-        expect(await readInteractionDelta(page, GRADED)).toBeLessThan(INTERACTION.submitToVerdictMs)
-      }
+      expect(await readInteractionDelta(page, GRADED)).toBeLessThan(INTERACTION.submitToVerdictMs)
     }
 
     // -------------------------------------------------------------------------------

@@ -8,14 +8,12 @@
  *
  * `useVitalsCollector()` wires Next's own `useReportWebVitals` (`next/web-vitals`) into this
  * buffer, using the docs' own recommended shape: a dedicated, otherwise-empty client
- * component a layout renders once, near the root, so the client boundary stays as small as
- * possible. That one mount call is outside this task's ownership (`src/app/layout.tsx` /
- * `src/app/providers.tsx` belong to T0.4/T0.6) — see this task's report for the exact line.
- * Until it lands, `useVitals()` correctly reads an empty buffer; it is never wrong, just not
- * yet fed. `src/app/(app)/account/diagnostics.ts` (T2.3) already renders the Account →
+ * component (`VitalsCollector.tsx`) a layout renders once, near the root. That mount landed
+ * in `src/app/providers.tsx` (fix round 2), so `useVitals()` is fed on every route, not just
+ * `(app)`. `src/app/(app)/account/diagnostics.ts` (T2.3) also renders the Account →
  * Diagnostics section from its own self-contained `PerformanceObserver` collector, built
- * before this module existed — it is not repointed here, since `src/app/(app)/account/**` is
- * not this task's file.
+ * before this module existed — it merges both sources (fix round 2) rather than dropping
+ * either.
  */
 
 import { useCallback, useSyncExternalStore } from 'react'

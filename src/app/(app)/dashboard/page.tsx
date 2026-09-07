@@ -266,6 +266,36 @@ export default function Dashboard() {
             </>
           )}
           <div className="mt-3 flex flex-wrap gap-3">
+            {/* N2-1 (T3.2 fix round 3): tried `prefetch` (shorthand for
+                `prefetch={true}`, the same treatment `CourseCard.tsx` already
+                carries) here first, on the theory that requesting the full
+                dynamic route ahead of time on viewport entry (this build's
+                own `node_modules/next/dist/docs/01-app/02-guides/
+                prefetching.md`, "the full route is prefetched for both
+                static and dynamic routes") would move the cost off the
+                click. Measured against a real production build twice: it
+                made the click *slower* (857ms, 863ms) than the unprefetched
+                baseline (494-509ms, matching round 2's own numbers, 503.8ms
+                re-confirmed here) -- `/course/[code]` itself makes zero
+                Supabase reads (`useCourseBundle` reads the static curriculum
+                bundle only), so both numbers are paying for the same
+                upstream cost: `src/proxy.ts` -> `src/lib/supabase/
+                middleware.ts`'s `updateSession`, which runs
+                `supabase.rpc('lift_expired_restriction')` then a `profiles`
+                select in series (both real network round trips against the
+                production Supabase project) before `(app)/layout.tsx`'s own
+                six-way `Promise.all` even starts -- on every request this
+                proxy's matcher covers, prefetch included. A second,
+                concurrent full-route prefetch competes with that same path
+                (and this route's parallel-6-read layout) for the project's
+                connection pool instead of moving the cost off the critical
+                path, which is the regression measured above. Left at the
+                default (no `prefetch` prop) rather than shipping a change
+                that measurably makes the budget worse; the real fix is
+                serial-round-trip work in `src/lib/supabase/middleware.ts`
+                and is out of this task's file grant -- see the T3.2 report,
+                Fix round 3, for the exact change to hand to whoever owns
+                that file. */}
             <Link href={`/course/${learnerState.currentCourse}`} className={cn(buttonVariants({ variant: 'outline' }), 'h-9')}>
               Open your course<ArrowUpRight aria-hidden="true" />
             </Link>

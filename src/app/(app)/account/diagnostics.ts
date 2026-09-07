@@ -67,11 +67,11 @@ function start(): void {
 
   const supported = new Set(PerformanceObserver.supportedEntryTypes ?? [])
 
-  function observe(type: string, onEntries: (list: PerformanceObserverEntryList) => void): void {
+  function observe(type: string, onEntries: (list: PerformanceObserverEntryList) => void, extra?: { durationThreshold: number }): void {
     if (!supported.has(type)) return
     try {
       const observer = new PerformanceObserver(onEntries)
-      observer.observe({ type, buffered: true })
+      observer.observe({ type, buffered: true, ...extra })
     } catch {
       // Best-effort: a diagnostics panel must never be the thing that breaks the page.
     }
@@ -88,11 +88,21 @@ function start(): void {
     }
   })
 
+  // Fix round 3, N2-2 (controller-granted): same fix as `e2e/perf.spec.ts`'s
+  // own observer -- with no `durationThreshold` the Event Timing API's
+  // default (104ms) meant this panel could only ever show an INP row for an
+  // interaction already well past a healthy budget. Matches the e2e
+  // observer's own threshold (0, which the Event Timing spec clamps to its
+  // 16ms floor -- see that file for the measurement showing 40, the
+  // `web-vitals` library's own value, still missed a real fast interaction),
+  // so a snappy interaction is no longer invisible to a learner reading their
+  // own numbers here (this was pre-existing, T2.3's code, not introduced by
+  // the gate this fixes).
   observe('event', (list) => {
     for (const item of list.getEntries() as (PerformanceEntry & { duration: number; interactionId?: number })[]) {
       if (item.interactionId) record('INP', Math.round(item.duration))
     }
-  })
+  }, { durationThreshold: 0 })
 
   try {
     const [nav] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
