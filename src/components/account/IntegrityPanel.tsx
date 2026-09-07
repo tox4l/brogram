@@ -63,27 +63,42 @@ export interface IntegrityPanelProps {
   crossedAt?: number | null
 }
 
+/**
+ * Fix round 1, I2: on the schema-0005 fallback, the caveat leads (read before
+ * any number) and "The line is {n}" never sits beside a total this component
+ * knows may be incomplete -- printing both together presented an admittedly
+ * partial, device-only count as if it were the arithmetic that decided the
+ * learner's status. That is the same failure the spec rules out for the
+ * banned screen ("an empty table reads as a cover-up"), in arithmetic form
+ * rather than empty form. The server's total is the only one ever shown next
+ * to "The line is" -- once `my_integrity_breakdown()` is reachable, this
+ * caveat and the suppressed line both disappear on their own.
+ */
 function Receipt({ breakdown, crossedAt }: { breakdown: IntegrityBreakdown; crossedAt?: number | null }) {
-  if (breakdown.rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No flags in the last 7 days.</p>
-  }
+  const isLocal = breakdown.source === 'local'
   return (
     <div className="space-y-3">
-      <ul className="space-y-1.5">
-        {breakdown.rows.map((row) => (
-          <li key={row.type} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 text-sm">
-            <span>{EVENT_LABELS[row.type]}</span>
-            <span className="font-mono text-xs text-muted-foreground">{row.events} at weight {row.weight} — {row.points}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-sm font-medium">
-        Total {breakdown.total}.{crossedAt != null && ` The line is ${crossedAt}.`}
-      </p>
-      {breakdown.source === 'local' && (
+      {isLocal && (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          This is what this browser itself has recorded, not the server&apos;s full seven-day count. The server&apos;s own record is what decided your status.
+          This is this device&apos;s own record, not the server&apos;s count. The server&apos;s count is what actually decided the account&apos;s status, and will show here once it is reachable.
         </p>
+      )}
+      {breakdown.rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No flags in the last 7 days.</p>
+      ) : (
+        <>
+          <ul className="space-y-1.5">
+            {breakdown.rows.map((row) => (
+              <li key={row.type} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 text-sm">
+                <span>{EVENT_LABELS[row.type]}</span>
+                <span className="font-mono text-xs text-muted-foreground">{row.events} at weight {row.weight} — {row.points}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm font-medium">
+            Total {breakdown.total}.{!isLocal && crossedAt != null && ` The line is ${crossedAt}.`}
+          </p>
+        </>
       )}
     </div>
   )
@@ -95,7 +110,13 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
 
   const query = useQuery({
     queryKey: ['integrity-breakdown', userId],
-    queryFn: () => fetchIntegrityBreakdown(createClient(), readLocalIntegrityEvents()),
+    // `userId` is non-null whenever this runs: `enabled` below gates it, and
+    // the guard clause a few lines down returns before render otherwise --
+    // but `enabled` and the render guard are evaluated separately, so the
+    // fallback keeps `readLocalIntegrityEvents` from ever being asked for a
+    // null id (fix round 1, C1 — this is also the userId the local log is
+    // keyed and read by, so a signed-in learner never reads anyone else's).
+    queryFn: () => fetchIntegrityBreakdown(createClient(), userId ? readLocalIntegrityEvents(userId) : []),
     enabled: userId !== null && accountStatus !== 'banned',
     staleTime: 30_000,
   })
@@ -108,7 +129,11 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
   const resolvedCrossedAt = crossedAt === undefined ? THRESHOLD_FOR_STATUS[accountStatus] : (crossedAt ?? undefined)
 
   return (
-    <section aria-labelledby="integrity-heading" className="space-y-5">
+    <section
+      aria-labelledby={variant === 'full' ? 'integrity-heading' : undefined}
+      aria-label={variant === 'full' ? undefined : 'Integrity record'}
+      className="space-y-5"
+    >
       {variant === 'full' && (
         <div className="space-y-2">
           <h2 id="integrity-heading" className="text-lg font-medium tracking-tight">Integrity, explained</h2>
@@ -144,11 +169,14 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
       )}
 
       <div>
-        {variant === 'full' && <h3 className="mb-2 text-sm font-medium text-muted-foreground">Your record, last 7 days</h3>}
+        {variant === 'full' && <h3 className="mb-2 text-sm font-medium text-muted-foreground">Last 7 days</h3>}
         {query.isLoading ? (
-          <p role="status" className="text-sm text-muted-foreground">Loading your record.</p>
+          <p role="status" className="text-sm text-muted-foreground">Loading the record.</p>
         ) : query.isError ? (
-          <p role="alert" className="text-sm text-muted-foreground">Your record could not load. Try again shortly.</p>
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <p>{line('error.load')}</p>
+            <button type="button" onClick={() => void query.refetch()} className="underline underline-offset-2 hover:text-foreground">Try again</button>
+          </div>
         ) : (
           <Receipt breakdown={query.data ?? { rows: [], total: 0, source: 'server' }} crossedAt={resolvedCrossedAt} />
         )}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type SyntheticEvent } from 'react'
 import { LOCKDOWN, type IntegrityEventType } from '@/lib/contracts'
 import { createClient } from '@/lib/supabase/client'
-import { recordLocalIntegrityEvent } from '@/lib/integrity/localLog'
+import { recordLocalIntegrityEvent, syncLocalIntegrityLogUser } from '@/lib/integrity/localLog'
 import { line } from '@/lib/voice/lines'
 import { useSession } from '@/store/session'
 
@@ -66,6 +66,15 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
 
   useEffect(() => { attempt.current = duringAttempt }, [duringAttempt])
 
+  // Fix round 1, C1 hygiene: the moment a different signed-in user is seen on
+  // this browser, drop the previous user's local integrity log outright
+  // (mirrors `resetQueryClientForUser` in `src/lib/query/client.ts`, a file
+  // this task does not own, hence the separate tracker rather than a shared
+  // call). The per-user key (`localLog.ts`) is what actually stops one
+  // learner's receipt from ever reading another's events; this only keeps a
+  // shared machine from accumulating one orphaned key per historical learner.
+  useEffect(() => { syncLocalIntegrityLogUser(userId ?? null) }, [userId])
+
   const flush = useCallback(function flushPending() {
     const now = Date.now()
     const batch: IntegrityRow[] = []
@@ -122,7 +131,7 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
     // `src/lib/integrity/localLog.ts` -- so the itemised receipt has
     // something honest to show even on schema 0005, where
     // `my_integrity_breakdown()` does not exist yet.
-    recordLocalIntegrityEvent(type, now)
+    recordLocalIntegrityEvent(userId, type, now)
     pending.current.set(type, {
       user_id: userId,
       exercise_id: exerciseId,

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IntegrityEventType } from '@/lib/contracts'
 import * as soundManager from '@/lib/sound/manager'
 import { LINE_BANK, line } from '@/lib/voice/lines'
-import { clearLocalIntegrityLog } from '@/lib/integrity/localLog'
+import { clearAllLocalIntegrityLogsForTests } from '@/lib/integrity/localLog'
 import { useLockdown } from './useLockdown'
 
 const { insert } = vi.hoisted(() => ({ insert: vi.fn().mockResolvedValue({ error: null }) }))
@@ -22,7 +22,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-05T12:00:00Z'))
   insert.mockReset().mockResolvedValue({ error: null })
   sessionStorage.clear()
-  clearLocalIntegrityLog()
+  clearAllLocalIntegrityLogsForTests()
   Object.defineProperty(document, 'hidden', { configurable: true, value: false })
 })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks() })
@@ -111,6 +111,14 @@ describe('useLockdown', () => {
     expect(first.length).toBeGreaterThan(0)
     expect(second).not.toBe(first)
     expect(result.current.pasteWhy).toBe(line('guard.paste.why'))
+  })
+
+  it('mirrors an accepted event into this signed-in user\'s own local log, keyed by user id (C1)', async () => {
+    const { result } = renderHook(() => useLockdown('exercise-1'))
+    act(() => { result.current.logIntegrity('paste-blocked') })
+    const stored = JSON.parse(localStorage.getItem('brogram:integrity-log:learner-1') ?? '[]')
+    expect(stored).toEqual([expect.objectContaining({ type: 'paste-blocked' })])
+    expect(localStorage.getItem('brogram:integrity-log:some-other-learner')).toBeNull()
   })
 
   it('never plays a sound or fires any animation hook on a guard event (R9.6 — enforcement surfaces get no personality)', async () => {

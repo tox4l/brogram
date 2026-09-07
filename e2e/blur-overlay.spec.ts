@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { test, expect } from '@playwright/test'
 import type { Exercise } from '../src/lib/contracts'
+import { LINE_BANK } from '../src/lib/voice/lines'
 import { readEnv, hasEnv, serviceClient, createOrReuseInvitedUser, mintSession, resetLearnerData, type E2eEnv } from './support/session'
 
 const env = readEnv()
@@ -36,7 +37,10 @@ test('blur → overlay → focus → overlay gone, event row exists', async ({ p
     await page.evaluate(() => window.dispatchEvent(new Event('blur')))
     await expect(overlay).toBeVisible()
     await expect(overlay).toHaveAttribute('data-reason', 'blur')
-    await expect(page.getByText('Come back to continue')).toBeVisible()
+    // T2.8 fix round 1, I1: the body copy is now one of the bank's own
+    // guard.blur variants (what the app actually saw), not the hardcoded
+    // "Come back to continue" heading this used to render.
+    await expect(overlay).toHaveText(new RegExp(LINE_BANK['guard.blur'].variants.map((variant) => variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')))
 
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await expect(overlay).toHaveCount(0)

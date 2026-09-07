@@ -8,16 +8,16 @@ import { INTEGRITY_THRESHOLDS } from '@/lib/contracts'
 import { makeQueryClient } from '@/lib/query/client'
 import { line } from '@/lib/voice/lines'
 import { SessionProvider } from '@/components/shell/SessionProvider'
-import { recordLocalIntegrityEvent, clearLocalIntegrityLog } from '@/lib/integrity/localLog'
+import { recordLocalIntegrityEvent, clearAllLocalIntegrityLogsForTests } from '@/lib/integrity/localLog'
 import { IntegrityPanel } from './IntegrityPanel'
 
 const spies = vi.hoisted(() => ({ rpc: vi.fn() }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ rpc: spies.rpc }) }))
 
-function setup(status: AccountStatus, props?: Parameters<typeof IntegrityPanel>[0]) {
+function setup(status: AccountStatus, props?: Parameters<typeof IntegrityPanel>[0], userId = 'student') {
   const initial = {
-    user: { id: 'student' } as User,
-    profile: { id: 'student', account_status: status, restricted_until: null },
+    user: { id: userId } as User,
+    profile: { id: userId, account_status: status, restricted_until: null },
     learnerState: null,
   }
   const queryClient = makeQueryClient()
@@ -37,7 +37,7 @@ const RPC_ROWS = [
 
 beforeEach(() => {
   vi.clearAllMocks()
-  clearLocalIntegrityLog()
+  clearAllLocalIntegrityLogsForTests()
   spies.rpc.mockResolvedValue({ data: RPC_ROWS, error: null })
 })
 afterEach(() => { cleanup() })
@@ -101,25 +101,66 @@ describe('IntegrityPanel', () => {
 
   it('falls back to this browser\'s own local log when the RPC is missing (schema 0005), and says so', async () => {
     spies.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.my_integrity_breakdown' } })
-    recordLocalIntegrityEvent('paste-blocked')
-    recordLocalIntegrityEvent('paste-blocked')
-    recordLocalIntegrityEvent('blur')
+    recordLocalIntegrityEvent('student', 'paste-blocked')
+    recordLocalIntegrityEvent('student', 'paste-blocked')
+    recordLocalIntegrityEvent('student', 'blur')
     setup('active')
     await waitFor(() => expect(screen.getByText('Total 5.')).toBeTruthy())
     expect(screen.getByText('Paste blocked')).toBeTruthy()
     expect(screen.getByText('2 at weight 2 — 4')).toBeTruthy()
-    expect(screen.getByText(/what this browser itself has recorded/)).toBeTruthy()
+    expect(screen.getByText(/this device's own record, not the server's count/)).toBeTruthy()
+  })
+
+  // Fix round 1, I2: a partial local total must never be shown as if it were
+  // the arithmetic that crossed a threshold, and the caveat must be read
+  // before any number, not two lines below a contradiction.
+  it('leads with the local-source caveat and suppresses "The line is" when the total is only this device\'s own record', async () => {
+    spies.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.my_integrity_breakdown' } })
+    recordLocalIntegrityEvent('student', 'paste-blocked')
+    recordLocalIntegrityEvent('student', 'paste-blocked')
+    setup('warned')
+    await waitFor(() => expect(screen.getByText('Total 4.')).toBeTruthy())
+    expect(screen.queryByText(/The line is/)).toBeNull()
+    const caveat = screen.getByText(/this device's own record/)
+    const total = screen.getByText('Total 4.')
+    expect(caveat.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('does not show the local-source caveat when the server answered', async () => {
     setup('active')
     await waitFor(() => expect(screen.getByText('Total 20.')).toBeTruthy())
-    expect(screen.queryByText(/what this browser itself has recorded/)).toBeNull()
+    expect(screen.queryByText(/this device's own record/)).toBeNull()
   })
 
   it('shows "no flags" rather than an empty table when the learner has none', async () => {
     spies.rpc.mockResolvedValue({ data: [], error: null })
     setup('active')
     await waitFor(() => expect(screen.getByText('No flags in the last 7 days.')).toBeTruthy())
+  })
+
+  // Fix round 1, C1: the same shared-machine failure the local log itself is
+  // tested against, exercised through the whole component this time.
+  it('never lets one signed-in user\'s panel show another user\'s local events (C1)', async () => {
+    spies.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.my_integrity_breakdown' } })
+    recordLocalIntegrityEvent('learner-a', 'printscreen')
+    recordLocalIntegrityEvent('learner-a', 'printscreen')
+    setup('active', undefined, 'learner-b')
+    await waitFor(() => expect(screen.getByText('No flags in the last 7 days.')).toBeTruthy())
+    expect(screen.queryByText('Screenshot attempts')).toBeNull()
+  })
+
+  it('shows the bank\'s error line with a working retry when the fetch itself fails', async () => {
+    spies.rpc.mockRejectedValue(new Error('network down'))
+    setup('active')
+    await waitFor(() => expect(screen.getByText(line('error.load'))).toBeTruthy(), { timeout: 5_000 })
+    spies.rpc.mockResolvedValue({ data: RPC_ROWS, error: null })
+    screen.getByRole('button', { name: 'Try again' }).click()
+    await waitFor(() => expect(screen.getByText('Total 20.')).toBeTruthy())
+  }, 10_000)
+
+  it('gives the receipt-only variant an accessible name instead of a dangling aria-labelledby (M1)', async () => {
+    setup('warned', { variant: 'receipt' })
+    await waitFor(() => expect(screen.getByText(/^Total 20\./)).toBeTruthy())
+    expect(screen.getByRole('region', { name: 'Integrity record' })).toBeTruthy()
   })
 })
