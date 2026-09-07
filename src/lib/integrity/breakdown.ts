@@ -24,7 +24,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { IntegrityEventType } from '@/lib/contracts'
-import { INTEGRITY_WEIGHTS } from '@/lib/contracts'
+import { INTEGRITY_THRESHOLDS, INTEGRITY_WEIGHTS } from '@/lib/contracts'
 
 export interface IntegrityBreakdownRow {
   type: IntegrityEventType
@@ -95,6 +95,37 @@ export function breakdownFromEvents(events: { type: IntegrityEventType }[]): Int
     .sort((a, b) => b.points - a.points || a.type.localeCompare(b.type))
 
   return { rows, total: totalOf(rows), source: 'local' }
+}
+
+export type RestrictedCause = 'score' | 'paste'
+
+/**
+ * Derives which of `apply_integrity_escalation()`'s two `or`-joined
+ * conditions caused a restriction (`0003_integrity.sql`:
+ * `s >= 20 or paste_in_exercise >= 5`), from the aggregate breakdown alone --
+ * no schema change, no raw rows.
+ *
+ * `total >= restrictAt` already proves the score condition on its own,
+ * regardless of anything else -- this is the boundary the fix round names
+ * explicitly: a total of exactly 20 with five pastes still reads as the
+ * score rule, since the score alone already crosses the line. Below that
+ * total, a `paste-blocked` row at or above `instantRestrictPasteCount` is
+ * the *only* other condition the trigger checks, so it is provably the sole
+ * cause of a restriction the score could not have caused by itself.
+ *
+ * Only sound on the **server** source: `my_integrity_breakdown()`'s total is
+ * the real 7-day figure the trigger used. On the **local** fallback the
+ * total is a lower bound (this device's own record, possibly missing events
+ * from another device or from before the log existed) and `StoredEvent`
+ * carries no `exercise_id`, so "five pastes in *one* exercise" -- the
+ * trigger's actual rule -- is not derivable from it either; callers must not
+ * call this for a local breakdown (see `guard.restricted.local`, which
+ * asserts no numeric cause at all).
+ */
+export function restrictedCause(breakdown: IntegrityBreakdown): RestrictedCause {
+  if (breakdown.total >= INTEGRITY_THRESHOLDS.restrictAt) return 'score'
+  const pasteEvents = breakdown.rows.find((row) => row.type === 'paste-blocked')?.events ?? 0
+  return pasteEvents >= INTEGRITY_THRESHOLDS.instantRestrictPasteCount ? 'paste' : 'score'
 }
 
 /**

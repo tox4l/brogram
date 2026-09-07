@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { INTEGRITY_WEIGHTS } from '@/lib/contracts'
-import { breakdownFromEvents, fetchIntegrityBreakdown, isMissingRpcError } from './breakdown'
+import { INTEGRITY_THRESHOLDS, INTEGRITY_WEIGHTS } from '@/lib/contracts'
+import { breakdownFromEvents, fetchIntegrityBreakdown, isMissingRpcError, restrictedCause, type IntegrityBreakdown } from './breakdown'
 
 function clientReturning(rpc: ReturnType<typeof vi.fn>): SupabaseClient {
   return { rpc } as unknown as SupabaseClient
@@ -57,6 +57,41 @@ describe('breakdownFromEvents', () => {
 
   it('is empty for no events', () => {
     expect(breakdownFromEvents([])).toEqual({ rows: [], total: 0, source: 'local' })
+  })
+})
+
+describe('restrictedCause', () => {
+  function breakdown(total: number, pasteEvents: number): IntegrityBreakdown {
+    const rows = pasteEvents > 0
+      ? [{ type: 'paste-blocked' as const, events: pasteEvents, weight: INTEGRITY_WEIGHTS['paste-blocked'], points: pasteEvents * INTEGRITY_WEIGHTS['paste-blocked'] }]
+      : []
+    return { rows, total, source: 'server' }
+  }
+
+  it('branch: under the restrict line with five or more pastes -- the instant paste rule is the only possible cause', () => {
+    expect(restrictedCause(breakdown(10, 5))).toBe('paste')
+    expect(restrictedCause(breakdown(0, 5))).toBe('paste')
+    expect(restrictedCause(breakdown(19, 7))).toBe('paste')
+  })
+
+  it('branch: at or above the restrict line -- the score condition alone already fired, regardless of pastes', () => {
+    expect(restrictedCause(breakdown(20, 0))).toBe('score')
+    expect(restrictedCause(breakdown(25, 0))).toBe('score')
+    expect(restrictedCause(breakdown(40, 12))).toBe('score')
+  })
+
+  it('boundary: total exactly at restrictAt with five pastes reads as the score rule, not the paste rule', () => {
+    expect(restrictedCause(breakdown(INTEGRITY_THRESHOLDS.restrictAt, INTEGRITY_THRESHOLDS.instantRestrictPasteCount))).toBe('score')
+  })
+
+  it('defaults to score when neither condition is actually met (should not occur for a genuinely restricted account, but must not throw or return paste)', () => {
+    expect(restrictedCause(breakdown(5, 2))).toBe('score')
+    expect(restrictedCause(breakdown(0, 0))).toBe('score')
+  })
+
+  it('reads the thresholds from the contracts, never a hardcoded copy', () => {
+    expect(restrictedCause(breakdown(INTEGRITY_THRESHOLDS.restrictAt - 1, INTEGRITY_THRESHOLDS.instantRestrictPasteCount - 1))).toBe('score')
+    expect(restrictedCause(breakdown(INTEGRITY_THRESHOLDS.restrictAt - 1, INTEGRITY_THRESHOLDS.instantRestrictPasteCount))).toBe('paste')
   })
 })
 

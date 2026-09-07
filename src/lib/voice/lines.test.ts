@@ -27,13 +27,16 @@ describe('voice rule 1 — length caps', () => {
   // §2.7 copy to dodge a strict "<" was rejected — ship verbatim (Step 1)
   // wins over a stricter reading of "under". Confirmed by Opus review,
   // ruling 1: APPROVE, condition recorded in docs/build-log.md.
-  const PANEL_BODY_KEYS = new Set<LineKey>(['welcome', 'guard.printscreen', 'guard.warned', 'guard.paste.why', 'guard.restricted.paste'])
+  // Fix round 2, N1: `guard.warned.local` is the same panel-body surface as
+  // `guard.warned` (the local-fallback wording, not a different kind of key).
+  const PANEL_BODY_KEYS = new Set<LineKey>(['welcome', 'guard.printscreen', 'guard.warned', 'guard.warned.local', 'guard.paste.why', 'guard.restricted.paste'])
   // Fix round 1, ruling 2: a full-screen policy surface is not a panel body
   // (the same argument the spec already accepted for guard.why) — extended
   // from guard.why alone to guard.restricted and guard.banned, both of
   // which now name the universal thresholds/weights that forced the
-  // 30-word cap's earlier, dishonest compression.
-  const EXEMPT_60_KEYS = new Set<LineKey>(['guard.why', 'guard.restricted', 'guard.banned'])
+  // 30-word cap's earlier, dishonest compression. Fix round 2, N1/N3:
+  // `guard.restricted.local` joins `guard.restricted` for the same reason.
+  const EXEMPT_60_KEYS = new Set<LineKey>(['guard.why', 'guard.restricted', 'guard.restricted.local', 'guard.banned'])
 
   it('keeps every celebration/toast/button-label line at 12 words or fewer', () => {
     for (const key of ALL_KEYS) {
@@ -138,8 +141,16 @@ describe('voice rule 5 — name the cause, then the next step, in that order', (
     { key: 'guard.printscreen', text: "Screenshots aren't something a website can block. We log the attempt and move on.", cause: "Screenshots aren't something a website can block", step: 'We log the attempt and move on' },
     { key: 'guard.why', text: "Paste is the one thing browsers actually let us stop, so we stop it. Leaving the tab and pressing PrintScreen are signals we log, not things we can prevent. Screenshots can't be prevented by anyone. The real backstop is that your exercises aren't the same as anyone else's.", cause: 'Paste is the one thing browsers actually let us stop', step: "The real backstop is that your exercises aren't the same as anyone else's" },
     { key: 'guard.warned', text: "Heads up: flags crossed 10 in the last 7 days. Nothing is paused. Here's exactly what counted.", cause: 'flags crossed 10 in the last 7 days', step: "Here's exactly what counted" },
+    // Fix round 2, N1: the local-fallback counterpart -- cause is still the
+    // window/flag fact, step is the honest hedge instead of a promised exact count.
+    { key: 'guard.warned.local', text: "Heads up: flags crossed 10 in the last 7 days. Nothing is paused. This is this device's own record — the server's count is what actually decided the account's status.", cause: 'flags crossed 10 in the last 7 days', step: "the server's count is what actually decided the account's status" },
     { key: 'guard.restricted', text: 'Reps are paused for 24 hours. Flags crossed 20 in the last 7 days — here is the arithmetic. Reps come back at {time}; dashboard, walkthroughs and De-rot stay open.', cause: 'Flags crossed 20 in the last 7 days', step: 'Reps come back at {time}' },
     { key: 'guard.restricted', text: 'Reps are paused for 24 hours. Flags crossed 20 in the last 7 days. Dashboard, walkthroughs and De-rot stay open.', cause: 'Flags crossed 20 in the last 7 days', step: 'Dashboard, walkthroughs and De-rot stay open' },
+    // Fix round 2, N1/N3: no numeric cause is asserted on the local path (see
+    // `restrictedCause()`'s doc in `src/lib/integrity/breakdown.ts`) -- the
+    // pause itself is the cause half, the resume time is the step half.
+    { key: 'guard.restricted.local', text: "Reps are paused for 24 hours. This is this device's own record — the server's count is what actually decided the account's status. Reps come back at {time}; dashboard, walkthroughs and De-rot stay open.", cause: 'Reps are paused for 24 hours', step: 'Reps come back at {time}' },
+    { key: 'guard.restricted.local', text: "Reps are paused for 24 hours. This is this device's own record — the server's count is what actually decided the account's status. Dashboard, walkthroughs and De-rot stay open.", cause: 'Reps are paused for 24 hours', step: 'Dashboard, walkthroughs and De-rot stay open' },
     { key: 'guard.restricted.paste', text: 'Reps are paused for 24 hours. Paste was blocked 5 times in one rep — an automatic rule that fires at exactly 5, for everyone. Back at {time}.', cause: 'Paste was blocked 5 times in one rep', step: 'Back at {time}' },
     { key: 'guard.restricted.paste', text: 'Reps are paused for 24 hours. Paste was blocked 5 times in one rep — an automatic rule that fires at exactly 5, for everyone.', cause: 'Paste was blocked 5 times in one rep', step: 'an automatic rule that fires at exactly 5, for everyone' },
     { key: 'guard.banned', text: "This account is banned. Flags crossed 40 in the last 7 days. The weights: 3 for a PrintScreen attempt, 2 for a blocked paste or copy, 1 for leaving the tab. The lines are 10, 20 and 40, the same for everyone. If this is wrong, contact Velocity through your invitation email; we'll read the actual log, not the number.", cause: 'Flags crossed 40 in the last 7 days', step: 'contact Velocity through your invitation email' },
@@ -307,8 +318,9 @@ describe('LineKey coverage', () => {
   it('has exactly one bank entry per declared key, no more, no fewer', () => {
     // 55 at T2.7a, +5 from T2.7b's sweep: achievement.collapsed (the
     // collapsed trophy-shelf announcement) and the four De-rot Playground
-    // run-summary tiers (derot.play.best/sharp/solid/rough).
-    expect(ALL_KEYS.length).toBe(60)
+    // run-summary tiers (derot.play.best/sharp/solid/rough). +2 from T2.8
+    // fix round 2 (N1/N3): guard.warned.local and guard.restricted.local.
+    expect(ALL_KEYS.length).toBe(62)
   })
 })
 

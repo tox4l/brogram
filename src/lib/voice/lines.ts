@@ -21,7 +21,7 @@ export type LineKey =
   | 'streak.keep' | 'streak.milestone' | 'streak.lost' | 'level.up' | 'best' | 'goal.done'
   | 'derot.arcade.enter' | 'derot.play.enter' | 'derot.run.done'
   | 'guard.paste' | 'guard.paste.why' | 'guard.blur' | 'guard.idle' | 'guard.printscreen' | 'guard.why'
-  | 'guard.warned' | 'guard.restricted' | 'guard.restricted.paste' | 'guard.banned'
+  | 'guard.warned' | 'guard.warned.local' | 'guard.restricted' | 'guard.restricted.local' | 'guard.restricted.paste' | 'guard.banned'
   | 'empty.bank' | 'empty.trophies' | 'error.offline' | 'error.save' | 'error.load' | 'loading.plan' | 'loading.runtime'
   | 'buddy.failed' | 'buddy.suggest.play' | 'buddy.suggest.arcade' | 'buddy.empty'
   | 'dock.prayer' | 'dock.water' | 'dock.stretch' | 'dock.pomodoro' | 'dock.collapse' | 'dock.restore'
@@ -293,6 +293,17 @@ const BANK: Readonly<Record<LineKey, BankEntry>> = {
     // §9.2 actually uses; matched to the wording now shared with `guard.banned`.)
     variants: ["Heads up: flags crossed 10 in the last 7 days. Nothing is paused. Here's exactly what counted."],
   },
+  // (T2.8 fix round 2, N1 — this key's "exactly what counted" is only true
+  // when the receipt beneath it is the server's own count. On schema 0005's
+  // fallback (`my_integrity_breakdown()` missing), the receipt is this
+  // device's own record, not an exact count -- the frame must say so instead
+  // of promising an arithmetic the next line immediately retracts.)
+  'guard.warned.local': {
+    frequency: 'rare',
+    variants: [
+      "Heads up: flags crossed 10 in the last 7 days. Nothing is paused. This is this device's own record — the server's count is what actually decided the account's status.",
+    ],
+  },
   // (deviation — spec §9.3's itemised receipt has a per-user, variable-length
   // list of event counts that no fixed string or `{n}`-style slot can hold
   // honestly. The bank carries the flat frame — including the threshold,
@@ -307,6 +318,21 @@ const BANK: Readonly<Record<LineKey, BankEntry>> = {
       'Reps are paused for 24 hours. Flags crossed 20 in the last 7 days — here is the arithmetic. Reps come back at {time}; dashboard, walkthroughs and De-rot stay open.',
     ],
     fallback: 'Reps are paused for 24 hours. Flags crossed 20 in the last 7 days. Dashboard, walkthroughs and De-rot stay open.',
+  },
+  // (T2.8 fix round 2, N1/N3 — the local-fallback counterpart to
+  // `guard.restricted`, same rationale as `guard.warned.local`: "flags
+  // crossed 20" is a claim only the server's own count can back. On the
+  // schema-0005 fallback the derived cause (score vs. the five-paste
+  // instant, see `restrictedCause()` in `src/lib/integrity/breakdown.ts`) is
+  // not reliable either -- `StoredEvent` carries no `exercise_id`, so "five
+  // pastes in one exercise" is not derivable locally -- so this key asserts
+  // no numeric cause at all, only the fact of the pause and when it lifts.)
+  'guard.restricted.local': {
+    frequency: 'rare',
+    variants: [
+      "Reps are paused for 24 hours. This is this device's own record — the server's count is what actually decided the account's status. Reps come back at {time}; dashboard, walkthroughs and De-rot stay open.",
+    ],
+    fallback: "Reps are paused for 24 hours. This is this device's own record — the server's count is what actually decided the account's status. Dashboard, walkthroughs and De-rot stay open.",
   },
   // §9.3's instant-restrict copy (five paste blocks in one rep) — a
   // different cause than the score threshold above, so it needs its own key

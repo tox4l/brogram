@@ -19,7 +19,7 @@
  * screen states the policy and the appeal channel instead (`guard.banned`),
  * with no per-user numbers; this component simply never mounts there.
  */
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import type { AccountStatus, IntegrityEventType } from '@/lib/contracts'
 import { INTEGRITY_THRESHOLDS } from '@/lib/contracts'
 import { fetchIntegrityBreakdown, type IntegrityBreakdown } from '@/lib/integrity/breakdown'
@@ -27,6 +27,29 @@ import { readLocalIntegrityEvents } from '@/lib/integrity/localLog'
 import { line } from '@/lib/voice/lines'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
+
+/**
+ * Fix round 2 (N1/N3): shared with `AccountNotice`, which needs to know the
+ * breakdown's `source` and derive `restrictedCause()` from it *before* this
+ * component's own receipt renders, so the frame above the receipt never
+ * promises an exact count the receipt underneath immediately retracts.
+ * Both callers use the identical `queryKey`, so react-query serves one
+ * shared cache entry rather than firing the RPC twice.
+ */
+export function useIntegrityBreakdown(): UseQueryResult<IntegrityBreakdown> {
+  const userId = useSession((session) => session.user?.id ?? null)
+  const accountStatus = useSession((session) => session.profile?.account_status ?? 'active')
+
+  return useQuery({
+    queryKey: ['integrity-breakdown', userId],
+    // `userId` is non-null whenever this runs (`enabled` below gates it) --
+    // this is also the userId the local log is keyed and read by, so a
+    // signed-in learner never reads anyone else's (fix round 1, C1).
+    queryFn: () => fetchIntegrityBreakdown(createClient(), userId ? readLocalIntegrityEvents(userId) : []),
+    enabled: userId !== null && accountStatus !== 'banned',
+    staleTime: 30_000,
+  })
+}
 
 const EVENT_LABELS: Record<IntegrityEventType, string> = {
   printscreen: 'Screenshot attempts',
@@ -107,19 +130,7 @@ function Receipt({ breakdown, crossedAt }: { breakdown: IntegrityBreakdown; cros
 export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelProps = {}) {
   const userId = useSession((session) => session.user?.id ?? null)
   const accountStatus = useSession((session) => session.profile?.account_status ?? 'active')
-
-  const query = useQuery({
-    queryKey: ['integrity-breakdown', userId],
-    // `userId` is non-null whenever this runs: `enabled` below gates it, and
-    // the guard clause a few lines down returns before render otherwise --
-    // but `enabled` and the render guard are evaluated separately, so the
-    // fallback keeps `readLocalIntegrityEvents` from ever being asked for a
-    // null id (fix round 1, C1 — this is also the userId the local log is
-    // keyed and read by, so a signed-in learner never reads anyone else's).
-    queryFn: () => fetchIntegrityBreakdown(createClient(), userId ? readLocalIntegrityEvents(userId) : []),
-    enabled: userId !== null && accountStatus !== 'banned',
-    staleTime: 30_000,
-  })
+  const query = useIntegrityBreakdown()
 
   // The banned screen is unauthenticated and never gets here in practice
   // (see the module doc above); this is the defence-in-depth version of the

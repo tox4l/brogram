@@ -1,13 +1,27 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { IntegrityBreakdown } from '@/lib/integrity/breakdown'
 import { line } from '@/lib/voice/lines'
 import { AccountNotice, BannedAccount } from './AccountNotice'
 
+const mocks = vi.hoisted(() => ({ useIntegrityBreakdown: vi.fn() }))
 vi.mock('@/components/account/IntegrityPanel', () => ({
   IntegrityPanel: (props: { variant?: string }) => <div data-testid="integrity-panel" data-variant={props.variant ?? 'full'} />,
+  useIntegrityBreakdown: mocks.useIntegrityBreakdown,
 }))
 
-afterEach(() => { cleanup() })
+function serverBreakdown(total: number, pasteEvents = 0): IntegrityBreakdown {
+  const rows = pasteEvents > 0
+    ? [{ type: 'paste-blocked' as const, events: pasteEvents, weight: 2, points: pasteEvents * 2 }]
+    : []
+  return { rows, total, source: 'server' }
+}
+
+function localBreakdown(): IntegrityBreakdown {
+  return { rows: [], total: 0, source: 'local' }
+}
+
+afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('BannedAccount', () => {
   // T2.7b: the heading's opening word changed from "Your" to "This" (voice
@@ -39,24 +53,92 @@ describe('BannedAccount', () => {
 
 describe('AccountNotice', () => {
   it('renders nothing for an active account', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
     const { container } = render(<AccountNotice status="active" restrictedUntil={null} />)
     expect(container.firstChild).toBeNull()
   })
 
   it('renders nothing for a banned account (banned has its own unauthenticated screen)', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
     const { container } = render(<AccountNotice status="banned" restrictedUntil={null} />)
     expect(container.firstChild).toBeNull()
   })
 
-  it('renders guard.warned plus the itemised receipt, not the old surveillance-register v1 line', () => {
+  it('links to the full policy in Account for both warned and restricted', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
     render(<AccountNotice status="warned" restrictedUntil={null} />)
-    expect(screen.getByText(line('guard.warned'))).toBeTruthy()
-    expect(screen.queryByText(/Type your own work/)).toBeNull()
-    const panel = screen.getByTestId('integrity-panel')
-    expect(panel.dataset.variant).toBe('receipt')
+    expect(screen.getByRole('link', { name: 'Integrity, explained' })).toHaveProperty('href', expect.stringContaining('/account'))
+
+    render(<AccountNotice status="restricted" restrictedUntil={null} />)
+    expect(screen.getAllByRole('link', { name: 'Integrity, explained' }).length).toBeGreaterThan(0)
+  })
+
+  it('mounts the itemised receipt for both warned and restricted', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
+    render(<AccountNotice status="warned" restrictedUntil={null} />)
+    expect(screen.getByTestId('integrity-panel').dataset.variant).toBe('receipt')
+  })
+
+  describe('N1 — the frame never promises an exact count the receipt underneath cannot back', () => {
+    it('warned: renders the exact guard.warned wording once the breakdown is confirmed server-sourced', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: serverBreakdown(10) })
+      render(<AccountNotice status="warned" restrictedUntil={null} />)
+      expect(screen.getByText(line('guard.warned'))).toBeTruthy()
+      expect(screen.queryByText(line('guard.warned.local'))).toBeNull()
+    })
+
+    it('warned: renders the honest local-record wording on the schema-0005 fallback', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: localBreakdown() })
+      render(<AccountNotice status="warned" restrictedUntil={null} />)
+      expect(screen.getByText(line('guard.warned.local'))).toBeTruthy()
+      expect(screen.queryByText(line('guard.warned'))).toBeNull()
+    })
+
+    it('warned: defaults to the local-record wording while the breakdown is still loading, never flashing the exact claim', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined, isLoading: true })
+      render(<AccountNotice status="warned" restrictedUntil={null} />)
+      expect(screen.getByText(line('guard.warned.local'))).toBeTruthy()
+    })
+
+    it('restricted: renders the exact guard.restricted wording once server-sourced with a score-crossing total', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: serverBreakdown(25) })
+      render(<AccountNotice status="restricted" restrictedUntil={null} />)
+      expect(screen.getByText(/Flags crossed 20 in the last 7 days/)).toBeTruthy()
+    })
+
+    it('restricted: renders the honest local-record wording on the schema-0005 fallback, naming no number', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: localBreakdown() })
+      render(<AccountNotice status="restricted" restrictedUntil={null} />)
+      expect(screen.getByText(/this device's own record/)).toBeTruthy()
+      expect(screen.queryByText(/Flags crossed 20/)).toBeNull()
+      expect(screen.queryByText(/Paste was blocked 5 times/)).toBeNull()
+    })
+
+    it('restricted: defaults to the local-record wording while loading', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined, isLoading: true })
+      render(<AccountNotice status="restricted" restrictedUntil={null} />)
+      expect(screen.getByText(/this device's own record/)).toBeTruthy()
+    })
+  })
+
+  describe('N3 — the restricted cause is derived from the server aggregate, not always the score threshold', () => {
+    it('names the five-paste instant rule when the server total is under the restrict line with five or more pastes', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: serverBreakdown(10, 5) })
+      render(<AccountNotice status="restricted" restrictedUntil={null} />)
+      expect(screen.getByText(/Paste was blocked 5 times in one rep/)).toBeTruthy()
+      expect(screen.queryByText(/Flags crossed 20/)).toBeNull()
+    })
+
+    it('names the score threshold once the total itself crosses the restrict line, even with five pastes (the boundary)', () => {
+      mocks.useIntegrityBreakdown.mockReturnValue({ data: serverBreakdown(20, 5) })
+      render(<AccountNotice status="restricted" restrictedUntil={null} />)
+      expect(screen.getByText(/Flags crossed 20 in the last 7 days/)).toBeTruthy()
+      expect(screen.queryByText(/Paste was blocked 5 times/)).toBeNull()
+    })
   })
 
   it('renders guard.restricted plus the itemised receipt, naming a restriction end time when known', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: serverBreakdown(25) })
     render(<AccountNotice status="restricted" restrictedUntil="2026-09-08T12:00:00.000Z" />)
     expect(screen.getByTestId('integrity-panel').dataset.variant).toBe('receipt')
     expect(screen.getByText(/Reps are paused for 24 hours/)).toBeTruthy()
@@ -64,15 +146,8 @@ describe('AccountNotice', () => {
   })
 
   it('still names a next step for restricted with no known restriction end time', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: serverBreakdown(25) })
     render(<AccountNotice status="restricted" restrictedUntil={null} />)
     expect(screen.getByText(/the next review/)).toBeTruthy()
-  })
-
-  it('links to the full policy in Account for both warned and restricted', () => {
-    render(<AccountNotice status="warned" restrictedUntil={null} />)
-    expect(screen.getByRole('link', { name: 'Integrity, explained' })).toHaveProperty('href', expect.stringContaining('/account'))
-
-    render(<AccountNotice status="restricted" restrictedUntil={null} />)
-    expect(screen.getAllByRole('link', { name: 'Integrity, explained' }).length).toBeGreaterThan(0)
   })
 })
