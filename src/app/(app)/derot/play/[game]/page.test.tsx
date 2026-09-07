@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DrillResult, LearnerState } from '@/lib/contracts'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import type { Attempt, DrillResult, LearnerState, LessonProgress } from '@/lib/contracts'
 import { LINE_BANK } from '@/lib/voice/lines'
+import { clearQueryClient, getQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
 import DerotPlayRunnerPage from './page'
 
 // Real timers throughout (matching the Arcade runner's own page.test.tsx): the three-two-one
@@ -29,8 +32,6 @@ const mocks = vi.hoisted(() => ({
   setLearnerState: vi.fn(),
   learnerState: null as LearnerState | null,
   play: vi.fn(),
-  invalidate: vi.fn(),
-  getQueryData: vi.fn<(key: readonly unknown[]) => unknown>(() => undefined),
   recordGoalDay: vi.fn(),
   recordAchievements: vi.fn(),
   hasPendingPrefsWrite: vi.fn(() => false),
@@ -47,7 +48,14 @@ vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (
 // X2/X7/X1: mirrors Arcade's own page.test.tsx -- this file only proves the
 // runner calls the shared writers with a context built from the run it just
 // saved, not their own internals (unit-tested in record.test.ts).
-vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: mocks.invalidate, getQueryData: mocks.getQueryData }) }))
+//
+// Fix round 3 (W2FIX-F3): `@/lib/query/client` is now the REAL module, not a
+// bare-object mock -- the page mounts a genuine `useQuery` observer
+// (`useKeepAttemptsResident`) to keep `qk.attempts` resident past its
+// five-minute `gcTime`, which needs a real `QueryClient`/`QueryClientProvider`
+// underneath it to prove anything. `getQueryClient()`'s cache is seeded and
+// read directly (`setQueryData`/`getQueryData`) and `invalidateQueries` is
+// spied on, rather than mocking the module away.
 vi.mock('@/lib/rewards/record', () => ({ recordGoalDay: mocks.recordGoalDay, recordAchievements: mocks.recordAchievements }))
 // F3-2: the wellness dock's own writer is unit-tested against the real
 // implementation in prefsMutation.test.ts -- this file only proves the
@@ -98,6 +106,19 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }))
 
+/**
+ * Fix round 3 (W2FIX-F3): wraps the page in a real `QueryClientProvider`
+ * bound to the same singleton `getQueryClient()` the page's own imports
+ * resolve to -- mirrors Arcade's own `page.test.tsx` fix.
+ */
+function renderPage() {
+  return render(
+    <QueryClientProvider client={getQueryClient()}>
+      <DerotPlayRunnerPage />
+    </QueryClientProvider>,
+  )
+}
+
 function learnerState(overrides: Partial<LearnerState> = {}): LearnerState {
   return {
     userId: 'student',
@@ -119,8 +140,14 @@ function result(overrides: Partial<DrillResult> = {}): DrillResult {
   return { drillId: 'play-follow-the-dot', kind: 'follow-the-dot', correct: true, timeMs: 500, score: 50, at: '2026-01-01T00:00:00.000Z', lane: 'play', ...overrides }
 }
 
+let invalidateSpy: MockInstance
+
 beforeEach(() => {
   osReducedMotion = false
+  // Fix round 3 (W2FIX-F3): a fresh, unmocked `QueryClient` per test, since
+  // `getQueryClient()` is now the real module-level browser singleton.
+  clearQueryClient()
+  invalidateSpy = vi.spyOn(getQueryClient(), 'invalidateQueries')
   mocks.params.mockReturnValue({ game: 'follow-the-dot' })
   mocks.learnerState = learnerState()
   wellnessRow = { prefs: {}, drill_results: [] }
@@ -128,18 +155,18 @@ beforeEach(() => {
   rpcError = null
   rpcData = []
   mocks.hasPendingPrefsWrite.mockReturnValue(false)
-  mocks.getQueryData.mockImplementation(() => undefined)
 })
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  clearQueryClient()
 })
 
 describe('DerotPlayRunnerPage', () => {
   it('rejects an id outside the six Playground kinds', async () => {
     mocks.params.mockReturnValue({ game: 'not-a-game' })
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     expect(await screen.findByText('This game could not open')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to de-rot' })).toHaveProperty('href', expect.stringContaining('/derot'))
   })
@@ -147,7 +174,7 @@ describe('DerotPlayRunnerPage', () => {
   it('opens the game, runs the three-two-one, mounts it with the right props, and produces one DrillResult with lane play', async () => {
     wellnessRow = { prefs: { motion: 'reduced', sound: { enabled: true, volume: 0.6, interface: true } }, drill_results: [] }
     rpcData = [result({ score: 50, timeMs: 500 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
 
     expect(await screen.findByText('Follow the Dot')).toBeTruthy()
     expect(await screen.findByText('3')).toBeTruthy()
@@ -172,7 +199,7 @@ describe('DerotPlayRunnerPage', () => {
 
   it('reads soundOn from prefs.sound.interface, off by default', async () => {
     wellnessRow = { prefs: {}, drill_results: [] } // DEFAULT_WELLNESS.sound.interface is false
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     const mounted = await screen.findByText(/follow-the-dot mounted/, {}, COUNTDOWN_TIMEOUT)
     expect(mounted.textContent).toContain('soundOn=false')
   })
@@ -180,7 +207,7 @@ describe('DerotPlayRunnerPage', () => {
   it('resolves reducedMotion from the OS signal when the preference is system', async () => {
     osReducedMotion = true
     wellnessRow = { prefs: { motion: 'system' }, drill_results: [] }
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     const mounted = await screen.findByText(/follow-the-dot mounted/, {}, COUNTDOWN_TIMEOUT)
     expect(mounted.textContent).toContain('reducedMotion=true')
   })
@@ -188,7 +215,7 @@ describe('DerotPlayRunnerPage', () => {
   it('shows a personal-best badge and voice line when the new score beats the stored best', async () => {
     wellnessRow = { prefs: {}, drill_results: [result({ score: 20 })] }
     rpcData = [result({ score: 20 }), result({ score: 50 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     expect(await screen.findByText('New best')).toBeTruthy()
     expect(screen.getByText('New personal best. Run it again.')).toBeTruthy()
@@ -201,7 +228,7 @@ describe('DerotPlayRunnerPage', () => {
   // zero included, by construction rather than by re-checking the score itself.
   it('never badges a first run as a personal best', async () => {
     wellnessRow = { prefs: {}, drill_results: [] } // no prior run of this kind at all
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     expect(await screen.findByText('Run complete')).toBeTruthy()
     expect(screen.queryByText('New best')).toBeNull()
@@ -212,7 +239,7 @@ describe('DerotPlayRunnerPage', () => {
   it('surfaces a save error with a working retry, without blocking the run summary', async () => {
     wellnessRow = { prefs: {}, drill_results: [] }
     rpcError = { code: '23505', message: 'unique violation' } // a real failure, never the missing-RPC fallback shape
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
 
     expect(await screen.findByText('Run complete')).toBeTruthy()
@@ -236,7 +263,7 @@ describe('DerotPlayRunnerPage', () => {
 
   it('surfaces a load error with a working retry', async () => {
     wellnessSelectError = { message: 'network down' }
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     expect(await screen.findByText('This game could not open.')).toBeTruthy()
 
     wellnessSelectError = null
@@ -246,35 +273,35 @@ describe('DerotPlayRunnerPage', () => {
 
   it('invalidates the shared wellness cache once a save succeeds, and not when it fails (X2)', async () => {
     rpcData = [result({ score: 50, timeMs: 500 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
-    expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] })
   })
 
   it('does not invalidate the wellness cache while a dock prefs write is queued (F3-2)', async () => {
     mocks.hasPendingPrefsWrite.mockReturnValue(true)
     rpcData = [result({ score: 50, timeMs: 500 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
     expect(mocks.hasPendingPrefsWrite).toHaveBeenCalledWith('student')
-    expect(mocks.invalidate).not.toHaveBeenCalled()
+    expect(invalidateSpy).not.toHaveBeenCalled()
   })
 
   it('does not invalidate the wellness cache, or record a goal day / achievements, when the save fails (X2)', async () => {
     rpcError = { code: '23505', message: 'unique violation' }
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
-    expect(mocks.invalidate).not.toHaveBeenCalled()
+    expect(invalidateSpy).not.toHaveBeenCalled()
     expect(mocks.recordGoalDay).not.toHaveBeenCalled()
     expect(mocks.recordAchievements).not.toHaveBeenCalled()
   })
 
   it('calls recordGoalDay with a context whose drillResults carry the run just saved (X7)', async () => {
     rpcData = [result({ drillId: 'play-follow-the-dot', kind: 'follow-the-dot', lane: 'play', score: 50 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
     expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
@@ -286,16 +313,15 @@ describe('DerotPlayRunnerPage', () => {
   it('builds the ctx with the REAL lessonProgress and attempts off the query cache, not empty arrays (F3-1)', async () => {
     // F3-1: without this, a mixed day (a walkthrough completed earlier today
     // plus this Playground run) would undercount `winsToday` and silently
-    // drop today's goal day -- reproducing X7 one layer down.
-    const todayLessonProgress = { lessonId: 'l1', userId: 'student', status: 'completed', completedAt: '2026-09-06T09:00:00.000Z', blocksRead: [] }
-    const todayAttempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
-    mocks.getQueryData.mockImplementation((key: readonly unknown[]) => {
-      if (key[0] === 'lesson-progress') return [todayLessonProgress]
-      if (key[0] === 'attempts') return [todayAttempt]
-      return undefined
-    })
+    // drop today's goal day -- reproducing X7 one layer down. Seeded
+    // directly on the real cache (keyed, not positional) rather than a
+    // mocked `getQueryData`.
+    const todayLessonProgress: LessonProgress = { lessonId: 'l1', userId: 'student', cloId: 'l1', status: 'completed', blockIndex: 5, checksPassed: 1, checksFailed: 0, lessonVersion: 1, startedAt: '2026-09-06T08:50:00.000Z', completedAt: '2026-09-06T09:00:00.000Z', updatedAt: '2026-09-06T09:00:00.000Z' }
+    const todayAttempt: Attempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
+    getQueryClient().setQueryData(qk.lessonProgress('student'), [todayLessonProgress])
+    getQueryClient().setQueryData(qk.attempts('student'), [todayAttempt])
     rpcData = [result({ drillId: 'play-follow-the-dot', kind: 'follow-the-dot', lane: 'play', score: 50 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
     expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
@@ -304,9 +330,45 @@ describe('DerotPlayRunnerPage', () => {
     expect(ctx.attempts).toEqual([todayAttempt])
   })
 
+  it('F3 fix round 3: an attempts row seeded before any observer survives an idle five minutes on this screen, so recordGoalDay still sees it in context', async () => {
+    // Reproduces the exact hazard the finding named: nothing under
+    // src/app/(app)/derot mounted an observer on qk.attempts, so TanStack's
+    // default five-minute gcTime silently dropped a row `QuerySeed` had
+    // already put in the cache before this screen's own observer attached.
+    // `shouldAdvanceTime` keeps real wall-clock time ticking underneath the
+    // faked one (mirrors lesson.test.tsx's own R1 test and Arcade's own
+    // page.test.tsx fix) so this file's real setTimeout-driven three-two-one
+    // countdown and testing-library's polling both keep working; only the
+    // explicit `advanceTimersByTimeAsync` call jumps the five minutes.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const seededAttempt: Attempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
+      // Seeded before render -- no observer exists on this key yet, exactly
+      // like `QuerySeed`'s server-side hydration landing before any client
+      // component mounts.
+      getQueryClient().setQueryData(qk.attempts('student'), [seededAttempt])
+      rpcData = [result({ drillId: 'play-follow-the-dot', kind: 'follow-the-dot', lane: 'play', score: 50 })]
+      renderPage()
+      await screen.findByText('Follow the Dot')
+
+      // No other observer anywhere in this test subscribes to qk.attempts --
+      // only this page's own `useKeepAttemptsResident` observer can be
+      // keeping the row alive past this mark.
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1_000)
+
+      fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
+      await screen.findByText('Run complete')
+      expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
+      const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { attempts: unknown[] }]
+      expect(ctx.attempts).toEqual([seededAttempt])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('calls recordAchievements with a context whose drillResults carry the run just saved (X1)', async () => {
     rpcData = [result({ drillId: 'play-follow-the-dot', kind: 'follow-the-dot', lane: 'play', score: 50 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
     expect(mocks.recordAchievements).toHaveBeenCalledTimes(1)
@@ -319,7 +381,7 @@ describe('DerotPlayRunnerPage', () => {
   it('plays drill.hit at run end and best only when this run genuinely beats a real previous best (X8)', async () => {
     wellnessRow = { prefs: {}, drill_results: [result({ score: 20 })] }
     rpcData = [result({ score: 20 }), result({ score: 50 })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('New best')
     expect(mocks.play).toHaveBeenCalledWith('drill.hit')
@@ -328,7 +390,7 @@ describe('DerotPlayRunnerPage', () => {
 
   it('never plays best on a first run of a kind, even with a perfect score', async () => {
     wellnessRow = { prefs: {}, drill_results: [] } // no prior run of this kind at all
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     await screen.findByText('Run complete')
     expect(mocks.play).toHaveBeenCalledWith('drill.hit')
@@ -336,7 +398,7 @@ describe('DerotPlayRunnerPage', () => {
   })
 
   it('quitting mid-game (onAbort) navigates back to de-rot without submitting a run', async () => {
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     fireEvent.click(await screen.findByText('Abort follow-the-dot', {}, COUNTDOWN_TIMEOUT))
     expect(mocks.push).toHaveBeenCalledWith('/derot')
     expect(rpcSpy).not.toHaveBeenCalled()
@@ -357,7 +419,7 @@ describe('DerotPlayRunnerPage', () => {
   it.each(gameCases)('mounts %s with timeLimitS %d and produces a lane-play DrillResult with score in [0,100]', async (game, timeLimitS, rawLabel, expectedScore) => {
     mocks.params.mockReturnValue({ game })
     rpcData = [result({ drillId: `play-${game}`, kind: game as DrillResult['kind'] })]
-    render(<DerotPlayRunnerPage />)
+    renderPage()
     const mounted = await screen.findByText(new RegExp(`${game} mounted`), {}, COUNTDOWN_TIMEOUT)
     expect(mounted.textContent).toContain(`timeLimitS=${timeLimitS}`)
 

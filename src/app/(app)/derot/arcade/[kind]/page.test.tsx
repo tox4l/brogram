@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DrillItem, DrillResult, LearnerState } from '@/lib/contracts'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import type { Attempt, DrillItem, DrillResult, LearnerState, LessonProgress } from '@/lib/contracts'
 import { LINE_BANK } from '@/lib/voice/lines'
+import { clearQueryClient, getQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
 import DerotArcadeRunnerPage from './page'
 
 // A full six-item run waits out six real 650ms pauses (~4s); give this file's
@@ -29,8 +32,6 @@ const mocks = vi.hoisted(() => ({
   setLearnerState: vi.fn(),
   learnerState: null as LearnerState | null,
   play: vi.fn(),
-  invalidate: vi.fn(),
-  getQueryData: vi.fn<(key: readonly unknown[]) => unknown>(() => undefined),
   recordGoalDay: vi.fn(),
   recordAchievements: vi.fn(),
   hasPendingPrefsWrite: vi.fn(() => false),
@@ -41,12 +42,19 @@ vi.mock('@/store/session', () => ({
     selector({ user: { id: 'student' }, learnerState: mocks.learnerState, setLearnerState: mocks.setLearnerState }),
 }))
 vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (run: () => void) => run() }))
-// X2/X7/X1: the query-cache invalidate and the two reward writers are unit-tested
-// against real implementations in their own lanes (record.test.ts, useCelebration
-// etc.) -- this file only proves the de-rot runner *calls* them, with a context
-// built from the run it just saved, so real supabase table shapes for
-// `user_achievements` / the prefs write never need mocking here.
-vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: mocks.invalidate, getQueryData: mocks.getQueryData }) }))
+// X2/X7/X1: the two reward writers are unit-tested against real
+// implementations in their own lane (record.test.ts) -- this file only
+// proves the de-rot runner *calls* them, with a context built from the run
+// it just saved, so real supabase table shapes for `user_achievements` / the
+// prefs write never need mocking here.
+//
+// Fix round 3 (W2FIX-F3): `@/lib/query/client` is now the REAL module, not a
+// bare-object mock -- the page mounts a genuine `useQuery` observer
+// (`useKeepAttemptsResident`) to keep `qk.attempts` resident past its
+// five-minute `gcTime`, which needs a real `QueryClient`/`QueryClientProvider`
+// underneath it to prove anything. `getQueryClient()`'s cache is seeded and
+// read directly (`setQueryData`/`getQueryData`) and `invalidateQueries` is
+// spied on, rather than mocking the module away.
 vi.mock('@/lib/rewards/record', () => ({ recordGoalDay: mocks.recordGoalDay, recordAchievements: mocks.recordAchievements }))
 // F3-2: the wellness dock's own writer is unit-tested against the real
 // implementation in prefsMutation.test.ts -- this file only proves the
@@ -117,6 +125,22 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }))
 
+/**
+ * Fix round 3 (W2FIX-F3): wraps the page in a real `QueryClientProvider`
+ * bound to the same singleton `getQueryClient()` the page's own imports
+ * resolve to -- so `useKeepAttemptsResident`'s observer, and every
+ * `setQueryData`/`getQueryData`/`invalidateQueries` call a test makes
+ * directly against `getQueryClient()`, all operate on one shared cache,
+ * exactly like production's `QueryProvider` wrapping the whole (app) shell.
+ */
+function renderPage() {
+  return render(
+    <QueryClientProvider client={getQueryClient()}>
+      <DerotArcadeRunnerPage />
+    </QueryClientProvider>,
+  )
+}
+
 function drillRow(overrides: Partial<Record<string, unknown>>): Record<string, unknown> {
   return { id: 'd1', kind: 'trace', difficulty: 3, time_limit_s: 60, payload: {}, ...overrides }
 }
@@ -156,8 +180,14 @@ async function answerCurrent(correct = true) {
   await new Promise((resolve) => setTimeout(resolve, 650))
 }
 
+let invalidateSpy: MockInstance
+
 beforeEach(() => {
   vi.clearAllMocks()
+  // Fix round 3 (W2FIX-F3): a fresh, unmocked `QueryClient` per test, since
+  // `getQueryClient()` is now the real module-level browser singleton.
+  clearQueryClient()
+  invalidateSpy = vi.spyOn(getQueryClient(), 'invalidateQueries')
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-09-06T12:00:00.000Z'))
   mocks.params.mockReturnValue({ kind: 'trace' })
@@ -170,22 +200,22 @@ beforeEach(() => {
   updateAffectsRow = true
   insertShouldFail = false
   mocks.hasPendingPrefsWrite.mockReturnValue(false)
-  mocks.getQueryData.mockImplementation(() => undefined)
 })
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  clearQueryClient()
 })
 
 describe('Arcade runner', () => {
   it('picks a never-played item over one already played', async () => {
     wellnessRow = { drill_results: [result({ drillId: 'd1', at: '2026-09-01T08:00:00.000Z' })] }
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d2')).toBeTruthy())
   })
 
   it('mounts no lockdown at all: a blur never touches integrity_events (fix round 1, I11)', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
 
     fireEvent(window, new Event('blur'))
@@ -199,7 +229,7 @@ describe('Arcade runner', () => {
   })
 
   it('pauses the item (and its clock) while the tab is hidden, resuming when it comes back (fix round 1, I3)', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Paused: false')).toBeTruthy())
 
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
@@ -212,7 +242,7 @@ describe('Arcade runner', () => {
   })
 
   it('a run is six items -- a miss on item 1 shows item 2 next instead of the summary', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     await answerCurrent(false)
     await waitFor(() => expect(screen.getByText('Item: d2')).toBeTruthy())
@@ -221,7 +251,7 @@ describe('Arcade runner', () => {
 
   it('a pool of three items shortens the run to three instead of repeating an item (fix round 2, N3)', async () => {
     drillsRows = ['d1', 'd2', 'd3'].map((id) => drillRow({ id }))
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
 
     const seenIds: string[] = []
@@ -242,7 +272,7 @@ describe('Arcade runner', () => {
   })
 
   it('the item counter never reads past RUN_SIZE, even during the post-answer pause after the sixth item (fix round 1, I1)', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 5; i++) await answerCurrent(true)
     // Answer the sixth item but check the counter DURING the pause, before run-complete shows.
@@ -254,7 +284,7 @@ describe('Arcade runner', () => {
   })
 
   it('completing all six items shows the run summary, and appends exactly ONE DrillResult through the RPC', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
 
@@ -270,7 +300,7 @@ describe('Arcade runner', () => {
   })
 
   it('every DrillResult.score lands in [0, 100] even for a run of all misses, and shows "First run logged" rather than a false "New best" (fix round 1, C2)', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(false)
     await waitFor(() => expect(rpcSpy).toHaveBeenCalledTimes(1))
@@ -285,7 +315,7 @@ describe('Arcade runner', () => {
     // drillId 'd7' (not one of the six items in the bank) so pickDrillItem's
     // never-played preference does not skip over d1 for this history row.
     wellnessRow = { drill_results: [result({ drillId: 'd7', kind: 'trace', score: 10, at: '2026-09-01T00:00:00.000Z' })] }
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
@@ -294,14 +324,14 @@ describe('Arcade runner', () => {
   })
 
   it('the combo-weighted raw total survives into the run summary alongside the normalised score', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getByText(/combo points/)).toBeTruthy())
   })
 
   it('shows a hit/miss chip per item, in the order they were played (fix round 2, item 5)', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (const correct of [true, true, false, true, false, true]) await answerCurrent(correct)
     await waitFor(() => expect(screen.getByText('Where it went')).toBeTruthy())
@@ -317,7 +347,7 @@ describe('Arcade runner', () => {
     // actually distinguishes "the session knows all six were played" from
     // "the session only knows the first one was" (I5's bug).
     drillsRows = [...sixDrillRows(), drillRow({ id: 'd7' }), drillRow({ id: 'd8' })]
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     const firstRunIds: string[] = []
     for (let i = 0; i < 6; i++) {
@@ -340,7 +370,7 @@ describe('Arcade runner', () => {
   it('falls back to the direct read-modify-write when the RPC is missing (pre-0009 schema)', async () => {
     rpcError = { code: '42883', message: 'function public.append_drill_result(jsonb) does not exist' }
     wellnessRow = { drill_results: [result({ drillId: 'other', kind: 'n-back', score: 10, at: '2026-09-01T00:00:00.000Z' })] }
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
 
@@ -353,7 +383,7 @@ describe('Arcade runner', () => {
   it('creates the wellness row in the fallback when the update affects no rows', async () => {
     rpcError = { code: 'PGRST202' }
     updateAffectsRow = false
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(insertSpy).toHaveBeenCalledTimes(1))
@@ -361,7 +391,7 @@ describe('Arcade runner', () => {
 
   it('surfaces a visible, retryable save error (from the voice bank) without blocking the summary from showing', async () => {
     rpcError = { code: '42501', message: 'permission denied' }
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
 
@@ -383,7 +413,7 @@ describe('Arcade runner', () => {
   it("refreshes the session's de-rot streak and last date after a successful save", async () => {
     mocks.learnerState = learnerState({ streak: { exerciseDays: 2, derotDays: 0, lastExerciseDate: '2026-09-05', lastDerotDate: null } })
     rpcData = [result({ drillId: 'd1', at: '2026-09-06T12:00:00.000Z' })]
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
 
@@ -394,29 +424,29 @@ describe('Arcade runner', () => {
   })
 
   it('invalidates the shared wellness cache once a save succeeds, and not when it fails (X2)', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
-    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] }))
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] }))
   })
 
   it('does not invalidate the wellness cache while a dock prefs write is queued (F3-2)', async () => {
     mocks.hasPendingPrefsWrite.mockReturnValue(true)
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
     expect(mocks.hasPendingPrefsWrite).toHaveBeenCalledWith('student')
-    expect(mocks.invalidate).not.toHaveBeenCalled()
+    expect(invalidateSpy).not.toHaveBeenCalled()
   })
 
   it('does not invalidate the wellness cache, or record a goal day / achievements, when the save fails (X2)', async () => {
     rpcError = { code: '42501', message: 'permission denied' }
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
-    expect(mocks.invalidate).not.toHaveBeenCalled()
+    expect(invalidateSpy).not.toHaveBeenCalled()
     expect(mocks.recordGoalDay).not.toHaveBeenCalled()
     expect(mocks.recordAchievements).not.toHaveBeenCalled()
   })
@@ -425,7 +455,7 @@ describe('Arcade runner', () => {
     // The server's own returned array is what the ctx is built from -- give the
     // RPC mock a realistic response (the appended run) rather than the default `[]`.
     rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1))
@@ -437,18 +467,16 @@ describe('Arcade runner', () => {
   it("builds the ctx with the REAL lessonProgress and attempts off the query cache, not empty arrays (F3-1)", async () => {
     // F3-1: without this, a mixed day (a walkthrough completed earlier today
     // plus this de-rot run) would undercount `winsToday` and silently drop
-    // today's goal day -- reproducing X7 one layer down. `getQueryData` is
-    // keyed, not positional: qk.lessonProgress/qk.attempts resolve to the
-    // cache rows below, qk.achievements still resolves to `undefined` (held: []).
-    const todayLessonProgress = { lessonId: 'l1', userId: 'student', status: 'completed', completedAt: '2026-09-06T09:00:00.000Z', blocksRead: [] }
-    const todayAttempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
-    mocks.getQueryData.mockImplementation((key: readonly unknown[]) => {
-      if (key[0] === 'lesson-progress') return [todayLessonProgress]
-      if (key[0] === 'attempts') return [todayAttempt]
-      return undefined
-    })
+    // today's goal day -- reproducing X7 one layer down. Seeded directly on
+    // the real cache (keyed, not positional) rather than a mocked
+    // `getQueryData` -- qk.achievements is left unseeded so `held` still
+    // resolves to `[]`.
+    const todayLessonProgress: LessonProgress = { lessonId: 'l1', userId: 'student', cloId: 'l1', status: 'completed', blockIndex: 5, checksPassed: 1, checksFailed: 0, lessonVersion: 1, startedAt: '2026-09-06T08:50:00.000Z', completedAt: '2026-09-06T09:00:00.000Z', updatedAt: '2026-09-06T09:00:00.000Z' }
+    const todayAttempt: Attempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
+    getQueryClient().setQueryData(qk.lessonProgress('student'), [todayLessonProgress])
+    getQueryClient().setQueryData(qk.attempts('student'), [todayAttempt])
     rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1))
@@ -457,9 +485,44 @@ describe('Arcade runner', () => {
     expect(ctx.attempts).toEqual([todayAttempt])
   })
 
+  it('F3 fix round 3: an attempts row seeded before any observer survives an idle five minutes on this screen, so recordGoalDay still sees it in context', async () => {
+    // Reproduces the exact hazard the finding named: nothing under
+    // src/app/(app)/derot mounted an observer on qk.attempts, so TanStack's
+    // default five-minute gcTime silently dropped a row `QuerySeed` had
+    // already put in the cache before this screen's own observer attached.
+    // `shouldAdvanceTime` keeps real wall-clock time ticking underneath the
+    // faked one (mirrors lesson.test.tsx's own R1 test) so `answerCurrent`'s
+    // real setTimeout waits and testing-library's polling both keep working;
+    // only the explicit `advanceTimersByTimeAsync` call jumps the five minutes.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.setSystemTime(new Date('2026-09-06T12:00:00.000Z'))
+      const seededAttempt: Attempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
+      // Seeded before render -- no observer exists on this key yet, exactly
+      // like `QuerySeed`'s server-side hydration landing before any client
+      // component mounts.
+      getQueryClient().setQueryData(qk.attempts('student'), [seededAttempt])
+      rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
+      renderPage()
+      await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+
+      // No other observer anywhere in this test subscribes to qk.attempts --
+      // only this page's own `useKeepAttemptsResident` observer can be
+      // keeping the row alive past this mark.
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1_000)
+
+      for (let i = 0; i < 6; i++) await answerCurrent(true)
+      await waitFor(() => expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1))
+      const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { attempts: unknown[] }]
+      expect(ctx.attempts).toEqual([seededAttempt])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("calls recordAchievements with a context whose drillResults carry the run just saved (X1)", async () => {
     rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(mocks.recordAchievements).toHaveBeenCalledTimes(1))
@@ -471,7 +534,7 @@ describe('Arcade runner', () => {
 
   it('plays drill.hit at run end on top of the per-item hits, and best only when this run genuinely beats a real previous best (X8)', async () => {
     wellnessRow = { drill_results: [result({ drillId: 'd7', kind: 'trace', score: 10, at: '2026-09-01T00:00:00.000Z' })] }
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
@@ -481,7 +544,7 @@ describe('Arcade runner', () => {
   })
 
   it('never plays best on a first run of a kind, even with a perfect run', async () => {
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
@@ -490,19 +553,19 @@ describe('Arcade runner', () => {
 
   it('shows a designed empty state when the kind has no drill items', async () => {
     drillsRows = []
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('No items yet')).toBeTruthy())
   })
 
   it('rejects a kind that is not one of the twelve drills', () => {
     mocks.params.mockReturnValue({ kind: 'made-up' })
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     expect(screen.getByText('This drill could not open')).toBeTruthy()
   })
 
   it('honors an explicit ?item= deep link for the first item of the run', async () => {
     mocks.searchParams.mockReturnValue(new URLSearchParams('item=d3'))
-    render(<DerotArcadeRunnerPage />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Item: d3')).toBeTruthy())
   })
 })

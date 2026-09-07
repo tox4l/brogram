@@ -42,6 +42,7 @@ import { hasPendingPrefsWrite } from '@/app/(app)/account/prefsMutation'
 import type { Attempt, DrillResult, LessonProgress, UserAchievement, WellnessPrefs } from '@/lib/contracts'
 import { DRILL_META, computeDerotStreak, dateKey, isPlayKind, lastResultsForKind, statsForKind } from '../../lib'
 import { submitRunResult } from '../../arcade/submit'
+import { useKeepAttemptsResident } from '../../useAttemptsWindow'
 import type { PlayGameComponent, PlayGameId, PlayGameResult } from '@/components/derot/play/types'
 
 /** Spec 7.9's Playground table, verbatim. Playground games are code, not DB rows, so this lives here rather than in a `drills` fetch. */
@@ -162,6 +163,13 @@ function initialState(): RunnerState {
 }
 
 function usePlayRun(game: PlayGameId, userId: string | null) {
+  // Fix round 3 (W2FIX-F3): mirrors Arcade's own fix -- keeps
+  // `qk.attempts(userId)` resident in the query cache for the life of this
+  // screen, so `submitFinishedRun`'s save-time `getQueryData` read below
+  // never silently sees `undefined` on a run started more than five idle
+  // minutes after whatever observer originally seeded the row elsewhere has
+  // unmounted. See `useAttemptsWindow.ts`'s own docblock for the mechanism.
+  useKeepAttemptsResident(userId)
   const [state, setState] = useState<RunnerState>(initialState)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef(state)

@@ -26,6 +26,7 @@ import { hasPendingPrefsWrite } from '@/app/(app)/account/prefsMutation'
 import type { Attempt, DrillItem, DrillKind, DrillResult, LessonProgress, MotionPreference, UserAchievement, WellnessPrefs } from '@/lib/contracts'
 import { comboMultiplier } from '@/components/derot/scoring'
 import { DRILL_META, computeDerotStreak, dateKey, isDrillKind, lastResultsForKind, mapDrillRow, pickDrillItem, statsForKind } from '../../lib'
+import { useKeepAttemptsResident } from '../../useAttemptsWindow'
 import { EMPTY_RUN, RUN_SIZE, buildRunResult, isRunComplete, recordRunAnswer, summarizeRun, type RunState } from '../run'
 import { submitRunResult } from '../submit'
 
@@ -73,6 +74,13 @@ const INITIAL_STATE: RunnerState = {
  * the latest value regardless of when it was last written.
  */
 function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string | null) {
+  // Fix round 3 (W2FIX-F3): keeps `qk.attempts(userId)` resident in the query
+  // cache for the life of this screen, so `submitFinishedRun`'s save-time
+  // `getQueryData` read below never silently sees `undefined` on a run
+  // started more than five idle minutes after whatever observer originally
+  // seeded the row elsewhere (the dashboard, a lesson) has unmounted. See
+  // `useAttemptsWindow.ts`'s own docblock for the full mechanism.
+  useKeepAttemptsResident(userId)
   const [state, setState] = useState<RunnerState>(INITIAL_STATE)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef(state)
