@@ -3,13 +3,9 @@
 import type { IntegrityEventType, Language } from '@/lib/contracts'
 import { useEffect, useMemo, useRef } from 'react'
 import { basicSetup } from 'codemirror'
-import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
-import { python } from '@codemirror/lang-python'
-import { javascript } from '@codemirror/lang-javascript'
-import { html } from '@codemirror/lang-html'
-import { sql, SQLite } from '@codemirror/lang-sql'
-import { java } from '@codemirror/lang-java'
+import { loadLanguageExtension } from './grammars'
 
 export interface EditorProps {
   value: string
@@ -18,18 +14,6 @@ export interface EditorProps {
   logIntegrity: (type: IntegrityEventType) => void
   disabled?: boolean
   label?: string
-}
-
-function languageExtension(language: Language): Extension {
-  switch (language) {
-    case 'python': return python()
-    case 'typescript': return javascript({ typescript: true })
-    case 'web': return html()
-    case 'sql': return sql({ dialect: SQLite })
-    case 'java': return java()
-    case 'javascript':
-    case 'mongo': return javascript()
-  }
 }
 
 const theme = EditorView.theme({
@@ -105,7 +89,15 @@ export function Editor({ value, onChange, language, logIntegrity, disabled = fal
   }, [value])
 
   useEffect(() => {
-    view.current?.dispatch({ effects: compartments.language.reconfigure(languageExtension(language)) })
+    // Loaded on demand, one grammar per `language` (`./grammars.ts`) -- the
+    // compartment holds no language extension (plain text) until this
+    // resolves. `active` guards against a stale dispatch landing after the
+    // language changed again or the view unmounted while the import was in flight.
+    let active = true
+    void loadLanguageExtension(language).then((extension) => {
+      if (active) view.current?.dispatch({ effects: compartments.language.reconfigure(extension) })
+    })
+    return () => { active = false }
   }, [compartments, language])
 
   useEffect(() => {

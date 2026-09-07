@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { LessonPublicBlock } from '@/lib/contracts'
 
@@ -19,6 +19,15 @@ function lineRange(line: number | [number, number]): [number, number] {
  * The previous callout fades to 40%, and the highlight band slides to the
  * new lines on the move curve over 200ms (spec 10.5); under reduced motion
  * both transitions are suppressed, holding a static state instead.
+ *
+ * Fix round 1 (I5): the band is a fixed 1-line box repositioned and resized
+ * with `transform: translateY(...) scaleY(...)` only -- `top`/`height` are
+ * never animated (spec 7.8's timing law bans both), so this is a
+ * compositor-only move, not a layout+paint on every step.
+ *
+ * Fix round 1 (I3): the "Next step" button unmounts on the click that
+ * reaches the last step, which would otherwise drop focus to `<body>`.
+ * Focus moves to the newly-revealed last callout instead.
  */
 export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduced: boolean }) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -26,37 +35,49 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
   const currentStep = block.steps[stepIndex]
   const [start, end] = lineRange(currentStep?.line ?? 1)
   const isLast = stepIndex >= block.steps.length - 1
+  const wasLast = useRef(false)
+  const lastCalloutRef = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    if (isLast && !wasLast.current) lastCalloutRef.current?.focus()
+    wasLast.current = isLast
+  }, [isLast])
 
   return (
     <section aria-label="Worked example" className="space-y-3">
       <div className="relative overflow-hidden rounded-lg border border-border bg-muted/30">
         <pre className="relative z-10 overflow-x-auto p-4 font-mono text-sm leading-6">
           <code>
-            {lines.map((line, index) => <div key={index}>{line || ' '}</div>)}
+            {lines.map((line, index) => <div key={index}>{line || ' '}</div>)}
           </code>
         </pre>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 rounded-md bg-primary/15 ring-1 ring-inset ring-primary/40"
+          className="pointer-events-none absolute inset-x-2 rounded-md bg-primary/15 ring-1 ring-inset ring-primary/40"
           style={{
-            top: 16 + (start - 1) * LINE_HEIGHT_PX,
-            height: (end - start + 1) * LINE_HEIGHT_PX,
-            left: 8,
-            right: 8,
-            transition: reduced ? 'none' : 'top 200ms var(--ease-move), height 200ms var(--ease-move)',
+            top: 16,
+            height: LINE_HEIGHT_PX,
+            transformOrigin: 'top',
+            transform: `translateY(${(start - 1) * LINE_HEIGHT_PX}px) scaleY(${end - start + 1})`,
+            transition: reduced ? 'none' : 'transform 200ms var(--ease-move)',
           }}
         />
       </div>
       <div className="space-y-2">
-        {block.steps.slice(0, stepIndex + 1).map((step, index) => (
-          <p
-            key={index}
-            className="rounded-lg border border-border bg-card p-3 text-sm leading-relaxed"
-            style={{ opacity: index === stepIndex ? 1 : 0.4, transition: reduced ? 'none' : 'opacity 200ms var(--ease-move)' }}
-          >
-            {step.say}
-          </p>
-        ))}
+        {block.steps.slice(0, stepIndex + 1).map((step, index) => {
+          const isLastCallout = index === block.steps.length - 1
+          return (
+            <p
+              key={index}
+              ref={isLastCallout ? lastCalloutRef : undefined}
+              tabIndex={isLastCallout ? -1 : undefined}
+              className="rounded-lg border border-border bg-card p-3 text-sm leading-relaxed outline-none"
+              style={{ opacity: index === stepIndex ? 1 : 0.4, transition: reduced ? 'none' : 'opacity 200ms var(--ease-move)' }}
+            >
+              {step.say}
+            </p>
+          )
+        })}
       </div>
       {block.caption && <p className="text-xs text-muted-foreground">{block.caption}</p>}
       {!isLast && (

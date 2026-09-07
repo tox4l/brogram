@@ -28,7 +28,10 @@ export function SnippetBlock({ block }: { block: SnippetBlockData }) {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<RuntimeProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const isJava = block.language === 'java'
+  // M8: gated on `!runnable`, not on language alone -- if a Java snippet ever
+  // ships `runnable: true` (the CheerpJ adapter is live per C1), a learner
+  // must never see both a working Run button and "read-only for now" at once.
+  const isJavaStatic = block.language === 'java' && !block.runnable
 
   async function run() {
     setRunning(true)
@@ -70,7 +73,7 @@ export function SnippetBlock({ block }: { block: SnippetBlockData }) {
           </Button>
         )}
       </div>
-      {isJava && <p role="note" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">This one&apos;s read-only for now — Java runs land soon.</p>}
+      {isJavaStatic && <p role="note" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">This one&apos;s read-only for now — Java runs land soon.</p>}
       {running && progress?.phase === 'loading' && (
         <p role="status" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Loading {progress.packageName}…</p>
       )}

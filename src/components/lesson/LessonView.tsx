@@ -68,6 +68,15 @@ function useLessonRunner(cloId: CloId) {
   // sidesteps both rules exactly the way `setProgress(next)` alone already did.
   const [state, setState] = useState<{ progress: LessonProgress; staleNotice: boolean } | null>(null)
   const openedFor = useRef<string | null>(null)
+  // Fix round 1 (M4, surfaced by I1): React runs child effects before parent
+  // effects. Under reduced motion every `RevealBlock` fires `onReveal` on its
+  // own first-mount effect, all of which run before this component's own
+  // 'opened' effect below -- so `advanceBlock`'s `dispatch` would silently
+  // no-op (`state` is still null) for every block revealed in that first
+  // commit. Buffering the furthest index here, independent of `state`, means
+  // the 'opened' effect can fold it into the very first progress it computes
+  // instead of losing it.
+  const furthestRevealed = useRef(0)
 
   const mutation = useMutation(optimistic<LessonProgress[], LessonProgress>({
     key: qk.lessonProgress(userId ?? ''),
@@ -95,7 +104,11 @@ function useLessonRunner(cloId: CloId) {
     const queued = readQueuedProgress(userId, lesson.id)
     const seed = queued ?? prevRow
     const staleNotice = Boolean(seed && isStale(seed, lesson))
-    const next = nextProgress(seed, { type: 'opened', lesson, userId }, new Date().toISOString())
+    const opened = nextProgress(seed, { type: 'opened', lesson, userId }, new Date().toISOString())
+    // Fold in any reveal(s) that already fired this same commit (M4 above).
+    const next = furthestRevealed.current > opened.blockIndex
+      ? { ...opened, blockIndex: furthestRevealed.current }
+      : opened
     setState({ progress: next, staleNotice })
     mutation.mutate(next)
     // mutation is a stable useMutation result; re-running this on every
@@ -113,7 +126,13 @@ function useLessonRunner(cloId: CloId) {
   }
 
   function advanceBlock(index: number) {
-    if (progress && index <= progress.blockIndex) return
+    if (index <= furthestRevealed.current) return
+    furthestRevealed.current = index
+    // Before the lesson has finished opening, there is nothing to dispatch
+    // against yet -- the buffered value above is picked up by the 'opened'
+    // effect itself once it runs (M4).
+    if (!state) return
+    if (index <= state.progress.blockIndex) return
     dispatch({ type: 'block-advanced', index })
   }
 
@@ -186,7 +205,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
     <div className="mx-auto flex max-w-3xl gap-6 py-10">
       <style>{SHAKE_STYLE}</style>
       <ProgressRail total={total} current={currentBlockIndex} />
-      <div className="min-w-0 max-w-xl flex-1 space-y-6">
+      <div className="min-w-0 max-w-[45rem] flex-1 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
             <ArrowLeft className="size-3" aria-hidden="true" />Your path

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -117,8 +117,24 @@ export function CheckBlock({ block, reduced, onAnswered }: {
   const [runtimeProgress, setRuntimeProgress] = useState<RuntimeProgress | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
   const [shaking, setShaking] = useState(false)
+  const verdictRef = useRef<HTMLParagraphElement>(null)
+  const shakeTimeout = useRef<number | null>(null)
 
   const locked = verdict?.right === true
+
+  // I3: the control the learner just activated (a "Check answer" click, an
+  // Enter on a radio) never itself moves -- but the verdict is new content
+  // elsewhere on the page, so a keyboard/screen-reader user needs to be
+  // taken there deliberately rather than left to discover it or fall to
+  // <body> once a sibling control unmounts (`!locked` below). `tabIndex={-1}`
+  // makes the paragraph a valid, non-tab-order focus target.
+  useEffect(() => {
+    if (verdict) verdictRef.current?.focus()
+  }, [verdict])
+
+  useEffect(() => () => {
+    if (shakeTimeout.current !== null) window.clearTimeout(shakeTimeout.current)
+  }, [])
 
   function grade(answer: CheckAnswer) {
     const attemptNumber = attempts + 1
@@ -126,9 +142,10 @@ export function CheckBlock({ block, reduced, onAnswered }: {
     const result = gradeCheck(block, answer, attemptNumber)
     setVerdict(result)
     play(result.right ? 'drill.hit' : 'drill.miss')
+    if (shakeTimeout.current !== null) window.clearTimeout(shakeTimeout.current)
     if (!result.right && !reduced) {
       setShaking(true)
-      window.setTimeout(() => setShaking(false), 150)
+      shakeTimeout.current = window.setTimeout(() => setShaking(false), 150)
     } else {
       setShaking(false)
     }
@@ -259,16 +276,27 @@ export function CheckBlock({ block, reduced, onAnswered }: {
         </div>
       )}
 
+      {/* I2: hint/explain live inside the same aria-live region as the verdict,
+          in DOM order right after it, so a second wrong attempt's swap from
+          hint to explain is itself an announced mutation -- not silence.
+          The sr-only attempt suffix additionally guarantees the announced
+          text changes attempt to attempt even on the rare lesson where an
+          author's `hint` and `explain` strings happen to read the same. */}
       <div aria-live="polite">
         {verdict && (
-          <p className={`flex items-center gap-2 text-sm font-medium ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}>
+          <p
+            ref={verdictRef}
+            tabIndex={-1}
+            className={`flex items-center gap-2 text-sm font-medium outline-none ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}
+          >
             {verdict.right ? <Check aria-hidden="true" className="size-4" /> : <X aria-hidden="true" className="size-4" />}
             {verdict.right ? 'Right' : 'Not yet'}
+            {!verdict.right && <span className="sr-only"> — attempt {attempts}</span>}
           </p>
         )}
+        {verdict?.reveal === 'hint' && <p className="text-sm text-muted-foreground">{block.hint}</p>}
+        {verdict?.reveal === 'explain' && <p className="text-sm text-muted-foreground">{block.explain}</p>}
       </div>
-      {verdict?.reveal === 'hint' && <p className="text-sm text-muted-foreground">{block.hint}</p>}
-      {verdict?.reveal === 'explain' && <p className="text-sm text-muted-foreground">{block.explain}</p>}
     </section>
   )
 }

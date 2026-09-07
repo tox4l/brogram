@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from 'react'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -72,6 +72,7 @@ const db = vi.hoisted(() => ({
   wellnessPrefs: {} as unknown,
   lessonProgressRows: [] as Record<string, unknown>[],
   upsertCalls: [] as Record<string, unknown>[],
+  upsertShouldFail: false,
 }))
 
 vi.mock('@/lib/curriculum', () => ({
@@ -115,6 +116,7 @@ vi.mock('@/lib/supabase/client', () => ({
           select: () => ({ eq: async () => ({ data: db.lessonProgressRows, error: null }) }),
           upsert: async (payload: Record<string, unknown>) => {
             db.upsertCalls.push(payload)
+            if (db.upsertShouldFail) return { error: new Error('relation "lesson_progress" does not exist') }
             db.lessonProgressRows = [...db.lessonProgressRows.filter((row) => row.lesson_id !== payload.lesson_id), payload]
             return { error: null }
           },
@@ -169,6 +171,8 @@ beforeEach(() => {
   db.wellnessPrefs = {}
   db.lessonProgressRows = []
   db.upsertCalls = []
+  db.upsertShouldFail = false
+  window.localStorage.clear()
   mocks.getRuntime.mockReturnValue({ run: mocks.run, warmup: vi.fn(), abort: vi.fn(), language: 'python' })
   observerSpy.mockClear();
   (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver = FakeIntersectionObserver
@@ -177,6 +181,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  window.localStorage.clear()
 })
 
 describe('LessonView', () => {
@@ -378,5 +383,165 @@ describe('LessonView', () => {
     mocks.clo.mockReturnValue(null)
     render(<LessonView cloId="NOPE-1" />, { wrapper: wrapper() })
     screen.getByText(/could not open/i) // throws if missing
+  })
+
+  // --- Fix round 1 -----------------------------------------------------
+
+  it('I2: the aria-live announcement changes between a first and second wrong attempt', async () => {
+    setCurriculum(GOLDEN_LESSON)
+    render(<LessonView cloId={GOLDEN_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(GOLDEN_LESSON.title)
+
+    const check = GOLDEN_LESSON.blocks.find((block) => block.type === 'check' && block.kind === 'predict-output') as { prompt: string }
+    const section = checkSection(check.prompt)
+    const textbox = within(section).getByRole('textbox')
+    const submit = () => fireEvent.click(within(section).getByRole('button', { name: /check answer/i }))
+
+    fireEvent.change(textbox, { target: { value: 'nonsense' } })
+    submit()
+    await within(section).findByText('Not yet')
+    const liveRegion = within(section).getByText('Not yet').closest('[aria-live]') as HTMLElement
+    const firstAnnouncement = liveRegion.textContent
+
+    fireEvent.change(textbox, { target: { value: 'still wrong' } })
+    submit()
+    // Same visible word ("Not yet") both times -- the region's full announced
+    // text (hint swapped for explain, plus the sr-only attempt count) must
+    // still differ, or a screen-reader learner hears nothing on this attempt.
+    await waitFor(() => expect(liveRegion.textContent).not.toBe(firstAnnouncement))
+  })
+
+  it('I3: moves focus to the verdict after grading a check, instead of dropping it to <body>', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    const predict = checkSection('What prints?')
+    fireEvent.change(within(predict).getByRole('textbox'), { target: { value: 'wrong' } })
+    fireEvent.click(within(predict).getByRole('button', { name: /check answer/i }))
+    const verdict = await within(predict).findByText('Not yet')
+    await waitFor(() => expect(document.activeElement).toBe(verdict))
+  })
+
+  it('I3: moves focus to the final worked-example callout once the last step is reached', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('Step one.')
+
+    fireEvent.click(screen.getByRole('button', { name: /next step/i }))
+    const lastCallout = await screen.findByText('Step two.')
+    await waitFor(() => expect(document.activeElement).toBe(lastCallout))
+    // The button the learner just activated is gone -- focus did not fall to <body>.
+    expect(screen.queryByRole('button', { name: /next step/i })).toBeNull()
+  })
+
+  it('I3: moves focus to "Back to your path" once the walkthrough completes', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+    const link = await screen.findByRole('link', { name: /back to your path/i })
+    await waitFor(() => expect(document.activeElement).toBe(link))
+  })
+
+  it('I4: a failed write is queued in localStorage without ever reverting the answered check locally', async () => {
+    db.upsertShouldFail = true
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper('learner-queue') })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+    await waitFor(() => expect(db.upsertCalls.length).toBeGreaterThan(0)) // the 'opened' write, also failing
+
+    const predict = checkSection('What prints?')
+    fireEvent.change(within(predict).getByRole('textbox'), { target: { value: '2' } })
+    fireEvent.click(within(predict).getByRole('button', { name: /check answer/i }))
+    await within(predict).findByText('Right')
+
+    // The check stays answered locally regardless of every write failing.
+    within(predict).getByText('Right')
+
+    const key = `brogram:lesson-progress-queue:learner-queue:${ALL_KINDS_LESSON.cloId}`
+    await waitFor(() => {
+      const raw = window.localStorage.getItem(key)
+      expect(raw).not.toBeNull()
+      const queued = JSON.parse(raw!) as { checksPassed: number; status: string }
+      expect(queued.checksPassed).toBe(1)
+      expect(queued.status).toBe('started')
+    })
+  })
+
+  it('I4: a later successful write drains the queued row exactly once and clears it', async () => {
+    // A single-block lesson: block 0 never triggers its own block-advanced
+    // dispatch (it is the starting index), so the only write this mount
+    // makes is the 'opened' effect draining the queue -- isolating the
+    // drain-and-clear behaviour from the unrelated, already-flagged (M1)
+    // one-write-per-revealed-block noise a multi-block lesson would add.
+    const userId = 'learner-drain'
+    const queuedRow = {
+      userId, lessonId: SPOT_THE_BUG_LESSON.cloId, cloId: SPOT_THE_BUG_LESSON.cloId,
+      status: 'started', blockIndex: 0, checksPassed: 3, checksFailed: 1,
+      lessonVersion: 1, startedAt: '2026-09-01T00:00:00.000Z', completedAt: null,
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    }
+    window.localStorage.setItem(`brogram:lesson-progress-queue:${userId}:${SPOT_THE_BUG_LESSON.cloId}`, JSON.stringify(queuedRow))
+    db.upsertShouldFail = false
+    setCurriculum(SPOT_THE_BUG_LESSON)
+    render(<LessonView cloId={SPOT_THE_BUG_LESSON.cloId} />, { wrapper: wrapper(userId) })
+    await screen.findByText('Find the bug.')
+
+    await waitFor(() => expect(db.upsertCalls.length).toBeGreaterThan(0))
+    const payload = db.upsertCalls[0]
+    expect(payload.checks_passed).toBe(3)
+    expect(payload.checks_failed).toBe(1)
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(`brogram:lesson-progress-queue:${userId}:${SPOT_THE_BUG_LESSON.cloId}`)).toBeNull()
+    })
+    // Drained exactly once -- no retry storm on the settle-triggered refetch.
+    expect(db.upsertCalls).toHaveLength(1)
+  })
+
+  it('I1: under reduced motion, block progress still advances instead of freezing at 0', async () => {
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+
+    setCurriculum(GOLDEN_LESSON)
+    render(<LessonView cloId={GOLDEN_LESSON.cloId} />, { wrapper: wrapper('learner-reduced') })
+    await screen.findByText(GOLDEN_LESSON.title)
+
+    await waitFor(() => {
+      const latest = db.upsertCalls.at(-1)
+      expect(latest?.block_index).toBe(GOLDEN_LESSON.blocks.length - 1)
+    })
+
+    // @ts-expect-error test-only cleanup of a global we own for this test
+    delete window.matchMedia
+  })
+
+  it('I6: a script tag inside a concept figure is stripped, never rendered live', async () => {
+    const hostileLesson: LessonPublic = {
+      ...ALL_KINDS_LESSON,
+      id: 'TEST101-3',
+      cloId: 'TEST101-3',
+      blocks: [{
+        type: 'concept',
+        id: 'c1',
+        heading: 'Hostile figure',
+        body: 'Body.',
+        figure: '<svg xmlns="http://www.w3.org/2000/svg"><script>window.__pwned = true</script><circle r="4" fill="red"/></svg>',
+      }],
+    }
+    setCurriculum(hostileLesson)
+    render(<LessonView cloId={hostileLesson.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('Hostile figure')
+
+    expect(document.querySelector('script')).toBeNull()
+    expect((window as unknown as { __pwned?: boolean }).__pwned).toBeUndefined()
+    // Sanitising is surgical, not a bail-to-nothing -- the safe shape survives.
+    expect(document.querySelector('svg circle')).not.toBeNull()
   })
 })

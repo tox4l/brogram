@@ -15,6 +15,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
  * `onReveal` fires exactly once, the first time the block becomes visible --
  * `LessonView` uses it to advance the progress rail's furthest-seen block,
  * never to gate content.
+ *
+ * Fix round 1 (I1): `announced` must start `false` unconditionally, not
+ * `reduced`. Under reduced motion `visible` is already `true` from the very
+ * first render, so the "announce once" effect below fires `onReveal` on
+ * mount by itself -- no `IntersectionObserver` is ever constructed in that
+ * case (the acceptance requirement), but block progress still advances
+ * instead of freezing at 0 for the whole lesson.
  */
 export function RevealBlock({ reduced, onReveal, children }: {
   reduced: boolean
@@ -23,7 +30,7 @@ export function RevealBlock({ reduced, onReveal, children }: {
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [visible, setVisible] = useState(() => reduced)
-  const announced = useRef(reduced)
+  const announced = useRef(false)
 
   useEffect(() => {
     if (reduced) return
