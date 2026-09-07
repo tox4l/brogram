@@ -26,8 +26,14 @@ export interface LockdownOverlayProps {
    * overlay of its own (R9.1).
    */
   printscreenNote?: string | null
-  /** R9.3: the rotating paste-block toast, with an optional "why" sentence
-   *  behind a small, persistent expand affordance -- no shake, no motion, no sound. */
+  /**
+   * R9.3: the rotating paste-block toast, with an optional "why" sentence
+   * behind a small expand affordance -- no shake, no motion, no sound.
+   * Fix round 2, N2: whenever `pasteWhy` is supplied, the toast never
+   * auto-dismisses on a timer at all (it stays until the next distinct
+   * blocked-paste event replaces it), so a keyboard or screen-reader user
+   * can reach "Why?" no matter how long that takes.
+   */
   pasteMessage?: string
   pasteWhy?: string
   /**
@@ -69,17 +75,24 @@ export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessag
 
   const toastVisible = Boolean(toastMessage) && !toastDismissed
 
-  // Fix round 1, I3: the toast never auto-dismisses while `whyOpen` is true,
-  // so a keyboard or screen-reader user reaching "Why?" can never have it
-  // unmount mid-reach. Closing "why" restarts a fresh dismiss window rather
-  // than vanishing on the spot. `setToastDismissed` here runs inside a
-  // `setTimeout` callback, not synchronously in the effect body, which is
-  // exactly the sanctioned "subscribe to an external timer" shape.
+  // Fix round 2, N2: reaching "Why?" itself has to happen inside the old
+  // fixed window -- pausing the timer only once `whyOpen` was already true
+  // (fix round 1's own fix) cannot save a keyboard user who has not yet
+  // Tabbed there, since the card already unmounted before their focus ever
+  // arrives. `pasteWhy` existing at all means there is a control worth
+  // protecting, so the dismiss timer never starts in that case: the toast
+  // (message and the "Why?" control together) stays mounted and reachable
+  // until superseded by the next distinct blocked-paste event (the
+  // render-time adjustment above), never on a clock. A caller with no
+  // `pasteWhy` keeps the original fixed-window behaviour, since there is no
+  // control there to protect from a timed unmount. `setToastDismissed` here
+  // runs inside a `setTimeout` callback, not synchronously in the effect
+  // body, which is exactly the sanctioned "subscribe to an external timer" shape.
   useEffect(() => {
-    if (!toastVisible || whyOpen) return
+    if (!toastVisible || whyOpen || pasteWhy) return
     const timer = setTimeout(() => setToastDismissed(true), PASTE_TOAST_MS)
     return () => clearTimeout(timer)
-  }, [toastVisible, whyOpen, toastMessage])
+  }, [toastVisible, whyOpen, toastMessage, pasteWhy])
 
   // Fix round 1, I4: return focus once the "why" panel closes.
   const wasWhyOpen = useRef(false)
@@ -127,7 +140,10 @@ export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessag
         // instead of wherever this component happens to sit in the page's
         // normal flow, so the explanation for a paste just blocked in the
         // editor is never buried below the results panel or the fold.
-        <div className="pointer-events-none fixed inset-x-0 top-4 z-[90] flex justify-center px-4">
+        // Fix round 2, N7: `top-16`, not `top-4` -- now that the card can
+        // stay up indefinitely (see the effect above), it must clear the app
+        // header rather than sit over it.
+        <div className="pointer-events-none fixed inset-x-0 top-16 z-[90] flex justify-center px-4">
           <div className="pointer-events-auto max-w-md rounded-lg border border-border bg-background px-4 py-3 shadow-sm">
             <p role="status" className="text-sm text-foreground">{toastMessage}</p>
             {pasteWhy && (

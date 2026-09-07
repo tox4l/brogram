@@ -19,6 +19,7 @@ import { LockdownOverlay } from '@/components/exercise/LockdownOverlay'
 import { PredictOutput } from '@/components/exercise/PredictOutput'
 import { SpotTheBug } from '@/components/exercise/SpotTheBug'
 import { Trace } from '@/components/exercise/Trace'
+import type { Focusable } from '@/components/exercise/LockdownOverlay'
 import { Celebration } from '@/components/rewards/Celebration'
 import { ChainPips } from '@/components/rewards/ChainPips'
 import { XpCounter } from '@/components/rewards/XpCounter'
@@ -47,9 +48,13 @@ function ExerciseWorkspace({ id }: { id: string }) {
   const loop = useExerciseLoop(id)
   const router = useRouter()
   const resultsRef = useRef<HTMLDivElement>(null)
+  // Fix round 3 (T2.8's returnFocusRef, previously wired nowhere): the same ref goes into the
+  // editor (which populates it once its CodeMirror view exists) and into LockdownOverlay (which
+  // calls `.focus()` on it the instant the overlay lifts or the paste "why" panel closes).
+  const editorFocusRef = useRef<Focusable | null>(null)
   const lockdown = useLockdown(id, { duringAttempt: loop.duringAttempt, enabled: Boolean(loop.exercise) })
   const exercise = loop.exercise
-  if (!exercise) return <section aria-label="Exercise" className="mx-auto max-w-xl space-y-4 py-12">
+  if (!exercise) return <section aria-label="Rep" className="mx-auto max-w-xl space-y-4 py-12">
     <h1 className="text-2xl font-medium tracking-tight">{loop.status === 'loading' ? 'Opening your rep' : 'This rep could not open'}</h1>
     <p role={loop.error ? 'alert' : 'status'} className="text-sm leading-relaxed text-muted-foreground">{loop.error ?? 'Loading your prompt and starting code.'}</p>
     <div className="flex gap-3">{loop.error && <Button onClick={() => void loop.retry()} variant="outline">Try again</Button>}<Link href="/dashboard" className={buttonVariants({ variant: 'ghost' })}>Back to courses</Link></div>
@@ -89,8 +94,8 @@ function ExerciseWorkspace({ id }: { id: string }) {
         {exercise.kind === 'predict-output' || (exercise.kind === 'trace' && traceUnanswerable) ? <PredictOutput snippet={exercise.starterCode} {...answerProps} />
           : exercise.kind === 'spot-the-bug' ? <SpotTheBug snippet={exercise.starterCode} {...answerProps} />
           : exercise.kind === 'trace' ? <Trace snippet={exercise.starterCode} variables={variables} {...answerProps} />
-          : exercise.kind === 'schema' ? <DynamicSchemaEditor {...answerProps} logIntegrity={lockdown.logIntegrity} />
-          : <DynamicEditor {...answerProps} language={exercise.language} logIntegrity={lockdown.logIntegrity} />}
+          : exercise.kind === 'schema' ? <DynamicSchemaEditor {...answerProps} logIntegrity={lockdown.logIntegrity} focusRef={editorFocusRef} />
+          : <DynamicEditor {...answerProps} language={exercise.language} logIntegrity={lockdown.logIntegrity} focusRef={editorFocusRef} />}
         <div className="space-y-3 border-t border-border p-3">
           {/* Java's warmup reports whole steps ("Fetching the compiler (18 MB, once)"), not package names. */}
           {loop.progress?.phase === 'loading' && <p role="status" className="break-words text-xs leading-relaxed text-muted-foreground">{exercise.language === 'java' ? loop.progress.packageName : `Loading ${loop.progress.packageName}`}{loop.progress.message ? ` · ${loop.progress.message}` : ''}</p>}
@@ -142,21 +147,27 @@ function ExerciseWorkspace({ id }: { id: string }) {
             {loop.error
               ? line('error.save', loop.lastRewardAttempt?.id ?? 'save-error')
               : loop.closed
-              ? lineWith('clo.close', { skill: loop.clo?.outcome ?? 'That skill' }, loop.clo?.id ?? exercise.id)
+              // T2.7b review, I1: `Clo.outcome` is a full curriculum sentence (up to 25 words),
+              // never a skill name -- interpolating it here blew past voice rule 1 (under twelve
+              // words). The bundle carries no short CLO title, so this stays the bank's own
+              // generic subject rather than fabricate one from a sentence fragment.
+              ? lineWith('clo.close', { skill: 'That skill' }, loop.clo?.id ?? exercise.id)
               : loop.nextExercise
               ? `Keep going with a different ${angleWord()}.`
               : loop.busy
               ? `Preparing your next ${repWord()}.`
               : 'Pass saved.'}
           </p>
-          <Button onClick={() => void loop.next()} disabled={!loop.canAdvance} className="w-full transition-none active:translate-y-0">{loop.closed ? 'Back to your path' : 'Next exercise'}<ArrowRight aria-hidden="true" /></Button>
+          <Button onClick={() => void loop.next()} disabled={!loop.canAdvance} className="w-full transition-none active:translate-y-0">{loop.closed ? 'Back to your path' : `Next ${repWord()}`}<ArrowRight aria-hidden="true" /></Button>
         </div>}
       </div>
     </div>
     {/* T2.8's rotating paste explanation and once-only PrintScreen note (pasteWhy/printscreenNote)
         were built and tested but never threaded through this page -- wired here so the "Why?"
-        toggle and the note are actually visible, not just logged underneath. */}
-    <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} pasteMessage={lockdown.pasteMessage} pasteWhy={lockdown.pasteWhy} printscreenNote={lockdown.printscreenNote} />
+        toggle and the note are actually visible, not just logged underneath. `returnFocusRef`
+        (fix round 3) is the same ref the editor above populates, so focus comes back to it the
+        instant the overlay lifts or the "why" explanation closes, instead of staying lost. */}
+    <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} pasteMessage={lockdown.pasteMessage} pasteWhy={lockdown.pasteWhy} printscreenNote={lockdown.printscreenNote} returnFocusRef={editorFocusRef} />
     <Celebration onOpenShelf={() => router.push('/account#trophies')} resultsAnchorRef={resultsRef} />
   </div>
 }

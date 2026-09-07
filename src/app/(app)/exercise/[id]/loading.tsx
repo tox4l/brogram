@@ -8,7 +8,7 @@
  */
 export default function ExerciseLoading() {
   return (
-    <div role="status" aria-label="Opening your exercise" className="space-y-5">
+    <div role="status" aria-label="Opening your rep" className="space-y-5">
       <div className="space-y-3">
         <div className="h-3 w-16 animate-pulse rounded-full bg-muted" />
         <div className="flex flex-wrap items-start justify-between gap-3">

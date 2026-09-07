@@ -1,11 +1,12 @@
 'use client'
 
 import type { IntegrityEventType, Language } from '@/lib/contracts'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { basicSetup } from 'codemirror'
 import { Compartment, EditorState, Prec, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { loadLanguageExtension } from './grammars'
+import type { Focusable } from './LockdownOverlay'
 
 export interface EditorProps {
   value: string
@@ -14,6 +15,15 @@ export interface EditorProps {
   logIntegrity: (type: IntegrityEventType) => void
   disabled?: boolean
   label?: string
+  /**
+   * Fix round 3: a shared ref this component populates with an imperative `focus()` once its
+   * CodeMirror view exists, so a caller elsewhere -- `page.tsx`, into `LockdownOverlay`'s own
+   * `returnFocusRef` (T2.8) -- can return keyboard focus here once the lockdown overlay lifts
+   * or the paste "why" panel closes. A plain prop rather than React's `ref`: this component is
+   * wrapped in `next/dynamic` at the call site, whose loadable wrapper is not itself
+   * `forwardRef`-aware, so an actual `ref` prop would never reach the CodeMirror view.
+   */
+  focusRef?: RefObject<Focusable | null>
 }
 
 const theme = EditorView.theme({
@@ -29,7 +39,7 @@ const theme = EditorView.theme({
   '.cm-tooltip': { backgroundColor: 'var(--popover)', color: 'var(--popover-foreground)', borderColor: 'var(--border)' },
 }, { dark: true })
 
-export function Editor({ value, onChange, language, logIntegrity, disabled = false, label = 'Code editor' }: EditorProps) {
+export function Editor({ value, onChange, language, logIntegrity, disabled = false, label = 'Code editor', focusRef }: EditorProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const callbacks = useRef({ onChange, logIntegrity })
@@ -119,6 +129,15 @@ export function Editor({ value, onChange, language, logIntegrity, disabled = fal
       role: 'textbox', 'aria-label': label, 'aria-multiline': 'true', 'aria-readonly': String(disabled), spellcheck: 'false',
     })) })
   }, [compartments, disabled, label])
+
+  // Fix round 3: populated once, for the lifetime of this mounted instance -- `.focus()` reads
+  // `view.current` fresh at call time, so it stays correct even though this effect itself only
+  // runs on mount/unmount (the CodeMirror view survives a `next()` exercise swap, T2.2's C1).
+  useEffect(() => {
+    if (!focusRef) return
+    focusRef.current = { focus: () => view.current?.focus() }
+    return () => { focusRef.current = null }
+  }, [focusRef])
 
   return <div ref={host} className="min-w-0 overflow-hidden rounded-b-xl bg-background font-mono" />
 }

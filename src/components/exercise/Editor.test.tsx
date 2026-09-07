@@ -1,10 +1,11 @@
+import { useRef } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { EditorView } from '@codemirror/view'
 import { undo } from '@codemirror/commands'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LINE_BANK } from '@/lib/voice/lines'
 import { Editor } from './Editor'
-import { LockdownOverlay } from './LockdownOverlay'
+import { LockdownOverlay, type Focusable } from './LockdownOverlay'
 import { SchemaEditor } from './SchemaEditor'
 
 afterEach(cleanup)
@@ -72,6 +73,23 @@ describe('exercise editor', () => {
     const editor = screen.getByRole('textbox', { name: 'Schema editor' })
     expect(fireEvent.paste(editor)).toBe(false)
     expect(logIntegrity).toHaveBeenCalledWith('paste-blocked')
+  })
+
+  it('populates focusRef with an imperative focus() that lands on the CodeMirror content (fix round 3)', () => {
+    function Harness() {
+      const focusRef = useRef<Focusable | null>(null)
+      return (
+        <>
+          <button type="button" onClick={() => focusRef.current?.focus()}>focus editor</button>
+          <Editor value="a" onChange={() => {}} language="javascript" logIntegrity={vi.fn()} focusRef={focusRef} />
+        </>
+      )
+    }
+    render(<Harness />)
+    const content = screen.getByRole('textbox', { name: 'Code editor' })
+    expect(document.activeElement).not.toBe(content)
+    fireEvent.click(screen.getByRole('button', { name: 'focus editor' }))
+    expect(document.activeElement).toBe(content)
   })
 })
 

@@ -80,17 +80,33 @@ describe('LockdownOverlay — paste toast (R9.3)', () => {
     expect(screen.getByText('Because typing is the exercise.')).toBeTruthy()
   })
 
-  it('restarts a fresh dismiss window when "why" closes, rather than vanishing immediately', () => {
+  // Fix round 2, N2: reaching "Why?" is what has to happen inside the old
+  // 3.5s window -- pausing the timer only once `whyOpen` is already true
+  // (fix round 1's fix) cannot save a keyboard user who has not yet Tabbed
+  // there, since the card would already be gone before their focus arrives.
+  // Whenever `pasteWhy` exists at all, no dismiss timer starts in the first
+  // place, so this is provable without any Tab-timing assumption.
+  it('never starts a dismiss timer at all while pasteWhy is supplied, so "Why?" stays reachable well past the old 3.5s window even if never opened', () => {
+    render(<LockdownOverlay reason={null} pasteMessage="Paste won't work here. Type it." pasteWhy="Because typing is the exercise." />)
+    act(() => { vi.advanceTimersByTime(10_000) })
+    expect(screen.getByText('Paste won\'t work here. Type it.')).toBeTruthy()
+    const whyButton = screen.getByRole('button', { name: 'Why?' })
+    whyButton.focus()
+    expect(document.activeElement).toBe(whyButton)
+  })
+
+  it('stays mounted after "why" closes too -- there is no timed region to restart while pasteWhy is supplied', () => {
     render(<LockdownOverlay reason={null} pasteMessage="Paste won't work here. Type it." pasteWhy="Because typing is the exercise." />)
     fireEvent.click(screen.getByRole('button', { name: 'Why?' }))
-    act(() => { vi.advanceTimersByTime(10_000) })
     fireEvent.click(screen.getByRole('button', { name: 'Hide why' }))
-    // Not gone the instant "why" closes.
+    act(() => { vi.advanceTimersByTime(60_000) })
     expect(screen.getByText('Paste won\'t work here. Type it.')).toBeTruthy()
-    act(() => { vi.advanceTimersByTime(3_499) })
-    expect(screen.getByText('Paste won\'t work here. Type it.')).toBeTruthy()
-    act(() => { vi.advanceTimersByTime(1) })
-    expect(screen.queryByText('Paste won\'t work here. Type it.')).toBeNull()
+  })
+
+  it('still auto-dismisses after 3.5s when there is no pasteWhy at all (the original fixed-window behaviour, unchanged)', () => {
+    render(<LockdownOverlay reason={null} pasteMessage="Keyboard only on this screen." />)
+    act(() => { vi.advanceTimersByTime(3_500) })
+    expect(screen.queryByText('Keyboard only on this screen.')).toBeNull()
   })
 
   // Fix round 1, I3: a new rotating line must not inherit the previous

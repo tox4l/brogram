@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { EditorView } from '@codemirror/view'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ExercisePublic } from '@/lib/contracts'
+import type { Clo, ExercisePublic } from '@/lib/contracts'
+import { LINE_BANK } from '@/lib/voice/lines'
 import ExercisePage from './page'
 
 const mocks = vi.hoisted(() => ({ loop: vi.fn(), session: vi.fn(), lockdown: vi.fn(), push: vi.fn(), params: vi.fn() }))
@@ -176,18 +177,56 @@ describe('exercise screen', () => {
     expect(EditorView.findFromDOM(editorAfter)).toBe(view) // same CodeMirror instance
     await waitFor(() => expect(editorAfter.textContent).toBe('function solveTwo() {}'))
   })
+  it('returns focus to the editor the instant the lockdown overlay lifts (fix round 3)', async () => {
+    mocks.loop.mockReturnValue({ ...model(), exercise: codeExercise, code: codeExercise.starterCode })
+    mocks.lockdown.mockReturnValue({ overlay: 'idle', logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+    const { rerender } = render(<ExercisePage />)
+    const editor = await waitFor(() => screen.getByRole('textbox', { name: 'Code editor' }))
+    expect(document.activeElement).not.toBe(editor)
+    mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+    rerender(<ExercisePage />)
+    expect(document.activeElement).toBe(editor)
+  })
+  it('returns focus to the editor once the paste "why" explanation closes (fix round 3)', async () => {
+    mocks.loop.mockReturnValue({ ...model(), exercise: codeExercise, code: codeExercise.starterCode })
+    mocks.lockdown.mockReturnValue({
+      overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(),
+      pasteMessage: 'Paste is off on this screen. Type it out.',
+      pasteWhy: 'Paste is off because typing is the exercise, and because it is the one thing browsers actually let us enforce, so we do.',
+      printscreenNote: null, loggingError: null,
+    })
+    render(<ExercisePage />)
+    const editor = await waitFor(() => screen.getByRole('textbox', { name: 'Code editor' }))
+    expect(document.activeElement).not.toBe(editor)
+    fireEvent.click(screen.getByRole('button', { name: 'Why?' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hide why' }))
+    expect(document.activeElement).toBe(editor)
+  })
   it('shows the next-exercise section as soon as outcome is passed, without waiting for status to settle', () => {
     const state = { ...model(), status: 'graded', outcome: 'passed', busy: true, nextExercise: null, canAdvance: false }
     mocks.loop.mockReturnValue(state)
     render(<ExercisePage />)
     expect(screen.getByText('Preparing your next rep.')).toBeTruthy()
-    expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /Next rep/ }) as HTMLButtonElement).disabled).toBe(true)
   })
   it('enables Next once the hook reports canAdvance, even while other background work is still busy', () => {
     const state = { ...model(), status: 'graded', outcome: 'passed', busy: true, nextExercise: { ...exercise, id: 'exercise-two' }, canAdvance: true }
     mocks.loop.mockReturnValue(state)
     render(<ExercisePage />)
-    expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: /Next rep/ }) as HTMLButtonElement).disabled).toBe(false)
+  })
+  it('never renders the raw CLO outcome sentence in the close celebration line (T2.7b review, I1)', () => {
+    const clo: Clo = { id: 'INFS1101-3', course: 'INFS1101', ordinal: 3, outcome: 'Control program flow correctly with sequence, selection (if / elif / else) and repetition (for / while), including nested and early-exit forms.', topics: [], prerequisites: [], patterns: [], assessableInCode: true }
+    const state = { ...model(), status: 'graded', outcome: 'passed', closed: true, clo }
+    mocks.loop.mockReturnValue(state)
+    render(<ExercisePage />)
+    // Scoped to the close celebration block itself -- `clo.outcome` legitimately appears
+    // elsewhere on the page (PromptPanel shows the curriculum context being exercised);
+    // the bug this guards is the outcome sentence leaking into the celebration line.
+    const closeSection = screen.getByRole('button', { name: 'Back to your path' }).closest('div')
+    const filled = LINE_BANK['clo.close'].variants.map((variant) => variant.replace('{skill}', 'That skill'))
+    expect(filled).toContain(closeSection?.querySelector('p')?.textContent)
+    expect(closeSection?.textContent).not.toContain('Control program flow')
   })
   it('keeps Next honestly disabled and shows the save-failure line, never "saved", when the background save fails on a pass (fix round C2)', () => {
     const state = { ...model(), status: 'graded', outcome: 'passed', error: 'write temporarily unavailable', canAdvance: false, nextExercise: null }
@@ -195,6 +234,6 @@ describe('exercise screen', () => {
     render(<ExercisePage />)
     expect(screen.queryByText('Pass saved.')).toBeNull()
     expect(screen.queryByText('Preparing your next rep.')).toBeNull()
-    expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /Next rep/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
