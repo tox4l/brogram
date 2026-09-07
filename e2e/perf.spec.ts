@@ -6,6 +6,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { compileLearnerState } from '../src/lib/learner/compile'
 import { readEnv, hasEnv, serviceClient, mintSession, deleteInvitedUser, type E2eEnv } from './support/session'
 import { SHELL_READY, ROUTE_READY, GRADED, CHECK_VERDICT } from '../src/lib/perf/marks'
+import { PROFILE_CACHE_COOKIE } from '../src/lib/supabase/profile-cache'
 
 /**
  * `npm run perf:timings` (plan Wave 3, T3.2 step 2): against a **production build**, so the
@@ -120,14 +121,43 @@ const PAINT = { lcpMsStandard: 1500, lcpMsExercise: 1800, clsMax: 0.05, inpMaxMs
 // `src/lib/supabase/middleware.ts`'s `updateSession` running `rpc('lift_expired_restriction')`
 // then a `profiles` select **in series** on every proxy-matched request. That request now
 // checks a signed, httpOnly cache cookie first (`src/lib/supabase/profile-cache.ts`, TTL
-// 60s) and skips both Supabase calls entirely on a hit -- true everywhere except `/exercise`,
-// which always re-reads fresh so a restriction still bites immediately, the two calls now run
-// concurrently rather than serially. Three production runs (`next build` + `next start`, real
-// Supabase, scratch worktree) of this exact flow -- dashboard loaded first, same as every
-// real click into a course -- measured 118.3ms, 132.0ms, 125.9ms: worst of three, 132.0,
-// rounded up to the next 50ms is 150. `docs/superpowers/plans/2026-09-06-brogram-v2-plan.md`'s
-// Wave-3 T3.2 row is amended to match.
-const INTERACTION = { courseTileClickToPaintMs: 150, submitToVerdictMs: 300, lessonCheckToVerdictMs: 120 } as const
+// `PROFILE_CACHE_TTL_MS` = 60s) and skips both Supabase calls entirely on a hit -- true
+// everywhere except `/exercise`, which always re-reads fresh so a restriction still bites
+// immediately; on a miss (or on `/exercise`) the two calls now run concurrently rather than
+// serially.
+//
+// Fix round F2 (Opus review): the number below is a **cache-hit** number, not "the transition
+// cost" -- it only holds within `PROFILE_CACHE_TTL_MS` of the last read on this route (in
+// practice, within 60s of the dashboard load that always precedes it in this flow and in real
+// use). A click that lands after the cookie has expired -- the learner reads the dashboard for
+// over a minute before clicking, or simply has no cache cookie yet -- pays a full concurrent
+// `rpc` + `profiles` round trip instead. Both numbers are measured below, three production
+// runs each (`next build` + `next start`, real Supabase, scratch worktree), and both are
+// asserted against their own budget (`clearCookies({ name: PROFILE_CACHE_COOKIE })` forces the
+// second measurement onto the cold path):
+//   - warm (cache hit):  131.2ms, 87.7ms, 131.1ms -- worst 131.2, rounded up to 150 (unchanged
+//     from the original fix round's 118.3/132.0/125.9ms: same code path, same budget).
+//   - cold (cache miss): 248.1ms, 249.9ms, 250.3ms -- worst 250.3, rounded up to 300. The
+//     remaining cost on a cold click is one concurrent PostgREST round-trip pair
+//     (`rpc('lift_expired_restriction')` + a `profiles` select, fired together, not in series)
+//     against the production Supabase project -- roughly half of the pre-fix serial cost
+//     (~500ms) this task replaced, and the reason a cold click is still budgeted separately
+//     rather than folded into the 150ms warm number.
+// `docs/superpowers/plans/2026-09-06-brogram-v2-plan.md`'s Wave-3 T3.2 row carries both numbers
+// and the TTL that separates them.
+const INTERACTION = {
+  /** Cache hit: the profile-cache cookie from a preceding request on this route is still
+   *  within `PROFILE_CACHE_TTL_MS`. This is the common case in this flow (dashboard loads
+   *  first) but is not "every real click into a course" -- see `courseTileClickToPaintColdMs`
+   *  for a click that lands after the cookie has expired or was never set. */
+  courseTileClickToPaintMs: 150,
+  /** Cache miss: the profile-cache cookie is absent or expired, so this request pays a fresh,
+   *  concurrent `rpc('lift_expired_restriction')` + `profiles` round-trip pair. Measured with
+   *  the cookie evicted immediately before the click (below), not merely assumed. */
+  courseTileClickToPaintColdMs: 300,
+  submitToVerdictMs: 300,
+  lessonCheckToVerdictMs: 120,
+} as const
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
@@ -368,6 +398,19 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     await waitForPaintSettled(page)
     assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
 
+    // Fix round F5 (Opus review, Minor): if `SUPABASE_SERVICE_ROLE_KEY` is absent from this
+    // environment, `encodeProfileCache` silently returns `null` (`profile-cache.ts`'s own
+    // documented degrade-honestly behaviour) and the whole caching optimisation disappears --
+    // every request pays the pre-fix, uncached cost, with nothing here to say so; the warm
+    // budget below would only fail on a keyless run if that run happened to be slow enough on
+    // its own, which is not reliable. Assert the cookie directly so a keyless deploy fails this
+    // gate loudly instead of quietly shipping full-price latency behind a green run.
+    const profileCacheCookie = (await context.cookies()).find((cookie) => cookie.name === PROFILE_CACHE_COOKIE)
+    expect(
+      profileCacheCookie,
+      'the dashboard navigation never set the signed profile-cache cookie -- SUPABASE_SERVICE_ROLE_KEY is likely missing from this environment, so every request is silently paying the pre-W2FIX-P latency',
+    ).toBeDefined()
+
     // -------------------------------------------------------------------------------
     // Course tile click -> course home. A real SPA transition (clicking the `<Link>`,
     // not `page.goto`) so the static curriculum's in-memory cache is still warm from the
@@ -402,6 +445,35 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       // client-side after `load` (a post-hydration query) must land in `seen` *before* the
       // lesson block below opens its own 0-round-trip window at `before = seen.length`, or a
       // straggler from this reload would be wrongly counted against the lesson route instead.
+      await page.waitForLoadState('networkidle')
+    }
+
+    // -------------------------------------------------------------------------------
+    // Course tile click, cold profile-cache cookie (fix round F2, Opus review). The block
+    // above measures a cache *hit* only -- the dashboard load immediately before it just wrote
+    // the profile-cache cookie (asserted above), so that click never paid a Supabase round trip
+    // for the ban/restrict gate. A learner who reads the dashboard for longer than
+    // `PROFILE_CACHE_TTL_MS` before clicking, or whose cookie was never set, pays a fresh,
+    // concurrent `rpc('lift_expired_restriction')` + `profiles` round-trip pair instead
+    // (`src/lib/supabase/middleware.ts`). Reproduced here -- not assumed -- by evicting the
+    // cookie immediately before an otherwise identical click.
+    // -------------------------------------------------------------------------------
+    {
+      await page.goto(`${PERF_BASE_URL}/dashboard`, { waitUntil: 'load' })
+      await expect(page.getByRole('link', { name: 'Open your course' })).toBeVisible()
+      await context.clearCookies({ name: PROFILE_CACHE_COOKIE })
+      const before = seen.length
+      await clearMark(page, ROUTE_READY)
+      await markInteractionStart(page)
+      await page.getByRole('link', { name: 'Open your course' }).click()
+      await page.waitForURL('**/course/**')
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      const courseCalls = seen.slice(before)
+      // The proxy's own Supabase reads run server-side and never cross `page.route`
+      // interception (see this file's own note on that above) -- 0 stays the right
+      // assertion here even though this click is deliberately the expensive path.
+      expect(courseCalls, `/course/[code] must be 0 browser-visible round trips even on a cold auth-cache click; saw ${courseCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
+      expect(await readInteractionDelta(page, ROUTE_READY), 'course tile click -> course home painted, cold profile-cache cookie').toBeLessThan(INTERACTION.courseTileClickToPaintColdMs)
       await page.waitForLoadState('networkidle')
     }
 

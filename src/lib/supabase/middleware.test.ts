@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { CookieMethodsServer } from '@supabase/ssr'
-import { encodeProfileCache, PROFILE_CACHE_COOKIE, PROFILE_CACHE_TTL_MS } from './profile-cache'
+import { decodeProfileCache, encodeProfileCache, PROFILE_CACHE_COOKIE, PROFILE_CACHE_TTL_MS } from './profile-cache'
 
 const mocks = vi.hoisted(() => ({
   createServerClient: vi.fn(),
@@ -174,6 +174,26 @@ describe('Supabase request proxy', () => {
     expect(lifted).toBe(true)
   })
 
+  // Fix round F1 (Opus review): `rpc` and `maybeSingle` now run concurrently
+  // (`Promise.all`), so the mock-toggle trick in the test above proves
+  // nothing about a real race -- both mocks resolve synchronously here. This
+  // test instead makes the select itself return a row whose restriction has
+  // already expired (the exact shape a genuine race would hand back on the
+  // request that commits the lift), and asserts the gate does not act on --
+  // or cache -- that stale value.
+  it('reconciles a fresh read whose restricted_until has already passed to warned, instead of gating or caching the stale restricted value', async () => {
+    const pastIso = new Date(Date.now() - 1000).toISOString()
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+    mocks.maybeSingle.mockResolvedValue({
+      data: { id: 'student', account_status: 'restricted', restricted_until: pastIso }, error: null,
+    })
+    const response = await visit('/exercise/ex_1')
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-request-x-brogram-account-status')).toBe('warned')
+    const cookie = response.cookies.get(PROFILE_CACHE_COOKIE)
+    expect(decodeProfileCache(cookie?.value, 'student')?.account_status).toBe('warned')
+  })
+
   it.each(['/exercise/ex_1', '/exercise/ex_1/review'])(
     'redirects a currently restricted exercise visit %s to the dashboard', async (path) => {
       mocks.maybeSingle.mockResolvedValue({
@@ -265,6 +285,20 @@ describe('Supabase request proxy', () => {
       expect(dashboard.headers.get('location')).toBeNull()
       expect(dashboard.headers.get('x-middleware-request-x-brogram-account-status')).toBe('restricted')
       expect(mocks.from).not.toHaveBeenCalled()
+    })
+
+    // Fix round F3 (Opus review, Minor): the ban gate reads `account`, which
+    // is the cached value on a hit -- no existing test exercised a *cached*
+    // banned status, so a future refactor that made the ban check fresh-only
+    // could regress silently. Not exploitable today (a request that
+    // discovers a ban clears the cookie in the same response), but pinning
+    // it keeps the cache the sole authoritative source it already is.
+    it('redirects a cached banned account to the sign-out handler with no Supabase round trip', async () => {
+      const cookie = cacheCookieHeader({ account_status: 'banned', restricted_until: null })
+      const response = await visit('/dashboard', { cookie })
+      expect(response.headers.get('location')).toBe('https://brogram.test/auth/signout')
+      expect(mocks.from).not.toHaveBeenCalled()
+      expect(mocks.rpc).not.toHaveBeenCalled()
     })
 
     it('never trusts the cache on the exercise route, even when the cookie is fresh and says active', async () => {

@@ -110,7 +110,22 @@ export async function updateSession(request: NextRequest) {
       ])
       if (liftError) return finish('/login?error=account-unavailable')
       if (profileError || !profile) return finish('/login?error=account-unavailable')
-      account = profile
+      // Fix round F1 (Opus review): the select above now races
+      // `lift_expired_restriction` (supabase/migrations/0001_init.sql:139-142,
+      // `restricted -> warned` once `restricted_until < now()`) instead of
+      // running after it, so the very request whose Promise.all just
+      // committed the lift can still read the pre-lift row back. The lift's
+      // rule is a pure function of the row just read, so reconcile locally
+      // rather than re-reading: this keeps the concurrency the brief
+      // requires while never caching or gating on a status the DB has
+      // already superseded.
+      const expiredNow = Date.now()
+      const restrictionExpired = profile.account_status === 'restricted'
+        && profile.restricted_until !== null
+        && Date.parse(profile.restricted_until) <= expiredNow
+      account = restrictionExpired
+        ? { account_status: 'warned', restricted_until: profile.restricted_until }
+        : profile
       const encoded = encodeProfileCache(userId, account)
       if (encoded) {
         pendingCookies.set(PROFILE_CACHE_COOKIE, {
