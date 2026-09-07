@@ -42,7 +42,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [ ] T1.3 The walkthrough screen (Group B)
 - [ ] T1.4 Course home and the path map
 - [x] T1.5 Onboarding once: six local questions (302b44e, 912b94c)
-- [ ] T1.6 `/courses`, the optimistic course switch, and the proxy matcher
+- [x] T1.6 `/courses`, the optimistic course switch, and the proxy matcher (3adfda2, b94b215)
 - [ ] T2.1 Data layer: `(app)/layout.tsx` and the dashboard
 - [ ] T2.2 The optimistic submit path
 - [ ] T2.3 Data layer: Progress and Account
