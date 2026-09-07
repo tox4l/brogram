@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DrillItem, DrillResult, Language } from '@/lib/contracts'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { useCountdown } from './useCountdown'
 import { countPlantedMatches, gradeNBack } from './scoring'
 
@@ -19,6 +18,8 @@ export interface NBackProps {
   item: DrillItem
   onResult: (result: DrillResult) => void
   now?: () => number
+  /** True while the tab is hidden or the run is otherwise away (fix round 1, I3): both the safety-net countdown and the token-advance loop stop, so the stream cannot run to completion unseen. */
+  paused?: boolean
 }
 
 const TOKEN_INTERVAL_MS = 1500
@@ -31,7 +32,7 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 }
 
-export function NBack({ item, onResult, now = Date.now }: NBackProps) {
+export function NBack({ item, onResult, now = Date.now, paused = false }: NBackProps) {
   const payload = item.payload as unknown as NBackPayload
   const total = payload.tokens.length
   const plantedMatches = useMemo(() => countPlantedMatches(payload.tokens, payload.n), [payload.tokens, payload.n])
@@ -80,9 +81,12 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
     else falseAlarmsRef.current += 1
   }, [index, total, payload.n, payload.tokens])
 
-  // Advance to the next token every 1500ms; once past the last token, the drill ends.
+  // Advance to the next token every 1500ms; once past the last token, the
+  // drill ends. Paused (fix round 1, I3) stops both the advance and the
+  // end-of-stream finish -- a hidden tab must not let the whole token stream
+  // play out and grade itself unseen.
   useEffect(() => {
-    if (submitted) return
+    if (submitted || paused) return
     if (index >= total) {
       finishRef.current()
       return
@@ -90,7 +94,7 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
     respondedRef.current = false
     const id = setTimeout(() => setIndex((i) => i + 1), TOKEN_INTERVAL_MS)
     return () => clearTimeout(id)
-  }, [index, total, submitted])
+  }, [index, total, submitted, paused])
 
   // Space bar doubles as the Match button, but only when focus is not in a
   // text field elsewhere on the page (e.g. the buddy drawer, wellness rail).
@@ -107,10 +111,10 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
   }, [submitted, respond])
 
   // Overall time-limit safety net, in case the token stream would outrun it.
-  const { percentRemaining, remainingMs } = useCountdown({
+  useCountdown({
     timeLimitS: item.timeLimitS,
     now,
-    active: !submitted,
+    active: !submitted && !paused,
     onExpire: finish,
   })
 
@@ -119,19 +123,12 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
   return (
     <Card className="mx-auto w-full max-w-2xl">
       <CardHeader className="gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle>N-back</CardTitle>
+        <div className="flex items-center justify-end gap-3">
           <Badge variant="outline" className="font-mono uppercase">
             n = {payload.n}
           </Badge>
         </div>
         <CardDescription>Press Match when the current token equals the one {payload.n} back.</CardDescription>
-        <div className="flex items-center gap-3">
-          <Progress value={percentRemaining} className="flex-1" />
-          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {Math.ceil(remainingMs / 1000)}s
-          </span>
-        </div>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-6 py-8">
         {!submitted ? (
@@ -142,7 +139,7 @@ export function NBack({ item, onResult, now = Date.now }: NBackProps) {
             <div className="flex h-24 w-full items-center justify-center rounded-lg bg-muted font-mono text-3xl">
               {currentToken}
             </div>
-            <Button size="lg" onClick={respond}>
+            <Button autoFocus size="lg" onClick={respond}>
               Match
             </Button>
             <p className="text-xs text-muted-foreground">or press space</p>

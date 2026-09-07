@@ -146,4 +146,20 @@ describe('HoldFocus', () => {
     expect(onResult).toHaveBeenCalledTimes(1)
     expect(onResult.mock.calls[0][0]).toMatchObject({ correct: false, score: 0 })
   })
+
+  it('focuses the passage on mount, not an answer option (fix round 1, I4)', () => {
+    render(<HoldFocus item={item} onResult={() => {}} />)
+    expect(document.activeElement).toBe(screen.getByLabelText(/reading passage/i))
+  })
+
+  it('the safety-net countdown does not expire while paused (fix round 1, I3)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    render(<HoldFocus item={item} onResult={onResult} now={now} paused />)
+
+    t = 120000
+    vi.advanceTimersByTime(120000)
+    expect(onResult).not.toHaveBeenCalled()
+  })
 })

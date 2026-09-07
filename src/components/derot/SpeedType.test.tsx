@@ -83,4 +83,20 @@ describe('SpeedType', () => {
     vi.advanceTimersByTime(30000)
     expect(onResult).toHaveBeenCalledTimes(1)
   })
+
+  it('autofocuses the textarea so a fresh item is immediately typeable (fix round 1, I4)', () => {
+    render(<SpeedType item={item} onResult={() => {}} now={() => 0} />)
+    expect(document.activeElement).toBe(screen.getByRole('textbox'))
+  })
+
+  it('while paused, time does not expire and no auto-submit happens (fix round 1, I3)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    render(<SpeedType item={item} onResult={onResult} now={now} paused />)
+
+    t = 30000
+    vi.advanceTimersByTime(30000)
+    expect(onResult).not.toHaveBeenCalled()
+  })
 })

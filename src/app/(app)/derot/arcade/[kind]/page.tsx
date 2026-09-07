@@ -7,17 +7,17 @@ import { ArrowLeft } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { useLockdown } from '@/hooks/useLockdown'
-import { LockdownOverlay } from '@/components/exercise/LockdownOverlay'
 import { DrillRunner } from '@/components/derot'
 import { useCountdown } from '@/components/derot/useCountdown'
 import { ComboMeter } from '@/components/derot/ComboMeter'
 import { CountdownRing } from '@/components/derot/CountdownRing'
 import { RunSummary } from '@/components/derot/RunSummary'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { play, withInterfaceSounds } from '@/lib/sound/manager'
+import { line, lineWith } from '@/lib/voice/lines'
 import { useSession } from '@/store/session'
-import type { DrillItem, DrillKind, DrillResult } from '@/lib/contracts'
+import type { DrillItem, DrillKind, DrillResult, MotionPreference } from '@/lib/contracts'
 import { comboMultiplier } from '@/components/derot/scoring'
 import { DRILL_META, computeDerotStreak, dateKey, isDrillKind, lastResultsForKind, mapDrillRow, pickDrillItem, statsForKind } from '../../lib'
 import { EMPTY_RUN, RUN_SIZE, buildRunResult, isRunComplete, recordRunAnswer, summarizeRun, type RunState } from '../run'
@@ -33,21 +33,43 @@ interface RunnerState {
   items: DrillItem[]
   /** wellness.drill_results as of page load, every kind -- streak math needs all of them, personal-best math filters to this kind. */
   allResults: DrillResult[]
+  /**
+   * Item-level results from every run completed THIS page session (fix
+   * round 1, I5). Because one run persists as a single aggregate row
+   * (`allResults` only ever gains the first item's id), `pickDrillItem`
+   * would otherwise see the other five items of every finished run as
+   * never-played and re-serve the exact same six items on "Run it again".
+   * Never persisted -- purely so the picker sees what this session has
+   * actually shown the learner.
+   */
+  sessionResults: DrillResult[]
   current: DrillItem | null
   run: RunState
   runResult: DrillResult | null
   previousBest: number | null
+  motionPref: MotionPreference
   error: string | null
   saveError: string | null
 }
 
-const INITIAL_STATE: RunnerState = { phase: 'loading', items: [], allResults: [], current: null, run: EMPTY_RUN, runResult: null, previousBest: null, error: null, saveError: null }
+const INITIAL_STATE: RunnerState = {
+  phase: 'loading', items: [], allResults: [], sessionResults: [], current: null, run: EMPTY_RUN, runResult: null, previousBest: null, motionPref: 'system', error: null, saveError: null,
+}
 
-function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string | null, reduced: boolean) {
+/**
+ * `reduced` is read from a ref, not a hook parameter: it depends on
+ * `wellness.prefs.motion`, which this same hook loads (`state.motionPref`),
+ * so the caller cannot compute it before this hook runs. `setReduced` lets
+ * `RunnerBody` keep the ref current every render without that circularity;
+ * `onItemResult` reads `reducedRef.current` at call time, so it is always
+ * the latest value regardless of when it was last written.
+ */
+function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string | null) {
   const [state, setState] = useState<RunnerState>(INITIAL_STATE)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef(state)
   useEffect(() => { stateRef.current = state }, [state])
+  const reducedRef = useRef(false)
   const learnerState = useSession((session) => session.learnerState)
   const setLearnerState = useSession((session) => session.setLearnerState)
   const learnerStateRef = useRef(learnerState)
@@ -64,16 +86,17 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
         const client = createClient()
         const [drills, wellness] = await Promise.all([
           client.from('drills').select('*').eq('kind', kind),
-          client.from('wellness').select('drill_results').eq('user_id', userId as string).maybeSingle(),
+          client.from('wellness').select('drill_results,prefs').eq('user_id', userId as string).maybeSingle(),
         ])
         if (drills.error || wellness.error) throw new Error('This drill could not open.')
         if (cancelled) return
         const items = (drills.data ?? []).map(mapDrillRow)
         const allResults = (wellness.data?.drill_results ?? []) as DrillResult[]
-        if (items.length === 0) { setState({ ...INITIAL_STATE, phase: 'empty', allResults }); return }
+        const motionPref = resolveWellnessPrefs(wellness.data?.prefs).motion
+        if (items.length === 0) { setState({ ...INITIAL_STATE, phase: 'empty', allResults, motionPref }); return }
         const forKind = allResults.filter((result) => result.kind === kind)
         const current = pickDrillItem(items, forKind, new Date(), explicitId)
-        setState({ ...INITIAL_STATE, phase: 'ready', items, allResults, current })
+        setState({ ...INITIAL_STATE, phase: 'ready', items, allResults, motionPref, current })
       } catch (err) {
         if (!cancelled) setState({ ...INITIAL_STATE, phase: 'error', error: err instanceof Error ? err.message : 'This drill could not open.' })
       }
@@ -103,7 +126,7 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
         })
       }
     } catch {
-      setState((prev) => ({ ...prev, saveError: 'Your run could not be saved. Check your connection, then try again.' }))
+      setState((prev) => ({ ...prev, saveError: line('error.save') }))
     }
   }, [userId, setLearnerState])
 
@@ -114,14 +137,22 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
       const previousBest = statsForKind(prev.allResults, kind).best
       // Optimistic: this run's own result is folded in immediately so the
       // summary (last runs, personal best) never waits on the network.
-      return { ...prev, phase: 'run-complete', run, runResult, previousBest, allResults: [...prev.allResults, runResult] }
+      return {
+        ...prev,
+        phase: 'run-complete',
+        run,
+        runResult,
+        previousBest,
+        allResults: [...prev.allResults, runResult],
+        sessionResults: [...prev.sessionResults, ...run.answers.map((a) => a.result)],
+      }
     })
     void submitFinishedRun(runResult)
   }, [kind, submitFinishedRun])
 
   const advanceToNext = useCallback((run: RunState) => {
-    const { items, allResults } = stateRef.current
-    const forKind = [...allResults, ...run.answers.map((a) => a.result)].filter((result) => result.kind === kind)
+    const { items, allResults, sessionResults } = stateRef.current
+    const forKind = [...allResults, ...sessionResults, ...run.answers.map((a) => a.result)].filter((result) => result.kind === kind)
     const current = pickDrillItem(items, forKind, new Date())
     setState((prev) => ({ ...prev, run, current }))
   }, [kind])
@@ -130,7 +161,7 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
     // Arcade turns drill.hit/drill.miss on for the duration of a run regardless of the tier toggle: there the tick IS the game (R7.8).
     withInterfaceSounds(() => play(result.correct ? 'drill.hit' : 'drill.miss'))
     const nextRun = recordRunAnswer(stateRef.current.run, item, result)
-    const delay = reduced ? 0 : ADVANCE_DELAY_MS
+    const delay = reducedRef.current ? 0 : ADVANCE_DELAY_MS
     if (advanceTimer.current) clearTimeout(advanceTimer.current)
     advanceTimer.current = setTimeout(() => {
       if (isRunComplete(nextRun)) finishRun(nextRun)
@@ -138,15 +169,17 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
     }, delay)
     // Reflect the just-answered item's combo state immediately so the meter and ring update in step with the child's own feedback, even during the pause.
     setState((prev) => ({ ...prev, run: nextRun }))
-  }, [reduced, finishRun, advanceToNext])
+  }, [finishRun, advanceToNext])
+
+  const setReduced = useCallback((value: boolean) => { reducedRef.current = value }, [])
 
   const retrySave = useCallback(() => {
     if (stateRef.current.runResult) void submitFinishedRun(stateRef.current.runResult)
   }, [submitFinishedRun])
 
   const playAgain = useCallback(() => {
-    const { items, allResults } = stateRef.current
-    const forKind = allResults.filter((result) => result.kind === kind)
+    const { items, allResults, sessionResults } = stateRef.current
+    const forKind = [...allResults, ...sessionResults].filter((result) => result.kind === kind)
     const current = pickDrillItem(items, forKind, new Date())
     setState((prev) => ({ ...prev, phase: 'ready', current, run: EMPTY_RUN, runResult: null, saveError: null }))
   }, [kind])
@@ -156,43 +189,43 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
     setAttempt((n) => n + 1)
   }, [])
 
-  return { ...state, retry, onItemResult, retrySave, playAgain }
+  return { ...state, retry, onItemResult, retrySave, playAgain, setReduced }
+}
+
+/** True while the document is hidden -- an alt-tab, not the old per-page lockdown overlay (fix round 1, I3 / I11: de-rot mounts no lockdown at all). */
+function useDocumentHidden(): boolean {
+  const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.hidden)
+  useEffect(() => {
+    const onChange = () => setHidden(document.hidden)
+    document.addEventListener('visibilitychange', onChange)
+    return () => document.removeEventListener('visibilitychange', onChange)
+  }, [])
+  return hidden
 }
 
 function RunnerBody({ kind }: { kind: DrillKind }) {
   const params = useSearchParams()
   const explicitId = params.get('item')
   const userId = useSession((session) => session.user?.id) ?? null
-  const reduced = useReducedMotion()
-  const runner = useArcadeRun(kind, userId, explicitId, reduced)
+  const runner = useArcadeRun(kind, userId, explicitId)
+  const reduced = useReducedMotion(runner.motionPref)
+  useEffect(() => { runner.setReduced(reduced) })
+  const paused = useDocumentHidden()
   const meta = DRILL_META[kind]
 
-  // exercise_id is a uuid column; a drill id is not one, so this screen logs
-  // with a null exercise reference. idleGuard is off for hold-focus, whose
-  // own blur/scroll voids are the reading guard -- the 15s idle overlay would
-  // otherwise cover a student who is reading, not idle.
-  const lockdown = useLockdown(null, { enabled: Boolean(runner.current), idleGuard: runner.current?.kind !== 'hold-focus' })
-
   const lastRuns = lastResultsForKind(runner.allResults, kind, 5)
-  const isPersonalBest = runner.runResult !== null && runner.runResult.score > (runner.previousBest ?? -1)
+  const isPersonalBest = runner.previousBest !== null && runner.runResult !== null && runner.runResult.score > runner.previousBest
 
   return (
-    <div {...lockdown.containerProps} className="relative min-w-0 space-y-5">
-      <div className="space-y-3" inert={Boolean(lockdown.overlay)}>
+    <div className="relative min-w-0 space-y-5">
+      <div className="space-y-3">
         <Link href="/derot" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="size-3" aria-hidden="true" />Back to de-rot
         </Link>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-medium tracking-tight">{meta.title}</h1>
-          {runner.phase === 'ready' && (
-            <p className="font-mono text-xs text-muted-foreground">Item {runner.run.answers.length + 1} of {RUN_SIZE}</p>
-          )}
-        </div>
+        <h1 className="text-2xl font-medium tracking-tight">{meta.title}</h1>
       </div>
 
-      <div inert={Boolean(lockdown.overlay)} className="space-y-5">
-        {lockdown.pasteMessage && <p role="status" className="text-sm text-muted-foreground">{lockdown.pasteMessage}</p>}
-        {lockdown.loggingError && <p role="alert" className="text-sm text-muted-foreground">{lockdown.loggingError}</p>}
+      <div className="space-y-5">
         {runner.saveError && (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
             <p className="min-w-0 flex-1">{runner.saveError}</p>
@@ -218,15 +251,21 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
         )}
 
         {runner.phase === 'ready' && runner.current && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <ItemCountdown key={runner.current.id} timeLimitS={runner.current.timeLimitS} reduced={reduced} />
-              <ComboMeter streak={runner.run.streak} multiplier={comboMultiplier(runner.run.streak)} reduced={reduced} />
+          <div className="mx-auto w-full max-w-2xl space-y-3">
+            {/* Composed header (fix round 1, item 12): ring, item counter and combo live in one strip
+                directly above the card they belong to, instead of spread across the full page width. */}
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3">
+              <div className="flex items-center gap-3">
+                <ItemCountdown key={runner.current.id} timeLimitS={runner.current.timeLimitS} reduced={reduced} paused={paused} />
+                <p className="font-mono text-xs text-muted-foreground">Item {Math.min(runner.run.answers.length + 1, RUN_SIZE)} of {RUN_SIZE}</p>
+              </div>
+              {runner.run.streak > 0 && <ComboMeter streak={runner.run.streak} multiplier={comboMultiplier(runner.run.streak)} reduced={reduced} />}
             </div>
             <DrillRunner
               key={runner.current.id}
               item={runner.current}
               onResult={(result) => runner.onItemResult(runner.current as DrillItem, result)}
+              paused={paused}
             />
           </div>
         )}
@@ -239,11 +278,11 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
               score={runner.runResult.score}
               accuracy={summary.accuracy}
               bestCombo={summary.bestCombo}
-              rawLabel={`${summary.rawTotal} raw points, combo-weighted`}
+              rawLabel={`${summary.rawTotal} combo points`}
               isPersonalBest={isPersonalBest}
               previousBest={runner.previousBest}
               lastRuns={lastRuns}
-              voiceLine={voiceLineFor(isPersonalBest, summary.accuracy)}
+              voiceLine={lineWith('derot.run.done', { n: summary.score, m: summary.bestCombo })}
               onPlayAgain={runner.playAgain}
               backHref="/derot"
               reduced={reduced}
@@ -251,17 +290,8 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
           )
         })()}
       </div>
-      <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} />
     </div>
   )
-}
-
-/** Plain strings pending the T2.7a/T2.7b voice bank -- see the T2.9a report. */
-function voiceLineFor(isPersonalBest: boolean, accuracy: number): string {
-  if (isPersonalBest) return 'New personal best. Run it again.'
-  if (accuracy >= 0.8) return 'Sharp run. Keep the streak going.'
-  if (accuracy >= 0.5) return 'Solid run. A little more focus next time.'
-  return 'Rough one. Shake it off and go again.'
 }
 
 /**
@@ -271,10 +301,13 @@ function voiceLineFor(isPersonalBest: boolean, accuracy: number): string {
  * `useCountdown` hook they use, so it ticks in lockstep without duplicating
  * timer logic; purely visual, it never sets `onExpire` and so never
  * auto-submits. The caller remounts this via `key={item.id}` on every new
- * item, exactly like DrillRunner, so the clock restarts cleanly.
+ * item, exactly like DrillRunner, so the clock restarts cleanly. `paused`
+ * mirrors the same flag passed to the real per-kind component (fix round 1,
+ * I3) so the ring visually freezes in sync with the timer it represents,
+ * rather than drifting from a clock that has actually stopped underneath it.
  */
-function ItemCountdown({ timeLimitS, reduced }: { timeLimitS: number; reduced: boolean }) {
-  const { remainingMs, percentRemaining } = useCountdown({ timeLimitS })
+function ItemCountdown({ timeLimitS, reduced, paused }: { timeLimitS: number; reduced: boolean; paused: boolean }) {
+  const { remainingMs, percentRemaining } = useCountdown({ timeLimitS, active: !paused })
   return <CountdownRing remainingMs={remainingMs} percentRemaining={percentRemaining} reduced={reduced} tickEnabled />
 }
 

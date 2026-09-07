@@ -47,7 +47,12 @@ export function LaneSwitch({ lane, onChange, reduced = false }: LaneSwitchProps)
         className="absolute inset-y-1 left-1 rounded-full bg-background shadow-sm"
         style={{
           width: `calc(50% - 4px)`,
-          transform: `translateX(calc(${activeIndex * 100}% + ${activeIndex * 8}px))`,
+          // fix round 1, I6: the indicator's own width is already exactly one
+          // tab's width (half the padding box minus the shared 4px gap), so
+          // translating by 100% alone lands it flush on the second tab -- an
+          // extra `+ activeIndex * 8px` (the old value here) pushed it 8px
+          // past the container's own right edge on the second tab.
+          transform: `translateX(${activeIndex * 100}%)`,
           transition: reduced ? 'none' : 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
         }}
       />

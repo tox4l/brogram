@@ -69,4 +69,20 @@ describe('SpotTheBug', () => {
     expect(onResult).toHaveBeenCalledTimes(1)
     expect(onResult.mock.calls[0][0]).toMatchObject({ correct: false, score: 0 })
   })
+
+  it('autofocuses the first line so a fresh item is immediately usable by keyboard (fix round 1, I4)', () => {
+    render(<SpotTheBug item={item} onResult={() => {}} now={() => 0} />)
+    expect(document.activeElement).toBe(screen.getByLabelText(/^Line 1:/))
+  })
+
+  it('while paused, time does not expire and no auto-submit happens (fix round 1, I3)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    render(<SpotTheBug item={item} onResult={onResult} now={now} paused />)
+
+    t = 30000
+    vi.advanceTimersByTime(30000)
+    expect(onResult).not.toHaveBeenCalled()
+  })
 })

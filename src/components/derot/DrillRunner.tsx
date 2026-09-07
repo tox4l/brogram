@@ -13,6 +13,8 @@ export interface DrillRunnerProps {
   item: DrillItem
   onResult: (result: DrillResult) => void
   now?: () => number
+  /** Threaded to the six timed components' own countdowns (fix round 1, I3): true while the tab is hidden, so no item's clock can run out unseen. */
+  paused?: boolean
 }
 
 /**
@@ -27,20 +29,20 @@ export interface DrillRunnerProps {
  * logic -- that lives in the run model (arcade/run.ts) and scoring.ts, kept
  * frozen here so the item-in / result-out contract never changes underneath it.
  */
-export function DrillRunner({ item, onResult, now = Date.now }: DrillRunnerProps) {
+export function DrillRunner({ item, onResult, now = Date.now, paused = false }: DrillRunnerProps) {
   switch (item.kind) {
     case 'predict-output':
-      return <PredictOutput key={item.id} item={item} onResult={onResult} now={now} />
+      return <PredictOutput key={item.id} item={item} onResult={onResult} now={now} paused={paused} />
     case 'spot-the-bug':
-      return <SpotTheBug key={item.id} item={item} onResult={onResult} now={now} />
+      return <SpotTheBug key={item.id} item={item} onResult={onResult} now={now} paused={paused} />
     case 'trace':
-      return <Trace key={item.id} item={item} onResult={onResult} now={now} />
+      return <Trace key={item.id} item={item} onResult={onResult} now={now} paused={paused} />
     case 'hold-focus':
-      return <HoldFocus key={item.id} item={item} onResult={onResult} now={now} />
+      return <HoldFocus key={item.id} item={item} onResult={onResult} now={now} paused={paused} />
     case 'n-back':
-      return <NBack key={item.id} item={item} onResult={onResult} now={now} />
+      return <NBack key={item.id} item={item} onResult={onResult} now={now} paused={paused} />
     case 'speed-type':
-      return <SpeedType key={item.id} item={item} onResult={onResult} now={now} />
+      return <SpeedType key={item.id} item={item} onResult={onResult} now={now} paused={paused} />
     case 'follow-the-dot':
     case 'color-nback':
     case 'reaction':

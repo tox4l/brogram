@@ -21,7 +21,14 @@ export const DRILL_META: Record<DrillKind, { title: string; description: string;
   'n-back': { title: 'Two Back', description: 'Watch a stream of code tokens and catch the ones that repeat.', lane: 'arcade' },
   'speed-type': { title: 'Hands', description: 'Type a snippet exactly as shown. Accuracy counts more than speed.', lane: 'arcade' },
   'follow-the-dot': { title: 'Follow the Dot', description: 'Keep the pointer inside a dot that drifts and accelerates along a smooth path.', lane: 'play' },
-  'color-nback': { title: 'Colour Back', description: 'Watch a stream of colours and shapes and catch the ones that match N back.', lane: 'play' },
+  // "Match Back" (fix round 1, Ruling 3): spec 7.9 critic ruling 2 asks for the
+  // colour out of this game's name (about 1 in 12 men cannot reliably separate
+  // the palette), but its own suggested replacement, "Two Back", collides with
+  // the Arcade n-back's voice title above -- two DrillKinds cannot share one
+  // title in a hub that renders all twelve from this one map. "Match Back"
+  // keeps the n-back family resemblance, names the mechanic instead of the
+  // stimulus, and does not collide. T2.9b (which owns this game) uses this title.
+  'color-nback': { title: 'Match Back', description: 'Watch a stream of shapes and colours and catch the ones that match N back.', lane: 'play' },
   reaction: { title: 'Twitch', description: 'Ten rounds. Tap the instant the shape lights up; an early tap voids the round.', lane: 'play' },
   rhythm: { title: 'Keep Time', description: 'Tap on the beat for sixty seconds while the tempo drifts.', lane: 'play' },
   breathe: { title: 'Breathe', description: 'Follow a slow four-seven-eight breathing pace. This one cannot be failed.', lane: 'play' },

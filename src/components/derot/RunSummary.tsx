@@ -6,7 +6,7 @@ import { useGSAP } from '@gsap/react'
 import { gsap } from 'gsap'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { DrillResult } from '@/lib/contracts'
 
@@ -19,8 +19,9 @@ export interface RunSummaryProps {
   accuracy: number
   /** Consecutive-correct streak reached at any point in the run (Arcade only -- omit for a single-session Playground game). */
   bestCombo?: number
-  /** The pre-normalisation "interesting number" -- a combo-weighted total for Arcade, a game's own raw metric for Playground. */
+  /** The pre-normalisation "interesting number" -- a game's own raw metric (e.g. "842 ms mean reaction"). Arcade's own combo-weighted total is jargon on this card and is deliberately not passed. */
   rawLabel?: string
+  /** True only when this run beat a genuine previous best (fix round 1, C2 -- never true on a first run, regardless of score). */
   isPersonalBest: boolean
   previousBest: number | null
   /** Most recent runs of this kind, newest first. Each stored run is one DrillResult row. */
@@ -32,21 +33,23 @@ export interface RunSummaryProps {
   reduced?: boolean
 }
 
+const RING_RADIUS = 52
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 const COUNT_UP_DURATION_S = 0.7 // the celebration duration token (DUR.celebration, spec 7.8)
 
 /**
- * The score count-up (spec 10.9), following the same pattern as XpCounter:
- * GSAP tweens a plain proxy object and writes straight into a ref's
- * `textContent`, never into React state -- writing through state would
- * re-render on every animation frame (react-hooks/set-state-in-effect) and
- * would race React's own reconciliation against the same text node. The
- * `sr-only` sibling below is ordinary React-rendered text, always the
- * settled `score`, so the value is announced immediately regardless of
- * whether the tween has finished (R7.9: feedback reduces, it never vanishes).
+ * The score ring (fix round 1, item 12): a big, centred visual instead of a
+ * lone number in a row of small stats -- "the score ring" the reviewer asked
+ * the summary to fill its frame around. The ring itself renders at its final
+ * position immediately (a static arc, not worth animating on its own); the
+ * number inside follows XpCounter's pattern -- GSAP tweens a proxy straight
+ * into a ref's `textContent`, never React state, so no animation frame ever
+ * triggers a re-render. The `sr-only` sibling is always the settled value.
  */
-function ScoreCountUp({ score, reduced }: { score: number; reduced: boolean }) {
+function ScoreRing({ score, reduced }: { score: number; reduced: boolean }) {
   const glyphRef = useRef<HTMLSpanElement>(null)
   const [initialText] = useState(() => (reduced ? String(score) : '0'))
+  const offset = RING_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, score)) / 100)
 
   useGSAP(() => {
     const el = glyphRef.current
@@ -66,14 +69,49 @@ function ScoreCountUp({ score, reduced }: { score: number; reduced: boolean }) {
   }, [score, reduced])
 
   return (
-    <span className="font-mono text-4xl font-semibold tabular-nums">
-      <span ref={glyphRef} aria-hidden="true">{initialText}</span>
-      <span className="sr-only">{score}</span>
-    </span>
+    <div className="relative inline-flex size-36 shrink-0 items-center justify-center">
+      <svg viewBox="0 0 120 120" className="size-36 -rotate-90" aria-hidden="true">
+        <circle cx="60" cy="60" r={RING_RADIUS} className="fill-none stroke-muted" strokeWidth="8" />
+        <circle
+          cx="60"
+          cy="60"
+          r={RING_RADIUS}
+          className="fill-none stroke-primary"
+          strokeWidth="8"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <span className="font-mono text-4xl font-semibold tabular-nums">
+          <span ref={glyphRef} aria-hidden="true">{initialText}</span>
+          <span className="sr-only">{score}</span>
+        </span>
+        <span className="text-xs text-muted-foreground">score</span>
+      </div>
+    </div>
   )
 }
 
-/** The Arcade / Playground run summary (spec 7.9 step 1, 10.9): score, accuracy, best combo, a personal-best badge when earned, one voice line, and the last runs of this kind -- nobody else's numbers ever appear. */
+function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 font-mono text-2xl font-medium tabular-nums', highlight && 'text-primary')}>{value}</p>
+    </div>
+  )
+}
+
+/**
+ * The Arcade / Playground run summary (spec 7.9 step 1, 10.9): the score
+ * ring, accuracy, combo peak and the two actions fill the card instead of a
+ * handful of numbers in a mostly-empty box. A personal best gets its badge
+ * only when it is a genuine one (C2); a first-ever run gets its own honest
+ * badge instead of a false "New best". Announced through a live region
+ * (fix round 1, I4) so a screen-reader user hears the run ended without
+ * needing to find focus first.
+ */
 export function RunSummary({
   title,
   score,
@@ -88,43 +126,38 @@ export function RunSummary({
   backHref,
   reduced = false,
 }: RunSummaryProps) {
+  const isFirstRun = previousBest === null
+  const announcement = `Run complete. ${title}. Score ${score}. Accuracy ${Math.round(accuracy * 100)} percent.${isPersonalBest ? ' New personal best.' : ''}`
+
   return (
     <Card className="mx-auto w-full max-w-2xl">
+      {/* fix round 1, I4: a screen-reader user hears the run ended and its score without needing to find focus first. The visible content below is not itself a live region -- announcing a whole card with interactive buttons on every re-render is noisy and can confuse focus handling. */}
+      <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
       <CardHeader className="gap-2">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle>{title} -- run complete</CardTitle>
+          <div>
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Run complete</p>
+            <p className="text-2xl font-medium tracking-tight">{title}</p>
+          </div>
           {isPersonalBest && <Badge className="bg-primary text-primary-foreground">New best</Badge>}
+          {!isPersonalBest && isFirstRun && <Badge variant="outline">First run logged</Badge>}
         </div>
         <p className="text-sm leading-relaxed text-muted-foreground">{voiceLine}</p>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <div className="flex flex-wrap items-end gap-8">
-          <div>
-            <p className="text-xs text-muted-foreground">Score</p>
-            <p className="mt-1"><ScoreCountUp score={score} reduced={reduced} /></p>
-            {rawLabel && <p className="mt-1 text-xs text-muted-foreground">{rawLabel}</p>}
+      <CardContent className="flex flex-col gap-8 py-4">
+        <div className="flex flex-wrap items-center justify-center gap-10 sm:justify-start">
+          <ScoreRing score={score} reduced={reduced} />
+          <div className="grid grid-cols-2 gap-x-10 gap-y-6">
+            <Stat label="Accuracy" value={`${Math.round(accuracy * 100)}%`} />
+            {typeof bestCombo === 'number' && <Stat label="Combo peak" value={`${bestCombo}x`} />}
+            {previousBest !== null && <Stat label="Best" value={`${Math.max(previousBest, score)}`} highlight={isPersonalBest} />}
+            {rawLabel && <Stat label="Raw" value={rawLabel} />}
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Accuracy</p>
-            <p className="mt-1 font-mono text-xl font-medium tabular-nums">{Math.round(accuracy * 100)}%</p>
-          </div>
-          {typeof bestCombo === 'number' && (
-            <div>
-              <p className="text-xs text-muted-foreground">Best combo</p>
-              <p className="mt-1 font-mono text-xl font-medium tabular-nums">{bestCombo}x</p>
-            </div>
-          )}
-          {previousBest !== null && (
-            <div>
-              <p className="text-xs text-muted-foreground">Your best</p>
-              <p className={cn('mt-1 font-mono text-xl font-medium tabular-nums', isPersonalBest && 'text-primary')}>{Math.max(previousBest, score)}</p>
-            </div>
-          )}
         </div>
 
         {lastRuns.length > 1 && (
           <div>
-            <p className="text-xs text-muted-foreground">Your last {lastRuns.length} runs</p>
+            <p className="text-xs text-muted-foreground">Last {lastRuns.length} runs</p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {lastRuns.map((run, index) => (
                 <li
@@ -142,9 +175,7 @@ export function RunSummary({
         )}
 
         <div className="flex flex-wrap gap-3">
-          <Button onClick={onPlayAgain} className="bg-emerald-200 text-primary-foreground hover:bg-emerald-100">
-            Run it again
-          </Button>
+          <Button autoFocus onClick={onPlayAgain}>Run it again</Button>
           <Link href={backHref} className={buttonVariants({ variant: 'outline' })}>
             Back to de-rot
           </Link>

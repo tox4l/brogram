@@ -194,4 +194,19 @@ describe('NBack', () => {
     advance(54000)
     expect(onResult).toHaveBeenCalledTimes(1)
   })
+
+  it('while paused, neither the token stream nor the safety-net countdown advances (fix round 1, I3)', () => {
+    const onResult = vi.fn()
+    render(<NBack item={item} onResult={onResult} now={() => 0} paused />)
+
+    expect(screen.getByText('a')).toBeTruthy()
+    advance(10000) // well past every token's 1500ms window and the 60s time limit
+    expect(screen.getByText('a')).toBeTruthy() // still token 0 -- nothing advanced
+    expect(onResult).not.toHaveBeenCalled()
+  })
+
+  it('focuses the Match button on mount so a fresh item is immediately playable by keyboard (fix round 1, I4)', () => {
+    render(<NBack item={item} onResult={() => {}} now={() => 0} />)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /match/i }))
+  })
 })

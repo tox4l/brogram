@@ -2,9 +2,8 @@
 
 import { useCallback, useRef, useState } from 'react'
 import type { DrillItem, DrillResult, Language } from '@/lib/contracts'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { useCountdown } from './useCountdown'
 import { gradeSpotTheBug, scoreTimedCorrect } from './scoring'
@@ -20,9 +19,11 @@ export interface SpotTheBugProps {
   item: DrillItem
   onResult: (result: DrillResult) => void
   now?: () => number
+  /** True while the tab is hidden or the run is otherwise away (fix round 1, I3): the clock stops, so time never runs out unseen. */
+  paused?: boolean
 }
 
-export function SpotTheBug({ item, onResult, now = Date.now }: SpotTheBugProps) {
+export function SpotTheBug({ item, onResult, now = Date.now, paused = false }: SpotTheBugProps) {
   const payload = item.payload as unknown as SpotTheBugPayload
   const lines = payload.snippet.split('\n')
 
@@ -56,29 +57,22 @@ export function SpotTheBug({ item, onResult, now = Date.now }: SpotTheBugProps) 
     [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.bugLines, now]
   )
 
-  const { percentRemaining, remainingMs } = useCountdown({
+  useCountdown({
     timeLimitS: item.timeLimitS,
     now,
-    active: !submitted,
+    active: !submitted && !paused,
     onExpire: () => submit(selectedLine, elapsed()),
   })
 
   return (
     <Card className="mx-auto w-full max-w-2xl">
       <CardHeader className="gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle>Spot the bug</CardTitle>
+        <div className="flex items-center justify-end gap-3">
           <Badge variant="outline" className="font-mono uppercase">
             {payload.language}
           </Badge>
         </div>
         <CardDescription>Click the line that causes the bug.</CardDescription>
-        <div className="flex items-center gap-3">
-          <Progress value={percentRemaining} className="flex-1" />
-          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {Math.ceil(remainingMs / 1000)}s
-          </span>
-        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="overflow-x-auto rounded-lg bg-muted font-mono text-sm">
@@ -90,6 +84,7 @@ export function SpotTheBug({ item, onResult, now = Date.now }: SpotTheBugProps) 
               <button
                 key={lineNumber}
                 type="button"
+                autoFocus={idx === 0}
                 disabled={submitted}
                 onClick={() => submit(lineNumber, elapsed())}
                 aria-label={`Line ${lineNumber}: ${line}`}

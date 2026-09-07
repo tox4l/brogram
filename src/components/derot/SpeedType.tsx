@@ -2,10 +2,9 @@
 
 import { useCallback, useRef, useState } from 'react'
 import type { DrillItem, DrillResult, Language } from '@/lib/contracts'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { useCountdown } from './useCountdown'
 import { gradeSpeedType } from './scoring'
@@ -19,13 +18,15 @@ export interface SpeedTypeProps {
   item: DrillItem
   onResult: (result: DrillResult) => void
   now?: () => number
+  /** True while the tab is hidden or the run is otherwise away (fix round 1, I3): the clock stops, so time never runs out unseen. */
+  paused?: boolean
 }
 
 function preventDefault(e: { preventDefault: () => void }) {
   e.preventDefault()
 }
 
-export function SpeedType({ item, onResult, now = Date.now }: SpeedTypeProps) {
+export function SpeedType({ item, onResult, now = Date.now, paused = false }: SpeedTypeProps) {
   const payload = item.payload as unknown as SpeedTypePayload
   const [typed, setTyped] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -57,29 +58,22 @@ export function SpeedType({ item, onResult, now = Date.now }: SpeedTypeProps) {
     [item.id, item.kind, item.lane, onResult, payload.snippet, now]
   )
 
-  const { percentRemaining, remainingMs } = useCountdown({
+  useCountdown({
     timeLimitS: item.timeLimitS,
     now,
-    active: !submitted,
+    active: !submitted && !paused,
     onExpire: () => submit(typed, elapsed()),
   })
 
   return (
     <Card className="mx-auto w-full max-w-2xl">
       <CardHeader className="gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle>Speed type</CardTitle>
+        <div className="flex items-center justify-end gap-3">
           <Badge variant="outline" className="font-mono uppercase">
             {payload.language}
           </Badge>
         </div>
         <CardDescription>Type the snippet exactly. Accuracy matters more than speed; pasting is disabled.</CardDescription>
-        <div className="flex items-center gap-3">
-          <Progress value={percentRemaining} className="flex-1" />
-          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {Math.ceil(remainingMs / 1000)}s
-          </span>
-        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-relaxed">
@@ -95,6 +89,7 @@ export function SpeedType({ item, onResult, now = Date.now }: SpeedTypeProps) {
           onContextMenu={preventDefault}
           onDrop={preventDefault}
           disabled={submitted}
+          autoFocus
           rows={4}
           spellCheck={false}
           placeholder="Type the snippet here"

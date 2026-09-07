@@ -1,10 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
 import type { DrillItem } from '@/lib/contracts'
 import { DrillRunner } from './DrillRunner'
 
-afterEach(() => cleanup())
+beforeEach(() => vi.useFakeTimers())
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 function item(over: Partial<DrillItem>): DrillItem {
   return {
@@ -18,6 +21,11 @@ function item(over: Partial<DrillItem>): DrillItem {
   }
 }
 
+// Fix round 1, I9: each per-kind component no longer renders its own title --
+// the wrapping run page's <h1> carries the drill's one voice-titled name, so
+// there is no second, conflicting heading to assert on here. These tests
+// instead confirm the right component mounted by its own fixed, kind-specific
+// description text.
 describe('DrillRunner', () => {
   it('renders PredictOutput for kind predict-output', () => {
     render(
@@ -26,7 +34,7 @@ describe('DrillRunner', () => {
         onResult={vi.fn()}
       />
     )
-    expect(screen.getByText('Predict the output')).toBeTruthy()
+    expect(screen.getByText('Read the snippet, then type exactly what it prints.')).toBeTruthy()
   })
 
   it('renders SpotTheBug for kind spot-the-bug', () => {
@@ -36,7 +44,7 @@ describe('DrillRunner', () => {
         onResult={vi.fn()}
       />
     )
-    expect(screen.getByText('Spot the bug')).toBeTruthy()
+    expect(screen.getByText('Click the line that causes the bug.')).toBeTruthy()
   })
 
   it('renders Trace for kind trace', () => {
@@ -46,7 +54,7 @@ describe('DrillRunner', () => {
         onResult={vi.fn()}
       />
     )
-    expect(screen.getByText('Trace by hand')).toBeTruthy()
+    expect(screen.getByLabelText('i')).toBeTruthy()
   })
 
   it('renders HoldFocus for kind hold-focus', () => {
@@ -56,16 +64,32 @@ describe('DrillRunner', () => {
         onResult={vi.fn()}
       />
     )
-    expect(screen.getByText('Hold focus')).toBeTruthy()
+    expect(screen.getByText('Read the passage without scrolling, then answer the question. Leaving the page voids the drill.')).toBeTruthy()
   })
 
   it('renders NBack for kind n-back', () => {
     render(<DrillRunner item={item({ kind: 'n-back', payload: { n: 1, tokens: ['a', 'b'], language: 'python' } })} onResult={vi.fn()} />)
-    expect(screen.getByText('N-back')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Match' })).toBeTruthy()
   })
 
   it('renders SpeedType for kind speed-type', () => {
     render(<DrillRunner item={item({ kind: 'speed-type', payload: { language: 'python', snippet: 'x = 1' } })} onResult={vi.fn()} />)
-    expect(screen.getByText('Speed type')).toBeTruthy()
+    expect(screen.getByText('Type the snippet exactly. Accuracy matters more than speed; pasting is disabled.')).toBeTruthy()
+  })
+
+  it('passes paused through to the mounted component so its clock cannot expire unseen (fix round 1, I3)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    render(
+      <DrillRunner
+        item={item({ kind: 'predict-output', timeLimitS: 5, payload: { language: 'python', snippet: 'print(1)', expectedOutput: '1' } })}
+        onResult={onResult}
+        now={() => t}
+        paused
+      />
+    )
+    t = 5000
+    vi.advanceTimersByTime(5000)
+    expect(onResult).not.toHaveBeenCalled()
   })
 })

@@ -1,16 +1,21 @@
 import type { DrillKind } from '@/lib/contracts'
 import type { DrillKindSummary } from '../derive'
 
-/** Titles mirror DRILL_META in src/app/(app)/derot/lib.ts, kept in sync by hand since that file is frozen. */
+/**
+ * Titles mirror DRILL_META in src/app/(app)/derot/lib.ts, kept in sync by
+ * hand since this file lives outside T2.9a's usual owned paths (fix round 1,
+ * item 10: retitled to the voice names so the report agrees with the hub and
+ * the run screen instead of showing the pre-rename Arcade titles).
+ */
 const DRILL_LABELS: Record<DrillKind, string> = {
-  'predict-output': 'Predict the output',
-  'spot-the-bug': 'Spot the bug',
-  trace: 'Trace by hand',
-  'hold-focus': 'Hold focus',
-  'n-back': 'N-back',
-  'speed-type': 'Speed type',
+  'predict-output': 'Call It',
+  'spot-the-bug': 'Find the Break',
+  trace: 'Run It in Your Head',
+  'hold-focus': "Don't Blink",
+  'n-back': 'Two Back',
+  'speed-type': 'Hands',
   'follow-the-dot': 'Follow the Dot',
-  'color-nback': 'Colour Back',
+  'color-nback': 'Match Back',
   reaction: 'Twitch',
   rhythm: 'Keep Time',
   breathe: 'Breathe',

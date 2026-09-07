@@ -184,7 +184,8 @@ export function normalizeFollowTheDot(shareInside: number): NormalizedScore {
 }
 
 /**
- * Colour Back: raw = (hits - falseAlarms) times 100. Normalised the same way
+ * Match Back (renamed from "Colour Back", fix round 1, Ruling 3 -- see lib.ts):
+ * raw = (hits - falseAlarms) times 100. Normalised the same way
  * gradeNBack normalises the Arcade n-back -- net hits over the plantable
  * matches -- so the two n-back-shaped drills stay consistent in intent.
  */

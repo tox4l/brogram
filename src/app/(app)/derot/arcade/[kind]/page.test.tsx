@@ -25,7 +25,6 @@ beforeAll(() => {
 const mocks = vi.hoisted(() => ({
   params: vi.fn(),
   searchParams: vi.fn(),
-  lockdown: vi.fn(),
   setLearnerState: vi.fn(),
   learnerState: null as LearnerState | null,
   play: vi.fn(),
@@ -35,12 +34,12 @@ vi.mock('@/store/session', () => ({
   useSession: (selector: (session: { user: { id: string }; learnerState: LearnerState | null; setLearnerState: typeof mocks.setLearnerState }) => unknown) =>
     selector({ user: { id: 'student' }, learnerState: mocks.learnerState, setLearnerState: mocks.setLearnerState }),
 }))
-vi.mock('@/hooks/useLockdown', () => ({ useLockdown: (...args: unknown[]) => mocks.lockdown(...args) }))
 vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (run: () => void) => run() }))
 vi.mock('@/components/derot', () => ({
-  DrillRunner: ({ item, onResult }: { item: DrillItem; onResult: (result: DrillResult) => void }) => (
+  DrillRunner: ({ item, onResult, paused }: { item: DrillItem; onResult: (result: DrillResult) => void; paused?: boolean }) => (
     <div>
       <p>Item: {item.id}</p>
+      <p>Paused: {String(Boolean(paused))}</p>
       <button onClick={() => onResult({ drillId: item.id, kind: item.kind, correct: true, timeMs: 500, score: 90, at: '2026-09-06T12:00:00.000Z', lane: item.lane })}>
         Correct for {item.id}
       </button>
@@ -52,7 +51,7 @@ vi.mock('@/components/derot', () => ({
 }))
 
 let drillsRows: Record<string, unknown>[]
-let wellnessRow: { drill_results: DrillResult[] } | null
+let wellnessRow: { drill_results: DrillResult[]; prefs?: Record<string, unknown> } | null
 let rpcError: { code?: string; message?: string } | null
 let rpcData: DrillResult[]
 let updateAffectsRow: boolean
@@ -60,6 +59,7 @@ let insertShouldFail: boolean
 const rpcSpy = vi.fn()
 const updateSpy = vi.fn()
 const insertSpy = vi.fn()
+const integrityInsertSpy = vi.fn()
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
@@ -87,6 +87,13 @@ vi.mock('@/lib/supabase/client', () => ({
             return Promise.resolve(insertShouldFail ? { error: { message: 'insert failed' } } : { error: null })
           },
         }
+      }
+      // fix round 1, I11: de-rot must never touch integrity_events at all. If the
+      // page still mounted lockdown, this branch would be hit on a blur/idle
+      // event; its own spy lets the test assert zero calls instead of just
+      // "the table was never queried at page-load time".
+      if (table === 'integrity_events') {
+        return { insert: (payload: Record<string, unknown>) => { integrityInsertSpy(payload); return Promise.resolve({ error: null }) } }
       }
       throw new Error(`Unexpected table: ${table}`)
     },
@@ -138,7 +145,6 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-06T12:00:00.000Z'))
   mocks.params.mockReturnValue({ kind: 'trace' })
   mocks.searchParams.mockReturnValue(new URLSearchParams())
-  mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', loggingError: null })
   mocks.learnerState = learnerState()
   drillsRows = sixDrillRows()
   wellnessRow = { drill_results: [] }
@@ -159,20 +165,31 @@ describe('Arcade runner', () => {
     await waitFor(() => expect(screen.getByText('Item: d2')).toBeTruthy())
   })
 
-  it('mounts lockdown with a null exercise id, gated until an item loads', async () => {
+  it('mounts no lockdown at all: a blur never touches integrity_events (fix round 1, I11)', async () => {
     render(<DerotArcadeRunnerPage />)
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
-    const lastCall = mocks.lockdown.mock.calls.at(-1)
-    expect(lastCall?.[0]).toBeNull()
-    expect((lastCall?.[1] as { enabled?: boolean })?.enabled).toBe(true)
+
+    fireEvent(window, new Event('blur'))
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    fireEvent(document, new Event('visibilitychange'))
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    fireEvent(document, new Event('visibilitychange'))
+
+    expect(screen.queryByTestId('lockdown-overlay')).toBeNull()
+    expect(integrityInsertSpy).not.toHaveBeenCalled()
   })
 
-  it('turns the idle guard off for hold-focus, on for every other kind', async () => {
-    mocks.params.mockReturnValue({ kind: 'hold-focus' })
-    drillsRows = sixDrillRows('hold-focus')
+  it('pauses the item (and its clock) while the tab is hidden, resuming when it comes back (fix round 1, I3)', async () => {
     render(<DerotArcadeRunnerPage />)
-    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
-    expect((mocks.lockdown.mock.calls.at(-1)?.[1] as { idleGuard?: boolean })?.idleGuard).toBe(false)
+    await waitFor(() => expect(screen.getByText('Paused: false')).toBeTruthy())
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    fireEvent(document, new Event('visibilitychange'))
+    await waitFor(() => expect(screen.getByText('Paused: true')).toBeTruthy())
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    fireEvent(document, new Event('visibilitychange'))
+    await waitFor(() => expect(screen.getByText('Paused: false')).toBeTruthy())
   })
 
   it('a run is six items -- a miss on item 1 shows item 2 next instead of the summary', async () => {
@@ -180,7 +197,19 @@ describe('Arcade runner', () => {
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     await answerCurrent(false)
     await waitFor(() => expect(screen.getByText('Item: d2')).toBeTruthy())
-    expect(screen.queryByText(/run complete/)).toBeNull()
+    expect(screen.queryAllByText(/run complete/i).length).toBe(0)
+  })
+
+  it('the item counter never reads past RUN_SIZE, even during the post-answer pause after the sixth item (fix round 1, I1)', async () => {
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 5; i++) await answerCurrent(true)
+    // Answer the sixth item but check the counter DURING the pause, before run-complete shows.
+    const itemLabel = await screen.findByText(/^Item: /)
+    const id = itemLabel.textContent!.replace('Item: ', '')
+    fireEvent.click(screen.getByRole('button', { name: `Correct for ${id}` }))
+    expect(screen.getByText('Item 6 of 6')).toBeTruthy()
+    expect(screen.queryByText('Item 7 of 6')).toBeNull()
   })
 
   it('completing all six items shows the run summary, and appends exactly ONE DrillResult through the RPC', async () => {
@@ -188,7 +217,7 @@ describe('Arcade runner', () => {
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
 
-    await waitFor(() => expect(screen.getByText(/run complete/)).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
     expect(rpcSpy).toHaveBeenCalledTimes(1)
     const [, payload] = rpcSpy.mock.calls[0] as [string, { result: DrillResult }]
     expect(payload.result.kind).toBe('trace')
@@ -199,20 +228,61 @@ describe('Arcade runner', () => {
     expect(updateSpy).not.toHaveBeenCalled() // the RPC exists -- the fallback path never runs
   })
 
-  it('every DrillResult.score lands in [0, 100] even for a run of all misses', async () => {
+  it('every DrillResult.score lands in [0, 100] even for a run of all misses, and shows "First run logged" rather than a false "New best" (fix round 1, C2)', async () => {
     render(<DerotArcadeRunnerPage />)
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(false)
     await waitFor(() => expect(rpcSpy).toHaveBeenCalledTimes(1))
     const [, payload] = rpcSpy.mock.calls[0] as [string, { result: DrillResult }]
     expect(payload.result.score).toBe(0)
+
+    expect(screen.getByText('First run logged')).toBeTruthy()
+    expect(screen.queryByText('New best')).toBeNull()
+  })
+
+  it('only shows "New best" when this run genuinely beats a real previous best (fix round 1, C2)', async () => {
+    // drillId 'd7' (not one of the six items in the bank) so pickDrillItem's
+    // never-played preference does not skip over d1 for this history row.
+    wellnessRow = { drill_results: [result({ drillId: 'd7', kind: 'trace', score: 10, at: '2026-09-01T00:00:00.000Z' })] }
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    expect(screen.getByText('New best')).toBeTruthy()
+    expect(screen.queryByText('First run logged')).toBeNull()
   })
 
   it('the combo-weighted raw total survives into the run summary alongside the normalised score', async () => {
     render(<DerotArcadeRunnerPage />)
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
-    await waitFor(() => expect(screen.getByText(/raw points/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/combo points/)).toBeTruthy())
+  })
+
+  it('running it again does not re-serve the same six items (fix round 1, I5)', async () => {
+    // Eight items in the bank: run 1 plays exactly six of them, leaving two
+    // genuinely never-played items for run 2 to prefer -- the shape that
+    // actually distinguishes "the session knows all six were played" from
+    // "the session only knows the first one was" (I5's bug).
+    drillsRows = [...sixDrillRows(), drillRow({ id: 'd7' }), drillRow({ id: 'd8' })]
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    const firstRunIds: string[] = []
+    for (let i = 0; i < 6; i++) {
+      const label = await screen.findByText(/^Item: /)
+      firstRunIds.push(label.textContent!.replace('Item: ', ''))
+      await answerCurrent(true)
+    }
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    expect(firstRunIds).toEqual(['d1', 'd2', 'd3', 'd4', 'd5', 'd6'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run it again' }))
+    await waitFor(() => expect(screen.getByText(/^Item: /)).toBeTruthy())
+    const secondRunFirstId = (await screen.findByText(/^Item: /)).textContent!.replace('Item: ', '')
+    // A bug that only remembers the aggregate row's first item (d1) as played
+    // would treat d2-d6 as never-played too, and re-serve one of them ahead
+    // of the genuinely-unplayed d7/d8. The fix must reach the truly fresh pool.
+    expect(['d7', 'd8']).toContain(secondRunFirstId)
   })
 
   it('falls back to the direct read-modify-write when the RPC is missing (pre-0009 schema)', async () => {
@@ -237,15 +307,15 @@ describe('Arcade runner', () => {
     await waitFor(() => expect(insertSpy).toHaveBeenCalledTimes(1))
   })
 
-  it('surfaces a visible, retryable save error without blocking the summary from showing', async () => {
+  it('surfaces a visible, retryable save error (from the voice bank) without blocking the summary from showing', async () => {
     rpcError = { code: '42501', message: 'permission denied' }
     render(<DerotArcadeRunnerPage />)
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
 
-    await waitFor(() => expect(screen.getByText(/run complete/)).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('could not be saved')
+    expect(alert.textContent!.length).toBeGreaterThan(0)
 
     rpcError = null
     fireEvent.click(screen.getByRole('button', { name: 'Retry save' }))
@@ -281,16 +351,5 @@ describe('Arcade runner', () => {
     mocks.searchParams.mockReturnValue(new URLSearchParams('item=d3'))
     render(<DerotArcadeRunnerPage />)
     await waitFor(() => expect(screen.getByText('Item: d3')).toBeTruthy())
-  })
-
-  it('running it again after a completed run starts a fresh six-item run', async () => {
-    render(<DerotArcadeRunnerPage />)
-    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
-    for (let i = 0; i < 6; i++) await answerCurrent(true)
-    await waitFor(() => expect(screen.getByText(/run complete/)).toBeTruthy())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Run it again' }))
-    await waitFor(() => expect(screen.getByText(/^Item: /)).toBeTruthy())
-    expect(screen.queryByText(/run complete/)).toBeNull()
   })
 })

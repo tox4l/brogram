@@ -1,17 +1,19 @@
 'use client'
 
-import { Suspense, useEffect, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Bug, Eye, Grid3x3, Keyboard, Music2, RotateCcw, Route, Shapes, Target, Terminal, Wind, Zap } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { line } from '@/lib/voice/lines'
 import { useSession } from '@/store/session'
 import { LaneSwitch } from '@/components/derot/LaneSwitch'
-import type { DrillKind, DrillLane, DrillResult } from '@/lib/contracts'
+import type { DrillKind, DrillLane, DrillResult, MotionPreference } from '@/lib/contracts'
 import { DRILL_KINDS, DRILL_META, PLAY_KINDS, computeDerotStreak, dateKey, isArcadeKind, isPlayKind, statsForKind, type KindStats } from './lib'
 
 // De-rot is never restricted (spec 10.8): this hub has no account-status
@@ -20,14 +22,31 @@ import { DRILL_KINDS, DRILL_META, PLAY_KINDS, computeDerotStreak, dateKey, isArc
 // untouched is made on the restricted surface itself (dashboard / exercise);
 // this file's contribution to that promise is simply never adding a gate.
 
+/** One small glyph per kind (fix round 1, item 12): the reviewer's own complaint was six identical cards differentiated only by a name and a grey dot. Decorative only -- aria-hidden. */
+const DRILL_GLYPHS: Record<DrillKind, ComponentType<{ className?: string }>> = {
+  'predict-output': Terminal,
+  'spot-the-bug': Bug,
+  trace: Route,
+  'hold-focus': Eye,
+  'n-back': RotateCcw,
+  'speed-type': Keyboard,
+  'follow-the-dot': Target,
+  'color-nback': Shapes,
+  reaction: Zap,
+  rhythm: Music2,
+  breathe: Wind,
+  'memory-grid': Grid3x3,
+}
+
 interface Overview {
   loading: boolean
   failed: boolean
   results: DrillResult[]
   availableKinds: Set<DrillKind>
+  motionPref: MotionPreference
 }
 
-const EMPTY_OVERVIEW: Overview = { loading: false, failed: false, results: [], availableKinds: new Set() }
+const EMPTY_OVERVIEW: Overview = { loading: false, failed: false, results: [], availableKinds: new Set(), motionPref: 'system' }
 
 function useDerotOverview(userId: string | null) {
   const [attempt, setAttempt] = useState(0)
@@ -46,14 +65,15 @@ function useDerotOverview(userId: string | null) {
       try {
         const client = createClient()
         const [wellness, drills] = await Promise.all([
-          client.from('wellness').select('drill_results').eq('user_id', userId as string).maybeSingle(),
+          client.from('wellness').select('drill_results,prefs').eq('user_id', userId as string).maybeSingle(),
           client.from('drills').select('kind'),
         ])
         if (wellness.error || drills.error) throw new Error('De-rot progress unavailable')
         if (cancelled) return
         const results = ((wellness.data?.drill_results ?? []) as DrillResult[])
         const availableKinds = new Set<DrillKind>((drills.data ?? []).map((row: { kind: string }) => row.kind as DrillKind))
-        setState({ loading: false, failed: false, results, availableKinds })
+        const motionPref = resolveWellnessPrefs(wellness.data?.prefs).motion
+        setState({ loading: false, failed: false, results, availableKinds, motionPref })
       } catch {
         if (!cancelled) setState({ ...EMPTY_OVERVIEW, failed: true })
       }
@@ -102,6 +122,7 @@ function FadeInCard({ index, reduced, children }: { index: number; reduced: bool
   }, [reduced])
   return (
     <div
+      className="h-full"
       style={{
         opacity: reduced || visible ? 1 : 0,
         transition: reduced ? 'none' : `opacity 220ms cubic-bezier(0.22, 1, 0.36, 1) ${Math.min(index * 30, 300)}ms`,
@@ -131,29 +152,35 @@ function useCardInView(reduced: boolean): [(node: HTMLElement | null) => void, b
 
 function DrillCard({ kind, lane, stats, available, reduced }: { kind: DrillKind; lane: DrillLane; stats: KindStats; available: boolean; reduced: boolean }) {
   const meta = DRILL_META[kind]
+  const Glyph = DRILL_GLYPHS[kind]
   const [setNode, animate] = useCardInView(reduced)
   return (
-    <Card ref={setNode}>
+    <Card ref={setNode} className="h-full">
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <span aria-hidden="true" className={cn('inline-block size-1.5 shrink-0 rounded-full bg-primary/60', animate && 'animate-pulse')} />
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className={cn('inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary', animate && 'animate-pulse')}
+          >
+            <Glyph className="size-4" />
+          </span>
           <CardTitle>{meta.title}</CardTitle>
         </div>
         <CardDescription>{meta.description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-1 flex-col justify-between gap-4">
         {!available ? (
           <p className="text-sm leading-relaxed text-muted-foreground">No items yet. This drill is still being prepared.</p>
         ) : stats.attempted ? (
-          <div className="flex gap-6">
-            <div><p className="text-xs text-muted-foreground">Best</p><p className="mt-1 font-mono text-lg font-medium">{stats.best}</p></div>
-            <div><p className="text-xs text-muted-foreground">Last</p><p className="mt-1 font-mono text-lg font-medium">{stats.last}</p></div>
+          <div>
+            <p className="text-xs text-muted-foreground">Best</p>
+            <p className="mt-1 font-mono text-3xl font-semibold tabular-nums">{stats.best}</p>
           </div>
         ) : (
           <p className="text-sm leading-relaxed text-muted-foreground">Not attempted yet. Give it a try.</p>
         )}
         {available ? (
-          <Link href={hrefFor(lane, kind)} className={cn(buttonVariants({ variant: 'default' }), 'w-fit bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
+          <Link href={hrefFor(lane, kind)} className={buttonVariants({ variant: 'default', className: 'w-fit' })}>
             Start<ArrowUpRight aria-hidden="true" />
           </Link>
         ) : (
@@ -167,7 +194,7 @@ function DrillCard({ kind, lane, stats, available, reduced }: { kind: DrillKind;
 function DerotSection() {
   const userId = useSession((session) => session.user?.id) ?? null
   const overview = useDerotOverview(userId)
-  const reduced = useReducedMotion()
+  const reduced = useReducedMotion(overview.motionPref)
   const [lane, setLane] = useState<DrillLane>('arcade')
 
   const streakDays = computeDerotStreak(overview.results.map((result) => result.at))
@@ -195,16 +222,17 @@ function DerotSection() {
             <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{todaysRuns}</p>
           </div>
         </div>
-        <LaneSwitch lane={lane} onChange={setLane} reduced={reduced} />
+        <div className="flex flex-col items-end gap-1.5">
+          <LaneSwitch lane={lane} onChange={setLane} reduced={reduced} />
+          {/* fix round 1, I7: the Playground's "no code in here" promise, made where the switch actually is. */}
+          <p className="text-xs text-muted-foreground">{line(lane === 'arcade' ? 'derot.arcade.enter' : 'derot.play.enter')}</p>
+        </div>
       </div>
-      <p className="-mt-4 text-sm leading-relaxed text-muted-foreground">
-        {streakDays ? 'Attention takes practice.' : 'Finish one run today to start your streak.'}
-      </p>
 
       {overview.loading && <p role="status" className="text-sm text-muted-foreground">Loading your de-rot progress.</p>}
       {overview.failed && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-          <p className="text-sm text-foreground">Your de-rot progress could not load.</p>
+          <p className="text-sm text-foreground">{line('error.load')}</p>
           <Button variant="outline" onClick={overview.retry}>Try again</Button>
         </div>
       )}

@@ -100,9 +100,17 @@ describe('the de-rot hub', () => {
     for (const title of ['Call It', 'Find the Break', 'Run It in Your Head', "Don't Blink", 'Two Back', 'Hands']) {
       expect(screen.getByText(title)).toBeTruthy()
     }
-    for (const title of ['Follow the Dot', 'Colour Back', 'Twitch', 'Keep Time', 'Breathe', 'Grid']) {
+    for (const title of ['Follow the Dot', 'Match Back', 'Twitch', 'Keep Time', 'Breathe', 'Grid']) {
       expect(screen.queryByText(title)).toBeNull()
     }
+  })
+
+  it('names each lane\'s promise under the switch, using the voice bank (fix round 1, I7)', async () => {
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText("Timer's on. Beat yesterday's you.")).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Playground' }))
+    await waitFor(() => expect(screen.getByText('No code in here. Just you and the screen.')).toBeTruthy())
   })
 
   it('switches to the Playground lane and shows its six cards instead', async () => {
@@ -113,7 +121,7 @@ describe('the de-rot hub', () => {
     expect(screen.queryByText('Call It')).toBeNull()
   })
 
-  it('shows best and last score where the student has results, and an invitation otherwise', async () => {
+  it('shows the personal best inline where the student has results, and an invitation otherwise', async () => {
     wellnessRow = {
       drill_results: [
         result({ drillId: 't1', kind: 'trace', score: 90, at: '2026-09-04T10:00:00.000Z' }),
@@ -124,8 +132,8 @@ describe('the de-rot hub', () => {
     await waitFor(() => expect(screen.getByText('Run It in Your Head')).toBeTruthy())
 
     const trace = cardFor('Run It in Your Head')
-    expect(within(trace).getByText('90')).toBeTruthy() // best
-    expect(within(trace).getByText('60')).toBeTruthy() // last (most recent)
+    expect(within(trace).getByText('Best')).toBeTruthy()
+    expect(within(trace).getByText('90')).toBeTruthy()
 
     const predictOutput = cardFor('Call It')
     expect(within(predictOutput).getByText('Not attempted yet. Give it a try.')).toBeTruthy()
@@ -173,11 +181,11 @@ describe('the de-rot hub', () => {
     expect(within(cardFor('Breathe')).getByRole('link', { name: /Start/ }).getAttribute('href')).toBe('/derot/play/breathe')
   })
 
-  it('shows a retry option when de-rot progress fails to load', async () => {
+  it('shows a retry option (from the voice bank) when de-rot progress fails to load', async () => {
     failWellness = true
     render(<DerotPage />)
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
-    expect(screen.getByText('Your de-rot progress could not load.')).toBeTruthy()
+    expect(screen.getByText("Couldn't load that. Try again.")).toBeTruthy()
   })
 
   it('redirects ?drill=trace straight to the Arcade runner', () => {

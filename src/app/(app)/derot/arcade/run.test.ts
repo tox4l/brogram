@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DrillItem, DrillResult } from '@/lib/contracts'
+import { comboMultiplier } from '@/components/derot/scoring'
 import { EMPTY_RUN, RUN_SIZE, buildRunResult, isRunComplete, recordRunAnswer, summarizeRun } from './run'
 
 function item(overrides: Partial<DrillItem> = {}): DrillItem {
@@ -112,6 +113,54 @@ describe('summarizeRun', () => {
   it('is empty-safe before any item has been answered', () => {
     const summary = summarizeRun(EMPTY_RUN)
     expect(summary).toEqual({ score: 0, rawTotal: 0, accuracy: 0, bestCombo: 0, itemCount: 0, correctCount: 0 })
+  })
+})
+
+describe('summarizeRun ceiling scales with the run\'s own length (fix round 1, I2)', () => {
+  function perfectRunOf(length: number) {
+    let state = EMPTY_RUN
+    for (let i = 0; i < length; i++) {
+      state = recordRunAnswer(state, item({ id: `p${i}` }), result({ drillId: `p${i}`, score: 100 }))
+    }
+    return state
+  }
+
+  it('a flawless one-item run normalises to exactly 100, not a tiny fraction of the six-item ceiling', () => {
+    const summary = summarizeRun(perfectRunOf(1))
+    expect(summary.itemCount).toBe(1)
+    expect(summary.score).toBe(100) // 100 * 1x / (100 * 1x) = 100, not 100/970 = 10
+  })
+
+  it('a flawless six-item run still normalises to exactly 100 (unchanged from before the fix)', () => {
+    const summary = summarizeRun(perfectRunOf(6))
+    expect(summary.itemCount).toBe(6)
+    expect(summary.score).toBe(100)
+  })
+
+  it('a flawless ten-item run also normalises to exactly 100 -- a longer run (e.g. a future Playground reuse) is not silently punished', () => {
+    // recordRunAnswer itself caps at RUN_SIZE (isRunComplete), so a ten-item
+    // state is built directly -- this is exactly the shape summarizeRun must
+    // handle honestly if it is ever fed a run of a different length.
+    const answers = Array.from({ length: 10 }, (_, i) => ({
+      item: item({ id: `p${i}` }),
+      result: result({ drillId: `p${i}`, score: 100 }),
+    }))
+    const state = { answers, streak: 10, bestCombo: 10, weightedTotal: answers.reduce((sum, _, i) => sum + 100 * comboMultiplier(i + 1), 0) }
+    const summary = summarizeRun(state)
+    expect(summary.itemCount).toBe(10)
+    expect(summary.score).toBe(100)
+  })
+
+  it('the same raw total normalises to a different score depending on how many items were actually played', () => {
+    // One perfect item (weightedTotal 100) scores 100 against a one-item ceiling...
+    let oneItem = EMPTY_RUN
+    oneItem = recordRunAnswer(oneItem, item({ id: 'x' }), result({ drillId: 'x', score: 100 }))
+    expect(summarizeRun(oneItem).score).toBe(100)
+
+    // ...but the identical single answer, still the only one in a run.ts caller never intends to
+    // finish yet, must not be silently compared against six items' worth of ceiling (the bug this
+    // fix removes: normalising against a fixed RUN_SIZE-shaped constant regardless of itemCount).
+    expect(summarizeRun(oneItem).itemCount).toBe(1)
   })
 })
 

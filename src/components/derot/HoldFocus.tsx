@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DrillItem, DrillResult } from '@/lib/contracts'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { useCountdown } from './useCountdown'
 import { gradeHoldFocus, scoreTimedCorrect } from './scoring'
@@ -19,9 +18,11 @@ export interface HoldFocusProps {
   item: DrillItem
   onResult: (result: DrillResult) => void
   now?: () => number
+  /** True while the tab is hidden or the run is otherwise away (fix round 1, I3). Largely moot here: blur/visibilitychange already void this drill outright, which is the correct, stricter behaviour for a hold-focus mechanic. */
+  paused?: boolean
 }
 
-export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
+export function HoldFocus({ item, onResult, now = Date.now, paused = false }: HoldFocusProps) {
   const payload = item.payload as unknown as HoldFocusPayload
 
   const [submitted, setSubmitted] = useState(false)
@@ -58,12 +59,20 @@ export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
 
   const voidDrill = useCallback(() => finish(null, true), [finish])
 
-  const { percentRemaining, remainingMs } = useCountdown({
+  useCountdown({
     timeLimitS: item.timeLimitS,
     now,
-    active: !submitted,
+    active: !submitted && !paused,
     onExpire: () => finish(null, false),
   })
+
+  // Focus lands on the passage itself, not an answer option -- the point of
+  // this drill is reading first (fix round 1, I4: a fresh item always moves
+  // focus to its first control; here that's the passage, not a pre-selected
+  // answer, which would tempt an early click).
+  useEffect(() => {
+    containerRef.current?.focus()
+  }, [])
 
   // Leaving the page voids the drill: blur or the tab going hidden.
   useEffect(() => {
@@ -102,20 +111,14 @@ export function HoldFocus({ item, onResult, now = Date.now }: HoldFocusProps) {
   return (
     <Card className="mx-auto w-full max-w-3xl">
       <CardHeader className="gap-3">
-        <CardTitle>Hold focus</CardTitle>
         <CardDescription>Read the passage without scrolling, then answer the question. Leaving the page voids the drill.</CardDescription>
-        <div className="flex items-center gap-3">
-          <Progress value={percentRemaining} className="flex-1" />
-          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {Math.ceil(remainingMs / 1000)}s
-          </span>
-        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div
           ref={containerRef}
+          tabIndex={-1}
           aria-label="Reading passage"
-          className="rounded-lg bg-muted p-4 text-sm leading-relaxed"
+          className="rounded-lg bg-muted p-4 text-sm leading-relaxed outline-none"
           style={{ overflow: 'hidden' }}
         >
           {payload.passage}

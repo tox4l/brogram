@@ -91,4 +91,26 @@ describe('PredictOutput', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
     expect(textarea.disabled).toBe(true)
   })
+
+  it('autofocuses the answer field so a fresh item is immediately typeable (fix round 1, I4)', () => {
+    render(<PredictOutput item={item} onResult={() => {}} now={() => 0} />)
+    const textarea = screen.getByPlaceholderText(/type the exact output/i)
+    expect(document.activeElement).toBe(textarea)
+  })
+
+  it('while paused, time does not expire and no auto-submit happens (fix round 1, I3 -- the tab-hidden clock)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    const { rerender } = render(<PredictOutput item={item} onResult={onResult} now={now} paused />)
+
+    t = 20000 // past the 20s time limit
+    vi.advanceTimersByTime(20000)
+    expect(onResult).not.toHaveBeenCalled()
+
+    // Resuming lets the (already-elapsed) time limit expire normally.
+    rerender(<PredictOutput item={item} onResult={onResult} now={now} paused={false} />)
+    vi.advanceTimersByTime(200)
+    expect(onResult).toHaveBeenCalledTimes(1)
+  })
 })

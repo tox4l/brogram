@@ -81,4 +81,20 @@ describe('Trace', () => {
     vi.advanceTimersByTime(45000)
     expect(onResult).toHaveBeenCalledTimes(1)
   })
+
+  it('autofocuses the first variable input so a fresh item is immediately usable by keyboard (fix round 1, I4)', () => {
+    render(<Trace item={item} onResult={() => {}} now={() => 0} />)
+    expect(document.activeElement).toBe(screen.getByLabelText('i'))
+  })
+
+  it('while paused, time does not expire and no auto-submit happens (fix round 1, I3)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    render(<Trace item={item} onResult={onResult} now={now} paused />)
+
+    t = 45000
+    vi.advanceTimersByTime(45000)
+    expect(onResult).not.toHaveBeenCalled()
+  })
 })

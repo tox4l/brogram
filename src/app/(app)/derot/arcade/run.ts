@@ -61,15 +61,18 @@ export function recordRunAnswer(state: RunState, item: DrillItem, result: DrillR
  * the combo ramp (1x, 1.2x, 1.5x, 2x) means no run can actually reach
  * `itemCount * 100 * 2`, since the multiplier only reaches its cap a few
  * items in. This is the true ceiling `summarizeRun` normalises against, so a
- * flawless run always lands at exactly 100, not some unreachable fraction of it.
+ * flawless run always lands at exactly 100, not some unreachable fraction of
+ * it -- computed from the RUN'S OWN length (fix round 1, I2), not the
+ * module-level `RUN_SIZE` constant: a partial run (built via a future path,
+ * or reused by a Playground game of a different length) must normalise
+ * against its own achievable ceiling, not silently divide by six-item math
+ * it never played.
  */
 function perfectRunCeiling(itemCount: number): number {
   let total = 0
   for (let streak = 1; streak <= itemCount; streak += 1) total += 100 * comboMultiplier(streak)
   return total
 }
-
-const RUN_SCORE_CEILING = perfectRunCeiling(RUN_SIZE)
 
 export interface RunSummaryStats {
   /** Normalised 0-100 -- this is what becomes the run's single DrillResult.score. */
@@ -85,8 +88,9 @@ export interface RunSummaryStats {
 export function summarizeRun(state: RunState): RunSummaryStats {
   const itemCount = state.answers.length
   const correctCount = state.answers.filter((answer) => answer.result.correct).length
+  const ceiling = perfectRunCeiling(itemCount)
   return {
-    score: clamp(0, 100, Math.round((state.weightedTotal / RUN_SCORE_CEILING) * 100)),
+    score: ceiling === 0 ? 0 : clamp(0, 100, Math.round((state.weightedTotal / ceiling) * 100)),
     rawTotal: state.weightedTotal,
     accuracy: itemCount === 0 ? 0 : correctCount / itemCount,
     bestCombo: state.bestCombo,
@@ -104,7 +108,15 @@ export function summarizeRun(state: RunState): RunSummaryStats {
  * is a majority verdict (at least half the items right): no single boolean
  * can describe six answers, and no reward predicate reads it today (`sharp`
  * / `touch-grass` count rows by lane, `winsToday` counts rows landed on a
- * day, `beatYourself` compares `score` -- none reads `correct`).
+ * day, `beatYourself` compares `score` -- none reads `correct`; verified
+ * independently by the Opus review, fix round 1).
+ *
+ * LANDMINE (upheld as a latent simplification, not a bug): `correctCount * 2
+ * >= itemCount` means a 3-of-6 run and a 6-of-6 run are BOTH stored as
+ * `correct: true`. Harmless while nothing reads the field -- not harmless
+ * the day a predicate reads `DrillResult.correct` for an Arcade row and
+ * assumes it means "passed" the way it does for every other drill kind.
+ * Check `correctCount`/`itemCount` intent before adding that reader.
  */
 export function buildRunResult(state: RunState, now: () => number = Date.now): DrillResult | null {
   if (state.answers.length === 0) return null
