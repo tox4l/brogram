@@ -1,219 +1,35 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useParams, useSearchParams } from 'next/navigation'
-import { ArrowLeft, ArrowRight } from 'lucide-react'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
-import { useLockdown } from '@/hooks/useLockdown'
-import { LockdownOverlay } from '@/components/exercise/LockdownOverlay'
-import { DrillRunner } from '@/components/derot'
-import { useSession } from '@/store/session'
-import type { DrillItem, DrillKind, DrillResult } from '@/lib/contracts'
-import { DRILL_META, computeDerotStreak, dateKey, isDrillKind, mapDrillRow, pickDrillItem } from '../lib'
+import { useEffect } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { isArcadeKind, isPlayKind } from '../lib'
 
-type Phase = 'loading' | 'ready' | 'result' | 'empty' | 'error'
-
-interface RunnerState {
-  phase: Phase
-  items: DrillItem[]
-  allResults: DrillResult[]
-  current: DrillItem | null
-  lastResult: DrillResult | null
-  pendingResult: DrillResult | null
-  error: string | null
-  saveError: string | null
-}
-
-const INITIAL_STATE: RunnerState = { phase: 'loading', items: [], allResults: [], current: null, lastResult: null, pendingResult: null, error: null, saveError: null }
-
-function useDrillRunner(kind: DrillKind, userId: string | null, explicitId: string | null) {
-  const [state, setState] = useState<RunnerState>(INITIAL_STATE)
-  const [attempt, setAttempt] = useState(0)
-  const stateRef = useRef(state)
-  useEffect(() => { stateRef.current = state }, [state])
-  const learnerState = useSession((session) => session.learnerState)
-  const setLearnerState = useSession((session) => session.setLearnerState)
-  const learnerStateRef = useRef(learnerState)
-  useEffect(() => { learnerStateRef.current = learnerState }, [learnerState])
+/**
+ * `/derot/[kind]` moved when the hub grew a second lane (spec 10.9): Arcade
+ * kinds now live at `/derot/arcade/[kind]`, Playground kinds at
+ * `/derot/play/[kind]`. This shim keeps every existing link, deep link and
+ * e2e spec pointed at the old path resolving instead of 404ing, by
+ * forwarding straight through (including any query string, e.g. `?item=`).
+ */
+export default function LegacyDerotKindRedirect() {
+  const router = useRouter()
+  const params = useParams<{ kind: string }>()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (!userId) return
-    let cancelled = false
-
-    async function load() {
-      try {
-        const client = createClient()
-        const [drills, wellness] = await Promise.all([
-          client.from('drills').select('*').eq('kind', kind),
-          client.from('wellness').select('drill_results').eq('user_id', userId as string).maybeSingle(),
-        ])
-        if (drills.error || wellness.error) throw new Error('This drill could not open.')
-        if (cancelled) return
-        const items = (drills.data ?? []).map(mapDrillRow)
-        const allResults = (wellness.data?.drill_results ?? []) as DrillResult[]
-        if (items.length === 0) { setState({ ...INITIAL_STATE, phase: 'empty', allResults }); return }
-        const forKind = allResults.filter((result) => result.kind === kind)
-        const current = pickDrillItem(items, forKind, new Date(), explicitId)
-        setState({ ...INITIAL_STATE, phase: 'ready', items, allResults, current })
-      } catch (err) {
-        if (!cancelled) setState({ ...INITIAL_STATE, phase: 'error', error: err instanceof Error ? err.message : 'This drill could not open.' })
-      }
+    const kind = params.kind
+    const qs = searchParams.toString()
+    const suffix = qs ? `?${qs}` : ''
+    if (isArcadeKind(kind)) {
+      router.replace(`/derot/arcade/${kind}${suffix}`)
+      return
     }
-
-    void load()
-    return () => { cancelled = true }
-  }, [kind, userId, explicitId, attempt])
-
-  const submitResult = useCallback(async (result: DrillResult) => {
-    if (!userId) return
-    setState((prev) => ({ ...prev, pendingResult: result, saveError: null }))
-    try {
-      const client = createClient()
-      // Fresh read right before the write: wellness also carries prefs, water_log
-      // and pomodoro_sessions written by the wellness rail, so the append must
-      // start from the latest array rather than a possibly stale local copy.
-      const { data, error: readError } = await client.from('wellness').select('drill_results').eq('user_id', userId).maybeSingle()
-      if (readError) throw readError
-      const current = (data?.drill_results ?? []) as DrillResult[]
-      const nextResults = [...current, result]
-      // `.select().maybeSingle()` confirms the update actually touched a row.
-      // Without it a missing wellness row makes a zero-row UPDATE look like
-      // success, and the drill result is silently lost.
-      const { data: updated, error: writeError } = await client
-        .from('wellness')
-        .update({ drill_results: nextResults })
-        .eq('user_id', userId)
-        .select('user_id')
-        .maybeSingle()
-      if (writeError) throw writeError
-      if (!updated) {
-        // The row is normally created by handle_new_user on sign-up; be safe
-        // if it is somehow missing rather than dropping the result.
-        const { error: insertError } = await client.from('wellness').insert({ user_id: userId, drill_results: nextResults })
-        if (insertError) throw insertError
-      }
-      setState((prev) => ({ ...prev, phase: 'result', allResults: nextResults, lastResult: result, pendingResult: null, saveError: null }))
-
-      const learner = learnerStateRef.current
-      if (learner) {
-        setLearnerState({
-          ...learner,
-          streak: {
-            ...learner.streak,
-            derotDays: computeDerotStreak(nextResults.map((r) => r.at)),
-            lastDerotDate: dateKey(result.at) ?? learner.streak.lastDerotDate,
-          },
-          updatedAt: new Date().toISOString(),
-        })
-      }
-    } catch {
-      setState((prev) => ({ ...prev, saveError: 'Your result could not be saved. Check your connection, then try again.' }))
+    if (isPlayKind(kind)) {
+      router.replace(`/derot/play/${kind}${suffix}`)
+      return
     }
-  }, [userId, setLearnerState])
+    router.replace('/derot')
+  }, [params.kind, router, searchParams])
 
-  const next = useCallback(() => {
-    const { items, allResults } = stateRef.current
-    const forKind = allResults.filter((result) => result.kind === kind)
-    const current = pickDrillItem(items, forKind, new Date())
-    setState((prev) => ({ ...prev, phase: 'ready', current, lastResult: null, pendingResult: null, saveError: null }))
-  }, [kind])
-
-  const retrySave = useCallback(() => {
-    if (stateRef.current.pendingResult) void submitResult(stateRef.current.pendingResult)
-  }, [submitResult])
-
-  const retry = useCallback(() => {
-    setState((prev) => ({ ...prev, phase: 'loading', error: null }))
-    setAttempt((n) => n + 1)
-  }, [])
-
-  return { ...state, retry, submitResult, next, retrySave }
-}
-
-function RunnerBody({ kind }: { kind: DrillKind }) {
-  const params = useSearchParams()
-  const explicitId = params.get('item')
-  const userId = useSession((session) => session.user?.id) ?? null
-  const runner = useDrillRunner(kind, userId, explicitId)
-  const meta = DRILL_META[kind]
-
-  // exercise_id is a uuid column; a drill id is not one, so this screen logs
-  // with a null exercise reference. idleGuard is off for hold-focus, whose
-  // own blur/scroll voids are the reading guard -- the 15s idle overlay would
-  // otherwise cover a student who is reading, not idle.
-  const lockdown = useLockdown(null, { enabled: Boolean(runner.current), idleGuard: runner.current?.kind !== 'hold-focus' })
-
-  return (
-    <div {...lockdown.containerProps} className="relative min-w-0 space-y-5">
-      <div className="space-y-3" inert={Boolean(lockdown.overlay)}>
-        <Link href="/derot" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          <ArrowLeft className="size-3" aria-hidden="true" />Back to de-rot
-        </Link>
-        <h1 className="text-2xl font-medium tracking-tight">{meta.title}</h1>
-      </div>
-
-      <div inert={Boolean(lockdown.overlay)} className="space-y-5">
-        {lockdown.pasteMessage && <p role="status" className="text-sm text-muted-foreground">{lockdown.pasteMessage}</p>}
-        {lockdown.loggingError && <p role="alert" className="text-sm text-muted-foreground">{lockdown.loggingError}</p>}
-        {runner.saveError && (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
-            <p className="min-w-0 flex-1">{runner.saveError}</p>
-            <Button variant="outline" onClick={runner.retrySave}>Retry save</Button>
-          </div>
-        )}
-
-        {runner.phase === 'loading' && <p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}
-
-        {runner.phase === 'error' && (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-            <p className="text-sm text-foreground">{runner.error}</p>
-            <Button variant="outline" onClick={runner.retry}>Try again</Button>
-          </div>
-        )}
-
-        {runner.phase === 'empty' && (
-          <div className="rounded-xl border border-dashed border-input p-6">
-            <p className="text-sm font-medium">No items yet</p>
-            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">This drill is still being prepared. Choose another kind from de-rot.</p>
-            <Link href="/derot" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}>Back to de-rot</Link>
-          </div>
-        )}
-
-        {runner.phase === 'ready' && runner.current && (
-          <DrillRunner key={runner.current.id} item={runner.current} onResult={(result) => void runner.submitResult(result)} />
-        )}
-
-        {runner.phase === 'result' && runner.lastResult && (
-          <div className="mx-auto w-full max-w-2xl space-y-5 rounded-xl border border-border p-6">
-            <p className="text-lg font-medium tracking-tight">{runner.lastResult.correct ? 'Correct.' : 'Not quite.'}</p>
-            <p className="font-mono text-sm text-muted-foreground">Score: {runner.lastResult.score}</p>
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={runner.next} className="bg-emerald-200 text-primary-foreground hover:bg-emerald-100">Next drill<ArrowRight aria-hidden="true" /></Button>
-              <Link href="/derot" className={buttonVariants({ variant: 'outline' })}>Back to de-rot</Link>
-            </div>
-          </div>
-        )}
-      </div>
-      <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} />
-    </div>
-  )
-}
-
-function InvalidKind() {
-  return (
-    <div className="space-y-4 py-10">
-      <h1 className="text-2xl font-medium tracking-tight">This drill could not open</h1>
-      <p className="text-sm text-muted-foreground">Choose a drill kind from the de-rot section.</p>
-      <Link href="/derot" className={buttonVariants({ variant: 'outline' })}>Back to de-rot</Link>
-    </div>
-  )
-}
-
-export default function DerotRunnerPage() {
-  const { kind } = useParams<{ kind: string }>()
-  if (!isDrillKind(kind)) return <InvalidKind />
-  return <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Opening your drill.</p>}><RunnerBody key={kind} kind={kind} /></Suspense>
+  return <p role="status" className="text-sm text-muted-foreground">Taking you to the new de-rot page.</p>
 }

@@ -1,7 +1,36 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DrillResult } from '@/lib/contracts'
 import DerotPage from './page'
+
+beforeAll(() => {
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+  }
+  // jsdom has no IntersectionObserver; the card idle-motion hook feature-detects
+  // and no-ops without one, but a fake here exercises the same code path a
+  // real browser would take (spec 10.8's "pauses off-screen" behaviour).
+  class FakeIntersectionObserver implements IntersectionObserver {
+    readonly root = null
+    readonly rootMargin = ''
+    readonly thresholds: ReadonlyArray<number> = []
+    constructor(private callback: IntersectionObserverCallback) {}
+    observe(target: Element) { this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this) }
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] { return [] }
+  }
+  ;(globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver = FakeIntersectionObserver
+})
 
 const mocks = vi.hoisted(() => ({ replace: vi.fn(), searchParams: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }), useSearchParams: () => mocks.searchParams() }))
@@ -40,7 +69,8 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }))
 
-const allKinds = ['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type']
+const arcadeKinds = ['predict-output', 'spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type']
+const playKinds = ['follow-the-dot', 'color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid']
 
 function result(overrides: Partial<DrillResult>): DrillResult {
   return { drillId: 'd', kind: 'trace', correct: true, timeMs: 500, score: 0, at: '2026-01-01T00:00:00.000Z', lane: 'arcade', ...overrides }
@@ -56,15 +86,34 @@ function cardFor(title: string): HTMLElement {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.searchParams.mockReturnValue(new URLSearchParams())
-  drillKinds = [...allKinds]
+  drillKinds = [...arcadeKinds, ...playKinds]
   wellnessRow = { drill_results: [] }
   failWellness = false
   failDrills = false
 })
 afterEach(cleanup)
 
-describe('de-rot section', () => {
-  it('lists all six kinds, showing best and last score where the student has results and an invitation otherwise', async () => {
+describe('the de-rot hub', () => {
+  it('opens on the Arcade lane, listing the six Arcade cards with their voice titles', async () => {
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Run It in Your Head')).toBeTruthy())
+    for (const title of ['Call It', 'Find the Break', 'Run It in Your Head', "Don't Blink", 'Two Back', 'Hands']) {
+      expect(screen.getByText(title)).toBeTruthy()
+    }
+    for (const title of ['Follow the Dot', 'Colour Back', 'Twitch', 'Keep Time', 'Breathe', 'Grid']) {
+      expect(screen.queryByText(title)).toBeNull()
+    }
+  })
+
+  it('switches to the Playground lane and shows its six cards instead', async () => {
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Call It')).toBeTruthy())
+    fireEvent.click(screen.getByRole('tab', { name: 'Playground' }))
+    await waitFor(() => expect(screen.getByText('Follow the Dot')).toBeTruthy())
+    expect(screen.queryByText('Call It')).toBeNull()
+  })
+
+  it('shows best and last score where the student has results, and an invitation otherwise', async () => {
     wellnessRow = {
       drill_results: [
         result({ drillId: 't1', kind: 'trace', score: 90, at: '2026-09-04T10:00:00.000Z' }),
@@ -72,37 +121,56 @@ describe('de-rot section', () => {
       ],
     }
     render(<DerotPage />)
-    await waitFor(() => expect(screen.getByText('Trace by hand')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Run It in Your Head')).toBeTruthy())
 
-    for (const title of ['Predict the output', 'Spot the bug', 'Trace by hand', 'Hold focus', 'N-back', 'Speed type']) {
-      expect(screen.getByText(title)).toBeTruthy()
-    }
-
-    const trace = cardFor('Trace by hand')
+    const trace = cardFor('Run It in Your Head')
     expect(within(trace).getByText('90')).toBeTruthy() // best
     expect(within(trace).getByText('60')).toBeTruthy() // last (most recent)
 
-    const predictOutput = cardFor('Predict the output')
+    const predictOutput = cardFor('Call It')
     expect(within(predictOutput).getByText('Not attempted yet. Give it a try.')).toBeTruthy()
   })
 
-  it('shows the de-rot streak as consecutive days ending today', async () => {
+  it('shows the de-rot streak as consecutive days ending today, counting activity across both lanes', async () => {
     const now = new Date()
     const today = now.toISOString()
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
-    wellnessRow = { drill_results: [result({ kind: 'n-back', score: 70, at: today }), result({ kind: 'n-back', score: 65, at: yesterday })] }
+    wellnessRow = { drill_results: [result({ kind: 'n-back', score: 70, at: today }), result({ kind: 'breathe', lane: 'play', score: 65, at: yesterday })] }
     render(<DerotPage />)
     await waitFor(() => expect(screen.getByText('2 days')).toBeTruthy())
   })
 
-  it('shows a designed empty state and disables Start for a kind with no drills in the bank', async () => {
-    drillKinds = allKinds.filter((kind) => kind !== 'n-back')
+  it("counts today's runs as one row per completed run, across both lanes", async () => {
+    const today = new Date().toISOString()
+    wellnessRow = {
+      drill_results: [
+        result({ kind: 'trace', score: 80, at: today }),
+        result({ kind: 'breathe', lane: 'play', score: 90, at: today }),
+      ],
+    }
     render(<DerotPage />)
-    await waitFor(() => expect(screen.getByText('N-back')).toBeTruthy())
-    const nBack = cardFor('N-back')
+    await waitFor(() => expect(screen.getByText("Today's runs")).toBeTruthy())
+    expect(screen.getByText('2')).toBeTruthy()
+  })
+
+  it('shows a designed empty state and disables Start for a kind with no drills in the bank', async () => {
+    drillKinds = drillKinds.filter((kind) => kind !== 'n-back')
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Two Back')).toBeTruthy())
+    const nBack = cardFor('Two Back')
     expect(within(nBack).getByText('No items yet. This drill is still being prepared.')).toBeTruthy()
     expect(within(nBack).getByRole('button', { name: 'Start' })).toHaveProperty('disabled', true)
-    expect(within(cardFor('Trace by hand')).getByRole('link', { name: /Start/ })).toBeTruthy()
+    expect(within(cardFor('Run It in Your Head')).getByRole('link', { name: /Start/ })).toBeTruthy()
+  })
+
+  it('links each card to the right lane path', async () => {
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Call It')).toBeTruthy())
+    expect(within(cardFor('Call It')).getByRole('link', { name: /Start/ }).getAttribute('href')).toBe('/derot/arcade/predict-output')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Playground' }))
+    await waitFor(() => expect(screen.getByText('Breathe')).toBeTruthy())
+    expect(within(cardFor('Breathe')).getByRole('link', { name: /Start/ }).getAttribute('href')).toBe('/derot/play/breathe')
   })
 
   it('shows a retry option when de-rot progress fails to load', async () => {
@@ -112,10 +180,16 @@ describe('de-rot section', () => {
     expect(screen.getByText('Your de-rot progress could not load.')).toBeTruthy()
   })
 
-  it('redirects ?drill=trace to the trace runner', () => {
+  it('redirects ?drill=trace straight to the Arcade runner', () => {
     mocks.searchParams.mockReturnValue(new URLSearchParams('drill=trace'))
     render(<DerotPage />)
-    expect(mocks.replace).toHaveBeenCalledWith('/derot/trace')
+    expect(mocks.replace).toHaveBeenCalledWith('/derot/arcade/trace')
+  })
+
+  it('redirects ?drill=breathe straight to the Playground runner', () => {
+    mocks.searchParams.mockReturnValue(new URLSearchParams('drill=breathe'))
+    render(<DerotPage />)
+    expect(mocks.replace).toHaveBeenCalledWith('/derot/play/breathe')
   })
 
   it('ignores an unknown drill query value', () => {

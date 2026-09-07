@@ -10,13 +10,16 @@ export const DRILL_KINDS: DrillKind[] = ['predict-output', 'spot-the-bug', 'trac
 /** Lane B: six non-coding games. Spec 7.9. Presentation lands with T2.9b. */
 export const PLAY_KINDS: DrillKind[] = ['follow-the-dot', 'color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid']
 
+// Arcade titles are the voice names (spec 7.9 / T2.9a step 2). The
+// descriptions stay literal -- they explain the mechanic, not the brand --
+// and are plain strings pending the T2.7a voice bank (T2.7b re-points them).
 export const DRILL_META: Record<DrillKind, { title: string; description: string; lane: DrillLane }> = {
-  'predict-output': { title: 'Predict the output', description: 'Read a snippet and type exactly what it prints before time runs out.', lane: 'arcade' },
-  'spot-the-bug': { title: 'Spot the bug', description: "Click the line that's broken before the clock runs out.", lane: 'arcade' },
-  trace: { title: 'Trace by hand', description: "Step through execution and fill in each variable's value.", lane: 'arcade' },
-  'hold-focus': { title: 'Hold focus', description: 'Read a technical passage without scrolling, then answer one question.', lane: 'arcade' },
-  'n-back': { title: 'N-back', description: 'Watch a stream of code tokens and catch the ones that repeat.', lane: 'arcade' },
-  'speed-type': { title: 'Speed type', description: 'Type a snippet exactly as shown. Accuracy counts more than speed.', lane: 'arcade' },
+  'predict-output': { title: 'Call It', description: 'Read a snippet and type exactly what it prints before time runs out.', lane: 'arcade' },
+  'spot-the-bug': { title: 'Find the Break', description: "Click the line that's broken before the clock runs out.", lane: 'arcade' },
+  trace: { title: 'Run It in Your Head', description: "Step through execution and fill in each variable's value.", lane: 'arcade' },
+  'hold-focus': { title: "Don't Blink", description: 'Read a technical passage without scrolling, then answer one question.', lane: 'arcade' },
+  'n-back': { title: 'Two Back', description: 'Watch a stream of code tokens and catch the ones that repeat.', lane: 'arcade' },
+  'speed-type': { title: 'Hands', description: 'Type a snippet exactly as shown. Accuracy counts more than speed.', lane: 'arcade' },
   'follow-the-dot': { title: 'Follow the Dot', description: 'Keep the pointer inside a dot that drifts and accelerates along a smooth path.', lane: 'play' },
   'color-nback': { title: 'Colour Back', description: 'Watch a stream of colours and shapes and catch the ones that match N back.', lane: 'play' },
   reaction: { title: 'Twitch', description: 'Ten rounds. Tap the instant the shape lights up; an early tap voids the round.', lane: 'play' },
@@ -86,6 +89,21 @@ export interface KindStats {
   best: number | null
   last: number | null
   lastAt: string | null
+}
+
+/**
+ * The most recent `limit` results for one kind, newest first -- the Arcade
+ * run summary's personal-best scoreboard (spec 7.9 step 1). Since each
+ * completed run is exactly one `DrillResult` row (never one per item), this
+ * is simply the tail of the kind's own history: no separate "run" grouping
+ * is needed.
+ */
+export function lastResultsForKind(results: DrillResult[], kind: DrillKind, limit = 5): DrillResult[] {
+  return results
+    .filter((result) => result.kind === kind)
+    .slice()
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, limit)
 }
 
 export function statsForKind(results: DrillResult[], kind: DrillKind): KindStats {

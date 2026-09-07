@@ -19,6 +19,13 @@ export interface DrillRunnerProps {
  * Picks the presentation component for a drill item by its kind. `key={item.id}`
  * on each branch forces a remount (and a fresh one-shot onResult guard) whenever
  * the caller swaps in a new drill without unmounting DrillRunner itself.
+ *
+ * The Arcade run page (src/app/(app)/derot/arcade/[kind]/page.tsx) relies on
+ * exactly this: it swaps `item` after each answer without ever unmounting
+ * DrillRunner, so a six-item run remounts only the per-kind child each time,
+ * never this switch. DrillRunner itself carries no run, combo or score-lane
+ * logic -- that lives in the run model (arcade/run.ts) and scoring.ts, kept
+ * frozen here so the item-in / result-out contract never changes underneath it.
  */
 export function DrillRunner({ item, onResult, now = Date.now }: DrillRunnerProps) {
   switch (item.kind) {

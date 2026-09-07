@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DrillItem, DrillResult } from '@/lib/contracts'
-import { computeDerotStreak, isArcadeKind, isDrillKind, isPlayKind, mapDrillRow, pickDrillItem, statsForKind } from './lib'
+import { DRILL_META, computeDerotStreak, isArcadeKind, isDrillKind, isPlayKind, lastResultsForKind, mapDrillRow, pickDrillItem, statsForKind } from './lib'
 
 function result(overrides: Partial<DrillResult> = {}): DrillResult {
   return { drillId: 'd1', kind: 'trace', correct: true, timeMs: 1000, score: 80, at: '2026-09-06T10:00:00.000Z', lane: 'arcade', ...overrides }
@@ -73,6 +73,41 @@ describe('statsForKind', () => {
       result({ drillId: 'd3', score: 70, at: '2026-09-06T10:00:00.000Z' }),
     ]
     expect(statsForKind(results, 'trace')).toEqual({ attempted: true, best: 95, last: 70, lastAt: '2026-09-06T10:00:00.000Z' })
+  })
+})
+
+describe('DRILL_META Arcade titles', () => {
+  it('carries the voice names for the six Arcade kinds (spec 7.9 step 2)', () => {
+    expect(DRILL_META['predict-output'].title).toBe('Call It')
+    expect(DRILL_META['spot-the-bug'].title).toBe('Find the Break')
+    expect(DRILL_META.trace.title).toBe('Run It in Your Head')
+    expect(DRILL_META['hold-focus'].title).toBe("Don't Blink")
+    expect(DRILL_META['n-back'].title).toBe('Two Back')
+    expect(DRILL_META['speed-type'].title).toBe('Hands')
+  })
+})
+
+describe('lastResultsForKind', () => {
+  it('returns the most recent results for one kind, newest first, capped at the limit', () => {
+    const results = [
+      result({ drillId: 'r1', kind: 'trace', at: '2026-09-01T10:00:00.000Z' }),
+      result({ drillId: 'r2', kind: 'trace', at: '2026-09-03T10:00:00.000Z' }),
+      result({ drillId: 'r3', kind: 'n-back', at: '2026-09-04T10:00:00.000Z' }),
+      result({ drillId: 'r4', kind: 'trace', at: '2026-09-02T10:00:00.000Z' }),
+    ]
+    expect(lastResultsForKind(results, 'trace').map((r) => r.drillId)).toEqual(['r2', 'r4', 'r1'])
+  })
+
+  it('caps at the given limit', () => {
+    const results = Array.from({ length: 8 }, (_, i) =>
+      result({ drillId: `r${i}`, kind: 'trace', at: `2026-09-0${i + 1}T10:00:00.000Z` })
+    )
+    expect(lastResultsForKind(results, 'trace', 5)).toHaveLength(5)
+    expect(lastResultsForKind(results, 'trace', 5)[0].drillId).toBe('r7')
+  })
+
+  it('is empty for a kind with no results', () => {
+    expect(lastResultsForKind([result({ kind: 'trace' })], 'n-back')).toEqual([])
   })
 })
 
