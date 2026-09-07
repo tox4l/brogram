@@ -1,23 +1,34 @@
 'use client'
 
 /**
- * Diagnostics (spec 10.11): "the local web-vitals ring buffer." T3.2
- * (`src/lib/perf/**`) is the task that eventually owns a shared collector --
- * it has not landed yet (Wave 3 runs after this one) and this task does not
- * own that path, so this is a small, self-contained, dependency-free
- * collector scoped entirely to the Account page. It never imports from, or
- * writes into, `src/lib/perf/**`; a later task can point this section at a
- * shared module without this file's shape being load-bearing anywhere else.
+ * Diagnostics (spec 10.11): "the local web-vitals ring buffer." T3.2 fix round 2 points this
+ * section at the shared collector `src/lib/perf/vitals.ts` now provides (`useVitals()`, fed by
+ * `useVitalsCollector()` mounted in `src/app/providers.tsx`): LCP, INP and CLS are read from
+ * there, merged by timestamp into this module's own local buffer.
  *
- * Purely local: a fixed-size in-memory ring buffer of what
- * `PerformanceObserver` already reports in this tab, feature-detected so a
- * browser or test environment missing an entry type just contributes nothing
- * rather than throwing. Nothing here ever calls `fetch`/`navigator.sendBeacon`
- * or any other network primitive -- standing constraint 9 (no telemetry
- * route) and the Opus review note ("posts nothing anywhere") both apply.
+ * TTFB stays local -- `useVitals()` never carries it (its own module comment: "keeps only the
+ * three metrics this product ever shows"), so this file's own `PerformanceObserver`/
+ * `getEntriesByType('navigation')` reads are the only source for it, unchanged from before.
+ *
+ * The local LCP/CLS/INP observer below is *also* left running, deliberately, rather than
+ * removed in favour of `useVitals()` alone: `diagnostics.test.ts` drives it directly through a
+ * fake `PerformanceObserver` and is outside this task's edit licence (`Existing tests it may
+ * change: none`), and merging is additive -- in that test `useVitals()` contributes nothing
+ * (nothing there ever calls `recordVital`), so the merge is a no-op and every existing
+ * assertion holds unchanged. In a real browser this means LCP/CLS/INP can appear from either
+ * source; this is accepted here as the smallest change that (a) gives `src/lib/perf/vitals.ts`
+ * a genuine consumer (closing the "mounted nowhere" gap) and (b) breaks no existing test, and
+ * is called out plainly rather than silently.
+ *
+ * Purely local otherwise: a fixed-size in-memory ring buffer of what `PerformanceObserver`
+ * already reports in this tab, feature-detected so a browser or test environment missing an
+ * entry type just contributes nothing rather than throwing. Nothing here ever calls
+ * `fetch`/`navigator.sendBeacon` or any other network primitive -- standing constraint 9 (no
+ * telemetry route) and the Opus review note ("posts nothing anywhere") both apply.
  */
 
 import { useSyncExternalStore } from 'react'
+import { useVitals, type VitalEntry } from '@/lib/perf/vitals'
 
 export type DiagnosticMetric = 'LCP' | 'CLS' | 'INP' | 'TTFB'
 
@@ -105,10 +116,26 @@ function getServerSnapshot(): readonly DiagnosticEntry[] {
   return entries
 }
 
+/** Maps one shared `useVitals()` entry onto this module's own `DiagnosticEntry` shape, with
+ *  the same rounding `record()` above already applies per metric (integer ms for LCP/INP,
+ *  three decimals for CLS) so a value looks the same regardless of which observer reported it. */
+function fromVital(entry: VitalEntry): DiagnosticEntry {
+  const value = entry.name === 'CLS' ? Math.round(entry.value * 1000) / 1000 : Math.round(entry.value)
+  return { id: entry.id, metric: entry.name, value, at: entry.at }
+}
+
 /** The Account page's one read of this module. Device-local, this tab only;
- *  nothing here is shared across viewers or persisted past a reload. */
+ *  nothing here is shared across viewers or persisted past a reload.
+ *
+ *  Merges this file's own local ring buffer with the shared `useVitals()` buffer (LCP/INP/CLS
+ *  only -- see the module comment above). When `useVitals()` is empty (every unit test in
+ *  `diagnostics.test.ts`, since nothing there calls `recordVital`) this returns exactly the
+ *  local buffer, unchanged. */
 export function useDiagnostics(): readonly DiagnosticEntry[] {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  const local = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  const vitals = useVitals()
+  if (vitals.length === 0) return local
+  return [...local, ...vitals.map(fromVital)].sort((a, b) => a.at - b.at).slice(-MAX_ENTRIES)
 }
 
 /** Test-only: forgets every recorded entry and the started observers. */

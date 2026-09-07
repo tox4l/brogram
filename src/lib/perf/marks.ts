@@ -4,20 +4,21 @@
  * `brogram:shell-ready`, `brogram:route-ready`, `brogram:graded`, `brogram:check-verdict`.
  *
  * This module owns the mark names and a safe way to set/read them — nothing here calls
- * `markPerf()` on its own. `src/lib/perf/**` is this task's whole ownership; the four call
- * sites below each live in a different task's files and are not edited here. Until each
- * lands, the matching section of `e2e/perf.spec.ts` fails loudly (an absent mark), the same
- * way an unfixed budget row fails `perf:bundle` — a real, named gap, not a silent one:
+ * `markPerf()` on its own; each call site lives in a different file (`src/lib/perf/**` is
+ * this task's own ownership, those files are not). Fix round 2 (controller-granted one-line
+ * call sites) landed three of the four:
  *
- *   - `SHELL_READY`   — once, after the app shell first mounts (`AppShell.tsx` or
- *                        `ShellLayout.tsx`, T0.7/T2.4).
- *   - `ROUTE_READY`   — once per navigation, when a route's own data is ready to paint
- *                        (`src/app/(app)/layout.tsx`, T2.1, or each page).
- *   - `GRADED`        — at every `setStatus('graded')` in `src/hooks/useExerciseLoop.ts`
- *                        (T2.2) — the instant the browser knows pass/fail, before the network
- *                        save.
- *   - `CHECK_VERDICT` — when a lesson check reveals right/wrong for a non-`micro-code` kind
- *                        (`src/components/lesson/CheckBlock.tsx`, T1.3).
+ *   - `SHELL_READY`   — landed: `src/components/shell/AppShell.tsx`, in a mount effect.
+ *   - `ROUTE_READY`   — landed: `src/lib/perf/RouteReadyMark.tsx` (new, this task's own
+ *                        file), mounted once from `src/app/(app)/layout.tsx`.
+ *   - `CHECK_VERDICT` — landed: `src/components/lesson/CheckBlock.tsx`'s `grade()`, guarded
+ *                        to non-`micro-code` kinds only.
+ *   - `GRADED`        — still not called anywhere. Its call site, `src/hooks/
+ *                        useExerciseLoop.ts` at every `setStatus('graded')`, belongs to the
+ *                        exercise lane (mid-flight this session) and was not touched per the
+ *                        controller's explicit ruling for this round. Until it lands,
+ *                        `e2e/perf.spec.ts`'s submit -> verdict budget reports a named,
+ *                        printed pending delta instead of failing the whole gate.
  */
 
 export const SHELL_READY = 'brogram:shell-ready'

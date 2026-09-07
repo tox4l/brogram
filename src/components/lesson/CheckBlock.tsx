@@ -9,6 +9,7 @@ import { gradeCheck, type CheckAnswer, type CheckVerdict } from '@/lib/lesson/gr
 import { getRuntime, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
 import { play } from '@/lib/sound/manager'
 import { line } from '@/lib/voice/lines'
+import { markPerf, CHECK_VERDICT } from '@/lib/perf/marks'
 import { DynamicEditor } from './DynamicEditor'
 
 type CheckBlockData = Extract<LessonPublicBlock, { type: 'check' }>
@@ -143,6 +144,10 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
     setAttempts(attemptNumber)
     const result = gradeCheck(block, answer, attemptNumber)
     setVerdict(result)
+    // T3.2 (perf gate), controller-granted one-line call site: `brogram:check-verdict` is
+    // scoped to non-`micro-code` kinds only (the brief's own carve-out -- a micro-code
+    // verdict depends on runtime execution time, not this interaction budget).
+    if (block.kind !== 'micro-code') markPerf(CHECK_VERDICT)
     play(result.right ? 'drill.hit' : 'drill.miss')
     if (shakeTimeout.current !== null) window.clearTimeout(shakeTimeout.current)
     if (!result.right && !reduced) {

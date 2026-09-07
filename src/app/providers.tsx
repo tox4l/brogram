@@ -7,6 +7,7 @@ import { THEME_STORAGE_KEY, THEMES } from '@/lib/theme/themes'
 import { initSoundOnFirstGesture } from '@/lib/sound/manager'
 import { registerEases } from '@/lib/motion/eases'
 import { MotionAttribute } from '@/components/motion/MotionAttribute'
+import { VitalsCollector } from '@/lib/perf/VitalsCollector'
 
 // W4 §5.6: "gsap.registerPlugin(...) once, in a client module imported by
 // the shell." This module is that shell entry point -- called once at
@@ -55,6 +56,7 @@ export function Providers({ children }: { children: ReactNode }) {
     >
       <QueryProvider>
         <MotionAttribute />
+        <VitalsCollector />
         {children}
       </QueryProvider>
     </ThemeProvider>

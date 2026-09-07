@@ -136,6 +136,30 @@ async function clearMark(page: Page, name: string): Promise<void> {
   await page.evaluate((markName) => performance.clearMarks(markName), name)
 }
 
+/**
+ * Fix round 2 (found while verifying the marks landed this round against a live server):
+ * `performance.mark()`'s `startTime` is time since the *current document's* `timeOrigin`
+ * (navigation start), never time since some later action. For a warm SPA transition -- no
+ * new document -- comparing an app mark's raw `startTime` against a short interaction budget
+ * ("click -> paint < 100ms") is meaningless once any real time has passed since that document
+ * first loaded, which is already true by the second interaction in this test, let alone the
+ * third. Every interaction budget below measures a *delta* instead: a marker set immediately
+ * before the action, subtracted from the app's own mark read immediately after.
+ */
+const INTERACTION_START = 't32:interaction-start'
+
+async function markInteractionStart(page: Page): Promise<void> {
+  await page.evaluate((name) => performance.mark(name), INTERACTION_START)
+}
+
+/** `end`'s mark minus the most recent `markInteractionStart()` call -- both required present,
+ *  the same "fail loudly, never silently pass a null" posture `requireMark` already has. */
+async function readInteractionDelta(page: Page, endMarkName: string): Promise<number> {
+  const start = requireMark(await readMark(page, INTERACTION_START), INTERACTION_START)
+  const end = requireMark(await readMark(page, endMarkName), endMarkName)
+  return end - start
+}
+
 /** A mark that is genuinely absent fails the step it gates with a message naming the exact
  *  instrumentation gap (see `src/lib/perf/marks.ts`), instead of `null` silently satisfying
  *  a numeric comparison or a generic Playwright timeout obscuring why. */
@@ -192,6 +216,19 @@ async function armPaintObservers(page: Page): Promise<void> {
 
 async function readPaintMetrics(page: Page): Promise<PaintMetrics> {
   return page.evaluate(() => (window as unknown as { __perf: PaintMetrics }).__perf)
+}
+
+/** Waits for the LCP entry to actually land (when this browser supports the entry type) before
+ *  `readPaintMetrics` samples it. Fix round 2, I-3: reading immediately after `page.reload()`
+ *  raced the `PerformanceObserver` callback's own dispatch and failed a real budget roughly one
+ *  run in three for a reason unrelated to performance. This only waits; it never manufactures a
+ *  pass -- a genuine regression (no entry within the timeout) still reaches `assertPaint`'s own
+ *  `not.toBeNull()` and fails there, for the real reason. */
+async function waitForPaintSettled(page: Page, timeoutMs = 5_000): Promise<void> {
+  await page.waitForFunction(() => {
+    const perf = (window as unknown as { __perf?: PaintMetrics }).__perf
+    return !perf || !perf.lcpSupported || perf.lcp !== null
+  }, { timeout: timeoutMs }).catch(() => undefined)
 }
 
 /** Asserts LCP and CLS against one budget, failing loudly (not silently passing) when LCP is
@@ -298,6 +335,7 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       }
     }
     expect(median(dashboardTimings), 'dashboard median full-navigation time').toBeLessThan(PAINT.lcpMsStandard + 500) // headroom for goto+load beyond LCP itself
+    await waitForPaintSettled(page)
     assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
 
     // -------------------------------------------------------------------------------
@@ -309,25 +347,42 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     {
       const before = seen.length
       await clearMark(page, ROUTE_READY)
+      await markInteractionStart(page)
       await page.getByRole('link', { name: 'Open your course' }).click()
+      // Fix round 2 (found landing the marks this round -- `getByRole('heading', {level: 1})`
+      // alone matches the DASHBOARD's own h1, which is already visible before this click and
+      // stays visible until the new document swaps in -- so `.toBeVisible()` was satisfied
+      // instantly, before any navigation happened, and every read below it raced a navigation
+      // that had not started yet. `waitForURL` first makes this genuinely wait for the SPA
+      // transition to land before checking anything about the page it lands on.
+      await page.waitForURL('**/course/**')
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
       const courseCalls = seen.slice(before)
       expect(courseCalls, `/course/[code] must be 0 round trips on an SPA transition; saw ${courseCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
-      expect(requireMark(await readMark(page, ROUTE_READY), ROUTE_READY), 'course tile click -> course home painted').toBeLessThan(INTERACTION.courseTileClickToPaintMs)
+      expect(await readInteractionDelta(page, ROUTE_READY), 'course tile click -> course home painted').toBeLessThan(INTERACTION.courseTileClickToPaintMs)
 
       // Paint budget (fix round I-3): a warm SPA transition fires no new
       // `largest-contentful-paint` entry (there is no new document), so LCP/CLS are measured
       // on a fresh navigation to the same URL instead. Round trips for this route are already
       // asserted above from the warm transition; this reload only re-measures paint.
       await page.reload({ waitUntil: 'load' })
+      await waitForPaintSettled(page)
       assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
+      // Fix round 2, N-2: the reload above is a fresh document -- anything it reads
+      // client-side after `load` (a post-hydration query) must land in `seen` *before* the
+      // lesson block below opens its own 0-round-trip window at `before = seen.length`, or a
+      // straggler from this reload would be wrongly counted against the lesson route instead.
+      await page.waitForLoadState('networkidle')
     }
 
     // -------------------------------------------------------------------------------
-    // Lesson: a real `<Link>` click by its `href` (as `NodeItem.tsx` renders it), still
-    // inside the same SPA session. Fix round m-2: the previous `window.history.pushState`
-    // fallback updates the URL without rendering the route (Next's own docs: pushState
-    // "does not reload the page"), so a locator miss used to pass this budget having
+    // Lesson: a real `<Link>` click by its `href` (as `NodeItem.tsx` renders it) -- launched
+    // from the course page's own freshly reloaded document just above (fix round 2, N-2: the
+    // course block's paint-budget reload makes this a fresh page, not "the same SPA session"
+    // the dashboard load started; it is still a genuine client-side transition, this time
+    // starting from that reloaded document). Fix round m-2: the previous `window.history.
+    // pushState` fallback updates the URL without rendering the route (Next's own docs:
+    // pushState "does not reload the page"), so a locator miss used to pass this budget having
     // rendered nothing. A miss now fails loudly instead.
     // -------------------------------------------------------------------------------
     {
@@ -339,6 +394,7 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
 
       // Paint budget, same reasoning as the course block above.
       await page.reload({ waitUntil: 'load' })
+      await waitForPaintSettled(page)
       assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
     }
 
@@ -347,28 +403,55 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     // Fix round m-3: asserted visible rather than silently skipped when absent -- a route
     // that stops rendering the surface must fail this budget, not report green having
     // checked nothing.
+    //
+    // Fix round 2, N-1: `INFS2101-3`'s check blocks are, in order, `predict-output` (a
+    // textarea, no radios), `choose` (a `role="radiogroup"`) and `micro-code`. Every block
+    // shares the same `aria-label="Check"`, so `.first()` alone picked the `predict-output`
+    // block, whose `getByRole('radio')` matches nothing -- `.click()` has no action timeout
+    // of its own (only `expect.timeout` is configured), so it hung for the full 120s *test*
+    // timeout with no indication of which line or budget. Filtered to the region that
+    // actually contains a radiogroup, with an explicit click timeout so a future content
+    // change fails in seconds with a locator error instead of hanging silently.
     // -------------------------------------------------------------------------------
-    const checkRegion = page.getByRole('region', { name: 'Check' }).first()
+    const checkRegion = page.getByRole('region', { name: 'Check' }).filter({ has: page.getByRole('radiogroup') }).first()
     await expect(checkRegion).toBeVisible()
     await clearMark(page, CHECK_VERDICT)
-    await checkRegion.getByRole('radio').first().click()
-    expect(requireMark(await readMark(page, CHECK_VERDICT), CHECK_VERDICT)).toBeLessThan(INTERACTION.lessonCheckToVerdictMs)
+    await markInteractionStart(page)
+    await checkRegion.getByRole('radio').first().click({ timeout: 10_000 })
+    expect(await readInteractionDelta(page, CHECK_VERDICT)).toBeLessThan(INTERACTION.lessonCheckToVerdictMs)
 
+    // Fix round 2, C-2: `await page.waitForLoadState('networkidle')` alone here was not
+    // enough -- a live run still caught `lesson_progress` inside the exercise window even
+    // with this settle in place. `LessonView.tsx`'s own progress mutation (`persistLesson
+    // ProgressRow`, `src/components/lesson/progressSync.ts`) always fails at schema 0005 by
+    // its own design ("every write in this module fails at the database today"), and this
+    // task does not own the retry/invalidation path around that mutation
+    // (`src/components/lesson/LessonView.tsx`, `src/lib/query/**`) to know its exact backoff
+    // timing -- a `networkidle` wait can close before a delayed retry fires. Reaching the
+    // exercise page once first (untracked) and waiting there for full settle instead means
+    // any straggler from the lesson page's own JS realm has to resolve or be torn down before
+    // the *next* step even starts; the round trips this block actually budgets are then
+    // counted from a `page.reload()` on that already-settled document -- a fresh navigation
+    // that starts this window with nothing left over, the same technique the paint budgets
+    // above already use for exactly this reason.
     // -------------------------------------------------------------------------------
-    // Exercise: reached with a hard `page.goto`, a genuinely cold navigation. Fix round
-    // C-2: a live probe of this exact flow (three runs) found this always costs 2 round
-    // trips on a cold nav, not 1 — `exercises_public` (the bundle-hit comment this
-    // replaced described a *warm* SPA transition, which this is not) plus `attempts`
-    // (prior-attempts history). Asserted per table with a closed allow-list rather than a
-    // guessed total, so this stays correct regardless of exactly how many
-    // `exercises_public` reads a cold load costs: the "1 seed" the brief names is the
-    // `attempts` read specifically (report ruling #4). Plan amendment owed to the
-    // controller: this row is 2 round trips on a cold `page.goto`, capped to these two
-    // tables.
+    // Exercise: reached with a hard `page.goto`, then measured on a `page.reload()` of that
+    // same URL -- a fresh document exactly like a cold navigation, but with the lesson page's
+    // own straggling retry (above) already settled out of this window. Fix round C-2 (round
+    // 2, re-measured with the reload boundary in place): a live run of this exact flow costs
+    // exactly 1 `exercises_public` read plus 1 `attempts` read. Asserted per table with a
+    // closed allow-list rather than a guessed total, so this stays correct regardless of
+    // exactly how many `exercises_public` reads a cold load costs: the "1 seed" the brief
+    // names is the `attempts` read specifically (report ruling #4). Plan amendment owed to
+    // the controller: this row is 2 round trips on a cold nav (1 `exercises_public` + 1
+    // `attempts`), capped to these two tables.
     // -------------------------------------------------------------------------------
     {
-      const before = seen.length
       await page.goto(`${PERF_BASE_URL}/exercise/${exerciseId}`, { waitUntil: 'load' })
+      await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible()
+      await page.waitForLoadState('networkidle')
+      const before = seen.length
+      await page.reload({ waitUntil: 'load' })
       await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible()
       const exerciseCalls = seen.slice(before)
       const allowedExerciseTables = new Set(['exercises_public', 'attempts'])
@@ -376,6 +459,7 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       expect(unexpected, `/exercise/[id] (seed) round trips must stay inside {exercises_public, attempts}; saw ${exerciseCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
       const attemptsCalls = exerciseCalls.filter((call) => tableOf(call.pathname) === 'attempts')
       expect(attemptsCalls.length, `/exercise/[id] (seed) should cost exactly 1 attempts read; saw ${exerciseCalls.map((c) => c.pathname).join(', ')}`).toBe(1)
+      await waitForPaintSettled(page)
       assertPaint(await readPaintMetrics(page), PAINT.lcpMsExercise)
     }
 
@@ -388,6 +472,14 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     // `/Passed|Submit/` was satisfied by the pre-click label at t=0 and never actually
     // waited for grading. Waits on the verdict banner's own "Needs work" text instead
     // (`page.tsx` renders it only once `loop.outcome` is set).
+    //
+    // Fix round 2 (controller ruling): `brogram:graded`'s own call site lives in
+    // `src/hooks/useExerciseLoop.ts`, owned this session by the exercise lane mid-flight --
+    // not touched here. Rather than a hard `requireMark` failure (which would read as this
+    // task's own bug), a missing mark is reported as a named, printed pending delta and this
+    // one budget is skipped; every other assertion in this block (and the rest of the test)
+    // still runs. The controller lands the one `markPerf(GRADED)` line after that lane, and
+    // this reverts to a hard assertion the moment the mark exists.
     // -------------------------------------------------------------------------------
     {
       const editor = page.getByRole('textbox', { name: 'Code editor' })
@@ -395,9 +487,18 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       await page.keyboard.press('ControlOrMeta+A')
       await page.keyboard.insertText('export function validateUsername(name) { return false }')
       await clearMark(page, GRADED)
+      await markInteractionStart(page)
       await page.getByRole('button', { name: 'Submit' }).click()
       await expect(page.getByText('Needs work').first()).toBeVisible()
-      expect(requireMark(await readMark(page, GRADED), GRADED)).toBeLessThan(INTERACTION.submitToVerdictMs)
+      const gradedMark = await readMark(page, GRADED)
+      if (gradedMark === null) {
+        test.info().annotations.push({
+          type: 'pending-delta',
+          description: 'brogram:graded is not yet emitted -- src/hooks/useExerciseLoop.ts (the exercise lane\'s own file, mid-flight this session) owns the one markPerf(GRADED) call site. Submit -> verdict budget (< 300ms) cannot be measured until the controller lands it.',
+        })
+      } else {
+        expect(await readInteractionDelta(page, GRADED)).toBeLessThan(INTERACTION.submitToVerdictMs)
+      }
     }
 
     // -------------------------------------------------------------------------------
@@ -408,11 +509,15 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     requireMark(await readMark(page, SHELL_READY), SHELL_READY)
 
     // -------------------------------------------------------------------------------
-    // INP (fix round I-3): `PAINT.inpMaxMs` was declared and referenced by nothing. INP
-    // entries exist only after a genuine interaction, so it is read here, at the end of a
-    // flow that has already clicked a course tile, a radio, Submit and Run -- skipped only
-    // when the browser itself lacks the `event` entry type, never merely because no value
-    // happened to be null.
+    // INP (fix round I-3, comment corrected in round 2 -- N-3: the previous wording claimed
+    // this reads after a flow that had "already clicked a course tile, a radio, Submit and
+    // Run", which both overstated what happens before this point and named a click ("Run")
+    // this test never makes). `finalPaint` is read from the exercise page's own document
+    // (created by the hard `page.goto` above) -- nothing before that navigation can contribute
+    // an `event` entry, since it belongs to a prior document. Only two interactions can
+    // produce one here: the code-editor click and the Submit click, both above, on this same
+    // exercise document. Skipped only when the browser itself lacks the `event` entry type,
+    // never merely because no value happened to be null.
     // -------------------------------------------------------------------------------
     const finalPaint = await readPaintMetrics(page)
     if (finalPaint.inpSupported) {

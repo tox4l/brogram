@@ -1,9 +1,10 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { markPerf, SHELL_READY } from '@/lib/perf/marks'
 import { ShellLayout } from './ShellLayout'
 import { ShellHeaderControls } from './ShellHeaderControls'
 import { WellnessSlot } from './WellnessSlot'
@@ -13,6 +14,13 @@ export function AppShell({ children, wellnessRail }: {
   wellnessRail?: ReactNode
 }) {
   const pathname = usePathname()
+  // T3.2 (perf gate), controller-granted one-line call site: fires once, the instant the
+  // app shell itself has mounted -- this is `brogram:shell-ready`'s whole definition
+  // (`src/lib/perf/marks.ts`'s own header). An effect, not render, because the mark must
+  // record real client-side mount time, not SSR time.
+  useEffect(() => {
+    markPerf(SHELL_READY)
+  }, [])
   const exercise = pathname === '/exercise' || pathname.startsWith('/exercise/')
   const navigation = [
     { title: 'Courses', href: '/courses', active: pathname.startsWith('/courses') || pathname === '/dashboard' || pathname.startsWith('/onboarding') || exercise },

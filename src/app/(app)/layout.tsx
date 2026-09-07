@@ -8,6 +8,7 @@ import type { AccountStatus, Attempt, LearnerState, LessonProgress, UserAchievem
 import type { ActivityDay } from '@/lib/query/hooks'
 import { utcDateKey } from '@/lib/rewards/context'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { RouteReadyMark } from '@/lib/perf/RouteReadyMark'
 import { AppShell } from '@/components/shell/AppShell'
 import { AccountNotice } from '@/components/shell/AccountNotice'
 import { SessionProvider } from '@/components/shell/SessionProvider'
@@ -269,6 +270,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       />
       <SessionProvider key={`${userId}:${profile.account_status}:${profile.restricted_until}`} initialState={{ user: { id: userId, email: userEmail } as User, profile, learnerState }}>
         <AccountNotice status={profile.account_status} restrictedUntil={profile.restricted_until} />
+        <RouteReadyMark />
         <AppShell>{children}</AppShell>
       </SessionProvider>
     </QueryProvider>
