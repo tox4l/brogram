@@ -3,7 +3,7 @@
 import { useGSAP } from '@gsap/react'
 import { gsap } from 'gsap'
 import { Flip } from 'gsap/Flip'
-import type { RefObject } from 'react'
+import { useRef, type RefObject } from 'react'
 import { DUR } from '@/lib/motion/tokens'
 
 /**
@@ -32,8 +32,35 @@ import { DUR } from '@/lib/motion/tokens'
  * Ruling W4.16: under reduced motion this never calls `Flip.from` --  it
  * positions with one `gsap.set` in the same shape, so the indicator still
  * lands in the right place, just without the animated move.
+ *
+ * Two more preconditions, both load-bearing:
+ *
+ * - **First mount never animates.** The `useGSAP` callback also runs on
+ *   initial mount (there is no separate "first run" concept), and on mount
+ *   there is no previous position for the indicator to move FROM -- only
+ *   its untransformed layout origin. Flipping from that origin reads as
+ *   unrequested entrance motion on a shell element (spec 5.4 scopes this
+ *   hook to indicators moving BETWEEN two already-chosen positions). A
+ *   `first` ref, written inside the effect (writing a ref in an effect is
+ *   fine -- the react-hooks `refs` rule bans reading one during render, not
+ *   writing one in an effect), forces the first run down the same
+ *   `gsap.set`-only branch as `reduced`.
+ * - **The geometry is a delta, not an absolute coordinate.** `gsap.set(el,
+ *   { x, y })` writes a transform relative to the indicator's OWN static
+ *   flow position, while `target.offsetLeft/offsetTop` is an absolute
+ *   coordinate in the shared `offsetParent`'s frame. The two agree only
+ *   when the indicator's own `offsetLeft/offsetTop` happen to be zero.
+ *   Subtracting the indicator's own offset (`target.offsetLeft -
+ *   indicator.offsetLeft`) gives the correct delta regardless of the
+ *   indicator's resting position, and stays correct across repeated calls
+ *   because `offsetLeft/offsetTop` ignore any transform already applied.
+ *   This still requires `indicator.offsetParent === target.offsetParent`;
+ *   in development a mismatch is a `console.warn`, not a silent wrong
+ *   answer.
  */
 export function useFlipIndicator(container: RefObject<HTMLElement | null>, activeKey: string, reduced: boolean): void {
+  const first = useRef(true)
+
   useGSAP(
     () => {
       const root = container.current
@@ -43,9 +70,19 @@ export function useFlipIndicator(container: RefObject<HTMLElement | null>, activ
       const target = root.querySelector<HTMLElement>(`[data-flip-key="${activeKey}"]`)
       if (!indicator || !target) return
 
-      const rect = { x: target.offsetLeft, y: target.offsetTop, width: target.offsetWidth, height: target.offsetHeight }
+      if (process.env.NODE_ENV !== 'production' && indicator.offsetParent !== target.offsetParent) {
+        console.warn('useFlipIndicator: the indicator and its target do not share an offsetParent, so the computed x/y will be wrong')
+      }
 
-      if (reduced) {
+      const rect = {
+        x: target.offsetLeft - indicator.offsetLeft,
+        y: target.offsetTop - indicator.offsetTop,
+        width: target.offsetWidth,
+        height: target.offsetHeight,
+      }
+
+      if (reduced || first.current) {
+        first.current = false
         gsap.set(indicator, rect)
         return
       }

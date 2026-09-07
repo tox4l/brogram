@@ -1,4 +1,5 @@
 import { cleanup, render } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DUR, STAGGER } from '@/lib/motion/tokens'
 
@@ -130,6 +131,40 @@ describe('Reveal', () => {
     ).not.toThrow()
     const [, vars] = splitTextMocks.create.mock.calls[0] as [HTMLElement, Record<string, unknown>]
     expect(vars.type).toBe('chars')
+  })
+
+  it('I2: the initial (server) markup ships hidden -- pending + visibility:hidden -- when not reduced, and skips both entirely under reduced motion', async () => {
+    const { Reveal } = await import('./Reveal')
+    const markup = renderToStaticMarkup(<Reveal mode="lines" reduced={false}>Hold focus.</Reveal>)
+    expect(markup).toContain('data-reveal="pending"')
+    expect(markup).toMatch(/visibility:\s*hidden/)
+
+    const reducedMarkup = renderToStaticMarkup(
+      <Reveal mode="lines" reduced>
+        Hold focus.
+      </Reveal>,
+    )
+    expect(reducedMarkup).not.toContain('data-reveal')
+    expect(reducedMarkup).not.toMatch(/visibility:\s*hidden/)
+  })
+
+  it('I2: clears data-reveal and the hidden inline style on mount, in both the motion-on and reduced branches', async () => {
+    const { Reveal } = await import('./Reveal')
+
+    const { container } = render(<Reveal mode="lines" reduced={false}>Hold focus.</Reveal>)
+    const span = container.querySelector('span') as HTMLSpanElement
+    expect(span.hasAttribute('data-reveal')).toBe(false)
+    expect(span.style.visibility).not.toBe('hidden')
+    cleanup()
+
+    const { container: reducedContainer } = render(
+      <Reveal mode="lines" reduced>
+        Hold focus.
+      </Reveal>,
+    )
+    const reducedSpan = reducedContainer.querySelector('span') as HTMLSpanElement
+    expect(reducedSpan.hasAttribute('data-reveal')).toBe(false)
+    expect(reducedSpan.style.visibility).not.toBe('hidden')
   })
 
   it('mode="chars" is allowed on the level-up surface', async () => {

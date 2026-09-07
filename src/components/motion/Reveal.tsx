@@ -54,6 +54,33 @@ type SplitParts = { lines: Element[]; words: Element[]; chars: Element[] }
  * matters here specifically: without it, a `mode`/`children` change would
  * call `SplitText.create` again on an element GSAP never reverted the
  * previous split from.
+ *
+ * `mask: 'lines'` only ever masks `mode="lines"` -- `SplitText` builds mask
+ * wrappers from `this.lines`, which stays empty for `mode="words"` and
+ * `mode="chars"`, so those two rely on the `opacity: 0 -> 1` half of their
+ * tween (not a clip) to hide the pre-reveal state. Passing the literal
+ * `{ type, mask: 'lines', ... }` for every mode is spec-faithful (W4 §5.2);
+ * it is a documented no-op for the two unmasked modes, not a bug.
+ *
+ * Flash-then-animate guard: a re-split fires later, from `SplitText`'s own
+ * resize/`fonts.ready` handlers, outside the window `useGSAP` holds its
+ * ambient context open -- `onSplit` is wrapped in `contextSafe` so those
+ * tweens are still registered on the context and get killed by
+ * `context.revert()` on unmount instead of continuing to run.
+ *
+ * This is also a `'use client'` component that Next server-renders, so the
+ * final text paints once before hydration runs the split/tween at all. The
+ * span renders `data-reveal="pending"` plus `visibility: hidden` inline
+ * (never `mode="chars"`/`"words"`/`"lines"` at final position on first
+ * paint) and the `useGSAP` callback clears both, unconditionally, as its
+ * first act -- *above* the `reduced` early return, so a reduced-motion
+ * learner whose `reduced` prop resolves differently between the server
+ * snapshot and the client is unhidden too and never left blank. (Ruling
+ * W4.15 -- "text is at final opacity on first paint" -- is met for every
+ * learner whose `reduced` prop is already correct at first render; the one
+ * remaining gap, a server render that guesses "full motion" for a learner
+ * who actually has `reduced` set, needs a blocking inline script in
+ * `layout.tsx`, T4.0's file and a cross-task decision, to close entirely.)
  */
 export function Reveal({ mode, reduced, children, surface, className }: RevealProps) {
   if (mode === 'chars' && process.env.NODE_ENV !== 'production' && !(surface && CHARS_LICENSED_SURFACES.includes(surface))) {
@@ -63,9 +90,21 @@ export function Reveal({ mode, reduced, children, surface, className }: RevealPr
   const ref = useRef<HTMLSpanElement>(null)
 
   useGSAP(
-    () => {
+    (_context, contextSafe) => {
       const el = ref.current
+      // Unhide unconditionally, before the `reduced` check: a reduced-motion
+      // learner must never be left showing the SSR `visibility: hidden`
+      // state just because this branch returns early.
+      if (el) {
+        el.removeAttribute('data-reveal')
+        el.style.visibility = ''
+      }
       if (!el || reduced) return
+
+      // `contextSafe` is typed optional (it is also exposed on the hook's
+      // return value); `useGSAP` always supplies it to the callback in
+      // practice, but the fallback keeps this branch honest under the type.
+      const safe = contextSafe ?? (<T extends (...args: never[]) => unknown>(fn: T) => fn)
 
       if (mode === 'fade') {
         gsap.killTweensOf(el)
@@ -78,14 +117,14 @@ export function Reveal({ mode, reduced, children, surface, className }: RevealPr
         mask: 'lines',
         aria: 'auto',
         autoSplit: true,
-        onSplit(self: SplitParts) {
+        onSplit: safe((self: SplitParts) => {
           const targets = mode === 'lines' ? self.lines : mode === 'words' ? self.words : self.chars
           const n = Math.max(targets.length, 1)
           const stagger = Math.min(STAGGER.step / 1000, STAGGER.max / 1000 / n)
           return mode === 'lines'
             ? gsap.from(targets, { yPercent: 110, duration: DUR.slow / 1000, ease: 'enter', stagger })
             : gsap.from(targets, { yPercent: 40, opacity: 0, duration: DUR.base / 1000, ease: 'enter', stagger })
-        },
+        }),
       })
 
       return () => split.revert()
@@ -94,7 +133,7 @@ export function Reveal({ mode, reduced, children, surface, className }: RevealPr
   )
 
   return (
-    <span ref={ref} className={className}>
+    <span ref={ref} className={className} data-reveal={reduced ? undefined : 'pending'} style={reduced ? undefined : { visibility: 'hidden' }}>
       {children}
     </span>
   )

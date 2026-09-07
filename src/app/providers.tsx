@@ -3,10 +3,10 @@
 import { useEffect, type ReactNode } from 'react'
 import { ThemeProvider } from 'next-themes'
 import { QueryProvider } from '@/components/shell/QueryProvider'
-import { THEME_STORAGE_KEY } from '@/lib/theme/themes'
+import { THEME_STORAGE_KEY, THEMES } from '@/lib/theme/themes'
 import { initSoundOnFirstGesture } from '@/lib/sound/manager'
-import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { registerEases } from '@/lib/motion/eases'
+import { MotionAttribute } from '@/components/motion/MotionAttribute'
 
 // W4 §5.6: "gsap.registerPlugin(...) once, in a client module imported by
 // the shell." This module is that shell entry point -- called once at
@@ -27,32 +27,36 @@ registerEases()
  * `<ViewTransition>` needs, because React does not read the in-app
  * override -- an override is React state, not a media query, so
  * `globals.css`'s two-selector kill switch (`@media (prefers-reduced-motion)`
- * plus this attribute) needs the attribute written somewhere. Written here,
- * off the one resolved boolean `useReducedMotion()` already produces: no
- * new state, no new hook -- one effect syncing an existing value onto
- * `<html>`.
+ * plus this attribute) needs the attribute written somewhere. It is written
+ * by `<MotionAttribute>` (`src/components/motion/MotionAttribute.tsx`, see
+ * its own header comment), mounted as the first child inside `QueryProvider`
+ * rather than here: the attribute has to carry the RESOLVED preference
+ * (`useReducedMotion(prefs.motion)`), and reading `wellness.prefs` needs a
+ * TanStack Query hook, which needs `QueryClientProvider` in its tree -- one
+ * boundary lower than this component sits.
  */
 export function Providers({ children }: { children: ReactNode }) {
-  const reducedMotion = useReducedMotion()
-
   useEffect(() => {
     initSoundOnFirstGesture()
   }, [])
 
-  useEffect(() => {
-    document.documentElement.dataset.motion = reducedMotion ? 'reduced' : 'full'
-  }, [reducedMotion])
-
   return (
     <ThemeProvider
       attribute="data-theme"
-      themes={['midnight', 'amber', 'paper', 'arcade']}
+      // T4.0 fix round 3 (F3/M2, granted for this one line): derived from
+      // the registry rather than hand-enumerated, so a sixth palette added
+      // to `THEMES` cannot leave this array silently stale the way it did
+      // for `eclipse` before this fix.
+      themes={THEMES.map((t) => t.id)}
       defaultTheme="midnight"
       enableSystem={false}
       storageKey={THEME_STORAGE_KEY}
       disableTransitionOnChange
     >
-      <QueryProvider>{children}</QueryProvider>
+      <QueryProvider>
+        <MotionAttribute />
+        {children}
+      </QueryProvider>
     </ThemeProvider>
   )
 }

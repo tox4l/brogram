@@ -11,9 +11,16 @@ import { EASE } from './tokens'
 /**
  * Every GSAP plugin the app uses, registered once (W4 §5.6: "gsap.registerPlugin(...)
  * once, in a client module imported by the shell"). This module carries a
- * `'use client'` directive and only ever runs in the browser -- `Providers`
- * (the root client boundary, T4.2) imports it and calls `registerEases()`
- * once at module scope, so SSR never touches `gsap.*`.
+ * `'use client'` directive, but that marks a *boundary*, not an exemption
+ * from evaluation -- Next still imports and runs this module's top level
+ * during prerender/SSR, so `gsap.registerPlugin(...)` below and every
+ * `CustomEase.create` call inside `registerEases()` do execute in the Node
+ * runtime, once per build/SSR pass, not only in the browser. That is safe
+ * only because registration and `CustomEase.create` are pure, DOM-free
+ * bookkeeping -- no `window`, no `document`, no layout read -- so running
+ * them on the server is inert rather than incorrect. `Providers` (the root
+ * client boundary, T4.2) calls `registerEases()` once at module scope,
+ * which is exactly why module scope is an acceptable place for the call.
  */
 gsap.registerPlugin(useGSAP, CustomEase, SplitText, Flip)
 
