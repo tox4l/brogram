@@ -52,7 +52,14 @@ function ExerciseWorkspace({ id }: { id: string }) {
   // editor (which populates it once its CodeMirror view exists) and into LockdownOverlay (which
   // calls `.focus()` on it the instant the overlay lifts or the paste "why" panel closes).
   const editorFocusRef = useRef<Focusable | null>(null)
-  const lockdown = useLockdown(id, { duringAttempt: loop.duringAttempt, enabled: Boolean(loop.exercise) })
+  // Fix round 5 (T2.2 review of round 4, C1, belt and braces): `router.replace()` is back for the
+  // in-place transition (see the hook's own comment), so the URL param genuinely does update on
+  // `next()` -- but this reads the LOADED exercise, not the param, anyway: every event `logIntegrity`
+  // writes is keyed on whichever id this hook is given, and a raw param read here is one more place
+  // that could silently drift from what is actually on screen if this page's own routing ever
+  // changes again. `loop.exercise` is the single source of truth for what the learner sees; falling
+  // back to `id` only covers the instant before the very first exercise has loaded.
+  const lockdown = useLockdown(loop.exercise?.id ?? id, { duringAttempt: loop.duringAttempt, enabled: Boolean(loop.exercise) })
   const exercise = loop.exercise
   if (!exercise) return <section aria-label="Rep" className="mx-auto max-w-xl space-y-4 py-12">
     <h1 className="text-2xl font-medium tracking-tight">{loop.status === 'loading' ? 'Opening your rep' : 'This rep could not open'}</h1>

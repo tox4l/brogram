@@ -156,6 +156,16 @@ describe('exercise screen', () => {
     expect(screen.getByRole('textbox', { name: 'Predicted output' })).toBe(workEditor)
     expect(screen.getByText('A different rep')).toBeTruthy()
   })
+  it('fix round 5 (T2.2 review of round 4, C1, belt and braces): useLockdown reads the id from the loaded exercise, not the raw route param', () => {
+    const { rerender } = render(<ExercisePage />)
+    expect(mocks.lockdown).toHaveBeenLastCalledWith('exercise-one', expect.anything())
+    // The worst case the review's C1 finding actually hit: the loaded exercise has already moved
+    // on (`next()`) but the route param, for whatever reason, has not caught up yet on this
+    // render. `page.tsx` must still log the SECOND exercise's id, never the first's.
+    mocks.loop.mockReturnValue({ ...model(), exercise: { ...exercise, id: 'exercise-two', title: 'A different rep' } })
+    rerender(<ExercisePage />)
+    expect(mocks.lockdown).toHaveBeenLastCalledWith('exercise-two', expect.anything())
+  })
   it('keeps the real CodeMirror editor instance across next() (fix round Mi3/C1)', async () => {
     // The earlier "does not remount" test used the plain `predict-output` textbox; the brief
     // and the review both ask specifically about the CodeMirror `Editor` instance, which only a

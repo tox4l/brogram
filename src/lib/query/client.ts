@@ -33,6 +33,21 @@ export function getQueryClient(): QueryClient {
 }
 
 /**
+ * Fix round 5 (T2.2 review Mi1): a registry other per-user module-scope state can hook into,
+ * so `resetQueryClientForUser` below can clear it too without this file importing that state's
+ * owner directly. `useExerciseLoop.ts`'s `pendingSubmissions`/`pendingHandoff` is the first user:
+ * it already imports `getQueryClient` from this file, so it registers its own cleanup here at
+ * module load — `client.ts` never needs to import `useExerciseLoop.ts` back, which would cycle
+ * (that hook already imports `getQueryClient` from here). Registering, not calling directly, also
+ * means this file stays ignorant of what it's clearing — any future module-scope, per-user state
+ * can join the same way.
+ */
+const userChangeCleanups: Array<() => void> = []
+export function onUserChange(cleanup: () => void): void {
+  userChangeCleanups.push(cleanup)
+}
+
+/**
  * Clears the browser query client whenever the signed-in user changes, so a
  * future client-side sign-out/sign-in cannot leave the previous user's
  * `gcTime: Infinity` rows (wellness, lesson progress, achievements, activity
@@ -46,6 +61,7 @@ export function getQueryClient(): QueryClient {
 export function resetQueryClientForUser(userId: string): void {
   if (typeof window !== 'undefined' && lastSeededUserId !== undefined && lastSeededUserId !== userId) {
     getQueryClient().clear()
+    for (const cleanup of userChangeCleanups) cleanup()
   }
   lastSeededUserId = userId
 }

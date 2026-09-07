@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -23,64 +23,49 @@ import { celebrate, levelUpDetail, type CelebrationDetail, type CelebrationKind 
 import { play } from '@/lib/sound/manager'
 import { prefsPatch, resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
-import { getQueryClient } from '@/lib/query/client'
+import { getQueryClient, onUserChange } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { line } from '@/lib/voice/lines'
 
 /**
- * Fix round (web-runtime hang investigation): `next()`'s own comment assumed
- * `page.tsx`'s "no key={id}" means this hook's instance survives an in-place
- * transition. It does not, in the live App Router: navigating to a new
- * `/exercise/<id>` value remounts `useExerciseLoop` (confirmed with a DOM-
- * identity probe against a real browser). A per-instance `useRef` cannot
- * hand anything to the fresh instance that replaces it -- refs die with
- * their component. `next()`'s old `handledExternally` ref, and the mount
- * effect's "already handled, skip the reset-then-refetch" branch built on
- * it, therefore never actually reached the new instance; instead the fresh
- * instance's own effect ran its normal async reset-then-refetch path a
- * moment after `next()`'s synchronous `applyLoadedExercise` call had already
- * rendered the target exercise. Ordinarily "a moment" is sub-millisecond and
- * invisible. Under real latency (a throttled CPU, in this investigation) the
- * fresh instance's async path can land *after* the learner has already
- * started typing into, and even submitting, the optimistically-rendered
- * exercise -- and when it lands, it silently resets the code editor and
- * results back to a fresh, unsubmitted state, discarding that work. This is
- * a real mechanism for a "submitted, then nothing happened" hang distinct
- * from any runtime adapter.
+ * Fix round (web-runtime hang investigation): `next()`'s own comment originally assumed
+ * `page.tsx`'s "no key={id}" means this hook's instance survives an in-place transition. It does
+ * not, in the live App Router: navigating to a new `/exercise/<id>` value remounts
+ * `useExerciseLoop` (confirmed with a DOM-identity probe against a real browser). A per-instance
+ * `useRef` cannot hand anything to the fresh instance that replaces it -- refs die with their
+ * component. The fix: survive the remount by holding the handoff at module scope, the same
+ * pattern `src/lib/runtimes/index.ts`'s adapter registry already uses for the identical problem
+ * (a singleton that must outlive any one component instance). Whoever resolves the next exercise
+ * (originally only `next()`; `queueNext` too, as of fix round 5 below) stores it here; the *next*
+ * mount effect to run for that exact exercise id -- whether it belongs to the same instance or a
+ * freshly remounted one -- consumes it and calls `applyLoadedExercise` with the already-known data
+ * instead of re-deriving it asynchronously. No network gap exists for a fresh instance to race
+ * against, so there is nothing left to overwrite.
  *
- * The fix: survive the remount by holding the handoff at module scope, the
- * same pattern `src/lib/runtimes/index.ts`'s adapter registry already uses
- * for the identical problem (a singleton that must outlive any one
- * component instance). `next()` stores the exercise it already resolved and
- * rendered; the *next* mount effect to run for that exact exercise id -
- * whether it belongs to the same instance or a freshly remounted one -
- * consumes it and calls `applyLoadedExercise` with the already-known data
- * instead of re-deriving it asynchronously. No network gap exists for a
- * fresh instance to race against, so there is nothing left to overwrite.
+ * Fix round 5 (T2.2 review of round 4, C1/I1/I2): round 4 replaced `next()`'s `router.replace()`
+ * with `window.history.replaceState()` to stop the App Router from remounting this hook on an
+ * in-place transition. That closed the remount, but bypassing the router left the ROUTE'S OWN
+ * dynamic param permanently stale for the rest of the session -- `useLockdown` (`page.tsx`) reads
+ * that param on every logged event, so every integrity event after rep 1 was filed under the
+ * previous exercise (reproduced live, `integrity_events`); Back into the rep also restored the
+ * previous exercise's route tree under the new URL (`app-router.js`'s `copyNextJsInternalHistoryState`
+ * pairs a `replaceState`'d entry's new URL with the CURRENT tree, not one that matches it).
+ *
+ * Binding ruling: the router comes back. `next()` calls `router.replace(url)` again (below,
+ * wrapped in React's `startTransition` so the resulting remount doesn't yank the UI to
+ * `loading.tsx` while it resolves) -- params, history and the segment tree all stay correct,
+ * closing C1 and the Back bug at once, and `pendingHandoff`'s `[exerciseId, reload]`-keyed
+ * consumption (see its own comment) becomes reachable again since `exerciseId` genuinely changes.
+ * The remount this causes is real and permanent (this tree's own Next docs prescribe the raw
+ * History API specifically because a real navigation remounts a changed dynamic segment; there is
+ * no supported way to update one without that) -- survivable because of `pendingSubmissions`
+ * below, and made INVISIBLE rather than merely survivable: `queueNext` prefetches the chosen
+ * exercise's route the moment it is known (`router.prefetch`) and re-populates `pendingHandoff`
+ * with its already-fetched public content right then too, well before the learner ever clicks
+ * "Next rep" -- so the remounted instance's very first render hydrates synchronously, with no
+ * loading state and no `exercises_public` refetch.
  */
 let pendingHandoff: { id: string; exercise: ExercisePublic; clo: Clo; packages: string[] } | null = null
-
-/**
- * Fix round 4: root cause of the remount, found by reading this tree's own Next docs
- * (`node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md`) after
- * the CPU-throttle investigation's DOM-identity probe proved a remount really happens.
- * `router.replace()` -- what `next()` used, below -- always goes through the App Router's own
- * RSC-aware navigation pipeline, and a dynamic segment (`[id]`) resolving to a NEW value is
- * exactly the case that pipeline treats as a fresh segment, remounting everything under it
- * client-side despite `page.tsx`'s own now-corrected "same instance" comment. The docs' own fix
- * for "change the URL without a route re-render" is `window.history.pushState`/`replaceState`
- * called directly -- bypassing the App Router's navigation machinery entirely, so nothing ever
- * asks it to remount this segment. `useParams()`'s reported `id` will not track a raw history
- * mutation (only `usePathname`/`useSearchParams` are documented to sync with it), but nothing in
- * this hook or `page.tsx` reads it again after the initial call into `useExerciseLoop(id)` -- the
- * exercise actually on screen is `exerciseRef.current`/`exercise`, not the URL param. A genuine
- * full reload or deep link still resolves the right exercise from the URL the normal way.
- *
- * This closes the root cause for the common path. `pendingHandoff` above (and the
- * `pendingSubmissions` store below, its generalization to a submission in flight) stay in place
- * regardless, as insurance against a remount from any OTHER cause -- Fast Refresh in dev, a future
- * upstream change, anything this fix does not anticipate.
- */
 
 /** The subset of a graded verdict a freshly (re)mounted instance needs to look right the instant
  *  it hydrates, before the durable background chain (which may have started on a now-gone
@@ -102,11 +87,19 @@ type GradedSnapshot = {
  * grading resolves; `ready` and `settle` let a (re)mounted instance either wait for the verdict
  * (mounted before grading finished) or adopt it immediately (mounted after) and then, either way,
  * learn when the durable save itself finishes or fails.
+ *
+ * Fix round 5, C2: `nextExercise`/`closed` are new -- `queueNext` records the exercise it chose
+ * (or that the CLO closed) directly onto this record, and the settle handler restores it, so a
+ * remount mid-chain no longer strands a passed rep with `nextExercise: null` and `canAdvance`
+ * false forever (the CLO-closed case was already covered indirectly, since the settle handler
+ * reads `closed` off the durably-saved mastery row regardless -- `closed` here is belt and braces).
  */
 type PendingRecord = {
   attemptId: string
   operation: Submission | null
   graded: GradedSnapshot | null
+  nextExercise: ExercisePublic | null
+  closed: boolean
   /** Resolves once `operation`/`graded` are populated -- grading has a verdict. */
   ready: Promise<void>
   markReady: () => void
@@ -122,6 +115,43 @@ const submissionKey = (userId: string, exerciseId: string) => `${userId}:${exerc
 function isCurrent(key: string, attemptId: string): boolean {
   return pendingSubmissions.get(key)?.attemptId === attemptId
 }
+
+/**
+ * Fix round 5 (review Mi1): the success path already deletes its own record the instant it
+ * settles (`syncInBackground`); a FAILED one is kept on purpose so `retry()` can recover it from
+ * any later mount, which means nothing ever evicted one before this. Each retained record holds
+ * the submitted code, a full results array and a `LearnerState` clone -- bounded here to the
+ * `MAX_RETAINED_FAILED_SUBMISSIONS` most recently failed keys, oldest evicted first, rather than
+ * left to grow with the number of exercises a learner has ever failed to save.
+ */
+const MAX_RETAINED_FAILED_SUBMISSIONS = 5
+const failedSubmissionOrder: string[] = []
+function retainFailedSubmission(key: string): void {
+  const already = failedSubmissionOrder.indexOf(key)
+  if (already !== -1) failedSubmissionOrder.splice(already, 1)
+  failedSubmissionOrder.push(key)
+  while (failedSubmissionOrder.length > MAX_RETAINED_FAILED_SUBMISSIONS) pendingSubmissions.delete(failedSubmissionOrder.shift()!)
+}
+function forgetFailedSubmission(key: string): void {
+  const index = failedSubmissionOrder.indexOf(key)
+  if (index !== -1) failedSubmissionOrder.splice(index, 1)
+}
+
+function clearExerciseLoopModuleState(): void {
+  pendingHandoff = null
+  pendingSubmissions.clear()
+  failedSubmissionOrder.length = 0
+}
+/**
+ * Fix round 5 (review Mi1): registers with `src/lib/query/client.ts`'s cleanup registry so a
+ * client-side user change (today only reachable in tests; `/auth/signout` is a full document
+ * navigation that discards the whole heap on its own) can never resurrect a different learner's
+ * in-flight or failed submission. Registering rather than that file importing this one directly
+ * avoids a cycle -- this hook already imports `getQueryClient` from there. Module load only runs
+ * once regardless of how many components call `useExerciseLoop`.
+ */
+onUserChange(clearExerciseLoopModuleState)
+
 /**
  * Fix round 4: both module-scope stores above are deliberately real singletons -- module scope,
  * not component scope, is the entire point (surviving a remount). In production that lifetime is
@@ -131,8 +161,7 @@ function isCurrent(key: string, attemptId: string): boolean {
  * only; nothing in `page.tsx` or this hook calls this.
  */
 export function __resetExerciseLoopModuleStateForTests(): void {
-  pendingHandoff = null
-  pendingSubmissions.clear()
+  clearExerciseLoopModuleState()
 }
 
 type Status = 'loading' | 'ready' | 'running' | 'graded' | 'submitting' | 'failed' | 'passed' | 'error'
@@ -205,6 +234,24 @@ export function useExerciseLoop(exerciseId: string) {
   const session = useSession(); const router = useRouter()
   const sessionRef = useRef(session)
   useEffect(() => { sessionRef.current = session }, [session])
+  // Fix round 5 (review Mi2): a dedicated "is this component instance still mounted" flag, on its
+  // own empty-deps effect just below -- narrower and clearer than relying solely on
+  // `generation.current !== token`, which several other code paths also bump for reasons other
+  // than a true unmount (a `next()` on a surviving instance, a `retry()`-driven reload). The load
+  // effect's own cleanup (`[exerciseId, reload]`) fires on those too, so it cannot tell "this
+  // instance re-ran its effect" apart from "this instance is gone" -- only an effect with no
+  // dependencies at all fires its cleanup exclusively on true unmount.
+  //
+  // The setup function MUST also set `mounted.current = true`, not only rely on `useRef(true)`'s
+  // initial value -- reproduced live (not in jsdom, which does not run effects twice by default):
+  // React's dev-mode Strict Mode double-invokes every effect once per real mount (mount -> cleanup
+  // -> mount again) specifically to catch exactly this class of bug. Without the reset here, that
+  // diagnostic cleanup permanently latches `mounted.current` to `false` the instant a page loads,
+  // silently discarding every `settle`/`ready` reconciliation (`nextExercise`, `canAdvance`, the
+  // final Reviewer quality) for the rest of that instance's real lifetime -- this exact mechanism
+  // reproduced the review's own C2 symptom on every live `next()`, not only under a forced remount.
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const clientRef = useRef<SupabaseClient | null>(null)
   const generation = useRef(0); const gate = useRef(false)
   const exerciseRef = useRef<ExercisePublic | null>(null); const cloRef = useRef<Clo | null>(null)
@@ -302,19 +349,29 @@ export function useExerciseLoop(exerciseId: string) {
         codeRef.current = graded.code; updateCode(graded.code)
         setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
         setPointsProvisional(graded.pointsProvisional); setChain(graded.chain); setClosed(graded.closed)
+        // Fix round 5, C2: restored here too, in case `queueNext` already chose one before this
+        // mount happened -- the settle handler below is the guaranteed-final source, this is best
+        // effort for the narrow window between the two.
+        if (submissionRecord.nextExercise) setNextExercise(submissionRecord.nextExercise)
       } else {
         // Grading itself (the runtime call) is still running on whatever instance started it.
         setStatus('submitting')
       }
+      // Fix round 5 (review Mi2): `mounted` is a dedicated flag for THIS effect run, set false in
+      // its own cleanup below -- a clearer, narrower signal than reusing `generation.current`
+      // alone (which the comment above `generation` explains is bumped by several unrelated
+      // paths). Native promises have no `off()`; this is the idiomatic React substitute for
+      // detaching a `.then` continuation once its effect has torn down.
       void submissionRecord.ready.then(() => {
-        if (generation.current !== token || !submissionRecord.graded) return
+        if (!mounted.current || generation.current !== token || !submissionRecord.graded) return
         const { graded } = submissionRecord
         codeRef.current = graded.code; updateCode(graded.code)
         setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
         setPointsProvisional(graded.pointsProvisional); setChain(graded.chain); setClosed(graded.closed)
+        if (submissionRecord.nextExercise) setNextExercise(submissionRecord.nextExercise)
       })
       void submissionRecord.settle.then(() => {
-        if (generation.current !== token) return
+        if (!mounted.current || generation.current !== token) return
         if (submissionRecord.error) { setError(submissionRecord.error); return } // pending.current stays -- retry() can recover it
         pending.current = null; setHasPending(false)
         const finalOp = submissionRecord.operation
@@ -324,7 +381,14 @@ export function useExerciseLoop(exerciseId: string) {
           setPointsEarned(pointsForPass(item.difficulty, finalOp.attempt.hintCount, finalOp.review.quality))
           setPointsProvisional(false)
           const finalMastery = finalOp.state.mastery[item.cloId]
+          // Fix round 5, C2: `nextExercise` restored from the record -- there is no durable row
+          // for it the way mastery covers `closed`/`chain`. `record.closed` (set alongside
+          // `record.nextExercise` in `queueNext`) is a belt-and-braces fallback if the mastery
+          // read above somehow lacked a row at all, which should not happen once `finalOp.state`
+          // exists but costs nothing to guard.
           if (finalMastery) { setChain(finalMastery.chain); setClosed(finalMastery.closed) }
+          else setClosed(submissionRecord.closed)
+          setNextExercise(submissionRecord.nextExercise)
           completed.current = true
           setStatus('passed')
         } else if (submissionRecord.graded?.outcome === 'failed') {
@@ -521,6 +585,12 @@ export function useExerciseLoop(exerciseId: string) {
         operation.planned = true
       }
       setClosed(true); operation.queued = true
+      // Fix round 5, C2 (belt and braces): the settle handler already restores `closed` from the
+      // durably-saved mastery row regardless, but recording it here too costs nothing and matches
+      // the same pattern the bank-pick branch below needs for `nextExercise`, which has no
+      // equivalent durable source to fall back on.
+      const closedRecord = pendingSubmissions.get(key)
+      if (closedRecord?.operation === operation) closedRecord.closed = true
       return
     }
     const inChain = mastery.chain > 0 ? mastery.patternsPassed.slice(-mastery.chain) : []
@@ -563,6 +633,21 @@ export function useExerciseLoop(exerciseId: string) {
     }
     if (!isCurrent(key, attemptId)) return
     setNextExercise(chosen); operation.queued = true
+    // Fix round 5, C2: recorded on the module record so a remount mid-chain restores
+    // `nextExercise` (and therefore `canAdvance`) instead of stranding a passed rep at "Pass
+    // saved." forever -- there is no durable row to fall back on for this the way mastery's own
+    // `closed` flag covers the CLO-close branch above.
+    const record = pendingSubmissions.get(key)
+    if (record?.operation === operation) record.nextExercise = chosen
+    // Fix round 5: make the remount `next()` will cause invisible. Prefetches the chosen
+    // exercise's route and re-populates `pendingHandoff` with its already-fetched content the
+    // moment it is known -- well before the learner clicks "Next rep" -- so the remounted
+    // instance's very first render hydrates synchronously with no loading state and no
+    // `exercises_public` refetch (see the module comment above `pendingHandoff`).
+    const chosenClo = staticClo(chosen.cloId) ?? operation.clo
+    const chosenPackages = staticCourse(chosenClo.course)?.packages ?? packages.current
+    pendingHandoff = { id: chosen.id, exercise: chosen, clo: chosenClo, packages: chosenPackages }
+    router.prefetch(`/exercise/${encodeURIComponent(chosen.id)}`)
   }
 
   /**
@@ -746,14 +831,16 @@ export function useExerciseLoop(exerciseId: string) {
     try {
       await finishSubmission(operation)
       const record = pendingSubmissions.get(key)
-      if (record?.operation === operation) { pendingSubmissions.delete(key); record.markSettled() }
+      if (record?.operation === operation) { pendingSubmissions.delete(key); forgetFailedSubmission(key); record.markSettled() }
     }
     catch (syncError) {
       setError(messageOf(syncError)); setPartialDiagnosis(null); setPartialHint(null)
       // Kept in the map (not deleted) on failure: `pending.current`, hydrated from this same
-      // record on any instance that mounts next, must still let `retry()` recover it.
+      // record on any instance that mounts next, must still let `retry()` recover it. Fix round
+      // 5 (review Mi1): `retainFailedSubmission` evicts the oldest kept failure once more than
+      // `MAX_RETAINED_FAILED_SUBMISSIONS` are being held, so this can never grow unbounded.
       const record = pendingSubmissions.get(key)
-      if (record?.operation === operation) { record.error = messageOf(syncError); record.markSettled() }
+      if (record?.operation === operation) { record.error = messageOf(syncError); record.markSettled(); retainFailedSubmission(key) }
     }
     finally {
       // A graded submission settling (pass, fail, or a background failure the retry banner
@@ -810,7 +897,7 @@ export function useExerciseLoop(exerciseId: string) {
       const key = submissionKey(state.userId, item.id)
       let markReady!: () => void; let markSettled!: () => void
       const record: PendingRecord = {
-        attemptId, operation: null, graded: null,
+        attemptId, operation: null, graded: null, nextExercise: null, closed: false,
         ready: new Promise(resolve => { markReady = resolve }), markReady,
         settle: new Promise(resolve => { markSettled = resolve }), markSettled,
         error: null,
@@ -965,17 +1052,28 @@ export function useExerciseLoop(exerciseId: string) {
     if (!cloRow) return
     const coursePackages = staticCourse(cloRow.course)?.packages ?? packages.current
     const url = `/exercise/${encodeURIComponent(target.id)}`
+    // Fix round 5: `pendingHandoff` was very likely already populated by `queueNext` the moment
+    // this exercise was chosen (see its own comment on the prefetch/hydration this enables) --
+    // refreshed here too, right before the router call, as cheap insurance against staleness.
     const commit = () => {
       const token = ++generation.current
       pendingHandoff = { id: target.id, exercise: target, clo: cloRow, packages: coursePackages }
       applyLoadedExercise(target, cloRow, coursePackages, token)
-      window.history.replaceState(null, '', url)
     }
     if (!reducedMotion && typeof document !== 'undefined' && 'startViewTransition' in document) {
       (document as Document & { startViewTransition: (cb: () => void) => unknown }).startViewTransition(() => flushSync(commit))
     } else {
       commit()
     }
+    // Fix round 5 (binding ruling on the review's C1/I1/I2): back through the router, not the raw
+    // History API. `startTransition` marks the resulting remount as low priority, so React keeps
+    // showing this instance's already-updated (optimistic) UI instead of yanking to `loading.tsx`
+    // while the (by now prefetched, per `queueNext`) navigation resolves -- the remount is real,
+    // but invisible. Kept OUTSIDE the `flushSync`/View Transition branch above on purpose:
+    // `flushSync` forces a synchronous commit for the crossfade snapshot, which is the opposite of
+    // what `startTransition` asks for, and the router call itself has nothing to do with the
+    // in-page crossfade -- it needs to run exactly once regardless of which branch ran above.
+    startTransition(() => { router.replace(url) })
   }
 
   const waitUntil = !hintTiming.first && hintTiming.coachAt !== null ? hintTiming.coachAt + LOCKDOWN.hintCooldownS * 1000 : hintTiming.failureAt !== null && !hintTiming.edited ? hintTiming.failureAt + LOCKDOWN.hintCooldownS * 1000 : 0

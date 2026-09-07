@@ -9,16 +9,21 @@ import { qk } from '@/lib/query/keys'
 import { __resetExerciseLoopModuleStateForTests, useExerciseLoop } from './useExerciseLoop'
 
 const spies = vi.hoisted(() => ({
-  call: vi.fn(), stream: vi.fn(), run: vi.fn(), warmup: vi.fn(), abort: vi.fn(), push: vi.fn(), replace: vi.fn(),
+  call: vi.fn(), stream: vi.fn(), run: vi.fn(), warmup: vi.fn(), abort: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(),
   from: vi.fn(), progress: vi.fn(), exerciseFrom: vi.fn<(code: string, id: string) => unknown>(() => null), celebrate: vi.fn(), play: vi.fn(),
-  invalidate: vi.fn(), historyReplace: vi.fn(),
+  invalidate: vi.fn(),
 }))
 vi.mock('@/lib/agents/client', () => ({ callAgent: spies.call, streamAgent: spies.stream }))
 vi.mock('@/lib/runtimes', () => ({ getRuntime: vi.fn(() => ({ language: 'javascript', run: spies.run, warmup: spies.warmup, abort: spies.abort })), subscribeRuntimeProgress: spies.progress }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: spies.from }) }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: spies.push, replace: spies.replace }) }))
+// Fix round 5: `prefetch` is new -- `queueNext` now calls `router.prefetch()` the moment it
+// chooses the next exercise (see the hook's own comment), well before `next()` itself runs.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: spies.push, replace: spies.replace, prefetch: spies.prefetch }) }))
 vi.mock('@/lib/sound/manager', () => ({ play: spies.play }))
-vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: spies.invalidate }) }))
+// Fix round 5: `onUserChange` is a real, top-level side effect this hook now runs at module load
+// (registering its own cleanup with `src/lib/query/client.ts`'s registry) -- mocked as a no-op
+// here since this file tests the hook, not the registry (that lives in `client.test.ts`).
+vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: spies.invalidate }), onUserChange: () => {} }))
 vi.mock('@/lib/rewards/useCelebration', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rewards/useCelebration')>()
   return { ...actual, celebrate: spies.celebrate }
@@ -109,10 +114,10 @@ function query(table: string) {
 function resultOf(ok: boolean, tests = current.tests): RunResult {
   return { ok, results: tests.map(test => ({ testId: test.id, passed: ok, actual: ok ? test.expected : 'undefined', expected: test.expected, stdout: '', stderr: '', durationMs: 2, ...(ok ? {} : { failureKind: 'wrong-answer' as const }) })), passedCount: ok ? tests.length : 0, totalCount: tests.length, runtime: 'browser' }
 }
-function setup() {
+function setup(id = 'e1') {
   const initial = { user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState: store }
   const wrapper = ({ children }: PropsWithChildren) => <SessionProvider initialState={initial}>{children}</SessionProvider>
-  return renderHook(() => useExerciseLoop('e1'), { wrapper })
+  return renderHook(() => useExerciseLoop(id), { wrapper })
 }
 async function loaded() { const hook = setup(); await waitFor(() => expect(hook.result.current.status).toBe('ready')); return hook }
 beforeEach(() => {
@@ -122,11 +127,6 @@ beforeEach(() => {
   // so a record an earlier test left pending (several fixtures below fail a write on purpose)
   // would otherwise leak into a later test's fresh mount of the same user+exercise id.
   __resetExerciseLoopModuleStateForTests()
-  // Fix round 4: `next()`'s in-place transition now updates the address bar via the raw History
-  // API (bypassing the App Router's own navigation/remount pipeline -- see the hook's comment),
-  // not `router.replace`. jsdom's real `window.history.replaceState` works fine on its own, but a
-  // plain mock keeps this test file from actually mutating `window.location` across tests.
-  window.history.replaceState = spies.historyReplace
   store = { ...compileLearnerState({ id: 'student' }, [], [], [], null), version: 1 }
   tables = { exercises_public: [rowOf(current), rowOf(candidate)], clos: [clo], courses: [{ code: 'course1', packages: [] }], attempts: [], mastery: [], learner_state: [{ user_id: 'student', state: store, version: 1 }] }
   failWrite = null
@@ -173,13 +173,14 @@ describe('exercise loop triggers and durable progress', () => {
     await act(async () => { await hook.result.current.submit(); await hook.result.current.next() })
     expect(spies.call).toHaveBeenCalledTimes(1)
     expect(tables.attempts).toHaveLength(2)
-    // Step 4 / fix round 4: advancing between exercises updates the URL via the raw History API
-    // in place, never `router.replace` (which remounts on a dynamic-segment change, per the
-    // hook's own comment) and never the `router.push` remount that used to discard the
-    // already-fetched next exercise either way.
-    expect(spies.historyReplace).toHaveBeenCalledWith(null, '', '/exercise/e2')
-    expect(spies.replace).not.toHaveBeenCalled()
+    // Step 4 / fix round 5 (binding ruling on the review's C1/I1/I2): back through the real
+    // router -- `router.replace`, never `router.push` (which would pile onto the back stack) and
+    // never the raw History API round 4 used (which left the route's own param permanently stale,
+    // filing every later integrity event under the wrong exercise -- C1). `queueNext` already
+    // prefetched this exact route the moment it chose 'e2', well before this `next()` call.
+    expect(spies.replace).toHaveBeenCalledWith('/exercise/e2')
     expect(spies.push).not.toHaveBeenCalled()
+    expect(spies.prefetch).toHaveBeenCalledWith('/exercise/e2')
   })
 
   it('unlocks first hints at 60 seconds or edit after each failure, then requires cooldown and caps five', async () => {
@@ -427,8 +428,10 @@ describe('the optimistic submit path (T2.2)', () => {
     expect(hook.result.current.code).toBe(candidate.starterCode)
     expect(hook.result.current.status).toBe('ready')
     expect(hook.result.current.outcome).toBeNull()
-    expect(spies.historyReplace).toHaveBeenCalledWith(null, '', '/exercise/e2')
-    expect(spies.replace).not.toHaveBeenCalled()
+    // Fix round 5: the local, synchronous swap above happens regardless of the router call below
+    // it (they're deliberately independent -- see the hook's own comment on `next()`) -- proven
+    // here by asserting it landed even though the background attempts refresh is still held open.
+    expect(spies.replace).toHaveBeenCalledWith('/exercise/e2')
     release()
   })
 
@@ -453,7 +456,7 @@ describe('the optimistic submit path (T2.2)', () => {
     warn.mockRestore()
   })
 
-  it('fix round 4: a forced remount mid-submit (before grading resolves) still lands the eventual verdict and its durability writes', async () => {
+  it('fix round 4/5: a forced remount mid-submit (before grading resolves) still lands the eventual verdict, its durability writes, and a usable nextExercise', async () => {
     // "mid-submit": the remount happens while the runtime call itself is still in flight -- before
     // any verdict exists at all. The old per-instance `generation` guard right after this exact
     // call used to make the whole submission vanish the instant the calling instance unmounted;
@@ -476,9 +479,14 @@ describe('the optimistic submit path (T2.2)', () => {
     // The durability chain landed for real, even though the instance that started it is gone.
     expect(tables.attempts).toHaveLength(1)
     expect(store.mastery.c1).toMatchObject({ chain: 1, closed: false, patternsPassed: ['scan'] })
+    // Fix round 5, C2 (review): the remounted instance is not stranded at "Pass saved." with a
+    // dead button -- `queueNext` (part of the same durability chain, run before `setStatus('passed')`)
+    // recorded the exercise it chose onto the module record, and the settle handler restored it.
+    expect(hook2.result.current.nextExercise?.id).toBe('e2')
+    expect(hook2.result.current.canAdvance).toBe(true)
   })
 
-  it('fix round 4: a forced remount mid-grade (verdict known, durability chain still saving) hydrates the verdict immediately and reconciles once the save lands', async () => {
+  it('fix round 4/5: a forced remount mid-grade (verdict known, durability chain still saving) hydrates the verdict immediately and reconciles once the save lands, canAdvance included', async () => {
     // "mid-grade": the remount happens right after grading resolves (the CPU-throttle
     // investigation's own reproduced mechanism, exactly this timing) but before the background
     // `attempts`/`learner_state`/`mastery` writes finish.
@@ -493,6 +501,7 @@ describe('the optimistic submit path (T2.2)', () => {
     await waitFor(() => expect(hook2.result.current.status).toBe('graded'))
     expect(hook2.result.current.outcome).toBe('passed')
     expect(hook2.result.current.pointsProvisional).toBe(true) // hydrated straight off the optimistic snapshot
+    expect(hook2.result.current.canAdvance).toBe(false) // the save this snapshot stands in for hasn't landed -- honestly disabled
     expect(settled).toBe(false) // the save this snapshot is standing in for has not landed yet
     release()
     await act(async () => { await submission })
@@ -500,6 +509,26 @@ describe('the optimistic submit path (T2.2)', () => {
     expect(hook2.result.current.pointsProvisional).toBe(false) // reconciled to the real Reviewer quality
     expect(tables.attempts).toHaveLength(1)
     expect(store.mastery.c1).toMatchObject({ chain: 1, closed: false, patternsPassed: ['scan'] })
+    // Fix round 5, C2 (review): C2's own repro -- without this the remounted instance reached
+    // `status: 'passed'` with `nextExercise: null` and `canAdvance: false`, a permanent dead end.
+    expect(hook2.result.current.nextExercise?.id).toBe('e2')
+    expect(hook2.result.current.canAdvance).toBe(true)
+  })
+
+  it('fix round 5: a remounted instance for the exercise `queueNext` already chose hydrates synchronously from the prefetch store, no exercises_public fetch', async () => {
+    // The "invisible remount" half of the binding ruling: `queueNext` prefetches the chosen
+    // route and stashes its already-fetched content in `pendingHandoff` the moment it is known --
+    // well before the learner ever clicks "Next rep" -- so the instance the real router.replace()
+    // eventually remounts for that exercise never shows a loading state or refetches it.
+    const hook1 = await loaded(); act(() => hook1.result.current.setCode('fixed'))
+    await act(async () => { await hook1.result.current.submit() })
+    expect(hook1.result.current.nextExercise?.id).toBe('e2')
+    expect(spies.prefetch).toHaveBeenCalledWith('/exercise/e2') // queueNext prefetched it already
+    spies.from.mockClear() // isolate hook2's own network calls from setup/submit above
+    const hook2 = setup('e2') // simulates the App Router's remount landing on the target id
+    expect(hook2.result.current.exercise?.id).toBe('e2') // synchronous -- no waitFor needed
+    expect(hook2.result.current.status).not.toBe('loading')
+    expect(spies.from.mock.calls.some(([table]) => table === 'exercises_public')).toBe(false)
   })
 
   it('reaches the graded verdict before the attempts insert ever resolves', async () => {

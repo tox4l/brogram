@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { clearQueryClient, getQueryClient, makeQueryClient, resetQueryClientForUser } from './client'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { clearQueryClient, getQueryClient, makeQueryClient, onUserChange, resetQueryClientForUser } from './client'
 
 afterEach(() => { clearQueryClient() })
 
@@ -44,6 +44,19 @@ describe('resetQueryClientForUser', () => {
     client.setQueryData(['probe'], 'value')
     resetQueryClientForUser('student-b')
     expect(client.getQueryData(['probe'])).toBeUndefined()
+  })
+})
+
+describe('onUserChange', () => {
+  it('fix round 5 (T2.2 review Mi1): fires every registered cleanup exactly when the user actually changes, not on every render', () => {
+    const cleanup = vi.fn()
+    onUserChange(cleanup)
+    resetQueryClientForUser('cleanup-user-a')
+    expect(cleanup).not.toHaveBeenCalled() // first sighting of this id, not a change
+    resetQueryClientForUser('cleanup-user-a')
+    expect(cleanup).not.toHaveBeenCalled() // a repeat render of the same user
+    resetQueryClientForUser('cleanup-user-b')
+    expect(cleanup).toHaveBeenCalledTimes(1) // the user actually changed
   })
 })
 
