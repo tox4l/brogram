@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IntegrityEventType } from '@/lib/contracts'
 import * as soundManager from '@/lib/sound/manager'
-import { LINE_BANK, line } from '@/lib/voice/lines'
+import { LINE_BANK } from '@/lib/voice/lines'
 import { clearAllLocalIntegrityLogsForTests } from '@/lib/integrity/localLog'
 import { useLockdown } from './useLockdown'
 
@@ -128,12 +128,34 @@ describe('useLockdown', () => {
     expect(result.current.printscreenNote).toBeNull()
     await act(async () => { vi.advanceTimersByTime(1_000) })
     fireEvent.keyUp(window, { key: 'PrintScreen' })
-    expect(result.current.printscreenNote).toBe(line('guard.printscreen'))
+    expect(LINE_BANK['guard.printscreen'].variants).toContain(result.current.printscreenNote)
+    const noteAtThirdPress = result.current.printscreenNote
     await act(async () => { vi.advanceTimersByTime(1_000) })
     fireEvent.keyUp(window, { key: 'PrintScreen' })
-    expect(result.current.printscreenNote).toBe(line('guard.printscreen'))
+    // Not merely "still a bank line" (that would hold trivially even if a fourth press re-rolled
+    // it) -- the note must not change once shown, independent of how many variants the key has.
+    expect(result.current.printscreenNote).toBe(noteAtThirdPress)
     await act(async () => { vi.advanceTimersByTime(1_000) })
     expect(rows().filter(row => row.type === 'printscreen')).toHaveLength(4)
+  })
+
+  it('W2G-2: counts presses toward the note even when they land inside the same coalescing window, while the write itself still coalesces to one row', async () => {
+    // The bug: `logIntegrity`'s per-type coalescing guard (1s, global, deliberately left alone)
+    // used to gate the counter itself, so a natural burst of presses -- anything under a second
+    // apart -- never advanced the count past 1. The note (spec R9.2, on the third press) was only
+    // reachable at an unnaturally slow, one-press-per-second cadence.
+    const { result } = renderHook(() => useLockdown('exercise-1'))
+    fireEvent.keyUp(window, { key: 'PrintScreen' })
+    await act(async () => { vi.advanceTimersByTime(200) })
+    fireEvent.keyUp(window, { key: 'PrintScreen' })
+    await act(async () => { vi.advanceTimersByTime(200) })
+    fireEvent.keyUp(window, { key: 'PrintScreen' })
+    expect(LINE_BANK['guard.printscreen'].variants).toContain(result.current.printscreenNote)
+    // The note is honest about the count; it says nothing about the accepted-write rate, which
+    // stays governed entirely by `logIntegrity`'s own coalescing -- all three presses landed
+    // inside one second of each other, so exactly one row is ever written.
+    await act(async () => { vi.advanceTimersByTime(1_000) })
+    expect(rows().filter(row => row.type === 'printscreen')).toHaveLength(1)
   })
 
   it('rotates the paste toast so two consecutive blocks never say the same thing, and exposes a fixed "why" sentence', () => {
@@ -144,7 +166,7 @@ describe('useLockdown', () => {
     const second = result.current.pasteMessage
     expect(first.length).toBeGreaterThan(0)
     expect(second).not.toBe(first)
-    expect(result.current.pasteWhy).toBe(line('guard.paste.why'))
+    expect(LINE_BANK['guard.paste.why'].variants).toContain(result.current.pasteWhy)
   })
 
   it('mirrors an accepted event into this signed-in user\'s own local log, keyed by user id (C1)', async () => {

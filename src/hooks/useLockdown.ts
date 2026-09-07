@@ -203,13 +203,21 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
     // the one genuine thing this guard ever produced.
     const keyup = (event: KeyboardEvent) => {
       if (event.key !== 'PrintScreen' && event.keyCode !== 44) return
-      if (!logIntegrity('printscreen')) return
+      // W2G-2 fix: the press count and the note threshold live above
+      // `logIntegrity`'s own per-type coalescing guard (:148, deliberately
+      // untouched -- it caps *writes* at one per type per second, globally,
+      // for every guard type, not just this one). Gating the count on that
+      // guard's return value meant a natural burst of presses -- anything
+      // under a second apart -- never advanced past 1, so the note was only
+      // reachable at an unnaturally slow, one-per-second cadence. Every raw
+      // press still counts; only the write to `integrity_events` coalesces.
       printscreenCount.current += 1
       // R9.2: exactly once, on the third press in this exercise -- a
       // non-blocking note, not a modal or a full-screen anything. Because
       // `printscreenCount` only ever climbs by one and this branch fires on
       // the exact value, later presses in the same exercise say nothing.
       if (printscreenCount.current === PRINTSCREEN_NOTE_AT) setPrintscreenNote(line('guard.printscreen'))
+      logIntegrity('printscreen')
     }
     printscreenCount.current = 0
     setPrintscreenNote(null)

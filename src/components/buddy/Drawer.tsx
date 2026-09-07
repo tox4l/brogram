@@ -357,10 +357,18 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
               <div className="flex flex-col items-start gap-2">
                 <div className="max-w-[85%] rounded-lg bg-accent/10 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap text-foreground ring-1 ring-accent/30">
                   {streamingText ? (
-                    <>
+                    // A11Y-07: this text node rewrites on every SSE frame -- dozens per reply --
+                    // and used to sit as a plain addition inside the `role="log"` region above,
+                    // so a screen reader queued and read the growing partial over and over. The
+                    // committed bubble (above, in the `messages` map) carries the identical final
+                    // text moments later and is a real, single addition to the log -- so the
+                    // streaming preview itself is visual only: `aria-hidden` removes the whole
+                    // mutating subtree from the accessibility tree, leaving the log's announced
+                    // content unchanged until the one real commit.
+                    <span aria-hidden="true">
                       {streamingText}
-                      {showCursor && <span aria-hidden="true" className={cn('ml-0.5 inline-block', !reducedMotion && 'animate-pulse')}>▍</span>}
-                    </>
+                      {showCursor && <span className={cn('ml-0.5 inline-block', !reducedMotion && 'animate-pulse')}>▍</span>}
+                    </span>
                   ) : (
                     <TypingDots reducedMotion={reducedMotion} />
                   )}

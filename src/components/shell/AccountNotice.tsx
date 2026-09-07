@@ -86,13 +86,26 @@ export function BannedAccount() {
  * itemised rows beneath it, and a link to the full "Integrity, explained"
  * policy in Account.
  */
+/**
+ * W2G-3 fix: the RPC-backed query used to be read unconditionally, one line
+ * before this early return -- a hook call cannot itself be conditional, so
+ * `AccountNotice` now decides whether to mount `Banner` at all, and only
+ * `Banner`'s body ever calls `useIntegrityBreakdown()`. An `active` learner
+ * -- every route load, on every screen the shell mounts this component --
+ * no longer fires `my_integrity_breakdown()` (a 404 at schema 0005) for a
+ * notice that was always going to render null.
+ */
 export function AccountNotice({ status, restrictedUntil }: { status: AccountStatus; restrictedUntil: string | null }) {
+  if (status !== 'restricted' && status !== 'warned') return null
+  return <Banner status={status} restrictedUntil={restrictedUntil} />
+}
+
+function Banner({ status, restrictedUntil }: { status: 'restricted' | 'warned'; restrictedUntil: string | null }) {
   // Fix round 2, N1/N3: the same query `<IntegrityPanel variant="receipt">`
   // below will run -- identical `queryKey`, so react-query serves one shared
   // cache entry rather than firing the RPC twice -- read here too so the
   // frame above the receipt can match what the receipt is about to show.
   const query = useIntegrityBreakdown()
-  if (status !== 'restricted' && status !== 'warned') return null
   const time = restrictedUntil ? formatRestrictedUntil(restrictedUntil) : 'the next review'
   const frame = status === 'warned' ? warnedFrame(query.data) : restrictedFrame(query.data, time)
 

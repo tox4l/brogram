@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, AgentError, BuddyReply, LearnerState } from '@/lib/contracts'
 import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
-import { line } from '@/lib/voice/lines'
+import { LINE_BANK, line } from '@/lib/voice/lines'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { BuddyButton } from '@/components/shell/BuddyButton'
 import { BuddyDrawer } from './Drawer'
@@ -346,7 +346,7 @@ describe('buddy drawer', () => {
     await typeAndSend('i keep failing this one')
     const link = await screen.findByRole('link')
     expect(link.getAttribute('href')).toBe('/derot/play/breathe')
-    expect(link.textContent).toBe(line('buddy.suggest.play'))
+    expect(LINE_BANK['buddy.suggest.play'].variants).toContain(link.textContent)
   })
 
   it('frames a long-idle-gap derot suggestion as an Arcade card, keeping the existing deep-link redirect', async () => {
@@ -364,7 +364,7 @@ describe('buddy drawer', () => {
     await typeAndSend('what should i do next')
     const link = await screen.findByRole('link')
     expect(link.getAttribute('href')).toBe('/derot?drill=trace')
-    expect(link.textContent).toBe(line('buddy.suggest.arcade'))
+    expect(LINE_BANK['buddy.suggest.arcade'].variants).toContain(link.textContent)
   })
 
   it('has a live region so a landed reply is announced, and an sr-only label while typing', async () => {
@@ -374,6 +374,42 @@ describe('buddy drawer', () => {
     await typeAndSend('why do i keep failing loops')
     expect(screen.getByText('Buddy is typing')).toBeTruthy()
     await screen.findByText('announced reply')
+  })
+
+  // A11Y-07: the streaming preview used to be a bare text node inside the `role="log"` region,
+  // rewritten on every SSE frame -- dozens of announcements for one reply. It is now
+  // `aria-hidden`, so the region's *announced* content (what a screen reader would actually
+  // read -- everything except aria-hidden subtrees) must stay put through the whole stream and
+  // change exactly once, when the real committed message lands.
+  it('does not change the log’s announced text while a reply streams, only once when it commits (A11Y-07)', async () => {
+    let deliverPartial!: (partial: Partial<BuddyReply>) => void
+    let finish!: (value: AgentEnvelope<BuddyReply>) => void
+    spies.stream.mockImplementationOnce((_req, onPartial) => {
+      deliverPartial = onPartial
+      onPartial({ onTopic: true, reply: 'partial one' })
+      return new Promise<AgentEnvelope<BuddyReply>>(resolve => { finish = resolve })
+    })
+    setup()
+    await typeAndSend('why do i keep failing loops')
+    await screen.findByText('partial one')
+    const log = screen.getByRole('log')
+    const announced = () => {
+      const clone = log.cloneNode(true) as HTMLElement
+      clone.querySelectorAll('[aria-hidden="true"]').forEach(node => node.remove())
+      return clone.textContent
+    }
+    const duringStream = announced()
+    act(() => { deliverPartial({ onTopic: true, reply: 'partial one two' }) })
+    await screen.findByText('partial one two')
+    act(() => { deliverPartial({ onTopic: true, reply: 'partial one two three' }) })
+    await screen.findByText('partial one two three')
+    // Real DOM mutations happened (the preview visibly grew) but none of them touched anything
+    // outside the aria-hidden subtree.
+    expect(announced()).toBe(duringStream)
+    await act(async () => { finish(envelope({ onTopic: true, reply: 'final complete reply' })) })
+    await screen.findByText('final complete reply')
+    expect(announced()).not.toBe(duringStream)
+    expect(announced()).toContain('final complete reply')
   })
 })
 

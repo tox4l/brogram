@@ -64,6 +64,26 @@ describe('AccountNotice', () => {
     expect(container.firstChild).toBeNull()
   })
 
+  // W2G-3: a clean learner (active, and the unauthenticated banned screen) must never fire
+  // `my_integrity_breakdown()` -- the query used to run one line above the status check that
+  // decides this component renders nothing, so it fired on every authenticated route load for
+  // every learner, including the two routes budgeted at zero Supabase round trips.
+  it('never queries the integrity breakdown for an active or banned account (W2G-3)', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
+    render(<AccountNotice status="active" restrictedUntil={null} />)
+    expect(mocks.useIntegrityBreakdown).not.toHaveBeenCalled()
+    render(<AccountNotice status="banned" restrictedUntil={null} />)
+    expect(mocks.useIntegrityBreakdown).not.toHaveBeenCalled()
+  })
+
+  it('queries the integrity breakdown once mounted for a warned or restricted account (W2G-3)', () => {
+    mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
+    render(<AccountNotice status="warned" restrictedUntil={null} />)
+    expect(mocks.useIntegrityBreakdown).toHaveBeenCalledTimes(1)
+    render(<AccountNotice status="restricted" restrictedUntil={null} />)
+    expect(mocks.useIntegrityBreakdown).toHaveBeenCalledTimes(2)
+  })
+
   it('links to the full policy in Account for both warned and restricted', () => {
     mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
     render(<AccountNotice status="warned" restrictedUntil={null} />)
