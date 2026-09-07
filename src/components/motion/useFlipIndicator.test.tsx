@@ -180,4 +180,47 @@ describe('useFlipIndicator', () => {
     expect(flipMocks.from).not.toHaveBeenCalled()
     expect(gsapMocks.set).not.toHaveBeenCalled()
   })
+
+  // Fix round, M2: `el.style.transform = translate(x, y)` replaces any
+  // transform the indicator already carries -- `gsap.set(el, {x, y})` used
+  // to parse the computed matrix and rewrite it in place, preserving
+  // whatever else was there. This pins the documented contract
+  // (`setRectStatic`'s doc comment): an indicator that carries its own CSS
+  // transform is silently clobbered, not composed with.
+  it("M2: clobbers a pre-existing CSS transform on the indicator instead of composing with it (documents the hook's contract)", () => {
+    function HarnessWithOwnTransform({ activeKey, reduced }: { activeKey: string; reduced: boolean }) {
+      const containerRef = useRef<HTMLDivElement>(null)
+      useFlipIndicator(containerRef, activeKey, reduced)
+      return (
+        <div ref={containerRef}>
+          <div
+            data-flip-key="a"
+            ref={(el) => {
+              if (el) setRect(el, TARGET_A)
+            }}
+          />
+          <div
+            data-flip-indicator
+            // A common centering idiom (e.g. Tailwind's -translate-x-1/2)
+            // applied before this hook ever runs.
+            style={{ transform: 'translateX(-50%) rotate(3deg)' }}
+            ref={(el) => {
+              if (el) setRect(el, INDICATOR_RECT)
+            }}
+          />
+        </div>
+      )
+    }
+
+    const { container } = render(<HarnessWithOwnTransform activeKey="a" reduced />)
+    const indicator = container.querySelector('[data-flip-indicator]') as HTMLElement
+
+    // The hook's own translate landed, but the pre-existing rotate/percentage
+    // transform is gone -- not composed, entirely overwritten. If this ever
+    // starts failing because the hook began composing instead, update the
+    // doc comment on `setRectStatic` alongside it.
+    expect(indicator.style.transform).not.toContain('rotate')
+    expect(indicator.style.transform).not.toContain('-50%')
+    expect(readTransform(indicator)).toEqual({ x: 0, y: 0 })
+  })
 })

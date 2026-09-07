@@ -15,7 +15,19 @@ type Rect = { x: number; y: number; width: number; height: number }
  *  neither one animates, so there is nothing here that ever needed gsap in
  *  the first place -- `gsap.set(el, {x, y, width, height})` was doing
  *  exactly this (translate for x/y, direct CSS width/height), one property
- *  write at a time, through a library that was not otherwise loaded yet. */
+ *  write at a time, through a library that was not otherwise loaded yet.
+ *
+ *  Contract (M2, fix round): this assigns `el.style.transform` wholesale --
+ *  it does not parse or compose with whatever transform the element already
+ *  carries, the way `gsap.set(el, {x, y})` used to (gsap reads the computed
+ *  matrix and rewrites it in place). The element this hook is told about via
+ *  `data-flip-indicator` must therefore carry no CSS-applied transform of
+ *  its own (no `-translate-x-1/2` centering idiom, no `rotate-*`, etc.) --
+ *  this hook owns `transform` outright. Today's only consumer
+ *  (`src/components/derot/LaneSwitch.tsx`) satisfies this; pinned by the
+ *  "clobbers a pre-existing CSS transform" test in `useFlipIndicator.test.tsx`
+ *  so the next indicator that violates it fails loudly instead of landing
+ *  silently offset by half its own width. */
 function setRectStatic(el: HTMLElement, rect: Rect): void {
   el.style.transform = `translate(${rect.x}px, ${rect.y}px)`
   el.style.width = `${rect.width}px`
@@ -107,13 +119,18 @@ export function useFlipIndicator(container: RefObject<HTMLElement | null>, activ
     }
 
     let cancelled = false
-    loadGsap().then(({ gsap, Flip }) => {
-      if (cancelled) return
-      gsap.killTweensOf(indicator)
-      const state = Flip.getState(indicator)
-      setRectStatic(indicator, rect)
-      Flip.from(state, { duration: DUR.guide / 1000, ease: 'move', scale: true, absolute: true })
-    })
+    loadGsap()
+      .then(({ gsap, Flip }) => {
+        if (cancelled) return
+        gsap.killTweensOf(indicator)
+        const state = Flip.getState(indicator)
+        setRectStatic(indicator, rect)
+        Flip.from(state, { duration: DUR.guide / 1000, ease: 'move', scale: true, absolute: true })
+      })
+      // M1: see eases.ts's loadGsap() -- a stale chunk hash across a deploy
+      // rejects this. The indicator is already correctly positioned by the
+      // static write below regardless, so a failed load should be silent.
+      .catch(() => {})
 
     return () => {
       cancelled = true

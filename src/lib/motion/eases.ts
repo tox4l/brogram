@@ -47,18 +47,29 @@ export function loadGsap(): Promise<LoadedGsap> {
       import('gsap/CustomEase'),
       import('gsap/SplitText'),
       import('gsap/Flip'),
-    ]).then(([gsapMod, reactMod, customEaseMod, splitTextMod, flipMod]) => {
-      const { gsap } = gsapMod
-      const { CustomEase } = customEaseMod
-      const { SplitText } = splitTextMod
-      const { Flip } = flipMod
-      gsap.registerPlugin(reactMod.useGSAP, CustomEase, SplitText, Flip)
-      for (const [name, value] of Object.entries(EASE)) {
-        const [x1, y1, x2, y2] = bezierTuple(value)
-        CustomEase.create(name, `${x1}, ${y1}, ${x2}, ${y2}`)
-      }
-      return { gsap, SplitText, Flip }
-    })
+    ])
+      .then(([gsapMod, reactMod, customEaseMod, splitTextMod, flipMod]) => {
+        const { gsap } = gsapMod
+        const { CustomEase } = customEaseMod
+        const { SplitText } = splitTextMod
+        const { Flip } = flipMod
+        gsap.registerPlugin(reactMod.useGSAP, CustomEase, SplitText, Flip)
+        for (const [name, value] of Object.entries(EASE)) {
+          const [x1, y1, x2, y2] = bezierTuple(value)
+          CustomEase.create(name, `${x1}, ${y1}, ${x2}, ${y2}`)
+        }
+        return { gsap, SplitText, Flip }
+      })
+      .catch((error: unknown) => {
+        // W4FIX-B fix round (M1): a learner can keep a page open across a
+        // deploy, so the chunk hash this import() asks for can 404. Without
+        // this, the rejected promise stays cached forever and every later
+        // mount reuses it -- nothing animates again for the rest of the
+        // session, with no retry. Clearing `cached` on rejection lets the
+        // next caller start a fresh attempt instead.
+        cached = null
+        throw error
+      })
   }
   return cached
 }

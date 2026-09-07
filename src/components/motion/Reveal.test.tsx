@@ -231,4 +231,142 @@ describe('Reveal', () => {
     // Both mounts resolve against the identical cached promise.
     expect(loadGsap()).toBe(loadGsap())
   })
+
+  // Fix round, F2: the review measured a real browser (reducedMotion:
+  // 'reduce', production build) still fetching all three gsap chunks on
+  // /login, because `useReducedMotion`'s hydration commit always reports
+  // `reduced === false` (its `getServerSnapshot()` returns `false`) and the
+  // old code called `loadGsap()` synchronously inside that first commit --
+  // before the corrected value landed later. A *single* requestAnimationFrame
+  // defer still was not enough: rAF runs before the browser paints, while the
+  // `useSyncExternalStore` correction that flips `reduced` fires from a
+  // passive effect, which only runs after that paint -- confirmed live
+  // (Playwright, production build, `reducedMotion: 'reduce'`) with one rAF,
+  // fixed with two. These tests exercise the real double-rAF schedule rather
+  // than asserting a specific frame count, so they do not re-pin an
+  // implementation detail that a future engine-timing fix might change.
+  describe('W4FIX-B fix round (F2): defers loadGsap() past the first commit and paint', () => {
+    let pending: Array<() => void>
+    let rafSpy: ReturnType<typeof vi.fn>
+    let cafSpy: ReturnType<typeof vi.fn>
+
+    function flushAllFrames() {
+      // requestAnimationFrame calls made inside a flushed callback push more
+      // entries onto `pending` -- draining with shift() (not forEach over a
+      // snapshot) lets a chain of N scheduled frames all run.
+      while (pending.length) {
+        const next = pending.shift()
+        next?.()
+      }
+    }
+
+    beforeEach(() => {
+      pending = []
+      let nextId = 1
+      rafSpy = vi.fn((cb: FrameRequestCallback) => {
+        const id = nextId++
+        pending.push(() => cb(0))
+        return id
+      })
+      cafSpy = vi.fn()
+      vi.stubGlobal('requestAnimationFrame', rafSpy)
+      vi.stubGlobal('cancelAnimationFrame', cafSpy)
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('does not call loadGsap() synchronously on mount -- only after every scheduled frame fires', async () => {
+      const { Reveal } = await import('./Reveal')
+      render(<Reveal mode="fade" reduced={false}>Loaded.</Reveal>)
+
+      expect(rafSpy).toHaveBeenCalledTimes(1)
+      expect(gsapMocks.fromTo).not.toHaveBeenCalled()
+
+      // Flushing every scheduled frame (draining, since the first callback
+      // schedules a second) is what actually starts the load.
+      flushAllFrames()
+      expect(rafSpy.mock.calls.length).toBeGreaterThan(1)
+      await waitFor(() => expect(gsapMocks.fromTo).toHaveBeenCalledTimes(1))
+    })
+
+    it('cancels every scheduled frame on an instant unmount -- the gsap load never starts', async () => {
+      const { Reveal } = await import('./Reveal')
+      const { unmount } = render(<Reveal mode="fade" reduced={false}>Loaded.</Reveal>)
+
+      unmount()
+      expect(cafSpy).toHaveBeenCalled()
+
+      // Even if a rogue timer flushed the (cancelled) frames anyway, the
+      // `cancelled` flag closed over by the effect guards it a second time.
+      flushAllFrames()
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(gsapMocks.fromTo).not.toHaveBeenCalled()
+    })
+
+    it('a post-hydration flip to reduced motion cancels the pending frame before either fires, so the gsap chunk is never requested', async () => {
+      const { Reveal } = await import('./Reveal')
+      const { rerender } = render(<Reveal mode="fade" reduced={false}>Loaded.</Reveal>)
+      expect(rafSpy).toHaveBeenCalledTimes(1)
+
+      // The real-browser sequence this reproduces: hydration commits with
+      // `reduced=false` (the server snapshot), then the store's real value
+      // lands after paint and the consumer re-renders with `reduced=true`
+      // -- before the first deferred frame has fired.
+      rerender(<Reveal mode="fade" reduced>Loaded.</Reveal>)
+      expect(cafSpy).toHaveBeenCalled()
+
+      flushAllFrames()
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(gsapMocks.fromTo).not.toHaveBeenCalled()
+    })
+  })
+
+  // Fix round, M3: `killTweensOf` stops the tween but used to leave
+  // whatever inline opacity it last wrote -- `useGSAP`'s own
+  // `context.revert()` cleared that; the hand-rolled cleanup did not.
+  it('W4FIX-B fix round (M3): mode="fade" cleanup clears the inline opacity after killing the tween', async () => {
+    const { Reveal } = await import('./Reveal')
+    const { container, unmount } = render(<Reveal mode="fade" reduced={false}>Loaded.</Reveal>)
+    await waitFor(() => expect(gsapMocks.fromTo).toHaveBeenCalledTimes(1))
+    const span = container.querySelector('span') as HTMLSpanElement
+    // Simulate the tween being mid-flight (gsap would have written this).
+    span.style.opacity = '0.3'
+
+    unmount()
+
+    expect(gsapMocks.killTweensOf).toHaveBeenCalledWith(span)
+    expect(span.style.opacity).toBe('')
+  })
+
+  // Fix round, M4: the tweens `onSplit` creates used to be owned by
+  // `useGSAP`'s context and killed by `context.revert()`. The hand-rolled
+  // cleanup only called `split.revert()`, which restores the markup but
+  // left the tween itself ticking on detached nodes for up to `DUR.slow`.
+  it('W4FIX-B fix round (M4): kills the onSplit tween on unmount, before reverting the split', async () => {
+    const fakeTween = { kill: vi.fn() }
+    gsapMocks.from.mockReturnValue(fakeTween)
+
+    const { Reveal } = await import('./Reveal')
+    const { unmount } = render(<Reveal mode="lines" reduced={false}>Two lines of hook copy.</Reveal>)
+    await waitFor(() => expect(splitTextMocks.create).toHaveBeenCalledTimes(1))
+    const [, vars] = splitTextMocks.create.mock.calls[0] as [HTMLElement, { onSplit: (self: unknown) => unknown }]
+    vars.onSplit({ lines: [{}, {}], words: [], chars: [] })
+    expect(gsapMocks.from).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    expect(fakeTween.kill).toHaveBeenCalledTimes(1)
+    expect(splitTextMocks.revert).toHaveBeenCalledTimes(1)
+    // Order matters: the tween must be killed before the split is
+    // reverted, matching the guarantee `useGSAP`'s context.revert() gave.
+    expect(fakeTween.kill.mock.invocationCallOrder[0]).toBeLessThan(splitTextMocks.revert.mock.invocationCallOrder[0])
+  })
 })

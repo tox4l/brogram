@@ -75,6 +75,20 @@ const useIsomorphicLayoutEffect = typeof document !== 'undefined' ? useLayoutEff
  * `{ type, mask: 'lines', ... }` for every mode is spec-faithful (W4 §5.2);
  * it is a documented no-op for the two unmasked modes, not a bug.
  *
+ * W4FIX-B fix round (F2): the `loadGsap()` call is scheduled inside a
+ * `requestAnimationFrame`, not fired in the same commit that runs this
+ * effect. Reason: `useReducedMotion()`'s `getServerSnapshot()` returns
+ * `false` (there is no way to know the OS preference on the server), so
+ * React's hydration commit always has `reduced === false` even for a
+ * reduced-motion learner -- the real value lands one tick later, this
+ * effect re-runs, and `cancelled` stops the split, but by then a
+ * synchronous `loadGsap()` call already had every `import()` in flight. The
+ * one-frame defer gives that correcting re-render a chance to cancel the
+ * scheduled frame (via `cancelAnimationFrame`, in the cleanup below) before
+ * any network request starts, so a reduced-motion learner never requests
+ * the gsap chunk at all -- only a learner whose resolved preference is
+ * still "motion on" one frame after mount actually pays for it.
+ *
  * This is also a `'use client'` component that Next server-renders, so the
  * final text paints once before hydration runs the split/tween at all. The
  * span renders `data-reveal="pending"` plus `visibility: hidden` inline
@@ -108,38 +122,85 @@ export function Reveal({ mode, reduced, children, surface, className }: RevealPr
     let cancelled = false
     let split: { revert: () => void } | undefined
     let loadedGsap: LoadedGsap['gsap'] | undefined
+    // M4: tweens `onSplit` creates used to be owned (and killed on
+    // unmount/re-run) by `useGSAP`'s context. The hand-rolled effect only
+    // ever called `split.revert()`, which restores the markup but left the
+    // tween itself ticking on detached nodes for up to `DUR.slow`. Collect
+    // what `onSplit` returns and kill it explicitly before reverting.
+    const tweens: Array<{ kill: () => void } | undefined> = []
 
-    loadGsap().then(({ gsap, SplitText }: LoadedGsap) => {
-      if (cancelled || !el) return
-      loadedGsap = gsap
+    // F2: two frames of deferral -- see the module doc above for why this
+    // has to happen after the commit, not inside it. One frame is not
+    // enough: `requestAnimationFrame` runs before the browser paints, while
+    // the `useSyncExternalStore` correction that flips `reduced` to its
+    // real value fires from a passive effect, which React runs only after
+    // that paint -- one rAF still lands before it. A second rAF waits for
+    // a full additional paint cycle, which is after the passive-effect
+    // flush in every engine this was verified against (measured live: a
+    // single rAF still let a reduced-motion learner's build request all
+    // three gsap chunks on /login; two does not).
+    function startLoad() {
+      loadGsap()
+        .then(({ gsap, SplitText }: LoadedGsap) => {
+          if (cancelled || !el) return
+          loadedGsap = gsap
 
-      if (mode === 'fade') {
-        gsap.killTweensOf(el)
-        gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: DUR.base / 1000, ease: 'enter' })
-        return
-      }
+          if (mode === 'fade') {
+            gsap.killTweensOf(el)
+            gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: DUR.base / 1000, ease: 'enter' })
+            return
+          }
 
-      split = SplitText.create(el, {
-        type: mode,
-        mask: 'lines',
-        aria: 'auto',
-        autoSplit: true,
-        onSplit: (self: SplitParts) => {
-          if (cancelled) return
-          const targets = mode === 'lines' ? self.lines : mode === 'words' ? self.words : self.chars
-          const n = Math.max(targets.length, 1)
-          const stagger = Math.min(STAGGER.step / 1000, STAGGER.max / 1000 / n)
-          return mode === 'lines'
-            ? gsap.from(targets, { yPercent: 110, duration: DUR.slow / 1000, ease: 'enter', stagger })
-            : gsap.from(targets, { yPercent: 40, opacity: 0, duration: DUR.base / 1000, ease: 'enter', stagger })
-        },
+          split = SplitText.create(el, {
+            type: mode,
+            mask: 'lines',
+            aria: 'auto',
+            autoSplit: true,
+            onSplit: (self: SplitParts) => {
+              if (cancelled) return
+              const targets = mode === 'lines' ? self.lines : mode === 'words' ? self.words : self.chars
+              const n = Math.max(targets.length, 1)
+              const stagger = Math.min(STAGGER.step / 1000, STAGGER.max / 1000 / n)
+              const tween =
+                mode === 'lines'
+                  ? gsap.from(targets, { yPercent: 110, duration: DUR.slow / 1000, ease: 'enter', stagger })
+                  : gsap.from(targets, { yPercent: 40, opacity: 0, duration: DUR.base / 1000, ease: 'enter', stagger })
+              tweens.push(tween)
+              return tween
+            },
+          })
+        })
+        // M1: a stale chunk hash across a deploy makes this reject. These
+        // components already render correct, visible, unanimated content
+        // when the load never resolves, so a chunk failure is silent, not
+        // an unhandled rejection in every viewer's console.
+        .catch(() => {})
+    }
+
+    let raf2 = 0
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return
+      raf2 = requestAnimationFrame(() => {
+        if (cancelled) return
+        startLoad()
       })
     })
 
     return () => {
       cancelled = true
+      cancelAnimationFrame(raf)
+      cancelAnimationFrame(raf2)
+      tweens.forEach((tween) => tween?.kill())
       split?.revert()
-      if (mode === 'fade' && el) loadedGsap?.killTweensOf(el)
+      if (mode === 'fade' && el) {
+        loadedGsap?.killTweensOf(el)
+        // M3: `killTweensOf` stops the tween but leaves the inline opacity
+        // it last wrote (e.g. mid-fade at `reduced`'s flip) -- `useGSAP`'s
+        // `context.revert()` used to clear that. Without this, the element
+        // freezes at whatever opacity it was mid-fade, permanently, until
+        // the next remount.
+        el.style.opacity = ''
+      }
     }
   }, [mode, reduced, children])
 

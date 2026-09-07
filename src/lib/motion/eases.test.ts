@@ -102,3 +102,51 @@ describe('ease name discipline (W4.13)', () => {
     expect(offenders).toEqual([])
   })
 })
+
+// W4FIX-B fix round, F3: this whole task exists to keep gsap off every
+// route's entry chunk by making `loadGsap()`'s dynamic import() the only
+// door in. Nothing in the suite failed if a static `import { gsap } from
+// 'gsap'` came back -- the motion suites mock `gsap` and never inspect the
+// import graph, and `perf:bundle` cannot tell a full gsap regression apart
+// from today's already-red state (T2.11's zod leak and the T0.4/T0.6
+// providers ruling are both still open). This is the regression guard: a
+// source scan of exactly the files that must reach gsap only through
+// `loadGsap()`.
+describe('no static gsap import in the motion lane (W4FIX-B fix round, F3)', () => {
+  const ROOT = path.resolve(__dirname, '..', '..', '..')
+  const SRC = path.join(ROOT, 'src')
+  // A leading-anchored, single-line `import ... from '<module>'` -- matches
+  // `import { gsap } from 'gsap'`, `import gsap from 'gsap'`,
+  // `import { SplitText } from 'gsap/SplitText'`, `import { useGSAP } from
+  // '@gsap/react'`, but not the string literal `'gsap/SplitText'` passed as
+  // an argument to `import(...)` inside `loadGsap()` itself.
+  const STATIC_GSAP_IMPORT = /^\s*import\s[^\n]*from\s+['"](gsap(\/.*)?|@gsap\/react)['"]/m
+
+  // Every file in the motion lane, plus the one file outside it that this
+  // whole bug lived in (`providers.tsx` used to call `registerEases()` at
+  // module scope). `*.test.*` is excluded on purpose -- test files
+  // legitimately import real `gsap` to read back what `loadGsap()`
+  // registered (see the top of this file).
+  function motionLaneFiles(): string[] {
+    const files: string[] = []
+    for (const dir of [path.join(SRC, 'lib', 'motion'), path.join(SRC, 'components', 'motion')]) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) continue
+        if (!/\.tsx?$/.test(entry.name) || entry.name.includes('.test.')) continue
+        files.push(path.join(dir, entry.name))
+      }
+    }
+    files.push(path.join(SRC, 'app', 'providers.tsx'))
+    return files
+  }
+
+  it("reaches gsap only through loadGsap()'s dynamic import -- no top-level `import ... from 'gsap'` / '@gsap/react'", () => {
+    const offenders: string[] = []
+    for (const file of motionLaneFiles()) {
+      const rel = path.relative(ROOT, file).split(path.sep).join('/')
+      const content = fs.readFileSync(file, 'utf8')
+      if (STATIC_GSAP_IMPORT.test(content)) offenders.push(rel)
+    }
+    expect(offenders, `${offenders.join(', ')} must reach gsap through loadGsap() (src/lib/motion/eases.ts), not a static import -- that is exactly the root-chunk leak W4FIX-B removed`).toEqual([])
+  })
+})
