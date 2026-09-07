@@ -40,3 +40,13 @@ export function errorOutput(error: unknown): ExecutionOutput {
 export function browserTimeout(ms: number): number {
   return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 5000) : 5000
 }
+
+/**
+ * One honest timeout line per phase, shared by every adapter in the bank
+ * (WorkerAdapter's languages and WebAdapter alike) so a deadline never reads
+ * as a hang: a per-test deadline names itself as a stopped test, a prepare
+ * deadline names itself as the runtime failing to load, and neither leaks
+ * adapter-specific wording a student would have to learn to recognize twice.
+ */
+export const testTimeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'Execution timed out or was aborted.', failureKind: 'timeout' }
+export const prepareTimeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'The runtime failed to load in time. Try again.', failureKind: 'timeout' }

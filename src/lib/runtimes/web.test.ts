@@ -96,6 +96,29 @@ describe('WebAdapter', () => {
     adapter.abort()
   })
 
+  it('gives every sandbox a real, deterministic viewport instead of display:none', async () => {
+    // Regression: `hidden` (display:none) collapses an iframe's own content
+    // viewport, so `@media (max-width: ...)` and viewport units evaluate
+    // against an undefined/near-zero size instead of a normal screen -
+    // confirmed live: a correct `@media (max-width: 600px)` solution read
+    // back `flexDirection: 'column'` even on a wide layout, because the
+    // hidden sandbox's own viewport was narrower than the breakpoint. The
+    // fix keeps the frame invisible via off-screen fixed positioning, which
+    // preserves a real, stable layout box.
+    const { frames } = installFrames()
+    const adapter = new WebAdapter()
+    await adapter.warmup()
+    for (const frame of frames) {
+      expect(frame.element.hidden).toBe(false)
+      expect(frame.element.style.position).toBe('fixed')
+      expect(frame.element.style.width).toBe('1024px')
+      expect(frame.element.style.height).toBe('768px')
+      // Off-screen, not display:none or visibility:hidden -- the box still lays out.
+      expect(frame.element.style.left).toBe('-10000px')
+    }
+    adapter.abort()
+  })
+
   it('captures console output and errors on free runs', async () => {
     installFrames()
     const adapter = new WebAdapter()
@@ -210,7 +233,10 @@ describe('WebAdapter', () => {
     // unhandled rejection window between the reject and this test's own assertion.
     const failure = adapter.warmup().then(() => null, (e: unknown) => e)
     await vi.advanceTimersByTimeAsync(15_000)
-    expect(await failure).toMatchObject({ message: 'The web sandbox could not start.' })
+    // Matches the shared prepare-phase timeout line every adapter in the
+    // bank uses (./shared's prepareTimeoutOutput) - the runtime itself never
+    // came up, so this must read the same as WorkerAdapter's own load failure.
+    expect(await failure).toMatchObject({ message: 'The runtime failed to load in time. Try again.' })
     vi.useRealTimers()
     options.stallReady = false
     await adapter.warmup()

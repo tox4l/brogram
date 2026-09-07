@@ -1,5 +1,5 @@
 import type { Language, RunRequest, RunResult, RuntimeAdapter, TestResult } from '@/lib/contracts'
-import { browserTimeout, errorOutput, makeTestResult, summarizeResults, type ExecutionOutput } from './shared'
+import { browserTimeout, errorOutput, makeTestResult, prepareTimeoutOutput, summarizeResults, testTimeoutOutput, type ExecutionOutput } from './shared'
 import { publishRuntimeProgress } from './progress'
 import type { WorkerCommand, WorkerReply } from './worker-host'
 
@@ -13,11 +13,11 @@ export interface RuntimeWorker {
 type Pending = { resolve: (output?: ExecutionOutput) => void; reject: (error: Error) => void }
 type Slot = { worker: RuntimeWorker; pending: Map<number, Pending>; prepared: Set<string>; preparation?: Promise<void>; dead: boolean }
 type Run = { request: RunRequest; results: TestResult[]; resolve: (result: RunResult) => void; done: boolean; timer?: ReturnType<typeof setTimeout>; phase?: RunPhase }
-const timeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'Execution timed out or was aborted.', failureKind: 'timeout' }
 // A prepare-phase deadline means the runtime itself never came up (a stalled
 // CDN, a missing asset) - the student's code never ran, so "Execution timed
-// out" would misattribute the failure to their program.
-const prepareTimeoutOutput: ExecutionOutput = { actual: '', stdout: '', stderr: 'The runtime failed to load in time. Try again.', failureKind: 'timeout' }
+// out" would misattribute the failure to their program. Both lines live in
+// ./shared, shared with WebAdapter, so the whole runtime bank speaks with one
+// honest timeout voice instead of each adapter inventing its own wording.
 
 /** A run is one warmup wait, one optional compile, then one deadline per test. */
 export type RunPhase = 'prepare' | 'compile' | 'test'
@@ -179,7 +179,7 @@ export class WorkerAdapter implements RuntimeAdapter {
   private finishAsTimedOut(): boolean {
     const run = this.current
     if (!run || run.done) return false
-    const output = run.phase === 'prepare' ? prepareTimeoutOutput : timeoutOutput
+    const output = run.phase === 'prepare' ? prepareTimeoutOutput : testTimeoutOutput
     const remaining = run.request.tests.slice(run.results.length).map(t => makeTestResult(t, output, browserTimeout(run.request.timeoutMs)))
     const result = summarizeResults([...run.results, ...remaining])
     if (!run.request.tests.length) Object.assign(result, { ok: false, stdout: '', stderr: output.stderr })

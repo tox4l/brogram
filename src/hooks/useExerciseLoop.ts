@@ -254,8 +254,20 @@ export function useExerciseLoop(exerciseId: string) {
     const timer = window.setInterval(() => { if (active()) setClock(Date.now()) }, 1000)
     return () => {
       generation.current = token + 1; unsubscribe(); window.clearInterval(timer)
+      // Unconditional, not gated behind gate.current: getRuntime() adapters are
+      // module-level singletons (one per language, src/lib/runtimes/index.ts),
+      // so they outlive this effect's own instance -- including a router-driven
+      // remount of this very component (confirmed live: navigating between
+      // exercises via next()'s router.replace() does NOT preserve this hook's
+      // instance despite page.tsx's own "same workspace instance" comment; a
+      // fresh mount runs this cleanup for the OLD instance first). gate.current
+      // only reflects whether THIS instance's own operate() call is mid-flight;
+      // it says nothing about whether the adapter itself still has abandoned
+      // timers or an unresolved pending run from a moment ago. abort() on both
+      // adapters is already a safe no-op when nothing is pending, so calling it
+      // unconditionally on every teardown costs nothing and closes the gap.
       const item = exerciseRef.current
-      if (item && !usesAnswerForm(item) && gate.current) getRuntime(item.kind === 'schema' ? 'sql' : item.language).abort()
+      if (item && !usesAnswerForm(item)) getRuntime(item.kind === 'schema' ? 'sql' : item.language).abort()
     }
   }, [exerciseId, reload])
 

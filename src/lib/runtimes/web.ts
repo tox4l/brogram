@@ -1,6 +1,6 @@
 import type { RunRequest, RunResult, RuntimeAdapter, TestResult } from '@/lib/contracts'
 import { publishRuntimeProgress } from './progress'
-import { makeTestResult, summarizeResults, type ExecutionOutput } from './shared'
+import { makeTestResult, prepareTimeoutOutput, summarizeResults, testTimeoutOutput, type ExecutionOutput } from './shared'
 import { webFrameDocument } from './web-frame'
 
 type Frame = {
@@ -20,8 +20,10 @@ type PendingRun = {
   cancelTest?: () => void
 }
 
+// One honest timeout line, shared with WorkerAdapter's languages (./shared) -
+// a per-test deadline reads as a stopped test the same way in every runtime.
 function timeoutOutput(): ExecutionOutput {
-  return { actual: '', stdout: '', stderr: 'Web execution stopped after the test deadline or was cancelled.', failureKind: 'timeout' }
+  return testTimeoutOutput
 }
 
 /** DOM exercises run in an opaque-origin iframe with no access to parent storage. */
@@ -34,7 +36,26 @@ export class WebAdapter implements RuntimeAdapter {
   private createFrame(): Frame {
     publishRuntimeProgress({ language: 'web', phase: 'loading', packageName: 'DOM sandbox' })
     const element = document.createElement('iframe')
-    element.hidden = true
+    // `hidden` (display:none) gives the sandbox no layout box at all, so its
+    // content document has no real viewport - Chromium collapses a display:none
+    // iframe's content viewport, and `@media (max-width: ...)`/`vw`/`vh` then
+    // evaluate against that collapsed size instead of a normal screen. A student's
+    // exactly-correct CSS (e.g. a max-width media query) reads back the WRONG
+    // computed style purely because of how the sandbox is hidden, not their code -
+    // confirmed against a live run: `flexDirection` came back `'column'` for a rule
+    // that only applies under `max-width: 600px`. Off-screen-but-laid-out (fixed
+    // position, real dimensions) keeps the iframe invisible to the user while
+    // giving it the same stable desktop-sized viewport `scripts/verify-exercise.mjs`
+    // already grades against (jsdom's own default window size), so authoring and
+    // live grading agree.
+    element.style.position = 'fixed'
+    element.style.top = '0'
+    element.style.left = '-10000px'
+    element.style.width = '1024px'
+    element.style.height = '768px'
+    element.style.border = '0'
+    element.tabIndex = -1
+    element.setAttribute('aria-hidden', 'true')
     element.title = 'Web exercise runtime'
     element.setAttribute('sandbox', 'allow-scripts')
     element.referrerPolicy = 'no-referrer'
@@ -74,7 +95,10 @@ export class WebAdapter implements RuntimeAdapter {
       }
     }
     const startupTimer = setTimeout(() => {
-      frame.error = 'The web sandbox could not start.'
+      // Same wording WorkerAdapter uses for its own prepare-phase deadline (./shared):
+      // the runtime itself never came up, so this must never read as the student's
+      // own code timing out.
+      frame.error = prepareTimeoutOutput.stderr
       publishRuntimeProgress({ language: 'web', phase: 'error', packageName: 'DOM sandbox', message: frame.error })
       frame.dispose()
     }, 15_000)
