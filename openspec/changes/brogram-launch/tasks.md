@@ -70,10 +70,10 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T4.2 Motion primitives: eases, Reveal, useFlipIndicator, the motion attribute (e360f74, fix 1d1b91c, approved 2026-09-07)
 - [x] T4.3 ShaderSurface and the settle-and-freeze field (e2bf740, fix 5b5415e, approved 2026-09-07)
 - [x] T4.4 CodeGuide, the lesson reading surface, and the verifier (a14a3a8, fixes 0068251, f51a92b, d922130, approved 2026-09-07)
-- [ ] T4.5 Shell, dock, Buddy, shared UI, Account
+- [x] T4.5 Shell, dock, Buddy, shared UI, Account (e755493, fix 8c062bd, approved 2026-09-07)
 - [ ] T4.6 Dashboard, Courses, Course home
 - [ ] T4.7 Exercise and the editor theme
 - [ ] T4.8 De-rot, Playground and the reward surfaces
-- [ ] T4.9 Reports, Login, Onboarding, landing
+- [x] T4.9 Reports, Login, Onboarding, landing (853aa16, fix f63d6b4, approved 2026-09-07)
 - [ ] T4.10 The bundle budget script and the e2e battery (after Wave 3 Group A)
 - [ ] T4.11 Wave review, build log, ledger
