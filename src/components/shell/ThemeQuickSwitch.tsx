@@ -199,6 +199,12 @@ export function ThemeQuickSwitch() {
                   className={cn(
                     'flex min-h-11 flex-col items-start justify-center gap-2 rounded-lg border p-2 text-left text-micro outline-none',
                     'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover',
+                    // Fix round (review M5): five tiles in a two-column grid
+                    // leave an empty third-row cell -- the one control the
+                    // spec calls "the most important in the wave" reading as
+                    // an accident. The last tile spans both columns so the
+                    // final row is a deliberate, full-width fifth choice.
+                    'last:col-span-2',
                     checked ? 'border-ring ring-2 ring-ring/50' : 'border-border hover:border-ring/50',
                   )}
                 >

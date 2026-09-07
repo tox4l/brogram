@@ -332,7 +332,7 @@ export default function AccountPage() {
       <Section id="make-it-yours-heading" title="Make it yours">
         <div className="space-y-2">
           <span className={LABEL_CLASS}>Theme</span>
-          <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {THEMES.map((entry, index) => {
               const checked = mounted && entry.id === activeTheme
               return (

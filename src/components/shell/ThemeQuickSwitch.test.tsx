@@ -281,6 +281,16 @@ describe('ThemeQuickSwitch', () => {
     )
   })
 
+  // T4.5 fix round (review finding M5): five tiles in a plain two-column
+  // grid render as 2+2+1 with a visibly empty cell, on the spec's own
+  // "most important control in the wave." The last tile now spans both
+  // columns so the final row is a deliberate full-width fifth choice.
+  it('M5: the fifth swatch spans both columns so the last row has no empty cell', () => {
+    renderSwitch()
+    fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
+    expect(screen.getByRole('radio', { name: 'Arcade' }).className).toMatch(/\blast:col-span-2\b/)
+  })
+
   // G2 (W2FIX-G fix round, wave 2 review section 6): a real pick from here
   // is no longer an unconfirmed device seed -- the marker `seedInitialTheme`
   // wrote must be cleared, or `useThemeSync`'s write-back skip would go on

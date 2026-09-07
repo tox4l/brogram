@@ -32,13 +32,16 @@ export function AppShell({ children, wellnessRail }: {
     <div className="flex flex-1 flex-col">
       <a href="#main-content" className="sr-only z-50 rounded-lg bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to content</a>
       {/* Wave 4 spec section 4: "Header content height 56px -- a rule, not a
-          band." The row locks to h-14 (56px) from sm up, where the nav sits
-          on one line; below that it keeps its organic wrap height (two
-          rows) rather than clipping content that has nowhere else to go. */}
+          band." The row locks to h-14 (56px) from lg up, where the wordmark,
+          nav and control cluster actually fit on one line (measured: the row
+          needs ~704px and does not fit until ~820px -- sm and md would clip
+          it and force a document-wide horizontal scrollbar); below lg it
+          keeps its organic wrap height (two rows) rather than clipping
+          content that has nowhere else to go. */}
       <header className="border-b border-border">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-3 sm:h-14 sm:flex-nowrap sm:py-0 sm:px-8">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-3 sm:px-8 lg:h-14 lg:flex-nowrap lg:py-0">
           <Link href="/dashboard" className="rounded-lg text-h3 font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring">BroGram<span className="text-primary">.</span></Link>
-          <nav aria-label="Main navigation" className="order-3 flex w-full items-center gap-2 sm:order-none sm:w-auto">
+          <nav aria-label="Main navigation" className="order-3 flex w-full items-center gap-2 lg:order-none lg:w-auto">
             {navigation.map((item) => (
               <Link key={item.title} href={item.href} aria-current={item.active ? 'page' : undefined}
                 className={cn('rounded-lg px-3 py-2 text-small outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none', item.active ? 'bg-muted text-foreground' : 'text-muted-foreground')}>

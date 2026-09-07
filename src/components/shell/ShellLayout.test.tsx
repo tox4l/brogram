@@ -126,6 +126,24 @@ describe('ShellLayout', () => {
     expect(screen.getByText('Content')).toBeTruthy()
   })
 
+  // T4.5 fix round (review finding I2): the rail's first label baseline must
+  // land within 2px of the page H1 baseline. Both start at the same
+  // container top (the shared `py-6`), but the rail's first line (a
+  // `text-small` heading) sits ~9-13px above where an H1's first baseline
+  // falls, so the rail needs its own top offset to compensate -- pinned here
+  // as a class assertion; the real geometry is asserted in e2e/measure.spec.ts.
+  it('gives the left rail an lg:pt-3 offset so its first label baseline approaches the page H1 baseline', async () => {
+    render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('left') })
+    const aside = await screen.findByRole('complementary', { name: 'Wellness' })
+    expect(aside.className).toMatch(/\blg:pt-3\b/)
+  })
+
+  it('gives the right rail an lg:pt-3 offset so its first label baseline approaches the page H1 baseline', async () => {
+    render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('right') })
+    const aside = await screen.findByRole('complementary', { name: 'Wellness' })
+    expect(aside.className).toMatch(/\blg:pt-3\b/)
+  })
+
   // R6.3 / I4: the v1 rail special-cased the exercise route directly inside
   // this component ("dock leads, compact strip", `usePathname()`-driven).
   // That assertion is gone because the mechanism it pinned is gone: this

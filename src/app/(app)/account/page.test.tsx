@@ -214,6 +214,15 @@ describe('Account page', () => {
       expect(mocks.setTheme).toHaveBeenCalledWith('amber')
     })
 
+    // T4.5 fix round (review finding M5): five tiles in a `sm:grid-cols-4`
+    // grid render as 4+1, an orphan tile on the spec's own "most important
+    // control in the wave." The 34rem/544px column comfortably holds five.
+    it('M5: the theme grid renders five swatches on one row from sm up (sm:grid-cols-5)', () => {
+      render(<AccountPage />, { wrapper: wrapper().Wrapper })
+      const group = screen.getByRole('radiogroup', { name: 'Theme' })
+      expect(group.className).toMatch(/\bsm:grid-cols-5\b/)
+    })
+
     // X5 (wave 2 review): the picker used to only ever call `setTheme` --
     // the choice never left this device. It now writes through the same
     // single `wellness.prefs` writer every other control on this page uses.

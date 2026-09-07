@@ -149,7 +149,7 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
             type="checkbox"
             checked={prefs.dock.compactOnExercise}
             onChange={(event) => onDockChange({ compactOnExercise: event.target.checked })}
-            className="size-4 rounded-lg border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="size-4 border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
         <NumberField label="Prayer lead time (min)" value={prefs.prayerLeadMinutes} max={60} onChange={(value) => onChange({ prayerLeadMinutes: value })} />
@@ -163,7 +163,7 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
             type="checkbox"
             checked={prefs.useDeviceLocation}
             onChange={(event) => onChange({ useDeviceLocation: event.target.checked })}
-            className="size-4 rounded-lg border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="size-4 border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
       </div>

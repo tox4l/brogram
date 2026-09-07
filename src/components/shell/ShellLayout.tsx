@@ -77,12 +77,12 @@ export function ShellLayout({ dock, children }: { dock: ReactNode; children: Rea
         )}
         <main id="main-content" tabIndex={-1} className="min-w-0 outline-none">{children}</main>
         {template === 'left-rail' && (
-          <aside aria-label="Wellness" className="min-w-0 border-b border-rule pb-6 lg:order-first lg:sticky lg:top-16 lg:border-b-0 lg:border-r lg:border-rule lg:pr-8 lg:pb-0">
+          <aside aria-label="Wellness" className="min-w-0 border-b border-rule pb-6 lg:order-first lg:sticky lg:top-16 lg:border-b-0 lg:border-r lg:border-rule lg:pr-8 lg:pt-3 lg:pb-0">
             {dock}
           </aside>
         )}
         {template === 'right-rail' && (
-          <aside aria-label="Wellness" className="min-w-0 border-t border-rule pt-6 lg:sticky lg:top-16 lg:border-t-0 lg:border-l lg:border-rule lg:pt-0 lg:pl-8">
+          <aside aria-label="Wellness" className="min-w-0 border-t border-rule pt-6 lg:sticky lg:top-16 lg:border-t-0 lg:border-l lg:border-rule lg:pt-3 lg:pl-8">
             {dock}
           </aside>
         )}

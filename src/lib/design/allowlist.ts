@@ -42,7 +42,9 @@ const T4_4_LESSON = ['src/components/lesson', 'src/app/(app)/lesson']
 // except two narrow, load-bearing exceptions -- see the individual 'src/components/wellness' (spacing-
 // scale), 'src/components/buddy'/'src/components/ui' (radii) and 'src/components/ui' (motion-css)
 // entries below, each with its own comment. No blanket prefix constant remains.
-const T4_6_COURSE = ['src/app/(app)/dashboard', 'src/app/(app)/courses', 'src/app/(app)/course', 'src/components/course']
+// T4_6_COURSE (src/app/(app)/dashboard, src/app/(app)/courses, src/app/(app)/course, src/components/course):
+// every rule below cleared to zero for T4.6's own paths, so no allowlist entry -- and therefore no
+// prefix constant -- remains.
 // T4_7_EXERCISE (src/app/(app)/exercise, src/components/exercise): every rule below cleared to
 // zero for T4.7's own paths, so no allowlist entry -- and therefore no prefix constant -- remains.
 const T4_8_DEROT = ['src/app/(app)/derot', 'src/components/derot', 'src/components/rewards', 'src/components/play']
@@ -78,7 +80,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // T4.5's entry deleted: shell/wellness/buddy/account (ui is out of this
     // rule's scope by design) now hold zero raw type-scale classes -- every
     // site maps to the additive scale (--text-micro|small|body|lede|h1..h3).
-    ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
+    // T4.6's entry deleted: dashboard/courses/course/[code]/components/course
+    // now hold zero raw type-scale classes.
     // T4.7's entry deleted: exercise/exercise-components now hold zero raw
     // type-scale classes.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
@@ -91,7 +94,9 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // hard-coded Tailwind palette classes (the three remaining hits --
     // DockControl.tsx's reminder dot, PrayerTimes.tsx's toggle track,
     // account/page.tsx's range-input accent -- moved to --primary tokens).
-    ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
+    // T4.6's entry deleted: the single emerald hit (the dashboard resume
+    // card's gradient wash) moved to a plain --card fill -- the card reads
+    // as a raised surface through its own token now, not a hard-coded tint.
     // T4.7's entry deleted: the six emerald hits (submit button, verdict
     // icon, results row/review-praise text, the fix-plan hint accent, the
     // spot-the-bug pressed line) moved to --primary/--success/--rule per
@@ -121,7 +126,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // regression risk this pure-presentation sweep does not have the
     // rendered-screenshot coverage to verify safely across every consumer.
     ...entriesFor('T4.5', ['src/components/ui'], 'shadcn/base-ui primitive micro-padding tuned to fixed control heights (h-5..h-8) — see the comment above this entry.'),
-    ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
+    // T4.6's entry deleted: dashboard/courses/course/[code]/components/course
+    // now sit on the eight-step rhythm.
     // T4.7's entry deleted: exercise/exercise-components now sit on the
     // eight-step rhythm.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
@@ -143,7 +149,8 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // the same four-way conditional a second time. Every other radius under
     // shell/wellness/buddy/ui/account now sits on rounded-(lg|xl|2xl|full).
     ...entriesFor('T4.5', ['src/components/buddy', 'src/components/ui'], 'Drawer.tsx (buddy) rounded-none and drawer.tsx (ui) rounded-[inherit] are load-bearing shape, not a scale miss — see the comment above this entry.'),
-    ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
+    // T4.6's entry deleted: dashboard/courses/course/[code]/components/course
+    // now sit on rounded-(lg|xl|2xl|full).
     // T4.7's entry deleted: exercise/exercise-components now sit on
     // rounded-(lg|xl|2xl|full).
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
@@ -157,7 +164,9 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // five inline size-3.5 glyphs (Dock, Pomodoro, PrayerTimes,
     // WaterStretch x2) and the button/badge parent-selector defaults for the
     // xs/sm/icon-xs button sizes were the six sites raised.
-    ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
+    // T4.6's entry deleted: every lucide icon under dashboard/courses/
+    // course/[code]/components/course now renders at size-4 (16px) or
+    // larger.
     // T4.7's entry deleted: the back-link chevron and the pass/fail glyphs
     // (both previously size-3/size-3.5) now render at size-4.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
@@ -212,13 +221,17 @@ export const FONT_WEIGHT_RATIO_ALLOWANCE = {
 // this recorded ceiling, the same shape as FONT_WEIGHT_RATIO_ALLOWANCE,
 // naming the two tasks whose own sweeps drop the count back under the cap.
 export const WILL_CHANGE_TRANSFORM_ALLOWANCE = {
-  owners: ['T4.5', 'T4.8'],
-  /** Measured the day this file was written: src/components/ui/drawer.tsx
-   *  (1, T4.5) and src/components/derot/play/FollowTheDot.tsx +
-   *  KeepTime.tsx (2 each, T4.8) = 5 against Step 2's cap of 3. The gate
-   *  never accepts a count *above* this -- only at or below it, tightening
-   *  to 3 as T4.5 and T4.8 drop two of the five in their own sweeps. */
-  baselineCount: 5,
+  // T4.5's fix round (review finding M4) drops its own occurrence:
+  // src/components/ui/drawer.tsx's DrawerContent already promotes itself
+  // via its own transform-[translate3d(...)] utility, so will-change-
+  // transform there was a redundant hint, not load-bearing behaviour --
+  // removed rather than allowlisted. T4.8 is the sole remaining owner.
+  owners: ['T4.8'],
+  /** Measured after T4.5's fix round: src/components/derot/play/
+   *  FollowTheDot.tsx + KeepTime.tsx (2 each) = 4 against Step 2's cap of 3.
+   *  The gate never accepts a count *above* this -- only at or below it,
+   *  tightening to 3 as T4.8 drops one of the four in its own sweep. */
+  baselineCount: 4,
   // Deliberately does not spell out the literal utility or CSS forms this
   // allowance is about: this file is itself scanned by scopeAllSrc() (rule
   // 6 and the will-change budget cover all of src/, allowlist.ts included),
@@ -226,7 +239,8 @@ export const WILL_CHANGE_TRANSFORM_ALLOWANCE = {
   // naming the class here verbatim would make this very note count as one
   // more occurrence against its own budget.
   note:
-    "5 selectors against Step 2's hard cap of 3 (drawer.tsx x1, FollowTheDot.tsx x2, KeepTime.tsx x2) use the will-change " +
-    "shorthand for the transform property. Cleared, and this allowance deleted, once T4.5 and T4.8 have each dropped " +
-    'their share and the CLI reports <= 3 on its own.',
+    "4 selectors against Step 2's hard cap of 3 (FollowTheDot.tsx x2, KeepTime.tsx x2) use the will-change shorthand for " +
+    "the transform property (drawer.tsx's single occurrence was dropped in T4.5's fix round — redundant next to its own " +
+    'transform-[translate3d(...)] utility). Cleared, and this allowance deleted, once T4.8 has dropped its share and the ' +
+    'CLI reports <= 3 on its own.',
 }
