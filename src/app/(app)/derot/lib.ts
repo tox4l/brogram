@@ -170,12 +170,24 @@ function closestToDifficulty(items: DrillItem[], target: number): DrillItem {
  * otherwise items not yet completed today are preferred over ones already
  * done today, never-played items are preferred over replays, and the pick
  * within that pool is the difficulty closest to the student's recent scores.
+ *
+ * `excludeIds` (fix round 2, N3) is a DIFFERENT exclusion than "played
+ * before": it is "already shown in the run in progress", and unlike the
+ * played-before/replay fallback below (which is deliberately permanent --
+ * a learner who has worked through a whole small bank must still be able to
+ * replay it forever), exhausting `excludeIds` returns `null` rather than a
+ * repeat. A bank with three items must not show its third item again as
+ * items four, five and six of the same run with the answer still on screen
+ * from two items ago -- the caller (the Arcade run page) reads a `null`
+ * return here as "shorten the run to what was actually played", not as
+ * "no items exist for this kind" (the pre-existing, `items.length === 0` case).
  */
 export function pickDrillItem(
   items: DrillItem[],
   resultsForKind: DrillResult[],
   now: Date = new Date(),
   explicitId?: string | null,
+  excludeIds?: ReadonlySet<string>,
 ): DrillItem | null {
   if (items.length === 0) return null
   if (explicitId) {
@@ -183,12 +195,15 @@ export function pickDrillItem(
     if (explicit) return explicit
   }
 
+  const notExcluded = excludeIds ? items.filter((item) => !excludeIds.has(item.id)) : items
+  if (notExcluded.length === 0) return null
+
   const todayKey = dateKey(now.toISOString())
   const completedToday = new Set(resultsForKind.filter((result) => dateKey(result.at) === todayKey).map((result) => result.drillId))
   const everPlayed = new Set(resultsForKind.map((result) => result.drillId))
 
-  const notDoneToday = items.filter((item) => !completedToday.has(item.id))
-  const pool = notDoneToday.length > 0 ? notDoneToday : items
+  const notDoneToday = notExcluded.filter((item) => !completedToday.has(item.id))
+  const pool = notDoneToday.length > 0 ? notDoneToday : notExcluded
 
   const neverPlayed = pool.filter((item) => !everPlayed.has(item.id))
   const candidates = neverPlayed.length > 0 ? neverPlayed : pool

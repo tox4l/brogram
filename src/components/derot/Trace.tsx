@@ -36,8 +36,6 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
   const [correct, setCorrect] = useState(false)
 
   const submittedRef = useRef(false)
-  const startRef = useRef(now())
-  const elapsed = () => now() - startRef.current
 
   const submit = useCallback(
     (values: Record<string, string>, elapsedMs: number) => {
@@ -60,11 +58,13 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
     [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.expected, now]
   )
 
-  useCountdown({
+  // getElapsedMs is the single source of elapsed time (fix round 2, N1): it
+  // excludes any span where `paused` was true.
+  const { getElapsedMs } = useCountdown({
     timeLimitS: item.timeLimitS,
     now,
     active: !submitted && !paused,
-    onExpire: () => submit(answers, elapsed()),
+    onExpire: (elapsedMs) => submit(answers, elapsedMs),
   })
 
   return (
@@ -110,7 +110,7 @@ export function Trace({ item, onResult, now = Date.now, paused = false }: TraceP
         </div>
 
         {!submitted ? (
-          <Button className="self-start" onClick={() => submit(answers, elapsed())}>
+          <Button className="self-start" onClick={() => submit(answers, getElapsedMs())}>
             Submit
           </Button>
         ) : (

@@ -32,8 +32,6 @@ export function SpotTheBug({ item, onResult, now = Date.now, paused = false }: S
   const [correct, setCorrect] = useState(false)
 
   const submittedRef = useRef(false)
-  const startRef = useRef(now())
-  const elapsed = () => now() - startRef.current
 
   const submit = useCallback(
     (line: number | null, elapsedMs: number) => {
@@ -57,11 +55,13 @@ export function SpotTheBug({ item, onResult, now = Date.now, paused = false }: S
     [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.bugLines, now]
   )
 
-  useCountdown({
+  // getElapsedMs is the single source of elapsed time (fix round 2, N1): it
+  // excludes any span where `paused` was true.
+  const { getElapsedMs } = useCountdown({
     timeLimitS: item.timeLimitS,
     now,
     active: !submitted && !paused,
-    onExpire: () => submit(selectedLine, elapsed()),
+    onExpire: (elapsedMs) => submit(selectedLine, elapsedMs),
   })
 
   return (
@@ -86,7 +86,7 @@ export function SpotTheBug({ item, onResult, now = Date.now, paused = false }: S
                 type="button"
                 autoFocus={idx === 0}
                 disabled={submitted}
-                onClick={() => submit(lineNumber, elapsed())}
+                onClick={() => submit(lineNumber, getElapsedMs())}
                 aria-label={`Line ${lineNumber}: ${line}`}
                 className={cn(
                   'flex w-full gap-4 px-4 py-1 text-left transition-colors disabled:cursor-default',

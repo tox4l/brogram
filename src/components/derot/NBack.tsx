@@ -44,14 +44,15 @@ export function NBack({ item, onResult, now = Date.now, paused = false }: NBackP
   const hitsRef = useRef(0)
   const falseAlarmsRef = useRef(0)
   const respondedRef = useRef(false)
-  const startRef = useRef(now())
-  const elapsed = useCallback(() => now() - startRef.current, [now])
 
-  const finish = useCallback(() => {
+  // `finish` takes elapsedMs as a parameter, read by each call site from
+  // `getElapsedMs` (fix round 2, N1) -- the single source of elapsed time,
+  // excluding any span where `paused` was true. This also breaks what would
+  // otherwise be a circular dependency with `useCountdown`.
+  const finish = useCallback((elapsedMs: number) => {
     if (submittedRef.current) return
     submittedRef.current = true
     const { correct, score } = gradeNBack(hitsRef.current, falseAlarmsRef.current, plantedMatches)
-    const elapsedMs = elapsed()
     setSubmitted(true)
     onResult({
       drillId: item.id,
@@ -62,12 +63,12 @@ export function NBack({ item, onResult, now = Date.now, paused = false }: NBackP
       at: new Date(now()).toISOString(),
       lane: item.lane,
     })
-  }, [item.id, item.kind, item.lane, onResult, plantedMatches, now, elapsed])
+  }, [item.id, item.kind, item.lane, onResult, plantedMatches, now])
 
-  // Held in a ref (the way useCountdown holds onExpire) so the token-advance
-  // effect below does not depend on `finish` -- a parent re-render that hands
-  // in a fresh inline onResult must never clear and reschedule the current
-  // token's in-flight 1500ms timer.
+  // Held in refs (the way useCountdown holds onExpire) so the token-advance
+  // effect below does not depend on `finish` or `getElapsedMs` by identity --
+  // a parent re-render that hands in a fresh inline `onResult` or `now` must
+  // never clear and reschedule the current token's in-flight 1500ms timer.
   const finishRef = useRef(finish)
   useEffect(() => {
     finishRef.current = finish
@@ -81,6 +82,21 @@ export function NBack({ item, onResult, now = Date.now, paused = false }: NBackP
     else falseAlarmsRef.current += 1
   }, [index, total, payload.n, payload.tokens])
 
+  // Overall time-limit safety net, in case the token stream would outrun it.
+  // Defined before the token-advance effect below so `getElapsedMs` -- the
+  // single source of elapsed time, excluding any paused span -- is in scope
+  // for the end-of-stream `finish` call there too.
+  const { getElapsedMs } = useCountdown({
+    timeLimitS: item.timeLimitS,
+    now,
+    active: !submitted && !paused,
+    onExpire: (elapsedMs) => finish(elapsedMs),
+  })
+  const getElapsedMsRef = useRef(getElapsedMs)
+  useEffect(() => {
+    getElapsedMsRef.current = getElapsedMs
+  })
+
   // Advance to the next token every 1500ms; once past the last token, the
   // drill ends. Paused (fix round 1, I3) stops both the advance and the
   // end-of-stream finish -- a hidden tab must not let the whole token stream
@@ -88,7 +104,7 @@ export function NBack({ item, onResult, now = Date.now, paused = false }: NBackP
   useEffect(() => {
     if (submitted || paused) return
     if (index >= total) {
-      finishRef.current()
+      finishRef.current(getElapsedMsRef.current())
       return
     }
     respondedRef.current = false
@@ -109,14 +125,6 @@ export function NBack({ item, onResult, now = Date.now, paused = false }: NBackP
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [submitted, respond])
-
-  // Overall time-limit safety net, in case the token stream would outrun it.
-  useCountdown({
-    timeLimitS: item.timeLimitS,
-    now,
-    active: !submitted && !paused,
-    onExpire: finish,
-  })
 
   const currentToken = index < total ? payload.tokens[index] : null
 

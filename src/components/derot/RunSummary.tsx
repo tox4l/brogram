@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useGSAP } from '@gsap/react'
 import { gsap } from 'gsap'
+import { Check, X } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -19,7 +20,13 @@ export interface RunSummaryProps {
   accuracy: number
   /** Consecutive-correct streak reached at any point in the run (Arcade only -- omit for a single-session Playground game). */
   bestCombo?: number
-  /** The pre-normalisation "interesting number" -- a game's own raw metric (e.g. "842 ms mean reaction"). Arcade's own combo-weighted total is jargon on this card and is deliberately not passed. */
+  /**
+   * Per-item correct/incorrect, in the order they were played (fix round 2,
+   * item 5): "where the run went", not just its aggregate accuracy. Omit for
+   * a single-session Playground game with no discrete items.
+   */
+  itemResults?: boolean[]
+  /** The pre-normalisation "interesting number" -- a game's own raw metric (e.g. "842 ms mean reaction"). Shown as a caption, not a number in the stat grid (fix round 2, item 5): it is prose, not a value on the same footing as accuracy or combo peak. */
   rawLabel?: string
   /** True only when this run beat a genuine previous best (fix round 1, C2 -- never true on a first run, regardless of score). */
   isPersonalBest: boolean
@@ -117,6 +124,7 @@ export function RunSummary({
   score,
   accuracy,
   bestCombo,
+  itemResults,
   rawLabel,
   isPersonalBest,
   previousBest,
@@ -127,6 +135,7 @@ export function RunSummary({
   reduced = false,
 }: RunSummaryProps) {
   const isFirstRun = previousBest === null
+  const delta = previousBest !== null ? score - previousBest : null
   const announcement = `Run complete. ${title}. Score ${score}. Accuracy ${Math.round(accuracy * 100)} percent.${isPersonalBest ? ' New personal best.' : ''}`
 
   return (
@@ -146,14 +155,38 @@ export function RunSummary({
       </CardHeader>
       <CardContent className="flex flex-col gap-8 py-4">
         <div className="flex flex-wrap items-center justify-center gap-10 sm:justify-start">
-          <ScoreRing score={score} reduced={reduced} />
+          <div className="flex flex-col items-center gap-2 sm:items-start">
+            <ScoreRing score={score} reduced={reduced} />
+            {/* fix round 2, item 5: prose, not a number -- kept out of the Stat grid below, which is built for values on the same footing as each other. */}
+            {rawLabel && <p className="max-w-40 text-center text-xs text-muted-foreground sm:text-left">{rawLabel}</p>}
+          </div>
           <div className="grid grid-cols-2 gap-x-10 gap-y-6">
             <Stat label="Accuracy" value={`${Math.round(accuracy * 100)}%`} />
             {typeof bestCombo === 'number' && <Stat label="Combo peak" value={`${bestCombo}x`} />}
             {previousBest !== null && <Stat label="Best" value={`${Math.max(previousBest, score)}`} highlight={isPersonalBest} />}
-            {rawLabel && <Stat label="Raw" value={rawLabel} />}
+            {delta !== null && <Stat label="Delta" value={delta === 0 ? '0' : delta > 0 ? `+${delta}` : `${delta}`} highlight={delta > 0} />}
           </div>
         </div>
+
+        {itemResults && itemResults.length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground">Where it went</p>
+            <ul className="mt-2 flex flex-wrap gap-1.5">
+              {itemResults.map((correct, index) => (
+                <li
+                  key={index}
+                  aria-label={`Item ${index + 1}: ${correct ? 'correct' : 'missed'}`}
+                  className={cn(
+                    'flex size-7 items-center justify-center rounded-md border',
+                    correct ? 'border-primary/30 bg-primary/10 text-primary' : 'border-destructive/30 bg-destructive/10 text-destructive'
+                  )}
+                >
+                  {correct ? <Check className="size-4" aria-hidden="true" /> : <X className="size-4" aria-hidden="true" />}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {lastRuns.length > 1 && (
           <div>

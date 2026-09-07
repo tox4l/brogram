@@ -237,6 +237,20 @@ function DerotSection() {
         </div>
       )}
 
+      {lane === 'arcade' && (
+        // fix round 2, N5 (controller ruling, preamble): four of the six
+        // Arcade kinds (scored by scoreTimedCorrect) can never actually
+        // reach 100 -- only an instant, zero-elapsed-time answer would, and
+        // no human plays that fast -- while the other two (Hands, Two Back)
+        // can. Six "Best" numbers sit in one row on this screen; without
+        // this line, a learner reading 95 next to 100 has no way to know
+        // that gap is the ruler, not their play. Plain string pending a
+        // voice-bank key -- listed in the T2.9a report for T2.7b.
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Best scores don&apos;t line up evenly across drills -- four of them cap out near 95 by design.
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kindsForLane.map((kind, index) => (
           <FadeInCard key={kind} index={index} reduced={reduced}>

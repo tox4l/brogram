@@ -94,6 +94,16 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('the de-rot hub', () => {
+  it('notes that four Arcade kinds cap below 100, only on the Arcade lane (fix round 2, N5)', async () => {
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Call It')).toBeTruthy())
+    expect(screen.getByText(/cap out near 95/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Playground' }))
+    await waitFor(() => expect(screen.getByText('Follow the Dot')).toBeTruthy())
+    expect(screen.queryByText(/cap out near 95/)).toBeNull()
+  })
+
   it('opens on the Arcade lane, listing the six Arcade cards with their voice titles', async () => {
     render(<DerotPage />)
     await waitFor(() => expect(screen.getByText('Run It in Your Head')).toBeTruthy())

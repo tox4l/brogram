@@ -34,8 +34,6 @@ export function SpeedType({ item, onResult, now = Date.now, paused = false }: Sp
   const [accuracy, setAccuracy] = useState(0)
 
   const submittedRef = useRef(false)
-  const startRef = useRef(now())
-  const elapsed = () => now() - startRef.current
 
   const submit = useCallback(
     (value: string, elapsedMs: number) => {
@@ -58,11 +56,13 @@ export function SpeedType({ item, onResult, now = Date.now, paused = false }: Sp
     [item.id, item.kind, item.lane, onResult, payload.snippet, now]
   )
 
-  useCountdown({
+  // getElapsedMs is the single source of elapsed time (fix round 2, N1): it
+  // excludes any span where `paused` was true.
+  const { getElapsedMs } = useCountdown({
     timeLimitS: item.timeLimitS,
     now,
     active: !submitted && !paused,
-    onExpire: () => submit(typed, elapsed()),
+    onExpire: (elapsedMs) => submit(typed, elapsedMs),
   })
 
   return (
@@ -97,7 +97,7 @@ export function SpeedType({ item, onResult, now = Date.now, paused = false }: Sp
         />
 
         {!submitted ? (
-          <Button className="self-start" onClick={() => submit(typed, elapsed())}>
+          <Button className="self-start" onClick={() => submit(typed, getElapsedMs())}>
             Submit
           </Button>
         ) : (

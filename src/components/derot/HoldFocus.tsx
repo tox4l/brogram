@@ -30,16 +30,18 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
   const [selected, setSelected] = useState<number | null>(null)
 
   const submittedRef = useRef(false)
-  const startRef = useRef(now())
-  const elapsed = useCallback(() => now() - startRef.current, [now])
   const containerRef = useRef<HTMLDivElement | null>(null)
 
+  // `finish` takes elapsedMs as a parameter, computed by each call site from
+  // `getElapsedMs` (fix round 2, N1) -- the single source of elapsed time,
+  // excluding any span where `paused` was true. This also breaks what would
+  // otherwise be a circular dependency: `finish` no longer needs anything
+  // `useCountdown` returns to be defined first.
   const finish = useCallback(
-    (selectedIndex: number | null, wasVoided: boolean) => {
+    (selectedIndex: number | null, wasVoided: boolean, elapsedMs: number) => {
       if (submittedRef.current) return
       submittedRef.current = true
       const isCorrect = !wasVoided && gradeHoldFocus(selectedIndex, payload.answerIndex)
-      const elapsedMs = elapsed()
       const score = wasVoided ? 0 : scoreTimedCorrect(isCorrect, elapsedMs, item.timeLimitS)
       setSelected(selectedIndex)
       setVoided(wasVoided)
@@ -54,17 +56,17 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
         lane: item.lane,
       })
     },
-    [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.answerIndex, now, elapsed]
+    [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.answerIndex, now]
   )
 
-  const voidDrill = useCallback(() => finish(null, true), [finish])
-
-  useCountdown({
+  const { getElapsedMs } = useCountdown({
     timeLimitS: item.timeLimitS,
     now,
     active: !submitted && !paused,
-    onExpire: () => finish(null, false),
+    onExpire: (elapsedMs) => finish(null, false, elapsedMs),
   })
+
+  const voidDrill = useCallback(() => finish(null, true, getElapsedMs()), [finish, getElapsedMs])
 
   // Focus lands on the passage itself, not an answer option -- the point of
   // this drill is reading first (fix round 1, I4: a fresh item always moves
@@ -140,7 +142,7 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
                     key={option}
                     type="button"
                     disabled={submitted}
-                    onClick={() => finish(idx, false)}
+                    onClick={() => finish(idx, false, getElapsedMs())}
                     className={cn(
                       'rounded-lg border border-border px-4 py-2 text-left text-sm transition-colors disabled:cursor-default',
                       !submitted && 'hover:bg-accent',

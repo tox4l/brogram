@@ -85,4 +85,27 @@ describe('SpotTheBug', () => {
     vi.advanceTimersByTime(30000)
     expect(onResult).not.toHaveBeenCalled()
   })
+
+  it('excludes the paused span from the submitted timeMs and score (fix round 2, N1)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    const { rerender } = render(<SpotTheBug item={item} onResult={onResult} now={now} paused={false} />)
+
+    t = 2000 // 2s active
+    vi.advanceTimersByTime(2000)
+
+    rerender(<SpotTheBug item={item} onResult={onResult} now={now} paused />)
+    t = 14000 // 12s hidden
+    vi.advanceTimersByTime(12000)
+
+    rerender(<SpotTheBug item={item} onResult={onResult} now={now} paused={false} />)
+    fireEvent.click(screen.getByLabelText(/^Line 3:/))
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+    // Only the 2s of active time counts -- the 12s hidden span is excluded, so
+    // the correct answer scores as if answered near-instantly, not after 14s.
+    expect(onResult.mock.calls[0][0]).toMatchObject({ correct: true, timeMs: 2000 })
+    expect(onResult.mock.calls[0][0].score).toBeGreaterThanOrEqual(95)
+  })
 })

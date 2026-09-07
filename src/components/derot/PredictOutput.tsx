@@ -30,8 +30,6 @@ export function PredictOutput({ item, onResult, now = Date.now, paused = false }
   const [correct, setCorrect] = useState(false)
 
   const submittedRef = useRef(false)
-  const startRef = useRef(now())
-  const elapsed = () => now() - startRef.current
 
   const submit = useCallback(
     (value: string, elapsedMs: number) => {
@@ -54,11 +52,15 @@ export function PredictOutput({ item, onResult, now = Date.now, paused = false }
     [item.id, item.kind, item.lane, item.timeLimitS, onResult, payload.expectedOutput, now]
   )
 
-  useCountdown({
+  // getElapsedMs is the single source of elapsed time (fix round 2, N1): it
+  // excludes any span where `paused` was true, so a manual submit and an
+  // auto-submit on expiry are always stamped with the same, honest duration
+  // -- never a local `elapsed()` anchored separately at mount.
+  const { getElapsedMs } = useCountdown({
     timeLimitS: item.timeLimitS,
     now,
     active: !submitted && !paused,
-    onExpire: () => submit(answer, elapsed()),
+    onExpire: (elapsedMs) => submit(answer, elapsedMs),
   })
 
   return (
@@ -87,7 +89,7 @@ export function PredictOutput({ item, onResult, now = Date.now, paused = false }
         />
 
         {!submitted ? (
-          <Button className="self-start" onClick={() => submit(answer, elapsed())}>
+          <Button className="self-start" onClick={() => submit(answer, getElapsedMs())}>
             Submit
           </Button>
         ) : (

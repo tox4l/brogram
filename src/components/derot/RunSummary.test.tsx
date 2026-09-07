@@ -96,6 +96,74 @@ describe('RunSummary', () => {
     expect(status.textContent).toContain('82')
   })
 
+  it('shows one hit/miss chip per item, in order, distinguishable by more than colour (fix round 2, item 5)', () => {
+    render(
+      <RunSummary
+        title="Call It"
+        score={67}
+        accuracy={0.67}
+        isPersonalBest={false}
+        previousBest={null}
+        lastRuns={[]}
+        itemResults={[true, true, false, true, false, true]}
+        voiceLine="Solid."
+        onPlayAgain={vi.fn()}
+        backHref="/derot"
+        reduced
+      />
+    )
+    expect(screen.getByLabelText('Item 1: correct')).toBeTruthy()
+    expect(screen.getByLabelText('Item 3: missed')).toBeTruthy()
+    expect(screen.getByLabelText('Item 6: correct')).toBeTruthy()
+    // Four correct, two missed -- distinguished by icon (Check/X), not colour alone.
+    expect(document.querySelectorAll('.lucide-check').length).toBe(4)
+    expect(document.querySelectorAll('.lucide-x').length).toBe(2)
+  })
+
+  it('omits the hit/miss row entirely when itemResults is not given (a Playground game with no discrete items)', () => {
+    render(<RunSummary title="Twitch" score={73} accuracy={1} isPersonalBest={false} previousBest={null} lastRuns={[]} voiceLine="Fast." onPlayAgain={vi.fn()} backHref="/derot" reduced />)
+    expect(screen.queryByText('Where it went')).toBeNull()
+  })
+
+  it('shows the delta against the previous best, signed, alongside Best (fix round 2, item 5)', () => {
+    const { rerender } = render(
+      <RunSummary title="Call It" score={92} accuracy={0.9} isPersonalBest previousBest={80} lastRuns={[]} voiceLine="New best." onPlayAgain={vi.fn()} backHref="/derot" reduced />
+    )
+    expect(screen.getByText('Delta')).toBeTruthy()
+    expect(screen.getByText('+12')).toBeTruthy()
+
+    rerender(
+      <RunSummary title="Call It" score={70} accuracy={0.7} isPersonalBest={false} previousBest={80} lastRuns={[]} voiceLine="Keep going." onPlayAgain={vi.fn()} backHref="/derot" reduced />
+    )
+    expect(screen.getByText('-10')).toBeTruthy()
+  })
+
+  it('shows no delta on a first-ever run -- there is nothing to compare against', () => {
+    render(<RunSummary title="Call It" score={50} accuracy={0.5} isPersonalBest={false} previousBest={null} lastRuns={[]} voiceLine="First run." onPlayAgain={vi.fn()} backHref="/derot" reduced />)
+    expect(screen.queryByText('Delta')).toBeNull()
+  })
+
+  it('keeps the raw label out of the numeric Stat grid -- it is a caption, not a value (fix round 2, item 5)', () => {
+    render(
+      <RunSummary
+        title="Twitch"
+        score={73}
+        accuracy={1}
+        isPersonalBest={false}
+        previousBest={null}
+        lastRuns={[]}
+        rawLabel="842 ms mean reaction"
+        voiceLine="Fast."
+        onPlayAgain={vi.fn()}
+        backHref="/derot/play/reaction"
+        reduced
+      />
+    )
+    const rawText = screen.getByText('842 ms mean reaction')
+    expect(rawText.className).not.toContain('text-2xl')
+    expect(screen.queryByText('Raw')).toBeNull() // no "Raw" label in the Stat grid
+  })
+
   it('calls onPlayAgain and links back to the given href, focusing "Run it again" on mount', () => {
     const onPlayAgain = vi.fn()
     render(<RunSummary title="Call It" score={70} accuracy={0.7} isPersonalBest={false} previousBest={null} lastRuns={[]} voiceLine="Nice." onPlayAgain={onPlayAgain} backHref="/derot" reduced />)

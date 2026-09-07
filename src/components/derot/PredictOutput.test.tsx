@@ -108,9 +108,55 @@ describe('PredictOutput', () => {
     vi.advanceTimersByTime(20000)
     expect(onResult).not.toHaveBeenCalled()
 
-    // Resuming lets the (already-elapsed) time limit expire normally.
+    // Resuming does NOT auto-expire (fix round 2, N1): zero active time has actually
+    // elapsed -- the whole 20s wall-clock gap above happened while paused.
     rerender(<PredictOutput item={item} onResult={onResult} now={now} paused={false} />)
     vi.advanceTimersByTime(200)
+    expect(onResult).not.toHaveBeenCalled()
+  })
+
+  it('excludes the paused span from both the countdown and the submitted timeMs (fix round 2, N1)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    const { rerender } = render(<PredictOutput item={item} onResult={onResult} now={now} paused={false} />)
+
+    // 3s of active reading/typing time.
+    t = 3000
+    vi.advanceTimersByTime(3000)
+
+    // Hide for twelve seconds mid-item.
+    rerender(<PredictOutput item={item} onResult={onResult} now={now} paused />)
+    t = 15000
+    vi.advanceTimersByTime(12000)
+    expect(onResult).not.toHaveBeenCalled()
+
+    // Resume and answer correctly after 2 more active seconds.
+    rerender(<PredictOutput item={item} onResult={onResult} now={now} paused={false} />)
+    const textarea = screen.getByPlaceholderText(/type the exact output/i)
+    fireEvent.change(textarea, { target: { value: '2\n1' } })
+    t = 17000
+    vi.advanceTimersByTime(2000)
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+
     expect(onResult).toHaveBeenCalledTimes(1)
+    // 3s before the pause + 2s after resume = 5s -- the 12s hidden span never counted,
+    // even though 17s of wall-clock time passed since mount.
+    expect(onResult.mock.calls[0][0]).toMatchObject({ correct: true, timeMs: 5000 })
+  })
+
+  it('does not auto-expire the instant it resumes from a pause that exceeded the time limit in wall-clock terms (fix round 2, N1)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    const { rerender } = render(<PredictOutput item={item} onResult={onResult} now={now} paused />)
+
+    t = 30000 // past the 20s limit in wall-clock terms, but zero active time has elapsed
+    vi.advanceTimersByTime(30000)
+    expect(onResult).not.toHaveBeenCalled()
+
+    rerender(<PredictOutput item={item} onResult={onResult} now={now} paused={false} />)
+    vi.advanceTimersByTime(200)
+    expect(onResult).not.toHaveBeenCalled() // the full 20s is still available -- nothing expired on resume
   })
 })

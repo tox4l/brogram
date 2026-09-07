@@ -200,6 +200,28 @@ describe('Arcade runner', () => {
     expect(screen.queryAllByText(/run complete/i).length).toBe(0)
   })
 
+  it('a pool of three items shortens the run to three instead of repeating an item (fix round 2, N3)', async () => {
+    drillsRows = ['d1', 'd2', 'd3'].map((id) => drillRow({ id }))
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+
+    const seenIds: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const label = await screen.findByText(/^Item: /)
+      seenIds.push(label.textContent!.replace('Item: ', ''))
+      await answerCurrent(true)
+    }
+    // All three distinct items were shown, in some order, with no repeat.
+    expect(new Set(seenIds).size).toBe(3)
+
+    // The run ends at three -- it does not wait for a fourth (repeated) item.
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    expect(rpcSpy).toHaveBeenCalledTimes(1)
+    const [, payload] = rpcSpy.mock.calls[0] as [string, { result: DrillResult }]
+    expect(payload.result.score).toBeGreaterThanOrEqual(0)
+    expect(payload.result.score).toBeLessThanOrEqual(100)
+  })
+
   it('the item counter never reads past RUN_SIZE, even during the post-answer pause after the sixth item (fix round 1, I1)', async () => {
     render(<DerotArcadeRunnerPage />)
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
@@ -257,6 +279,17 @@ describe('Arcade runner', () => {
     await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent(true)
     await waitFor(() => expect(screen.getByText(/combo points/)).toBeTruthy())
+  })
+
+  it('shows a hit/miss chip per item, in the order they were played (fix round 2, item 5)', async () => {
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (const correct of [true, true, false, true, false, true]) await answerCurrent(correct)
+    await waitFor(() => expect(screen.getByText('Where it went')).toBeTruthy())
+    expect(screen.getByLabelText('Item 1: correct')).toBeTruthy()
+    expect(screen.getByLabelText('Item 3: missed')).toBeTruthy()
+    expect(screen.getByLabelText('Item 5: missed')).toBeTruthy()
+    expect(screen.getByLabelText('Item 6: correct')).toBeTruthy()
   })
 
   it('running it again does not re-serve the same six items (fix round 1, I5)', async () => {

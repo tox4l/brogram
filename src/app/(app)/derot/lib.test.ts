@@ -172,4 +172,37 @@ describe('pickDrillItem', () => {
     const results = [result({ drillId: 'other', score: 100, at: '2026-09-06T08:00:00.000Z' })]
     expect(pickDrillItem(items, results, now)?.id).toBe('hard')
   })
+
+  describe('excludeIds (fix round 2, N3 -- a run never repeats its own items)', () => {
+    it('never returns an excluded item, even as the last one standing', () => {
+      const items = [item({ id: 'a' }), item({ id: 'b' })]
+      expect(pickDrillItem(items, [], now, null, new Set(['a']))?.id).toBe('b')
+    })
+
+    it('returns null once every item is excluded, instead of falling back to a repeat', () => {
+      const items = [item({ id: 'a' }), item({ id: 'b' }), item({ id: 'c' })]
+      expect(pickDrillItem(items, [], now, null, new Set(['a', 'b', 'c']))).toBeNull()
+    })
+
+    it('a pool of three exhausts after exactly three distinct picks, never a fourth repeat', () => {
+      const items = [item({ id: 'a', difficulty: 3 }), item({ id: 'b', difficulty: 3 }), item({ id: 'c', difficulty: 3 })]
+      const shown = new Set<string>()
+      const results: DrillResult[] = []
+      for (let i = 0; i < 3; i++) {
+        const picked = pickDrillItem(items, results, now, null, shown)
+        expect(picked).not.toBeNull()
+        expect(shown.has(picked!.id)).toBe(false) // never a repeat within the run
+        shown.add(picked!.id)
+        results.push(result({ drillId: picked!.id, at: now.toISOString() }))
+      }
+      // A fourth pick against the same three-item pool, still excluding what the run already showed.
+      expect(pickDrillItem(items, results, now, null, shown)).toBeNull()
+    })
+
+    it('is additive: a caller that never passes excludeIds keeps the old, permanent-replay behaviour unchanged', () => {
+      const items = [item({ id: 'only' })]
+      const results = [result({ drillId: 'only', at: '2026-01-01T00:00:00.000Z' })]
+      expect(pickDrillItem(items, results, now)?.id).toBe('only')
+    })
+  })
 })

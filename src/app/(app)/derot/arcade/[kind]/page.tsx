@@ -153,9 +153,19 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
   const advanceToNext = useCallback((run: RunState) => {
     const { items, allResults, sessionResults } = stateRef.current
     const forKind = [...allResults, ...sessionResults, ...run.answers.map((a) => a.result)].filter((result) => result.kind === kind)
-    const current = pickDrillItem(items, forKind, new Date())
+    // A run never repeats its own items (fix round 2, N3): a bank smaller
+    // than RUN_SIZE must shorten the run instead of re-serving an item whose
+    // answer the learner just saw two picks ago. `summarizeRun`'s per-length
+    // normalisation (fix round 1, I2) already makes a shorter run's score
+    // honest, so ending early here is a complete fix, not a partial one.
+    const shownThisRun = new Set(run.answers.map((a) => a.item.id))
+    const current = pickDrillItem(items, forKind, new Date(), null, shownThisRun)
+    if (current === null) {
+      finishRun(run)
+      return
+    }
     setState((prev) => ({ ...prev, run, current }))
-  }, [kind])
+  }, [kind, finishRun])
 
   const onItemResult = useCallback((item: DrillItem, result: DrillResult) => {
     // Arcade turns drill.hit/drill.miss on for the duration of a run regardless of the tier toggle: there the tick IS the game (R7.8).
@@ -278,11 +288,19 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
               score={runner.runResult.score}
               accuracy={summary.accuracy}
               bestCombo={summary.bestCombo}
+              itemResults={runner.run.answers.map((a) => a.result.correct)}
               rawLabel={`${summary.rawTotal} combo points`}
               isPersonalBest={isPersonalBest}
               previousBest={runner.previousBest}
               lastRuns={lastRuns}
-              voiceLine={lineWith('derot.run.done', { n: summary.score, m: summary.bestCombo })}
+              // A stable seed (fix round 2, N2): unseeded, `lineWith` picks a
+              // fresh random variant on every render, so the line re-rolled
+              // itself a few hundred ms after the summary mounted, the moment
+              // `submitFinishedRun` resolved and re-rendered with the server's
+              // `allResults`. `runResult.at` is unique per run and constant
+              // for the summary's whole lifetime -- the same pattern
+              // Celebration.tsx uses for its own `line`/`lineWith` calls.
+              voiceLine={lineWith('derot.run.done', { n: summary.score, m: summary.bestCombo }, runner.runResult.at)}
               onPlayAgain={runner.playAgain}
               backHref="/derot"
               reduced={reduced}

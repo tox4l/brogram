@@ -97,4 +97,26 @@ describe('Trace', () => {
     vi.advanceTimersByTime(45000)
     expect(onResult).not.toHaveBeenCalled()
   })
+
+  it('excludes the paused span from the submitted timeMs and score (fix round 2, N1)', () => {
+    const onResult = vi.fn()
+    let t = 0
+    const now = () => t
+    const { rerender } = render(<Trace item={item} onResult={onResult} now={now} paused={false} />)
+
+    t = 2000
+    vi.advanceTimersByTime(2000)
+
+    rerender(<Trace item={item} onResult={onResult} now={now} paused />)
+    t = 14000 // 12s hidden
+    vi.advanceTimersByTime(12000)
+
+    rerender(<Trace item={item} onResult={onResult} now={now} paused={false} />)
+    fillIn({ i: '2', total: '3', count: '2' })
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+
+    expect(onResult).toHaveBeenCalledTimes(1)
+    expect(onResult.mock.calls[0][0]).toMatchObject({ correct: true, timeMs: 2000 })
+    expect(onResult.mock.calls[0][0].score).toBeGreaterThanOrEqual(95)
+  })
 })
