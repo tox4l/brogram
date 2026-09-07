@@ -575,7 +575,7 @@ export function nextMasteryScore(current: number, passed: boolean, difficulty: D
 
 // --- Look, sound, motion, dock ---------------------------------------------
 
-export type ThemeName = 'midnight' | 'amber' | 'paper' | 'arcade'
+export type ThemeName = 'midnight' | 'amber' | 'eclipse' | 'paper' | 'arcade'
 export type DockPlacement = 'left' | 'right' | 'top' | 'float' | 'hidden'
 export type DockCorner = 'tl' | 'tr' | 'bl' | 'br'
 export type MotionPreference = 'system' | 'full' | 'reduced'

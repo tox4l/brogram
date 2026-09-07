@@ -45,12 +45,12 @@ function srgbGammaEncode(linear: number): number {
 }
 
 /**
- * OKLCH -> gamma-encoded sRGB, each channel clamped to [0, 1]. Values
- * outside the sRGB gamut (routine at high chroma) are clamped rather than
- * rejected, matching how a browser actually renders an out-of-gamut OKLCH
- * colour on an sRGB display.
+ * OKLCH -> linear sRGB, unclamped. This is the pre-gamma, pre-clamp value a
+ * browser computes internally; whether it lands inside [0, 1] per channel is
+ * exactly the in-gamut question `isInGamut` answers, so this is the shared
+ * base both `oklchToSrgb` and `isInGamut` build on.
  */
-export function oklchToSrgb(l: number, c: number, h: number): [number, number, number] {
+function oklchToLinearSrgb(l: number, c: number, h: number): [number, number, number] {
   const hRad = (h * Math.PI) / 180
   const a = c * Math.cos(hRad)
   const b = c * Math.sin(hRad)
@@ -63,16 +63,47 @@ export function oklchToSrgb(l: number, c: number, h: number): [number, number, n
   const mCubed = mPrime ** 3
   const sCubed = sPrime ** 3
 
-  const rLinear = 4.0767416621 * lCubed - 3.3077115913 * mCubed + 0.2309699292 * sCubed
-  const gLinear = -1.2684380046 * lCubed + 2.6097574011 * mCubed - 0.3413193965 * sCubed
-  const bLinear = -0.0041960863 * lCubed - 0.7034186147 * mCubed + 1.7076147010 * sCubed
+  return [
+    4.0767416621 * lCubed - 3.3077115913 * mCubed + 0.2309699292 * sCubed,
+    -1.2684380046 * lCubed + 2.6097574011 * mCubed - 0.3413193965 * sCubed,
+    -0.0041960863 * lCubed - 0.7034186147 * mCubed + 1.7076147010 * sCubed,
+  ]
+}
 
+/**
+ * OKLCH -> gamma-encoded sRGB, each channel clamped to [0, 1]. Values
+ * outside the sRGB gamut (routine at high chroma) are clamped rather than
+ * rejected, matching how a browser actually renders an out-of-gamut OKLCH
+ * colour on an sRGB display.
+ */
+export function oklchToSrgb(l: number, c: number, h: number): [number, number, number] {
+  const [rLinear, gLinear, bLinear] = oklchToLinearSrgb(l, c, h)
   const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
   return [
     clamp01(srgbGammaEncode(rLinear)),
     clamp01(srgbGammaEncode(gLinear)),
     clamp01(srgbGammaEncode(bLinear)),
   ]
+}
+
+/**
+ * W4.6: does this `oklch(...)` value round-trip into sRGB without exceeding
+ * the gamut? Browsers gamut-*map* an out-of-range OKLCH colour (CSS Color 4
+ * S14.2) rather than simply clamping per channel the way `oklchToSrgb` does
+ * for a contrast estimate, so an authored value whose linear-light channels
+ * fall outside `[-0.001, 1.001]` does not describe what actually renders.
+ */
+export function isInGamut(value: string): boolean {
+  const { l, c, h } = parseOklch(value)
+  const [r, g, b] = oklchToLinearSrgb(l, c, h)
+  const inRange = (v: number) => v >= -0.001 && v <= 1.001
+  return inRange(r) && inRange(g) && inRange(b)
+}
+
+/** OKLCH lightness distance between two swatches (ignores hue and chroma):
+ *  the gate W4.3/W4.4 use for how far a surface sits from its ground. */
+export function deltaL(a: string, b: string): number {
+  return Math.abs(parseOklch(a).l - parseOklch(b).l)
 }
 
 /** Simple "over" alpha compositing in gamma-encoded sRGB space: close enough

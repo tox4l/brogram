@@ -64,7 +64,12 @@ describe('C1: the `dark:` variant follows the active theme, not the OS', () => {
     expect(body).toContain('[data-theme="midnight"]')
     expect(body).toContain('[data-theme="amber"]')
     expect(body).toContain('[data-theme="arcade"]')
-    // Paper is the one light theme -- `dark:` utilities must never match it.
+    // W3 (wave 4 plan correction): Eclipse is dark too, and its
+    // `[data-theme="eclipse"]` block must land in the same commit that adds
+    // it to this list, or every `dark:` utility is silently off in it.
+    expect(body).toContain('[data-theme="eclipse"]')
+    // Paper (Folio) is the one light theme -- `dark:` utilities must never
+    // match it. The id never changes (W4.1), so this string stays "paper".
     expect(body).not.toContain('[data-theme="paper"]')
     // The old binary must not have crept back in alongside the new one.
     expect(body).not.toMatch(/\.dark\b/)

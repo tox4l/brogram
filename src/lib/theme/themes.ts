@@ -1,43 +1,55 @@
 import type { ThemeName } from '@/lib/contracts'
 
 /**
- * The four personalities on next-themes' one axis (R8.1). Order here is
- * the order they render in `ThemeQuickSwitch`. Swatch triples are
- * [background, primary, accent] -- copied by hand from `globals.css`'s
- * `oklch(...)` values.
+ * The five personalities on next-themes' one axis (wave 4 §2.1). Order here
+ * is the order they render in `ThemeQuickSwitch` and the Account picker.
+ * Swatch triples are [background, primary, accent] -- copied by hand from
+ * `globals.css`'s `oklch(...)` values.
  *
  * I5 (review): these literals are pinned against the real tokens by a
  * dedicated assertion in `contrast.test.ts` ("swatches stay pinned to the
  * real tokens"), which parses `globals.css` and compares. That assertion,
  * not the key-set-parity check (a different, unrelated guarantee -- it only
- * confirms the four `[data-theme]` blocks define the same property
+ * confirms the five `[data-theme]` blocks define the same property
  * *names*), is what keeps a palette retune from silently leaving a stale
  * dot in the picker.
+ *
+ * Ruling W4.1: the `paper` id never changes -- `wellness.prefs.theme` and
+ * `localStorage['brogram:theme']` persist it, and `resolveWellnessPrefs`
+ * falls back to `midnight` on an id it does not recognise, so a rename
+ * would silently reset a stored preference. Only its label moves, to
+ * "Folio". Eclipse is new and opt-in; Midnight stays seeded.
  */
 export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swatch: [string, string, string] }[] = [
   {
     id: 'midnight',
     name: 'Midnight',
-    blurb: 'Confident, cool. The developer’s 2am default.',
-    swatch: ['oklch(0.16 0.014 260)', 'oklch(0.78 0.16 264)', 'oklch(0.74 0.14 200)'],
+    blurb: 'Cool graphite, one indigo through button and ring. The room you already work in at 2am, tidier.',
+    swatch: ['oklch(0.16 0.014 260)', 'oklch(0.78 0.11 264)', 'oklch(0.74 0.12 200)'],
   },
   {
     id: 'amber',
     name: 'Amber',
-    blurb: 'Cozy, warm dark. A lamp-lit desk at midnight.',
-    swatch: ['oklch(0.17 0.02 55)', 'oklch(0.78 0.16 55)', 'oklch(0.80 0.13 35)'],
+    blurb: 'The only warm dark. A lamp on a desk.',
+    swatch: ['oklch(0.17 0.02 55)', 'oklch(0.78 0.148 55)', 'oklch(0.80 0.115 35)'],
+  },
+  {
+    id: 'eclipse',
+    name: 'Eclipse',
+    blurb: 'Almost black, almost colourless, until one violet lights the thing you must look at.',
+    swatch: ['oklch(0.09 0.008 285)', 'oklch(0.80 0.126 305)', 'oklch(0.84 0.06 300)'],
   },
   {
     id: 'paper',
-    name: 'Paper',
-    blurb: 'Daytime, notebook, unhurried.',
-    swatch: ['oklch(0.97 0.008 85)', 'oklch(0.42 0.11 220)', 'oklch(0.55 0.14 35)'],
+    name: 'Folio',
+    blurb: 'Warm white ground, ink text, one indigo mark. A printed listing.',
+    swatch: ['oklch(0.972 0.006 85)', 'oklch(0.40 0.12 275)', 'oklch(0.92 0.03 275)'],
   },
   {
     id: 'arcade',
     name: 'Arcade',
-    blurb: 'Cabinet glow. Maximum legibility.',
-    swatch: ['oklch(0.12 0 0)', 'oklch(0.85 0.16 195)', 'oklch(0.84 0.22 350)'],
+    blurb: 'Pure black, cyan and magenta at full volume. Loud on purpose, easiest of the five to read.',
+    swatch: ['oklch(0.12 0 0)', 'oklch(0.85 0.13 195)', 'oklch(0.84 0.10 350)'],
   },
 ] as const
 
