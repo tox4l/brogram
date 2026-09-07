@@ -29,6 +29,7 @@ import {
   type NormalizedScore,
 } from '@/components/derot/scoring'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { line } from '@/lib/voice/lines'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useSession } from '@/store/session'
 import type { DrillResult, WellnessPrefs } from '@/lib/contracts'
@@ -105,11 +106,20 @@ function scoreForGame(game: PlayGameId, result: PlayGameResult): NormalizedScore
  * number except follow-the-dot's, which is a 0..1 share -- scaled by 1000
  * (the same scaling the spec's own table and `normalizeFollowTheDot`'s own
  * display `raw` use) so it reads as a real number instead of rounding to 0 or 1.
- * Grid's primitive round count lives in `payload`, not `raw` -- see `scoreForGame`.
+ * Grid's primitive round count and colour-nback's primitive net-hits both
+ * live in `payload`, not `raw` -- see `scoreForGame`. Fix round 1 (A-I1):
+ * `ColorBack.tsx` emits `raw = (hits - falseAlarms) * 100` (the spec table's
+ * own already-scaled display figure); falling through to `Math.round(result.raw)`
+ * here persisted a number a hundred times too large ("1700 net hits" for a
+ * real 17). Recompute the net directly from the payload instead of reusing `raw`.
  */
 function timeMsForGame(game: PlayGameId, result: PlayGameResult, normalized: NormalizedScore): number {
   if (game === 'follow-the-dot') return normalized.raw
   if (game === 'memory-grid') return Math.round((result.payload as { roundsCleared?: number }).roundsCleared ?? 0)
+  if (game === 'color-nback') {
+    const payload = result.payload as { hits?: number; falseAlarms?: number }
+    return Math.round((payload.hits ?? 0) - (payload.falseAlarms ?? 0))
+  }
   return Math.round(result.raw)
 }
 
@@ -196,7 +206,7 @@ function usePlayRun(game: PlayGameId, userId: string | null) {
         })
       }
     } catch {
-      setState((prev) => ({ ...prev, saveError: 'Your run could not be saved. Check your connection, then try again.' }))
+      setState((prev) => ({ ...prev, saveError: line('error.save') }))
     }
   }, [userId, setLearnerState])
 
@@ -285,7 +295,11 @@ function RunnerBody({ game }: { game: PlayGameId }) {
   const onAbort = useCallback(() => router.push('/derot'), [router])
 
   const lastRuns = lastResultsForKind(runner.allResults, game, 5)
-  const isPersonalBest = runner.runResult !== null && runner.runResult.score > (runner.previousBest ?? -1)
+  // Fix round 1 (T2.9a re-check): mirrors Arcade's own corrected formula exactly. A personal best
+  // requires a genuine previous run to beat -- `?? -1` previously let any non-negative score,
+  // including a flat 0, badge itself "New best" on a learner's very first run of a kind.
+  // `previousBest === null` now falls through to RunSummary's own "First run logged" badge instead.
+  const isPersonalBest = runner.previousBest !== null && runner.runResult !== null && runner.runResult.score > runner.previousBest
 
   return (
     <div className="relative min-w-0 space-y-5">

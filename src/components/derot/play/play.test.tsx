@@ -1,9 +1,16 @@
+import { StrictMode } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PlayGameResult } from './types'
 import FollowTheDot, { dotPathPosition } from './FollowTheDot'
 import Twitch, { randomWaitMs } from './Twitch'
 import KeepTime, { beatProgressAt, buildBeatSchedule, nearestBeatOffsetMs } from './KeepTime'
+
+/** Fix round 1: toggles the same property every game's `useHiddenTab()` reads, dispatching the event those hooks listen for. Always restore to visible so later tests never inherit a hidden document. */
+function setDocumentHidden(value: boolean) {
+  Object.defineProperty(document, 'hidden', { value, configurable: true })
+  document.dispatchEvent(new Event('visibilitychange'))
+}
 
 const mocks = vi.hoisted(() => ({ play: vi.fn() }))
 vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (run: () => void) => run() }))
@@ -13,6 +20,10 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
   mocks.play.mockClear()
+  // A test that throws before its own cleanup line would otherwise leave `document.hidden`
+  // permanently overridden (Object.defineProperty on the instance shadows the prototype getter
+  // for every later test in this file, not just the one that set it) -- always visible by default.
+  setDocumentHidden(false)
 })
 
 /** A controllable requestAnimationFrame double: frames only advance when `flush` is called, never on their own, so a game's rAF loop is fully deterministic under test. */
@@ -187,6 +198,79 @@ describe('Twitch', () => {
     fireEvent.click(screen.getByTestId('twitch-target'))
     expect(mocks.play).toHaveBeenCalledWith('drill.hit', expect.any(Object))
   })
+
+  // Fix round 1 (A-C1): every setState call is a plain value now, never an updater function that
+  // pushes into a ref or fires the run's single submit from inside it -- so a StrictMode
+  // dev double-invoke of an effect (which this route's real mount goes through twice over, via
+  // `<Suspense>` and `next/dynamic`) must produce the exact same ten reactions and one submit as
+  // a normal mount, not a corrupted eleven-entry array or a skipped round.
+  it('under StrictMode, ten rounds still produce exactly ten reactions and exactly one submit', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const onComplete = vi.fn<(result: PlayGameResult) => void>()
+    render(
+      <StrictMode>
+        <Twitch timeLimitS={60} soundOn={false} reducedMotion={false} onComplete={onComplete} onAbort={noop} />
+      </StrictMode>
+    )
+
+    for (let round = 0; round < 10; round++) {
+      act(() => { vi.advanceTimersByTime(700) })
+      act(() => { vi.advanceTimersByTime(150) })
+      fireEvent.click(screen.getByTestId('twitch-target'))
+      act(() => { vi.advanceTimersByTime(250) })
+    }
+
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    expect(onComplete.mock.calls[0][0].payload.reactions).toHaveLength(10)
+  })
+
+  // Fix round 1 (A-I2/A-I3): a hidden tab used to keep lighting and expiring rounds unseen (one
+  // real probe recorded round 1 -> 4 after twelve seconds hidden, each expiry a full void
+  // penalty). Now the per-round effect schedules nothing at all while hidden, and the overall
+  // countdown's `active` flag is gated the same way, so neither can silently advance or expire.
+  it('pauses the current round while the tab is hidden and restarts it fresh on return', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const onComplete = vi.fn()
+    render(<Twitch timeLimitS={60} soundOn={false} reducedMotion={false} onComplete={onComplete} onAbort={noop} />)
+    expect(screen.getByText('Round 1 of 10')).toBeTruthy()
+
+    // Committed in its own `act()`, separately from the timer advance below: the per-round
+    // effect's cleanup (clearing round 1's already-scheduled wait timer) only runs once React
+    // actually re-renders on the `hidden` change, and a single `vi.advanceTimersByTime` call
+    // fires every due timer synchronously, before React gets a chance to commit an update that
+    // was merely queued (not yet flushed) going into it.
+    act(() => { setDocumentHidden(true) })
+    // Long enough that, unpaused, several rounds would have lit and expired unseen.
+    act(() => { vi.advanceTimersByTime(12000) })
+    expect(screen.getByText('Round 1 of 10')).toBeTruthy()
+    expect(screen.queryByText('Tap now')).toBeNull()
+    expect(onComplete).not.toHaveBeenCalled()
+
+    act(() => { setDocumentHidden(false) })
+    act(() => { vi.advanceTimersByTime(700) }) // the restarted round's own fresh wait
+    expect(screen.getByText('Tap now')).toBeTruthy()
+  })
+
+  it('reducedMotion drops the colour cross-fade and passes through to the countdown ring', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    render(<Twitch timeLimitS={60} soundOn={false} reducedMotion onComplete={noop} onAbort={noop} />)
+
+    expect(screen.getByTestId('twitch-target').className).not.toContain('transition-colors')
+    // CountdownRing.tsx swaps its animated SVG arc for a plain numeral under reduced motion.
+    expect(screen.getByRole('timer').querySelector('svg')).toBeNull()
+  })
+
+  it('reducedMotion=false keeps the colour cross-fade and the animated countdown ring', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    render(<Twitch timeLimitS={60} soundOn={false} reducedMotion={false} onComplete={noop} onAbort={noop} />)
+
+    expect(screen.getByTestId('twitch-target').className).toContain('transition-colors')
+    expect(screen.getByRole('timer').querySelector('svg')).toBeTruthy()
+  })
 })
 
 describe('KeepTime pure helpers', () => {
@@ -265,5 +349,40 @@ describe('KeepTime component', () => {
     render(<KeepTime timeLimitS={60} soundOn={false} reducedMotion={false} onComplete={noop} onAbort={onAbort} />)
     fireEvent.click(screen.getByRole('button', { name: 'Quit' }))
     expect(onAbort).toHaveBeenCalledTimes(1)
+  })
+
+  // Fix round 1 (A-I4): the pulse and marker used to tween on every single frame regardless of
+  // `reducedMotion` -- and rule 1's substitute card offers this exact game as the reduced-motion
+  // alternative to Follow the Dot. Under reduced motion the DOM is only ever touched once a beat
+  // boundary is actually crossed, a discrete snap, never a per-frame interpolation.
+  it('reducedMotion snaps the pulse and marker once per beat instead of tweening every frame', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    const rafStub = stubRaf()
+    render(<KeepTime timeLimitS={5} soundOn={false} reducedMotion onComplete={noop} onAbort={noop} />)
+    const pulse = screen.getByTestId('rhythm-pulse') as HTMLElement
+    const marker = screen.getByTestId('rhythm-marker') as HTMLElement
+
+    // Beat 0 itself is a boundary crossing (the sentinel "no beat yet" -> index 0), so the very
+    // first frame already produces one discrete snap -- that is the correct, intended behaviour,
+    // not a per-frame tween, so this test pins the state *after* it rather than assuming untouched.
+    act(() => rafStub.flush(0))
+    const afterBeat0Marker = marker.style.transform
+    const afterBeat0Opacity = pulse.style.opacity
+
+    act(() => rafStub.flush(300)) // still inside beat 0's window (the 750ms base interval) -- no boundary crossed
+    expect(marker.style.transform).toBe(afterBeat0Marker) // untouched since beat 0: no per-frame write under reduced motion
+    expect(pulse.style.opacity).toBe(afterBeat0Opacity)
+
+    act(() => rafStub.flush(760)) // crosses into beat 1 -- exactly one further discrete snap
+    expect(marker.style.transform).not.toBe(afterBeat0Marker)
+    expect(pulse.style.opacity).not.toBe(afterBeat0Opacity)
+  })
+
+  it('passes reducedMotion through to the countdown ring', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    stubRaf()
+    render(<KeepTime timeLimitS={60} soundOn={false} reducedMotion onComplete={noop} onAbort={noop} />)
+    // CountdownRing.tsx swaps its animated SVG arc for a plain numeral under reduced motion.
+    expect(screen.getByRole('timer').querySelector('svg')).toBeNull()
   })
 })

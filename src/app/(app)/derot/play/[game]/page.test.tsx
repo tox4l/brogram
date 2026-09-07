@@ -54,7 +54,7 @@ const stubs = vi.hoisted(() => {
 })
 
 vi.mock('@/components/derot/play/FollowTheDot', () => ({ default: stubs.makeStub('follow-the-dot', 0.5, {}) }))
-vi.mock('@/components/derot/play/ColorBack', () => ({ default: stubs.makeStub('color-nback', 0, { hits: 6, falseAlarms: 1, plantedMatches: 8 }) }))
+vi.mock('@/components/derot/play/ColorBack', () => ({ default: stubs.makeStub('color-nback', 500, { hits: 6, falseAlarms: 1, plantedMatches: 8 }) }))
 vi.mock('@/components/derot/play/Twitch', () => ({ default: stubs.makeStub('reaction', 842, {}) }))
 vi.mock('@/components/derot/play/KeepTime', () => ({ default: stubs.makeStub('rhythm', 150, {}) }))
 vi.mock('@/components/derot/play/Breathe', () => ({ default: stubs.makeStub('breathe', 100, {}) }))
@@ -175,6 +175,21 @@ describe('DerotPlayRunnerPage', () => {
     expect(screen.getByText('New personal best. Run it again.')).toBeTruthy()
   })
 
+  // Fix round 1 (T2.9a re-check): mirrors Arcade's own corrected rule -- a personal best requires
+  // a genuine previous run to beat (`previousBest !== null`), not merely a non-negative score
+  // against a `?? -1` fallback -- which let a flat 0 badge itself "New best" on a first run,
+  // since 0 > -1. The `previousBest !== null` guard rules out every score on a first run,
+  // zero included, by construction rather than by re-checking the score itself.
+  it('never badges a first run as a personal best', async () => {
+    wellnessRow = { prefs: {}, drill_results: [] } // no prior run of this kind at all
+    render(<DerotPlayRunnerPage />)
+    fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
+    expect(await screen.findByText('Run complete')).toBeTruthy()
+    expect(screen.queryByText('New best')).toBeNull()
+    expect(screen.getByText('First run logged')).toBeTruthy()
+    expect(screen.queryByText('New personal best. Run it again.')).toBeNull()
+  })
+
   it('surfaces a save error with a working retry, without blocking the run summary', async () => {
     wellnessRow = { prefs: {}, drill_results: [] }
     rpcError = { code: '23505', message: 'unique violation' } // a real failure, never the missing-RPC fallback shape
@@ -182,13 +197,18 @@ describe('DerotPlayRunnerPage', () => {
     fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
 
     expect(await screen.findByText('Run complete')).toBeTruthy()
-    expect(await screen.findByText(/could not be saved/)).toBeTruthy()
+    // Fix round 1 (A-I6): the message now comes from `line('error.save')`, a rotating three-variant
+    // pick (never "Your"-first) rather than a hardcoded string, so this asserts the alert region
+    // and its retry action exist rather than pinning one exact variant's text.
+    const alertBeforeRetry = await screen.findByRole('alert')
+    expect(alertBeforeRetry.textContent).not.toMatch(/^Your /)
+    expect(screen.getByRole('button', { name: 'Retry save' })).toBeTruthy()
 
     rpcError = null
     rpcData = [result()]
     fireEvent.click(screen.getByRole('button', { name: 'Retry save' }))
     await screen.findByText('50') // the summary is already showing; this just lets the retry's promise settle
-    expect(screen.queryByText(/could not be saved/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Retry save' })).toBeNull()
   })
 
   it('surfaces a load error with a working retry', async () => {
@@ -213,7 +233,7 @@ describe('DerotPlayRunnerPage', () => {
   // primitive out of `payload` (hits/falseAlarms/plantedMatches, roundsCleared) rather than
   // `raw`, exactly like the real ColorBack.tsx / MemoryGrid.tsx components do.
   const gameCases: [string, number, string, number][] = [
-    ['color-nback', 90, '0 net hits', 63], // normalizeColorNBack(6, 1, 8): net 5 of 8 planted
+    ['color-nback', 90, '5 net hits', 63], // normalizeColorNBack(6, 1, 8): net 5 of 8 planted; timeMs reads the payload's net, not the game's already-scaled raw (A-I1)
     ['reaction', 60, '842 ms mean reaction', 92], // normalizeReaction(842)
     ['rhythm', 60, '150 ms mean offset from the beat', 70], // normalizeRhythm(150)
     ['breathe', 90, '100% of the pacer completed', 100], // normalizeBreathe(100)

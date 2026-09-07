@@ -15,7 +15,7 @@
  * still there to tap along to. Sound (a soft tick per beat) only plays when
  * `soundOn` is true.
  */
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { CountdownRing } from '@/components/derot/CountdownRing'
@@ -78,7 +78,18 @@ export function beatProgressAt(elapsedMs: number, beatTimes: readonly number[]):
   return { index, progress }
 }
 
-export default function KeepTime({ timeLimitS, soundOn, onComplete, onAbort }: PlayGameProps) {
+/** Fix round 1 (A-I3): `useCountdown` drives off wall-clock time with no visibility gate of its own, so every game that owns one gates its `active` flag off this. */
+function useHiddenTab(): boolean {
+  const [hidden, setHidden] = useState(() => (typeof document !== 'undefined' ? document.hidden : false))
+  useEffect(() => {
+    const onVisibility = () => setHidden(document.hidden)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+  return hidden
+}
+
+export default function KeepTime({ timeLimitS, soundOn, reducedMotion, onComplete, onAbort }: PlayGameProps) {
   const pulseRef = useRef<HTMLDivElement>(null)
   const markerRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -106,7 +117,8 @@ export default function KeepTime({ timeLimitS, soundOn, onComplete, onAbort }: P
     onComplete({ raw: meanAbsOffsetMs, payload: { taps: offsets.length, beats: (beatTimesRef.current?.length ?? 1) - 1 } })
   }, [onComplete])
 
-  const { remainingMs, percentRemaining } = useCountdown({ timeLimitS, onExpire: finish })
+  const hidden = useHiddenTab()
+  const { remainingMs, percentRemaining } = useCountdown({ timeLimitS, active: !hidden, onExpire: finish })
 
   useEffect(() => {
     const el = trackRef.current
@@ -139,10 +151,23 @@ export default function KeepTime({ timeLimitS, soundOn, onComplete, onAbort }: P
 
       const beatTimes = beatTimesRef.current ?? [0]
       const { index, progress } = beatProgressAt(elapsedMsRef.current, beatTimes)
-      if (index !== lastBeatIndexRef.current) {
+      const isNewBeat = index !== lastBeatIndexRef.current
+      if (isNewBeat) {
         lastBeatIndexRef.current = index
         if (soundOnRef.current) play('ui.tap', { volumeScale: 0.4 })
       }
+
+      // Fix round 1 (A-I4): under reduced motion, a discrete snap once per beat -- never a
+      // per-frame tween. Rule 1's substitute card offers this game as a movement-free
+      // alternative, so it cannot itself keep animating every frame regardless of the setting.
+      if (reducedMotion) {
+        if (isNewBeat) {
+          if (pulseRef.current) pulseRef.current.style.opacity = index % 2 === 0 ? '1' : '0.5'
+          if (markerRef.current) markerRef.current.style.transform = `translateX(${index % 2 === 0 ? trackWidthRef.current : 0}px)`
+        }
+        return
+      }
+
       if (pulseRef.current) {
         pulseRef.current.style.transform = `scale(${1 + 0.35 * (1 - progress)})`
         pulseRef.current.style.opacity = String(1 - 0.6 * progress)
@@ -156,7 +181,7 @@ export default function KeepTime({ timeLimitS, soundOn, onComplete, onAbort }: P
       document.removeEventListener('visibilitychange', onVisibility)
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
     }
-  }, [])
+  }, [reducedMotion])
 
   const tap = useCallback(() => {
     if (finishedRef.current) return
@@ -181,7 +206,7 @@ export default function KeepTime({ timeLimitS, soundOn, onComplete, onAbort }: P
     <Card className="mx-auto w-full max-w-2xl">
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
-          <CountdownRing remainingMs={remainingMs} percentRemaining={percentRemaining} reduced={false} />
+          <CountdownRing remainingMs={remainingMs} percentRemaining={percentRemaining} reduced={reducedMotion} />
           <Button variant="ghost" size="sm" onClick={onAbort}>Quit</Button>
         </div>
         <CardDescription>Tap on every beat. The tempo drifts, so listen and watch, do not count.</CardDescription>

@@ -56,6 +56,17 @@ function clampToBounds(value: number, max: number): number {
   return Math.min(max, Math.max(0, value))
 }
 
+/** Fix round 1 (A-I3): `useCountdown` drives off wall-clock time with no visibility gate of its own, so every game that owns one gates its `active` flag off this. */
+function useHiddenTab(): boolean {
+  const [hidden, setHidden] = useState(() => (typeof document !== 'undefined' ? document.hidden : false))
+  useEffect(() => {
+    const onVisibility = () => setHidden(document.hidden)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+  return hidden
+}
+
 /** The real game: only ever mounted once motion is actually intended (reduced motion is off, or the learner opted in from the substitute card). */
 function FollowTheDotGame({ timeLimitS, onComplete, onAbort }: PlayGameProps) {
   const areaRef = useRef<HTMLDivElement>(null)
@@ -80,7 +91,8 @@ function FollowTheDotGame({ timeLimitS, onComplete, onAbort }: PlayGameProps) {
     onComplete({ raw: shareInside, payload: { framesInside: framesInsideRef.current, framesTotal: total } })
   }, [onComplete])
 
-  const { remainingMs, percentRemaining } = useCountdown({ timeLimitS, onExpire: finish })
+  const hidden = useHiddenTab()
+  const { remainingMs, percentRemaining } = useCountdown({ timeLimitS, active: !hidden, onExpire: finish })
 
   useEffect(() => {
     const el = areaRef.current
