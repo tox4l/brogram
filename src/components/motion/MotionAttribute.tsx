@@ -6,6 +6,7 @@ import { qk } from '@/lib/query/keys'
 import type { WellnessRow } from '@/lib/learner/compile'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { claimMotionAttribute } from '@/components/motion/MotionAttributeStatic'
 
 // W4FIX-B: `@/lib/supabase/client` (a thin wrapper over
 // `createBrowserClient` from `@supabase/ssr`) used to be a top-level import
@@ -94,9 +95,25 @@ function useAuthUserId(): string | null {
  * even though every component's own `useReducedMotion(prefs.motion)` call
  * has already gone quiet.
  *
- * Mounted as the first child inside `QueryProvider` in `providers.tsx`
- * (rather than in `Providers` itself): `Providers` sits above
- * `QueryProvider` and cannot read a query result at all.
+ * Mounted from `AppEffects` (`src/app/(app)/providers.tsx`), inside
+ * `(app)/layout.tsx`'s own `QueryProvider` -- not the root `Providers` in
+ * `src/app/providers.tsx`, which sits above any `QueryProvider` and cannot
+ * read a query result at all. `src/app/providers.tsx` mounts the OS-only
+ * `MotionAttributeStatic` (`./MotionAttributeStatic.tsx`) instead for `/`
+ * and `/login`, which need no query client and no Supabase client to
+ * resolve `data-motion` before anyone has signed in.
+ *
+ * F3 (W4FIX-B2 re-check): `MotionAttributeStatic` also writes `data-motion`
+ * on every route (it is mounted from the root boundary every route
+ * renders), so while this component is mounted it claims ownership via
+ * `claimMotionAttribute()` -- otherwise an OS motion change mid-session
+ * (e.g. a laptop's battery saver toggling) re-runs `MotionAttributeStatic`'s
+ * own effect and clobbers this component's prefs-aware resolution with a
+ * plain OS-only one, even though nothing this component reads has changed.
+ * Releasing the claim on unmount re-asserts this component's own last
+ * resolved value once more, so `data-motion` does not silently revert to a
+ * stale OS-only write in the gap before `MotionAttributeStatic` next
+ * re-runs on its own.
  *
  * Renders nothing; side-effect only.
  */
@@ -113,7 +130,17 @@ export function MotionAttribute(): null {
   const reduced = useReducedMotion(prefs.motion)
 
   useEffect(() => {
+    const release = claimMotionAttribute()
     document.documentElement.dataset.motion = reduced ? 'reduced' : 'full'
+    return () => {
+      release()
+      // Re-assert this component's own resolved value one more time on the
+      // way out, so `data-motion` keeps reading the learner's preference
+      // until `MotionAttributeStatic` next re-runs on its own (an OS
+      // change), rather than reverting to whatever it last silently
+      // computed while its writes were suppressed.
+      document.documentElement.dataset.motion = reduced ? 'reduced' : 'full'
+    }
   }, [reduced])
 
   return null
