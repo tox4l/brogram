@@ -158,12 +158,21 @@ function renderPage(state: LearnerState, row: Row) {
   mocks.createClient.mockReturnValue(fakeSupabase(row))
   const client = makeQueryClient()
   client.setQueryData(qk.learnerState('student'), state)
-  render(
+  const { container } = render(
     <QueryClientProvider client={client}>
       <CoursesPage />
     </QueryClientProvider>,
   )
-  return client
+  return { client, container }
+}
+
+/** Fix round (review M1): counts the filled variant's own `bg-primary` class
+ *  token, never an alpha-suffixed form like the "Current" pill's
+ *  `bg-primary/20`. */
+function filledActionCount(container: HTMLElement): number {
+  return Array.from(container.querySelectorAll('a,button')).filter((el) =>
+    el.className.split(/\s+/).includes('bg-primary'),
+  ).length
 }
 
 beforeEach(() => {
@@ -332,6 +341,12 @@ describe('/courses — the optimistic switch', () => {
     expect(lastStoreCall.currentCourse).toBeNull()
     // Query cache rolled back too — `useOptimistic`'s own machinery.
     expect(client.getQueryData(qk.learnerState('student'))).toMatchObject({ currentCourse: null })
+  })
+
+  it('review M1: carries zero filled-variant actions -- every card and control on this screen is an outline, ghost or plain link', () => {
+    const row: Row = { state: learnerState(), version: 1 }
+    const { container } = renderPage(learnerState(), row)
+    expect(filledActionCount(container)).toBe(0)
   })
 
   it('a coming-soon course states its reason and is inert, but stays reachable by keyboard (M4)', () => {

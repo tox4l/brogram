@@ -154,7 +154,10 @@ export function CoursesClient({ comingSoon }: { comingSoon: readonly ComingSoonC
         </div>
       )}
 
-      <div role="group" aria-label="Live courses" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Fix round (review I2): the two-column editorial index at 24px gaps
+          (spec §9, "/courses") -- a three-up grid was truncating course
+          titles at 1280px. */}
+      <div role="group" aria-label="Live courses" className="grid gap-6 sm:grid-cols-2">
         {courses.map((course, index) => (
           <CourseCard
             key={course.code}

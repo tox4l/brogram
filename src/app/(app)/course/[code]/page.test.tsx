@@ -87,6 +87,14 @@ function renderPage(client: QueryClient = makeQueryClient()) {
   return render(<QueryClientProvider client={client}><CoursePage /></QueryClientProvider>)
 }
 
+/** Fix round (review M1): counts the filled variant's own `bg-primary` class
+ *  token, never an alpha-suffixed form. */
+function filledActionCount(container: HTMLElement): number {
+  return Array.from(container.querySelectorAll('a,button')).filter((el) =>
+    el.className.split(/\s+/).includes('bg-primary'),
+  ).length
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
@@ -174,6 +182,12 @@ describe('course home', () => {
     // path-map node is exercise-bound -- restricted must block all of them.
     expect(within(region).queryAllByRole('link')).toHaveLength(0)
     expect(screen.getByRole('list', { name: 'Skill path' }).querySelectorAll('a')).toHaveLength(0)
+  })
+
+  it('review M1: carries zero filled-variant actions -- the path map, next-up cards and flat list are all plain links, never a filled button', async () => {
+    const { container } = renderPage()
+    await screen.findByText('Demo Course')
+    expect(filledActionCount(container)).toBe(0)
   })
 
   it('I5: resolves the learner\'s wellness.prefs.motion through a passive cache peek rather than the OS media query', async () => {

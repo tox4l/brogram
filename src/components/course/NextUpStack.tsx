@@ -38,7 +38,9 @@ export function NextUpStack({ cards, reducedMotion, restricted }: { cards: NextU
           {cards.map((card) => {
             const blocked = restricted && card.kind === 'exercise'
             const cardClassName = cn(
-              'flex h-full flex-col justify-between gap-3 rounded-xl border border-border p-4 outline-none',
+              // Fix round (review I3): --rule edge and --elevation-xs, matching
+              // every other resting card this wave (mandatory in Folio, W4.4).
+              'flex h-full flex-col justify-between gap-3 rounded-xl border border-rule p-4 shadow-xs outline-none',
               blocked ? 'cursor-not-allowed opacity-80' : 'hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring',
               !reducedMotion && !blocked && 'transition-colors',
             )
@@ -50,7 +52,8 @@ export function NextUpStack({ cards, reducedMotion, restricted }: { cards: NextU
                       ? <><BookOpen className="size-4" aria-hidden="true" />Walkthrough</>
                       : <>{card.language ? (LANGUAGE_NAMES[card.language] ?? card.language) : ''} · {card.difficulty ? difficultyWord(card.difficulty) : ''}</>}
                   </span>
-                  <p className="mt-2 max-w-[68ch] text-body font-medium text-foreground">{card.title}</p>
+                  {/* Fix round (review I1): 34rem, not the bare 68ch -- see NodeItem.tsx. */}
+                  <p className="mt-2 max-w-[34rem] text-body font-medium text-foreground">{card.title}</p>
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   {card.pickedForYou && (

@@ -201,9 +201,15 @@ export default function CoursePage() {
         <div className="relative min-h-48 overflow-hidden rounded-2xl">
           <ShaderSurface motionPref={motionPref} className="z-0" />
           <div className="relative z-10 flex min-h-48 flex-col justify-end gap-2 p-6">
-            <div className="w-fit max-w-full rounded-xl bg-background/95 px-4 py-3">
+            {/* Fix round (review M3): bg-card, not bg-background/95 -- an opaque
+             *  real surface tier, matching spec §9's "CLO text ... on solid
+             *  --card" rather than a near-invisible scrim in Folio. */}
+            <div className="w-fit max-w-full rounded-xl bg-card px-4 py-3">
               <p className="font-mono text-micro text-muted-foreground uppercase">{LANGUAGE_NAMES[meta.language] ?? meta.language}</p>
-              <h1 className="mt-1 max-w-[68ch] text-hero font-display text-foreground">
+              {/* Fix round (review I1): 68ch never binds at --text-hero/56px
+               *  (~2500px) -- dropped rather than swapped, since nothing this
+               *  wide needs a measure cap. */}
+              <h1 className="mt-1 text-hero font-display text-foreground">
                 {/* `mode="fade"` deliberately, not "words": a course code is
                  *  dynamic, server-supplied content, and `no-agent-surfaces.
                  *  test.tsx` (frozen, not owned by this task) asserts on the

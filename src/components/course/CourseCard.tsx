@@ -99,9 +99,10 @@ export function CourseCard(props: CourseCardProps) {
           onClick={(event) => event.preventDefault()}
           className="w-full cursor-default rounded-xl border-t-2 border-rule bg-background p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="block max-w-[68ch] text-body font-medium text-foreground">
-            <Reveal mode="words" reduced={props.reducedMotion}>{props.title}</Reveal>
-          </span>
+          {/* Fix round (review M2): no reveal here -- coming-soon tiles are the
+              restricted-adjacent state (spec §9/§8 want that surface quiet),
+              not a second stage for the word-reveal the live cards below get. */}
+          <span className="block text-body font-medium text-foreground">{props.title}</span>
           <span className="mt-1 block text-small text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language}</span>
           <span className="mt-2 block text-small text-muted-foreground">{props.reason}</span>
         </button>
@@ -123,15 +124,15 @@ export function CourseCard(props: CourseCardProps) {
         whileTap={props.reducedMotion ? undefined : { scale: 0.98 }}
         aria-current={props.isCurrent ? 'true' : undefined}
         className={cn(
-          'flex w-full items-center gap-4 rounded-xl border bg-card p-4 text-left outline-none transition-colors',
+          'flex w-full items-center gap-4 rounded-xl border bg-card p-4 text-left shadow-xs outline-none transition-colors',
           'hover:border-primary hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
-          props.isCurrent ? 'border-primary' : 'border-border',
+          props.isCurrent ? 'border-primary' : 'border-rule',
         )}
       >
         <ProgressRing value={props.progress} label={`${props.title} progress`} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="block max-w-[68ch] truncate text-body font-medium text-foreground">
+            <span className="block text-h2 text-foreground line-clamp-2">
               <Reveal mode="words" reduced={props.reducedMotion}>{props.title}</Reveal>
             </span>
             {props.isCurrent && (

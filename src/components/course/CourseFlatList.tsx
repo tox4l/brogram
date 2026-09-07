@@ -58,7 +58,8 @@ export function CourseFlatList({
           )
           const body = (
             <>
-              <span aria-hidden="true" className="min-w-0 max-w-[68ch] flex-1 text-body text-foreground">
+              {/* Fix round (review I1): 34rem, not the bare 68ch -- see NodeItem.tsx. */}
+              <span aria-hidden="true" className="min-w-0 max-w-[34rem] flex-1 text-body text-foreground">
                 {node.title}
                 {node.draft && <span className="ml-2 align-middle text-micro tracking-wide text-muted-foreground uppercase">Drafted</span>}
                 {node.skipped && <span className="ml-2 align-middle text-micro tracking-wide text-muted-foreground uppercase">Skipped</span>}

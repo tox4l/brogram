@@ -360,7 +360,10 @@ export default function Dashboard() {
       </p>
 
       {restricted && (
-        <p className="flex items-center gap-2 text-micro text-muted-foreground">
+        // Fix round (review M4): text-body, not the uppercase-label
+        // text-micro tier -- matches NextUpStack.tsx's own restricted
+        // sentence and keeps this reading as information, not punishment.
+        <p className="flex items-center gap-2 text-body text-muted-foreground">
           <LockKeyhole className="size-4" aria-hidden="true" />Reps are paused while your account is restricted. Walkthroughs and De-rot stay open.
         </p>
       )}

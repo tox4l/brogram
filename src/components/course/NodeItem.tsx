@@ -136,18 +136,26 @@ export function NodeItem({
 
   const content = (
     <>
-      <span aria-hidden="true" className="block max-w-[68ch] text-body font-medium text-foreground">
+      {/* Fix round (review I1): 68ch measures ~811px in this face (~99 rendered
+       *  characters), never binding to the ~700px column it sits in --
+       *  T4.4's own measurement (LessonView.tsx) already replaced the same
+       *  bare 68ch with this 34rem/544px figure (66-73 rendered characters
+       *  across the two captured palettes). */}
+      <span aria-hidden="true" className="block max-w-[34rem] text-body font-medium text-foreground">
         {node.title}
         {node.draft && <span className="ml-2 align-middle text-micro tracking-wide text-muted-foreground uppercase">Drafted</span>}
         {node.skipped && <span className="ml-2 align-middle text-micro tracking-wide text-muted-foreground uppercase">Skipped</span>}
       </span>
       {extraPrerequisiteTitles.map((title) => (
-        <span key={title} aria-hidden="true" className="mt-1 block text-small text-muted-foreground/70">
+        // Fix round (review I4): the /70 alpha failed AA in Folio (3.31:1) --
+        // plain text-muted-foreground is already the quieter tier and clears
+        // AA in all five palettes.
+        <span key={title} aria-hidden="true" className="mt-1 block text-small text-muted-foreground">
           Builds on {title}.
         </span>
       ))}
       {node.externalPrerequisites.length > 0 && (
-        <span aria-hidden="true" className="mt-1 block text-small text-muted-foreground/70">
+        <span aria-hidden="true" className="mt-1 block text-small text-muted-foreground">
           Also builds on a skill from another course.
         </span>
       )}

@@ -131,6 +131,19 @@ function renderDashboard(client: QueryClient = seededClient()) {
   return render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>)
 }
 
+/** Fix round (review M1): a render-level count of the filled variant's own
+ *  `bg-primary` class token (never the `/NN`-suffixed alpha forms `bg-
+ *  primary/20` etc. carry, e.g. the "Current" pill or the in-progress chain
+ *  pips) -- catches a future second filled action even though T4.1's own
+ *  gate is a static source-call-site count that a single hoisted
+ *  `primaryButtonClassName` constant, used at two mutually exclusive call
+ *  sites, cannot see multiplied at render time either way. */
+function filledActionCount(container: HTMLElement): number {
+  return Array.from(container.querySelectorAll('a,button')).filter((el) =>
+    el.className.split(/\s+/).includes('bg-primary'),
+  ).length
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
@@ -177,6 +190,18 @@ describe('dashboard', () => {
     expect(screen.getByRole('link', { name: /Choose a course/ }).getAttribute('href')).toBe('/onboarding')
     expect(screen.getByRole('group', { name: 'Rep streak' }).textContent).toContain('4 days')
     expect(screen.queryByText('Pick up where you left off')).toBeNull()
+  })
+
+  it('review M1: carries exactly one filled-variant action -- the resume card\'s primary link -- when a course is chosen', async () => {
+    const { container } = renderDashboard()
+    await screen.findByText('Programming foundations')
+    expect(filledActionCount(container)).toBe(1)
+  })
+
+  it('review M1: still exactly one filled-variant action in the no-course-chosen branch, not zero and never two', () => {
+    mocks.session.mockReturnValue(session(learnerState({ currentCourse: null, path: [], nextExerciseIds: [] })))
+    const { container } = renderDashboard()
+    expect(filledActionCount(container)).toBe(1)
   })
 
   it('shows the walkthrough-in-flight resume line when a lesson_progress row is started for the current skill', async () => {
