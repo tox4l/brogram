@@ -60,6 +60,81 @@ import { line } from '@/lib/voice/lines'
  */
 let pendingHandoff: { id: string; exercise: ExercisePublic; clo: Clo; packages: string[] } | null = null
 
+/**
+ * Fix round 4: root cause of the remount, found by reading this tree's own Next docs
+ * (`node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md`) after
+ * the CPU-throttle investigation's DOM-identity probe proved a remount really happens.
+ * `router.replace()` -- what `next()` used, below -- always goes through the App Router's own
+ * RSC-aware navigation pipeline, and a dynamic segment (`[id]`) resolving to a NEW value is
+ * exactly the case that pipeline treats as a fresh segment, remounting everything under it
+ * client-side despite `page.tsx`'s own now-corrected "same instance" comment. The docs' own fix
+ * for "change the URL without a route re-render" is `window.history.pushState`/`replaceState`
+ * called directly -- bypassing the App Router's navigation machinery entirely, so nothing ever
+ * asks it to remount this segment. `useParams()`'s reported `id` will not track a raw history
+ * mutation (only `usePathname`/`useSearchParams` are documented to sync with it), but nothing in
+ * this hook or `page.tsx` reads it again after the initial call into `useExerciseLoop(id)` -- the
+ * exercise actually on screen is `exerciseRef.current`/`exercise`, not the URL param. A genuine
+ * full reload or deep link still resolves the right exercise from the URL the normal way.
+ *
+ * This closes the root cause for the common path. `pendingHandoff` above (and the
+ * `pendingSubmissions` store below, its generalization to a submission in flight) stay in place
+ * regardless, as insurance against a remount from any OTHER cause -- Fast Refresh in dev, a future
+ * upstream change, anything this fix does not anticipate.
+ */
+
+/** The subset of a graded verdict a freshly (re)mounted instance needs to look right the instant
+ *  it hydrates, before the durable background chain (which may have started on a now-gone
+ *  instance) finishes reconciling it for real. */
+type GradedSnapshot = {
+  outcome: Outcome; results: TestResult[]; pointsEarned: number; pointsProvisional: boolean
+  chain: number; closed: boolean; code: string; hintCount: number
+}
+/**
+ * Fix round 4: "the pendingHandoff idea, completed" -- the same module-scope-survives-a-remount
+ * pattern, generalized from "which exercise is this" to "is a submission for this exact
+ * exercise in flight or freshly graded but not yet durably saved." Keyed by user+exercise
+ * (`submissionKey`) since a submission belongs to exactly one learner's one exercise. `attemptId`
+ * (== `Submission.attempt.id`, a UUID already minted per submit) is the record's own identity --
+ * `isCurrent` compares against it rather than any per-instance `generation` ref, specifically so
+ * a remount (which never touches this map) can never make an in-flight write look "stale" the
+ * way the per-instance guards it replaces used to. Registered the moment `submit()` starts
+ * (`operation`/`graded` still null -- the runtime hasn't graded anything yet) and filled in once
+ * grading resolves; `ready` and `settle` let a (re)mounted instance either wait for the verdict
+ * (mounted before grading finished) or adopt it immediately (mounted after) and then, either way,
+ * learn when the durable save itself finishes or fails.
+ */
+type PendingRecord = {
+  attemptId: string
+  operation: Submission | null
+  graded: GradedSnapshot | null
+  /** Resolves once `operation`/`graded` are populated -- grading has a verdict. */
+  ready: Promise<void>
+  markReady: () => void
+  /** Resolves once the durable background chain finishes, pass or fail; check `.error` after. */
+  settle: Promise<void>
+  markSettled: () => void
+  error: string | null
+}
+const pendingSubmissions = new Map<string, PendingRecord>()
+const submissionKey = (userId: string, exerciseId: string) => `${userId}:${exerciseId}`
+/** False once a DIFFERENT submission (a distinct `attemptId`) has replaced this one for the same
+ *  user+exercise -- never false merely because the component that started it unmounted. */
+function isCurrent(key: string, attemptId: string): boolean {
+  return pendingSubmissions.get(key)?.attemptId === attemptId
+}
+/**
+ * Fix round 4: both module-scope stores above are deliberately real singletons -- module scope,
+ * not component scope, is the entire point (surviving a remount). In production that lifetime is
+ * the page's own. In a test file, the same module registry is shared by every `it()` in the run,
+ * so a record an earlier test left pending (a durability failure, on purpose, in several fixtures
+ * below) would otherwise leak into a later test's fresh mount of the same user+exercise id. Tests
+ * only; nothing in `page.tsx` or this hook calls this.
+ */
+export function __resetExerciseLoopModuleStateForTests(): void {
+  pendingHandoff = null
+  pendingSubmissions.clear()
+}
+
 type Status = 'loading' | 'ready' | 'running' | 'graded' | 'submitting' | 'failed' | 'passed' | 'error'
 /** The durable pass/fail fact, known the instant local grading resolves. Never rolled back by a
  *  later network failure (brief step 3) -- `status` may keep moving (`graded` -> `submitting` on a
@@ -213,6 +288,50 @@ export function useExerciseLoop(exerciseId: string) {
     setHasPending(false); setError(null); setBusy(false); setHintCount(used)
     setHintTiming({ failureAt: null, coachAt: receipt.calledAt, edited: false, first: true })
     setClock(Date.now())
+    // Fix round 4: this exact user+exercise may already have a submission in flight or freshly
+    // graded but not yet durably saved, in `pendingSubmissions` -- surviving a remount that
+    // happened between `submit()` starting and its background chain finishing (the CPU-throttle
+    // investigation's reproduced mechanism). This instance ADOPTS it instead of showing the blank
+    // "ready" state the resets above just painted.
+    const submissionRecord = pendingSubmissions.get(submissionKey(userId, item.id))
+    if (submissionRecord) {
+      pending.current = submissionRecord.operation
+      setHasPending(true); setDuringAttempt(false)
+      if (submissionRecord.graded) {
+        const { graded } = submissionRecord
+        codeRef.current = graded.code; updateCode(graded.code)
+        setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
+        setPointsProvisional(graded.pointsProvisional); setChain(graded.chain); setClosed(graded.closed)
+      } else {
+        // Grading itself (the runtime call) is still running on whatever instance started it.
+        setStatus('submitting')
+      }
+      void submissionRecord.ready.then(() => {
+        if (generation.current !== token || !submissionRecord.graded) return
+        const { graded } = submissionRecord
+        codeRef.current = graded.code; updateCode(graded.code)
+        setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
+        setPointsProvisional(graded.pointsProvisional); setChain(graded.chain); setClosed(graded.closed)
+      })
+      void submissionRecord.settle.then(() => {
+        if (generation.current !== token) return
+        if (submissionRecord.error) { setError(submissionRecord.error); return } // pending.current stays -- retry() can recover it
+        pending.current = null; setHasPending(false)
+        const finalOp = submissionRecord.operation
+        if (finalOp?.diagnosis) setDiagnosis(finalOp.diagnosis)
+        if (submissionRecord.graded?.outcome === 'passed' && finalOp?.review && finalOp.state) {
+          setReview(finalOp.review)
+          setPointsEarned(pointsForPass(item.difficulty, finalOp.attempt.hintCount, finalOp.review.quality))
+          setPointsProvisional(false)
+          const finalMastery = finalOp.state.mastery[item.cloId]
+          if (finalMastery) { setChain(finalMastery.chain); setClosed(finalMastery.closed) }
+          completed.current = true
+          setStatus('passed')
+        } else if (submissionRecord.graded?.outcome === 'failed') {
+          setStatus('failed')
+        }
+      })
+    }
     if (userId) {
       void (async () => {
         const client = clientRef.current ??= createClient()
@@ -327,11 +446,20 @@ export function useExerciseLoop(exerciseId: string) {
     return currentSession.learnerState
   }
 
-  async function saveState(delta: (base: LearnerState) => LearnerState, token: number): Promise<LearnerState> {
+  /**
+   * Fix round 4: `token`/`generation.current` replaced with `isCurrent(key, attemptId)` in this
+   * function and every function in the durability chain below it (`queueNext`, `finishSubmission`)
+   * -- the OLD per-instance guard aborted this exact write the instant the calling instance's
+   * effect cleanup ran, which happens on every unmount INCLUDING a remount, not only a genuine
+   * "the learner moved on elsewhere" case. `isCurrent` is keyed on the module-level
+   * `pendingSubmissions` record instead, which a remount never touches, so only a truly
+   * different, newer submission for the same user+exercise can still make this abort.
+   */
+  async function saveState(delta: (base: LearnerState) => LearnerState, key: string, attemptId: string): Promise<LearnerState> {
     const client = clientRef.current!; const local = assertAllowed()
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: row, error: readError } = await client.from('learner_state').select('state,version').eq('user_id', local.userId).maybeSingle()
-      if (generation.current !== token) throw new Error(line('rep.changed.presave'))
+      if (!isCurrent(key, attemptId)) throw new Error(line('rep.changed.presave'))
       if (readError) throw readError
       const base = row?.state && row.state.mastery && row.state.profile && row.state.streak ? { ...row.state, version: row.version } as LearnerState : { ...local, version: row?.version ?? 0 }
       const changed = delta(base)
@@ -346,14 +474,15 @@ export function useExerciseLoop(exerciseId: string) {
         throw write.error
       }
       if (!write.data) continue
-      if (generation.current !== token) throw new Error(line('rep.changed.postsave'))
+      if (!isCurrent(key, attemptId)) throw new Error(line('rep.changed.postsave'))
       sessionRef.current.setLearnerState(nextState)
       return nextState
     }
     throw new Error(line('rep.retry.elsewhere'))
   }
 
-  async function queueNext(operation: Submission, token: number) {
+  async function queueNext(operation: Submission) {
+    const key = submissionKey(operation.attempt.userId, operation.exercise.id); const attemptId = operation.attempt.id
     const client = clientRef.current!; const state = operation.state!
     const mastery = state.mastery[operation.exercise.cloId]
     if (mastery.closed) {
@@ -361,7 +490,7 @@ export function useExerciseLoop(exerciseId: string) {
       const clos = [...closFor(operation.clo.course)]
       if (!operation.planner) {
         const flatBanks = (await Promise.all(clos.map(item => fetchBank(client, { cloId: item.id })))).flat()
-        if (generation.current !== token) return
+        if (!isCurrent(key, attemptId)) return
         try {
           operation.planner = (await callAgent({ agent: 'planner', trigger: 'plan-refresh', state, course: operation.clo.course, clos, candidates: flatBanks.slice(0, 30).map(({ id, cloId, pattern, difficulty, title }) => ({ id, cloId, pattern, difficulty, title })) })).reply
         } catch (plannerError) {
@@ -375,13 +504,13 @@ export function useExerciseLoop(exerciseId: string) {
           operation.planner = { path: provisional.path, nextExerciseIds: provisional.nextExerciseIds, focus: '' }
         }
       }
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       if (!operation.planned) {
         const plan = operation.planner!
         try {
           // `focus` is not part of the frozen LearnerState contract; it rides along as an
           // extra jsonb key so the dashboard and report can show the Planner's latest line.
-          operation.state = await saveState(base => ({ ...base, path: plan.path, nextExerciseIds: plan.nextExerciseIds, focus: plan.focus }) as typeof base, token)
+          operation.state = await saveState(base => ({ ...base, path: plan.path, nextExerciseIds: plan.nextExerciseIds, focus: plan.focus }) as typeof base, key, attemptId)
         } catch (saveError) {
           // Same ruling: a transient learner_state write failure here must not strand the
           // learner either. Keep them moving on the locally-merged plan; a later save (the next
@@ -399,7 +528,7 @@ export function useExerciseLoop(exerciseId: string) {
     const preferences = nextInChain(mastery, operation.exercise.pattern, operation.clo.patterns).preferPatterns
     const query: BankQuery = { cloId: operation.clo.id, difficulty: DEFAULT_DIFFICULTY, preferPatterns: preferences, excludePatterns: inChain, excludeExerciseIds: history.current.map(attempt => attempt.exercise_id) }
     const bank = await fetchBank(client, query)
-    if (generation.current !== token) return
+    if (!isCurrent(key, attemptId)) return
     let chosen = pickFromBank(query, bank)
     if (!chosen) {
       try {
@@ -409,7 +538,7 @@ export function useExerciseLoop(exerciseId: string) {
         if (exampleIds.length < 2) throw new Error('Two distinct CLO examples are required before an exercise can be authored.')
         const parent = history.current.filter(attempt => attempt.passed && bank.some(item => item.id === attempt.exercise_id)).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0]?.exercise_id ?? operation.exercise.id
         const authored = await callAgent({ agent: 'author', trigger: 'bank-miss', state, clo: operation.clo, language: operation.exercise.language, kind: operation.exercise.kind, difficulty: DEFAULT_DIFFICULTY, pattern, exampleIds, parentExerciseId: parent })
-        if (generation.current !== token) return
+        if (!isCurrent(key, attemptId)) return
         const generated = authored.reply.exercise as typeof authored.reply.exercise & { id?: unknown }
         if (typeof generated.id !== 'string' || !generated.id || generated.cloId !== operation.clo.id || generated.pattern !== pattern || inChain.includes(generated.pattern) || !generated.tests.length) throw new Error('The generated exercise did not match this chain.')
         const { referenceSolution, ...publicFields } = generated
@@ -417,7 +546,7 @@ export function useExerciseLoop(exerciseId: string) {
         const request = exerciseRunRequest(publicExercise, referenceSolution, true, packages.current)
         const verified = usesAnswerForm(publicExercise) ? gradeAnswer(publicExercise, referenceSolution) : await getRuntime(request.language).run(request)
         if (!verified.ok || verified.totalCount !== publicExercise.tests.length || verified.passedCount !== publicExercise.tests.length) throw new Error('The generated reference did not pass every test.')
-        if (generation.current !== token) return
+        if (!isCurrent(key, attemptId)) return
         const response = await fetch('/api/exercises/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: publicExercise.id }) })
         const verification: unknown = await response.json()
         if (!response.ok || !verification || typeof verification !== 'object' || !('ok' in verification) || verification.ok !== true) throw new Error('The generated exercise could not be verified.')
@@ -432,7 +561,7 @@ export function useExerciseLoop(exerciseId: string) {
         if (!chosen) throw new Error(line('rep.next.preparing'))
       }
     }
-    if (generation.current !== token) return
+    if (!isCurrent(key, attemptId)) return
     setNextExercise(chosen); operation.queued = true
   }
 
@@ -476,16 +605,17 @@ export function useExerciseLoop(exerciseId: string) {
     }
   }
 
-  async function finishSubmission(operation: Submission, token: number) {
+  async function finishSubmission(operation: Submission) {
+    const key = submissionKey(operation.attempt.userId, operation.exercise.id); const attemptId = operation.attempt.id
     const client = clientRef.current!; const attempt = operation.attempt
     if (!operation.inserted) {
       const { error: insertError } = await client.from('attempts').upsert({ id: attempt.id, user_id: attempt.userId, exercise_id: attempt.exerciseId, code: attempt.code, results: attempt.results, passed: attempt.passed, duration_ms: attempt.durationMs, hint_count: attempt.hintCount, created_at: attempt.createdAt }, { onConflict: 'id', ignoreDuplicates: true })
       if (insertError) throw insertError
       operation.inserted = true
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       history.current.unshift({ id: attempt.id, exercise_id: attempt.exerciseId, passed: attempt.passed, hint_count: attempt.hintCount, created_at: attempt.createdAt })
     }
-    if (generation.current !== token) return
+    if (!isCurrent(key, attemptId)) return
     const state = assertAllowed()
     // Fix round I3: captured once at grading time (`submit()`), not re-read here -- a retry
     // that re-enters this function after the state write already succeeded would otherwise
@@ -496,7 +626,7 @@ export function useExerciseLoop(exerciseId: string) {
     const exerciseRefForAgent = { id: operation.exercise.id, cloId: operation.exercise.cloId, pattern: operation.exercise.pattern, prompt: operation.exercise.prompt, language: operation.exercise.language }
     if (attempt.passed) {
       if (!operation.review) operation.review = (await callAgent({ agent: 'reviewer', trigger: 'attempt-passed', state, exercise: exerciseRefForAgent, code: attempt.code, hintCount: attempt.hintCount, durationMs: attempt.durationMs })).reply
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       setReview(operation.review)
       // Step 2: the tween IS the reconciliation -- fires the instant the real quality lands,
       // not after the slower mastery-save/queueNext chain below.
@@ -504,9 +634,9 @@ export function useExerciseLoop(exerciseId: string) {
       setPointsProvisional(false)
     } else {
       if (!operation.diagnosis) {
-        operation.diagnosis = (await streamAgent({ agent: 'diagnoser', trigger: 'attempt-failed', state, exercise: { ...exerciseRefForAgent, kind: operation.exercise.kind }, code: attempt.code, results: attempt.results }, partial => { if (generation.current === token) setPartialDiagnosis(partial) })).reply
+        operation.diagnosis = (await streamAgent({ agent: 'diagnoser', trigger: 'attempt-failed', state, exercise: { ...exerciseRefForAgent, kind: operation.exercise.kind }, code: attempt.code, results: attempt.results }, partial => { if (isCurrent(key, attemptId)) setPartialDiagnosis(partial) })).reply
       }
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       setPartialDiagnosis(null); setDiagnosis(operation.diagnosis)
     }
     if (!operation.state) {
@@ -519,16 +649,16 @@ export function useExerciseLoop(exerciseId: string) {
         const mastery = { ...scored.mastery, lastAttemptAt: attempt.createdAt }
         const mistakes = operation.diagnosis ? [{ exerciseId: attempt.exerciseId, cloId: operation.exercise.cloId, pattern: operation.exercise.pattern, label: operation.diagnosis.mistakeLabel, at: attempt.createdAt }, ...base.recentMistakes].slice(0, 10) : base.recentMistakes
         return { ...base, currentCourse: operation.clo.course, mastery: { ...base.mastery, [operation.exercise.cloId]: mastery }, points: base.points + scored.points, recentMistakes: mistakes, streak: activityStreak(base, attempt.createdAt) }
-      }, token)
+      }, key, attemptId)
     }
-    if (generation.current !== token) return
+    if (!isCurrent(key, attemptId)) return
     let mastery = operation.state.mastery[operation.exercise.cloId]
     if (!operation.masterySaved) {
       // A state write may have succeeded before a retry. Repair from the newest
       // document and condition the row update so an older tab cannot roll it back.
       const latest = await client.from('learner_state').select('state,version').eq('user_id', attempt.userId).maybeSingle()
       if (latest.error) throw latest.error
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       if (latest.data?.state?.mastery?.[operation.exercise.cloId] && latest.data.version >= operation.state.version) {
         operation.state = { ...latest.data.state, version: latest.data.version } as LearnerState
         mastery = operation.state.mastery[operation.exercise.cloId]
@@ -536,13 +666,13 @@ export function useExerciseLoop(exerciseId: string) {
       const row = { user_id: mastery.userId, clo_id: mastery.cloId, score: mastery.score, chain: mastery.chain, patterns_passed: mastery.patternsPassed, closed: mastery.closed, last_attempt_at: mastery.lastAttemptAt }
       const inserted = await client.from('mastery').upsert(row, { onConflict: 'user_id,clo_id', ignoreDuplicates: true })
       if (inserted.error) throw inserted.error
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       const updated = await client.from('mastery').update(row).eq('user_id', mastery.userId).eq('clo_id', mastery.cloId).or(`last_attempt_at.is.null,last_attempt_at.lte."${mastery.lastAttemptAt ?? attempt.createdAt}"`).select('clo_id').maybeSingle()
       if (updated.error) throw updated.error
       if (!updated.data) throw new Error(line('rep.stale.mastery'))
       operation.masterySaved = true
     }
-    if (generation.current !== token) return
+    if (!isCurrent(key, attemptId)) return
     if (attempt.passed) {
       completed.current = true
       setPointsEarned(pointsForPass(operation.exercise.difficulty, attempt.hintCount, operation.review!.quality))
@@ -563,8 +693,8 @@ export function useExerciseLoop(exerciseId: string) {
       // Goal-day + `goal.done`: best-effort, fire-and-forget -- never blocks the pass or the
       // save above. See `recordGoalAndStreak`'s own comment for the ownership note.
       void recordGoalAndStreak(client, attempt.userId, operation.state, attempt.createdAt)
-      if (!operation.queued) await queueNext(operation, token)
-      if (generation.current !== token) return
+      if (!operation.queued) await queueNext(operation)
+      if (!isCurrent(key, attemptId)) return
       setStatus('passed')
     } else {
       failureAt.current = Date.parse(attempt.createdAt); failedCode.current = attempt.code
@@ -606,9 +736,25 @@ export function useExerciseLoop(exerciseId: string) {
    * stay put (a "didn't save, retrying" banner via `error`, not a hidden verdict) -- `retry()`
    * routes back through the same wrapper for the same guarantee on a second attempt.
    */
-  async function syncInBackground(operation: Submission, token: number) {
-    try { await finishSubmission(operation, token) }
-    catch (syncError) { if (generation.current === token) { setError(messageOf(syncError)); setPartialDiagnosis(null); setPartialHint(null) } }
+  async function syncInBackground(operation: Submission) {
+    // Fix round 4: keyed off the module-level record, not the calling instance's `generation` --
+    // this whole chain must keep running (and land its writes) even if the instance that started
+    // it unmounts partway through, so its own liveness can no longer be what decides whether the
+    // record gets marked settled. Setting state (`setError` below) on an instance that has since
+    // unmounted is a silent no-op in React 18+; no guard is needed for that half any more either.
+    const key = submissionKey(operation.attempt.userId, operation.exercise.id)
+    try {
+      await finishSubmission(operation)
+      const record = pendingSubmissions.get(key)
+      if (record?.operation === operation) { pendingSubmissions.delete(key); record.markSettled() }
+    }
+    catch (syncError) {
+      setError(messageOf(syncError)); setPartialDiagnosis(null); setPartialHint(null)
+      // Kept in the map (not deleted) on failure: `pending.current`, hydrated from this same
+      // record on any instance that mounts next, must still let `retry()` recover it.
+      const record = pendingSubmissions.get(key)
+      if (record?.operation === operation) { record.error = messageOf(syncError); record.markSettled() }
+    }
     finally {
       // A graded submission settling (pass, fail, or a background failure the retry banner
       // covers) is exactly the moment the dashboard's streak, goal ring, points and trophy
@@ -632,7 +778,17 @@ export function useExerciseLoop(exerciseId: string) {
   async function submit() {
     const item = exerciseRef.current; const cloRow = cloRef.current
     if (!item || !cloRow || completed.current || pending.current) return
-    const token = generation.current
+    // Fix round 4: `pending.current` alone does not yet know about a submission that is
+    // registered in `pendingSubmissions` but still ungraded (the runtime call itself hasn't
+    // resolved) -- a freshly hydrated instance's own `pending.current` stays null until grading
+    // does. Without this, a remount landing exactly mid-run, followed by an immediate resubmit
+    // click, could start a second submission for the same exercise before the first one even has
+    // a verdict.
+    const userIdForGuard = sessionRef.current.user?.id
+    if (userIdForGuard) {
+      const existing = pendingSubmissions.get(submissionKey(userIdForGuard, item.id))
+      if (existing && !existing.graded) return
+    }
     await operate(async () => {
       // Mi1 (fix round): clear the previous attempt's verdict the instant a new one starts,
       // not once grading finishes -- a slow CheerpJ/Pyodide run must never leave "Needs work"
@@ -643,14 +799,30 @@ export function useExerciseLoop(exerciseId: string) {
       const durationMs = Math.max(0, submittedAt - (startedAt.current ?? submittedAt))
       if (!item.tests.length) throw new Error(line('rep.notests'))
       if (submittedCode.length > 20_000) throw new Error('Keep your solution under 20,000 characters before submitting.')
+      // Fix round 4: minted and registered in `pendingSubmissions` BEFORE the runtime call runs,
+      // not after it resolves -- a remount while a slow runtime is still grading (a throttled
+      // CPU running Pyodide/CheerpJ, in production; a forced remount in a test) used to hit the
+      // very next `generation`-gated line and silently drop the whole submission before a
+      // verdict even existed to protect. `record.operation`/`graded` fill in a few lines down,
+      // once grading resolves; `markReady()` lets a (re)mounted instance move off its own
+      // "still submitting" placeholder (`applyLoadedExercise`'s hydration) the moment that happens.
+      const attemptId = crypto.randomUUID()
+      const key = submissionKey(state.userId, item.id)
+      let markReady!: () => void; let markSettled!: () => void
+      const record: PendingRecord = {
+        attemptId, operation: null, graded: null,
+        ready: new Promise(resolve => { markReady = resolve }), markReady,
+        settle: new Promise(resolve => { markSettled = resolve }), markSettled,
+        error: null,
+      }
+      pendingSubmissions.set(key, record)
       const request = exerciseRunRequest(item, submittedCode, true, packages.current)
       const result: RunResult = usesAnswerForm(item) ? gradeAnswer(item, submittedCode) : await getRuntime(request.language).run(request)
-      if (generation.current !== token) return
+      if (!isCurrent(key, attemptId)) return
       setResults(result.results); setStdout(''); setStderr(''); setDuringAttempt(false); startedAt.current = null
       const previousTime = history.current[0]?.created_at ? Date.parse(history.current[0].created_at) : 0
       const at = new Date(Math.max(Date.now(), Number.isFinite(previousTime) ? previousTime + 1 : 0)).toISOString()
       const passedNow = result.ok && result.totalCount === item.tests.length && result.passedCount === item.tests.length
-      const attemptId = crypto.randomUUID()
       // Difficulty attached (T2.5 Ruling 1): this loop already has the exercise's Difficulty in
       // memory at pass time, so the attempt it hands downstream is `RewardAttempt`-shaped from
       // the moment it exists, even though the `attempts` table itself carries no such column.
@@ -664,6 +836,7 @@ export function useExerciseLoop(exerciseId: string) {
       // network call -- that is where the verdict, the optimistic XP, the chain pip and the
       // celebration all fire. `finishSubmission` still runs, but only in the background below.
       setStatus('graded'); setOutcome(passedNow ? 'passed' : 'failed'); setLastRewardAttempt(rewardAttempt)
+      let snapshot: GradedSnapshot
       if (passedNow) {
         const previousMastery = state.mastery[item.cloId] ?? emptyMastery(state.userId, item.cloId)
         const graded = applyPass(previousMastery, item.difficulty, item.pattern, NEUTRAL_QUALITY, spentHints.current)
@@ -679,12 +852,15 @@ export function useExerciseLoop(exerciseId: string) {
         if (justClosed) fireCelebration('clo-close', { skill: cloRow.outcome }, `${attemptId}:close`)
         else if (chainIncreased) fireCelebration('chain', { n: graded.mastery.chain }, `${attemptId}:chain`)
         play('pass')
+        snapshot = { outcome: 'passed', results: result.results, pointsEarned: graded.points, pointsProvisional: true, chain: graded.mastery.chain, closed: justClosed, code: submittedCode, hintCount: spentHints.current }
       } else {
         setChain(0)
         play('fail')
+        snapshot = { outcome: 'failed', results: result.results, pointsEarned: 0, pointsProvisional: false, chain: 0, closed: false, code: submittedCode, hintCount: spentHints.current }
       }
+      record.operation = operation; record.graded = snapshot; markReady()
 
-      await syncInBackground(operation, token)
+      await syncInBackground(operation)
     }, 'submitting')
   }
 
@@ -735,7 +911,7 @@ export function useExerciseLoop(exerciseId: string) {
   async function retry() {
     if (gate.current) return
     const operation = pending.current
-    if (operation) { const token = generation.current; await operate(() => syncInBackground(operation, token), 'submitting') }
+    if (operation) { await operate(() => syncInBackground(operation), 'submitting') }
     else if (!exerciseRef.current) setReload(value => value + 1)
     else { setError(null); setStatus(completed.current ? 'passed' : failureAt.current === null ? 'ready' : 'failed') }
   }
@@ -744,21 +920,35 @@ export function useExerciseLoop(exerciseId: string) {
    * Fix round C1: `next()` no longer routes through the load effect's reset-then-refetch cycle
    * at all -- `nextExercise` is already a complete `ExercisePublic` (fetched by `queueNext`'s
    * bank query or Author generation), so `applyLoadedExercise` swaps it in directly and
-   * synchronously. The module-level `pendingHandoff` (see its own comment) tells the effect
-   * (which still fires once `exerciseId`, the URL param, catches up -- on this instance if it
-   * survives, or on a freshly remounted one if it does not) that this exact exercise is already
-   * resolved, so it applies the same data again instead of re-deriving it asynchronously.
-   * `router.replace` is bookmarking, not data-fetching -- history-replace semantics because a
-   * chain of reps should not pile up the back stack.
+   * synchronously.
+   *
+   * Fix round 4: the URL update below is `window.history.replaceState`, not `router.replace`.
+   * The web-runtime CPU-throttle investigation proved this hook's instance really does get
+   * remounted on an in-place `next()` in the live App Router, despite this comment's own
+   * (now-corrected) prior claim otherwise. Root cause, confirmed by reading this tree's own docs
+   * (`node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md`):
+   * `router.replace()` always goes through the App Router's RSC-aware navigation pipeline, and a
+   * dynamic segment (`[id]`) resolving to a NEW value is exactly the case that pipeline treats as
+   * a fresh segment -- remounting this hook along with everything under it. The docs' own
+   * prescribed fix for "update the URL without a route re-render" is the raw History API, called
+   * directly; that bypasses the App Router's navigation machinery entirely, so nothing ever asks
+   * it to remount this segment. `useParams()`'s reported `id` will not track this (only
+   * `usePathname`/`useSearchParams` are documented to sync with a raw history mutation), but
+   * nothing here or in `page.tsx` reads it again after the initial `useExerciseLoop(id)` call --
+   * the exercise on screen is `exerciseRef.current`, not the URL param. A genuine full reload or
+   * deep link still resolves correctly from the URL the normal way.
+   *
+   * `pendingHandoff` (see its own comment) and `pendingSubmissions` (the durability chain's own
+   * remount-proofing) both stay in place regardless, as insurance against a remount from any
+   * OTHER cause this fix does not anticipate -- Fast Refresh in dev, a future upstream change.
    *
    * Fix round I1: the browser's native View Transition needs the DOM change to happen
-   * *synchronously inside* its callback, or it captures old-to-old and crossfades nothing
-   * (confirmed: `router.replace` alone never satisfies this, since the URL/param update is
-   * itself asynchronous). `flushSync` forces React to commit `applyLoadedExercise`'s state
-   * updates before the callback returns, which is the documented way to pair React with this
-   * API absent React's own `<ViewTransition>` component (not exported by this tree's pinned
-   * React 19.2.8 -- see report). The prompt panel carries the transition name (`page.tsx`) so
-   * only it crossfades; the editor and the warm runtime never remount either way.
+   * *synchronously inside* its callback, or it captures old-to-old and crossfades nothing.
+   * `flushSync` forces React to commit `applyLoadedExercise`'s state updates before the callback
+   * returns, which is the documented way to pair React with this API absent React's own
+   * `<ViewTransition>` component (not exported by this tree's pinned React 19.2.8 -- see report).
+   * The prompt panel carries the transition name (`page.tsx`) so only it crossfades; the editor
+   * and the warm runtime never remount either way.
    */
   async function next() {
     if (!completed.current || gate.current || pending.current) return
@@ -779,7 +969,7 @@ export function useExerciseLoop(exerciseId: string) {
       const token = ++generation.current
       pendingHandoff = { id: target.id, exercise: target, clo: cloRow, packages: coursePackages }
       applyLoadedExercise(target, cloRow, coursePackages, token)
-      router.replace(url)
+      window.history.replaceState(null, '', url)
     }
     if (!reducedMotion && typeof document !== 'undefined' && 'startViewTransition' in document) {
       (document as Document & { startViewTransition: (cb: () => void) => unknown }).startViewTransition(() => flushSync(commit))
