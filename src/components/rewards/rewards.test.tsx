@@ -355,6 +355,30 @@ describe('TrophyCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open the shelf' }))
     expect(onOpenShelf).toHaveBeenCalledTimes(1)
   })
+
+  it('A11Y-13: only opacity transitions on the collapsed glyph reveal, never max-width, and it snaps under reduced motion', async () => {
+    const { TrophyCard } = await import('./TrophyCard')
+    const collapsedAchievements = [ACHIEVEMENTS.find((a) => a.id === 'no-wheels')!]
+
+    const { unmount } = render(
+      <TrophyCard achievement={null} collapsedCount={2} collapsedAchievements={collapsedAchievements} onDismiss={() => {}} />,
+    )
+    const revealFullMotion = screen.getByTestId('collapsed-reveal')
+    expect(revealFullMotion.className).toContain('transition-opacity')
+    expect(revealFullMotion.className).not.toMatch(/transition-all|transition-none/)
+    unmount()
+
+    installMatchMedia(true)
+    render(<TrophyCard achievement={null} collapsedCount={2} collapsedAchievements={collapsedAchievements} onDismiss={() => {}} />)
+    const revealReduced = screen.getByTestId('collapsed-reveal')
+    expect(revealReduced.className).toContain('transition-none')
+    expect(revealReduced.className).not.toContain('transition-opacity')
+    // The width reveal itself is unchanged by the preference (fix round's own
+    // ruling: dropping it would leave the invisible strip permanently
+    // reserving layout) -- only whether it animates.
+    expect(revealReduced.className).toContain('max-w-0')
+    expect(revealReduced.className).toContain('group-hover:max-w-[240px]')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -510,6 +534,16 @@ describe('Celebration', () => {
     // The text is still shown and the sound still plays -- feedback reduces, it never vanishes.
     expect(soundMocks.play).toHaveBeenCalledWith('first.win')
     within(visibleCard()).getByText(line('pass.first', 'celebration-1'))
+  })
+
+  it('A11Y-10: under reduced motion, a haptic-eligible celebration fires no vibration -- sound and text still land', async () => {
+    installMatchMedia(true)
+    const { Celebration, celebrate } = await freshCelebration()
+    render(<Celebration />)
+    act(() => celebrate('pass'))
+    await act(async () => { await Promise.resolve() })
+    expect(vibrateMock).not.toHaveBeenCalled()
+    expect(soundMocks.play).toHaveBeenCalledWith('pass')
   })
 
   it('small round 3: the epic moment renders its text on a `.celebration-plate`, not bare over the scrim', async () => {

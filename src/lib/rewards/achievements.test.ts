@@ -392,17 +392,34 @@ describe('kept-the-promise', () => {
 })
 
 describe('sharp / touch-grass', () => {
+  // `kind` (not the stored `lane`) is what actually decides the lane as of
+  // W2-SCHEMA-I2 -- 'reaction' is a real Playground kind (DRILL_META), so
+  // these fixtures now match a row this predicate would really see, instead
+  // of the pre-fix shortcut of overriding only `lane` on an Arcade `kind`.
   it('fire at ten runs in their own lane', () => {
     const arcadeRuns = Array.from({ length: 10 }, () => drillResult({ lane: 'arcade' }))
     expect(PREDICATES.sharp(ctx({ drillResults: arcadeRuns }))).toBe(true)
-    const playRuns = Array.from({ length: 10 }, () => drillResult({ lane: 'play' }))
+    const playRuns = Array.from({ length: 10 }, () => drillResult({ kind: 'reaction', lane: 'play' }))
     expect(PREDICATES['touch-grass'](ctx({ drillResults: playRuns }))).toBe(true)
   })
   it('do not count the other lane\'s runs, and do not fire below ten', () => {
-    const playRuns = Array.from({ length: 10 }, () => drillResult({ lane: 'play' }))
+    const playRuns = Array.from({ length: 10 }, () => drillResult({ kind: 'reaction', lane: 'play' }))
     expect(PREDICATES.sharp(ctx({ drillResults: playRuns }))).toBe(false)
     const nineArcade = Array.from({ length: 9 }, () => drillResult({ lane: 'arcade' }))
     expect(PREDICATES.sharp(ctx({ drillResults: nineArcade }))).toBe(false)
+  })
+
+  it('still counts a pre-Wave-2 row with no lane, derived from its kind (W2-SCHEMA-I2)', () => {
+    // `trace` is an Arcade kind, `breathe` is a Playground kind (DRILL_META,
+    // src/app/(app)/derot/lib.ts). Legacy rows never carried `lane` at all --
+    // an unchecked cast, exactly like the one at the real read boundary
+    // (src/app/(app)/reports/data.ts).
+    const legacyArcade = Array.from({ length: 10 }, () => ({ ...drillResult({ kind: 'trace' }), lane: undefined }) as unknown as DrillResult)
+    expect(PREDICATES.sharp(ctx({ drillResults: legacyArcade }))).toBe(true)
+    expect(PREDICATES['touch-grass'](ctx({ drillResults: legacyArcade }))).toBe(false)
+
+    const legacyPlay = Array.from({ length: 10 }, () => ({ ...drillResult({ kind: 'breathe' }), lane: undefined }) as unknown as DrillResult)
+    expect(PREDICATES['touch-grass'](ctx({ drillResults: legacyPlay }))).toBe(true)
   })
 })
 

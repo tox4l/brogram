@@ -7,6 +7,7 @@
  */
 
 import type { Attempt, Clo, CloId, DrillKind, DrillLane, DrillResult, LearnerState, PatternId } from '@/lib/contracts'
+import { DRILL_META } from '@/app/(app)/derot/lib'
 
 // ---------------------------------------------------------------------------
 // Caps. Every list on the report is bounded so a section never overflows its
@@ -297,19 +298,26 @@ const LANE_ORDER: DrillLane[] = ['arcade', 'play']
  * shows only kinds with at least one real result, and a lane with zero
  * attempted kinds is omitted entirely rather than shown as an empty group --
  * "render only lanes and kinds with data" (fix round 1 dispatch), literally.
- * The lane itself is read from each `DrillResult.lane`, never a static
- * kind-to-lane table: a kind's actual results already say which lane they
- * were run in, so nothing here needs to duplicate `DRILL_META`'s mapping
- * (`src/app/(app)/derot/lib.ts`, outside this file's ownership).
+ *
+ * W2-SCHEMA-I2, fix round 2: the lane is now read from `DRILL_META`
+ * (`src/app/(app)/derot/lib.ts`), never from `result.lane` -- `DrillLane`
+ * became a required contract field in Wave 0, but rows written before Wave 2
+ * never carried it, and no migration backfills existing rows. `DrillKind`
+ * already determines its lane one-to-one (every kind belongs to exactly one
+ * lane), so trusting `DRILL_META` instead of the possibly-absent stored
+ * field is strictly more correct, not just a fallback -- a lane-less legacy
+ * row groups exactly where it always ran instead of vanishing from the
+ * report under the `undefined` key.
  */
 export function deriveDrillScores(drillResults: DrillResult[]): LaneDrillScores[] {
   const byLaneThenKind = new Map<DrillLane, Map<DrillKind, number[]>>()
   for (const result of drillResults) {
-    const byKind = byLaneThenKind.get(result.lane) ?? new Map<DrillKind, number[]>()
+    const lane: DrillLane = DRILL_META[result.kind]?.lane ?? 'arcade'
+    const byKind = byLaneThenKind.get(lane) ?? new Map<DrillKind, number[]>()
     const scores = byKind.get(result.kind) ?? []
     scores.push(result.score)
     byKind.set(result.kind, scores)
-    byLaneThenKind.set(result.lane, byKind)
+    byLaneThenKind.set(lane, byKind)
   }
 
   const groups: LaneDrillScores[] = []

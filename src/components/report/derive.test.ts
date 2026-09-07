@@ -317,7 +317,7 @@ describe('deriveDrillScores', () => {
     expect(groups.some(g => g.lane === 'play')).toBe(false)
   })
 
-  it('groups by lane using each result\'s own lane, one group per lane actually played, Arcade before Playground', () => {
+  it('groups by lane derived from each kind, one group per lane actually played, Arcade before Playground', () => {
     const results: DrillResult[] = [
       makeDrill({ kind: 'reaction', score: 70, lane: 'play' }),
       makeDrill({ kind: 'trace', score: 80, lane: 'arcade' }),
@@ -325,6 +325,20 @@ describe('deriveDrillScores', () => {
     const groups = deriveDrillScores(results)
     expect(groups.map(g => g.lane)).toEqual(['arcade', 'play'])
     expect(groups.find(g => g.lane === 'play')?.rows).toEqual([{ kind: 'reaction', best: 70, mean: 70, count: 1 }])
+  })
+
+  it('W2-SCHEMA-I2: a pre-Wave-2 row with no lane at all is grouped by its kind\'s DRILL_META lane, not dropped', () => {
+    // `DrillLane` is a required contract field, but rows written before Wave
+    // 2 never carried it -- the read boundary (src/app/(app)/reports/data.ts)
+    // hands this function whatever Postgres actually stored, cast to the
+    // frozen type. `trace` is Arcade and `breathe` is Playground (DRILL_META).
+    const legacyArcade = { ...makeDrill({ kind: 'trace', score: 80 }), lane: undefined } as unknown as DrillResult
+    const legacyPlay = { ...makeDrill({ kind: 'breathe', score: 40 }), lane: undefined } as unknown as DrillResult
+    const groups = deriveDrillScores([legacyArcade, legacyPlay])
+    expect(groups).toEqual([
+      { lane: 'arcade', rows: [{ kind: 'trace', best: 80, mean: 80, count: 1 }] },
+      { lane: 'play', rows: [{ kind: 'breathe', best: 40, mean: 40, count: 1 }] },
+    ])
   })
 })
 

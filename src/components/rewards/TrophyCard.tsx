@@ -150,7 +150,15 @@ export function TrophyCard({ achievement, collapsedCount, collapsedAchievements,
             </button>
             {collapsedAchievements && collapsedAchievements.length > 0 && (
               <div
-                className="mt-2 flex max-w-0 gap-1.5 overflow-hidden opacity-0 transition-all duration-200 group-hover:max-w-[240px] group-hover:opacity-100 group-focus-within:max-w-[240px] group-focus-within:opacity-100"
+                data-testid="collapsed-reveal"
+                className={cn(
+                  'mt-2 flex max-w-0 gap-1.5 overflow-hidden opacity-0 group-hover:max-w-[240px] group-hover:opacity-100 group-focus-within:max-w-[240px] group-focus-within:opacity-100',
+                  // A11Y-13: `max-width` itself never transitions -- it snaps
+                  // both open and closed, keyboard-reachable via
+                  // `group-focus-within`, not only on hover. Only opacity
+                  // animates, and only when the resolved preference allows it.
+                  reducedMotion ? 'transition-none' : 'transition-opacity duration-200',
+                )}
                 aria-hidden="true"
               >
                 {collapsedAchievements.map((one) => (

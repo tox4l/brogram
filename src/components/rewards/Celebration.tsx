@@ -166,7 +166,11 @@ export function Celebration({ motionPref, onOpenShelf, resultsAnchorRef }: Celeb
     for (const item of queue) {
       if (markSoundFired(item.id)) {
         for (const soundId of soundsFor(item.kind)) play(soundId)
-        if (HAPTIC_KINDS.has(item.kind)) buzz(item.kind === 'level-up' ? [20, 40, 20] : 15)
+        // A11Y-10: gated on the motion preference this component already
+        // resolves -- the sound-mute half of this fix needs a reader
+        // exported from src/lib/sound/manager.ts (outside this lane's owned
+        // paths; see the report's recipe for that export).
+        if (!reducedMotion && HAPTIC_KINDS.has(item.kind)) buzz(item.kind === 'level-up' ? [20, 40, 20] : 15)
       }
       if (item.confetti && markConfettiFired(item.id)) {
         fireConfetti(reducedMotion)

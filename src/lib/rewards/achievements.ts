@@ -8,9 +8,10 @@
  * each is documented at its own definition below (`comeback`, `twoTongues`,
  * `keptThePromise`).
  */
-import type { Achievement, CloId, DrillResult, Language, Mastery } from '@/lib/contracts'
+import type { Achievement, CloId, DrillLane, DrillResult, Language, Mastery } from '@/lib/contracts'
 import { ACHIEVEMENTS, levelForXp } from '@/lib/contracts'
 import { clo, course } from '@/lib/curriculum'
+import { DRILL_META } from '@/app/(app)/derot/lib'
 import type { RewardAttempt, RewardContext } from './context'
 
 export type AchievementPredicate = (ctx: RewardContext) => boolean
@@ -239,9 +240,20 @@ const LANE_RUN_TARGET = 10
  * per drill item as shipped). `sharp` will fire roughly 6x too early for
  * Arcade until T2.9a's run model lands; that gap is T2.9a's obligation, not
  * a bug in this count.
+ *
+ * W2-SCHEMA-I2: a row's `lane` is a required contract field, but rows
+ * written before Wave 2 never carried it, and no migration backfills it.
+ * `DrillKind` fully determines `DrillLane` (`DRILL_META`, one lane per kind,
+ * `src/app/(app)/derot/lib.ts`), so the kind is the source of truth here,
+ * never the possibly-absent stored field -- identical guard to
+ * `src/components/report/derive.ts`'s `deriveDrillScores`.
  */
-const sharp: AchievementPredicate = (ctx) => ctx.drillResults.filter((d) => d.lane === 'arcade').length >= LANE_RUN_TARGET
-const touchGrass: AchievementPredicate = (ctx) => ctx.drillResults.filter((d) => d.lane === 'play').length >= LANE_RUN_TARGET
+function laneOf(result: DrillResult): DrillLane {
+  return DRILL_META[result.kind]?.lane ?? 'arcade'
+}
+
+const sharp: AchievementPredicate = (ctx) => ctx.drillResults.filter((d) => laneOf(d) === 'arcade').length >= LANE_RUN_TARGET
+const touchGrass: AchievementPredicate = (ctx) => ctx.drillResults.filter((d) => laneOf(d) === 'play').length >= LANE_RUN_TARGET
 
 // ---------------------------------------------------------------------------
 // #18: personal bests
