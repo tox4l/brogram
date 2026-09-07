@@ -7,12 +7,13 @@ import { ArrowUpRight, ChevronDown, ChevronUp, CupSoda, PanelRightClose, Sunrise
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { type DockCorner, type WellnessPrefs } from '@/lib/contracts'
-import { prefsPatch, resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
 import { useWellness } from '@/lib/query/hooks'
 import { useOptimistic } from '@/lib/query/optimistic'
 import { qk } from '@/lib/query/keys'
+import { hasPendingPrefsWrite, useWellnessPrefsMutation } from '@/app/(app)/account/prefsMutation'
 import { useSecondTick } from '@/components/shell/useSecondTick'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { nextCorner, rememberDockPlacement } from '@/lib/wellness/dock'
@@ -27,26 +28,23 @@ import { WaterStretch, type WellnessLogEntry } from './WaterStretch'
 import { Pomodoro, type PomodoroSession } from './Pomodoro'
 
 // ---------------------------------------------------------------------------
-// Shared data hooks -- the one writer path (spec 6.3, standing constraint):
-// every wellness write is a patch through `useOptimistic`, never a whole
-// resolved blob. Mirrors `SoundToggle`/`DockControl`'s persist shape exactly,
-// which is what replaces the v1 rail's `mergePrefs` (a shallow spread that
-// wrote the *entire* locally-held snapshot and could revert an unrelated
-// concurrent write, e.g. the header's `SoundToggle`, on its next save).
-// Dock-sub-object changes (placement/collapsed/corner/compactOnExercise) go
-// through `useDockPrefsMutation` instead (I2): a local+localStorage tier
-// that updates the same frame, plus a 400ms-debounced network write.
+// Shared data hooks (X3 fix): `wellness.prefs` has exactly ONE writer in the
+// whole tree, `useWellnessPrefsMutation` (`src/app/(app)/account/prefsMutation.ts`)
+// -- this used to keep its own, independent `useOptimistic` mutation against
+// the same JSONB blob, which could revert a concurrent Account-page write (or
+// vice versa) under the learner's finger, since neither writer's debounce/
+// pending state was visible to the other. Every prefs field the dock touches
+// (prayer toggles, the Settings numeric fields, `useDeviceLocation`) now goes
+// through that shared queue; dock-sub-object changes still go through
+// `useDockPrefsMutation` (I2), which already delegates to the same writer.
+//
+// `useRowMutation` (water/pomodoro row *columns*, not `prefs`) legitimately
+// keeps its own `useOptimistic` mutation -- it is a different concern on the
+// same row -- but shares `qk.wellness` with the prefs writer above, so its
+// settle-invalidate is guarded by `hasPendingPrefsWrite`: firing it while a
+// prefs write is still queued or in flight would refetch and land the
+// server's stale prefs snapshot back over whatever the learner just changed.
 // ---------------------------------------------------------------------------
-
-async function persistPrefsChange(userId: string, change: (current: WellnessPrefs) => Partial<WellnessPrefs>): Promise<void> {
-  const client = createClient()
-  const { data, error } = await client.from('wellness').select('prefs').eq('user_id', userId).maybeSingle()
-  if (error) throw error
-  const current = resolveWellnessPrefs((data as { prefs: unknown } | null)?.prefs)
-  const patch = prefsPatch({ ...current, ...change(current) })
-  const { data: updated } = await client.from('wellness').update({ prefs: patch, updated_at: new Date().toISOString() }).eq('user_id', userId).select('user_id').maybeSingle()
-  if (!updated) await client.from('wellness').insert({ user_id: userId, prefs: patch })
-}
 
 async function persistRowPatch(userId: string, patch: Partial<WellnessRow>): Promise<void> {
   const client = createClient()
@@ -54,30 +52,25 @@ async function persistRowPatch(userId: string, patch: Partial<WellnessRow>): Pro
   if (!updated) await client.from('wellness').insert({ user_id: userId, ...patch })
 }
 
-function usePrefsMutation(userId: string | null) {
-  return useMutation(useOptimistic<WellnessRow, (current: WellnessPrefs) => Partial<WellnessPrefs>>({
-    key: qk.wellness(userId ?? ''),
-    apply: (previousRow, change) => {
-      const current = resolveWellnessPrefs(previousRow?.prefs)
-      const patch = prefsPatch({ ...current, ...change(current) })
-      return { ...(previousRow ?? {}), prefs: patch }
-    },
-    mutate: async (change) => {
-      if (!userId) return
-      await persistPrefsChange(userId, change)
-    },
-  }))
-}
-
 function useRowMutation(userId: string | null) {
-  return useMutation(useOptimistic<WellnessRow, Partial<WellnessRow>>({
+  const base = useOptimistic<WellnessRow, Partial<WellnessRow>>({
     key: qk.wellness(userId ?? ''),
     apply: (previousRow, patch) => ({ ...(previousRow ?? {}), ...patch }),
     mutate: async (patch) => {
       if (!userId) return
       await persistRowPatch(userId, patch)
     },
-  }))
+  })
+  // Wraps (never edits) `optimistic.ts`'s own `onSettled` -- forwarding
+  // whatever arguments TanStack Query calls it with, so this stays correct
+  // across a TanStack Query version bump without pinning its exact arity.
+  return useMutation({
+    ...base,
+    onSettled: (...args: Parameters<NonNullable<typeof base.onSettled>>) => {
+      if (userId && hasPendingPrefsWrite(userId)) return
+      return base.onSettled?.(...args)
+    },
+  })
 }
 
 function useDeviceCoords(enabled: boolean): GeoCoordinates | null {
@@ -180,7 +173,7 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
  *  card that would show it was not on screen (collapsed, or hidden). */
 function PendingBadge() {
   return (
-    <span data-testid="dock-badge" role="status" className="inline-flex size-2 shrink-0 rounded-full bg-emerald-300">
+    <span data-testid="dock-badge" role="status" className="inline-flex size-2 shrink-0 rounded-full bg-primary">
       <span className="sr-only">A reminder is waiting.</span>
     </span>
   )
@@ -271,7 +264,7 @@ function SettingsAndFooter({ prefs, onPrefsChange, onDockChange }: DockChromePro
     <>
       <WellnessSettings prefs={prefs} onChange={onPrefsChange} onDockChange={onDockChange} />
       <div className="mt-5 border-t border-border pt-5">
-        <Link href="/derot" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">Open de-rot<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+        <Link href="/derot" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">Open de-rot<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </div>
     </>
   )
@@ -362,7 +355,7 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
   const deviceCoords = useDeviceCoords(prefs.useDeviceLocation)
   const reducedMotion = useReducedMotion(prefs.motion)
 
-  const prefsMutation = usePrefsMutation(userId)
+  const prefsMutation = useWellnessPrefsMutation(userId)
   const rowMutation = useRowMutation(userId)
   const dockPrefsMutation = useDockPrefsMutation(userId)
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Attempt, Clo, DrillResult } from '@/lib/contracts'
+import { closFor } from '@/lib/curriculum'
+import type { Attempt, Clo, CourseCode, DrillResult } from '@/lib/contracts'
 
 export interface ReportData {
   clos: Clo[]
@@ -24,21 +25,15 @@ export interface ReportData {
 const REPORT_ATTEMPTS_CAP = 1000
 
 /**
- * `Clo` carries no `draft` field (the frozen contract is not extended for this), so a
- * draft outcome's marker is baked into the outcome text itself: the same " (draft)"
- * suffix the report's mastery table then simply renders as part of the row.
+ * X4 fix: every field the report needs is already in the static curriculum
+ * bundle (`closFor`, `@/lib/curriculum`) -- CLOs are no longer read from
+ * Postgres here. `Clo.draft` is optional on the frozen contract, so the
+ * draft marker still has to be baked into the outcome text itself (the same
+ * " (draft)" suffix `MasteryPerClo` renders with no separate draft branch)
+ * rather than carried as its own field through to that component.
  */
-function mapClo(row: Record<string, unknown>): Clo {
-  return {
-    id: String(row.id),
-    course: String(row.course),
-    ordinal: Number(row.ordinal),
-    outcome: row.draft === true ? `${String(row.outcome)} (draft)` : String(row.outcome),
-    topics: (row.topics as string[] | null) ?? [],
-    prerequisites: (row.prerequisites as string[] | null) ?? [],
-    patterns: (row.patterns as string[] | null) ?? [],
-    assessableInCode: row.assessable_in_code === true,
-  }
+function markDraft(c: Clo): Clo {
+  return c.draft === true ? { ...c, outcome: `${c.outcome} (draft)` } : c
 }
 
 /**
@@ -79,23 +74,19 @@ async function fetchReportAttempts(client: SupabaseClient, userId: string): Prom
  * Everything the report needs for one course: every one of the course's CLOs
  * (draft ones marked, not hidden) in ordinal order, the student's most recent
  * attempts (capped, narrow columns), and their saved de-rot drill results.
- * Never touches `exercises` — the report needs no bodies.
+ * CLOs come from the static bundle (X4) — never touches `exercises` or
+ * `clos`, so a fork ships a new syllabus by editing `seed/` and rebuilding
+ * with no separate Postgres table to keep in sync.
  */
 export async function fetchReportData(client: SupabaseClient, userId: string, courseCode: string): Promise<ReportData> {
-  const [clos, wellness, attempts] = await Promise.all([
-    client
-      .from('clos')
-      .select('id,course,ordinal,outcome,topics,prerequisites,patterns,assessable_in_code,draft')
-      .eq('course', courseCode)
-      .order('ordinal'),
+  const [wellness, attempts] = await Promise.all([
     client.from('wellness').select('drill_results').eq('user_id', userId).maybeSingle(),
     fetchReportAttempts(client, userId),
   ])
-  if (clos.error) throw new Error('Unable to load your course outcomes.', { cause: clos.error })
   if (wellness.error) throw new Error('Unable to load your de-rot scores.', { cause: wellness.error })
 
   return {
-    clos: ((clos.data as Record<string, unknown>[] | null) ?? []).map(mapClo),
+    clos: closFor(courseCode as CourseCode).map(markDraft),
     attempts,
     drillResults: (wellness.data?.drill_results as DrillResult[] | null) ?? [],
     attemptsTruncated: attempts.length === REPORT_ATTEMPTS_CAP,

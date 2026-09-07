@@ -105,6 +105,12 @@ interface WriterState {
   pending: Partial<WellnessPrefs> | null
   timer: ReturnType<typeof setTimeout> | null
   consecutiveFailures: number
+  /** True for the network round trip itself, between `flush` clearing
+   *  `pending`/`timer` and `persistPrefsPatch` settling. `hasPendingPrefsWrite`
+   *  needs this in addition to `pending`/`timer`: the debounce window is not
+   *  the only unsafe moment for a same-key row writer's settle-invalidate to
+   *  land the server's still-stale prefs snapshot over this write (X3). */
+  inFlight: boolean
 }
 
 /** Per-user, module-level -- see the file doc comment for why this cannot be
@@ -114,10 +120,25 @@ const writers = new Map<string, WriterState>()
 function writerFor(userId: string): WriterState {
   let state = writers.get(userId)
   if (!state) {
-    state = { pending: null, timer: null, consecutiveFailures: 0 }
+    state = { pending: null, timer: null, consecutiveFailures: 0, inFlight: false }
     writers.set(userId, state)
   }
   return state
+}
+
+/**
+ * X3's guard, exported for the two row-level writers that share `qk.wellness`
+ * without being prefs writes themselves (`Dock.useRowMutation`,
+ * `useExerciseLoop.recordGoalAndStreak`): true from the moment a prefs change
+ * is queued through the moment its write-through actually lands, covering
+ * both the debounce window (`pending`/`timer`) and the network round trip
+ * itself (`inFlight`) -- either one settling a row mutation's own key during
+ * this span would invalidate against a server snapshot this writer already
+ * knows is stale, visibly reverting the learner's change.
+ */
+export function hasPendingPrefsWrite(userId: string): boolean {
+  const writer = writers.get(userId)
+  return writer !== undefined && (writer.pending !== null || writer.timer !== null || writer.inFlight)
 }
 
 function flush(userId: string, queryClient: QueryClient): void {
@@ -127,9 +148,11 @@ function flush(userId: string, queryClient: QueryClient): void {
   writer.pending = null
   if (!latest) return
   const key = qk.wellness(userId)
+  writer.inFlight = true
   void persistPrefsPatch(userId, latest)
     .then(() => {
       writer.consecutiveFailures = 0
+      writer.inFlight = false
       // Reconcile with the server only on success, and only when nothing
       // newer has been queued in the meantime (by this control or any other
       // sharing this writer) -- otherwise the refetch this triggers could
@@ -140,6 +163,7 @@ function flush(userId: string, queryClient: QueryClient): void {
     })
     .catch(() => {
       writer.consecutiveFailures += 1
+      writer.inFlight = false
       // A toast, never a rollback (brief Step 4) -- the learner's choice
       // stands; this only says the server has not heard about it yet.
       if (writer.consecutiveFailures >= FAILURES_BEFORE_TOAST) {

@@ -4,9 +4,9 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
-import { resetWellnessPrefsWriterForTests, useWellnessPrefsMutation } from './prefsMutation'
+import { hasPendingPrefsWrite, resetWellnessPrefsWriterForTests, useWellnessPrefsMutation } from './prefsMutation'
 
-const db = vi.hoisted(() => ({ row: null as { prefs?: unknown } | null }))
+const db = vi.hoisted(() => ({ row: null as { prefs?: unknown } | null, selectGate: null as Promise<void> | null }))
 const mocks = vi.hoisted(() => ({ select: vi.fn(), update: vi.fn(), insert: vi.fn(), toast: vi.fn() }))
 
 vi.mock('sonner', () => ({ toast: mocks.toast }))
@@ -15,7 +15,11 @@ vi.mock('@/lib/supabase/client', () => ({
     from: (table: string) => ({
       select: () => ({
         eq: () => ({
-          maybeSingle: async () => { mocks.select(table); return { data: db.row, error: null } },
+          // `db.selectGate`, when set, holds the read open until the test
+          // releases it -- how the in-flight-write tests below observe
+          // `hasPendingPrefsWrite` true for the network round trip itself,
+          // not just the pre-flush debounce window.
+          maybeSingle: async () => { mocks.select(table); if (db.selectGate) await db.selectGate; return { data: db.row, error: null } },
         }),
       }),
       update: (patch: { prefs?: unknown }) => ({
@@ -42,10 +46,16 @@ vi.mock('@/lib/supabase/client', () => ({
 beforeEach(() => {
   vi.useFakeTimers()
   db.row = { prefs: {} }
+  db.selectGate = null
 })
 afterEach(() => {
   vi.useRealTimers()
-  vi.clearAllMocks()
+  // `resetAllMocks` (not `clearAllMocks`): a couple of cases above set a
+  // persistent `mockImplementation` (not `...Once`) on `mocks.select` to
+  // simulate a run of failures, which `clearAllMocks` would leave in place
+  // for every test after it -- the network-round-trip case below needs
+  // `mocks.select` to actually succeed.
+  vi.resetAllMocks()
   // The module-level writer store (module-level so every component instance
   // shares one queue in production, see prefsMutation.ts's doc comment)
   // would otherwise leak pending/timer/failure state across test cases.
@@ -135,5 +145,63 @@ describe('useWellnessPrefsMutation', () => {
     expect(() => act(() => { result.current.mutate(() => ({ dailyGoal: 2 })) })).not.toThrow()
     expect(mocks.update).not.toHaveBeenCalled()
     expect(mocks.insert).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * X3's guard: `Dock.useRowMutation` (water/pomodoro row columns) shares
+ * `qk.wellness` with this writer but is not itself a prefs write -- it must
+ * skip its own settle-invalidate while this queue still has an unflushed or
+ * in-flight prefs change, or its refetch lands the server's stale prefs
+ * snapshot back over a change the learner just made (the flipped-toggle
+ * scenario X3 traces).
+ */
+describe('hasPendingPrefsWrite', () => {
+  it('is false for a user with no writer at all', () => {
+    expect(hasPendingPrefsWrite('nobody')).toBe(false)
+  })
+
+  it('is true the instant a change is queued, before the debounce fires', () => {
+    const { Wrapper } = wrapper()
+    const { result } = renderHook(() => useWellnessPrefsMutation('learner-1'), { wrapper: Wrapper })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(false)
+    act(() => { result.current.mutate(() => ({ dailyGoal: 4 })) })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(true)
+  })
+
+  it('stays true for the network round trip itself, not just the debounce window', async () => {
+    let releaseSelect: () => void = () => {}
+    db.selectGate = new Promise((resolve) => { releaseSelect = resolve })
+    const { Wrapper } = wrapper()
+    const { result } = renderHook(() => useWellnessPrefsMutation('learner-1'), { wrapper: Wrapper })
+
+    act(() => { result.current.mutate(() => ({ dailyGoal: 4 })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    // The debounce has fired and the read is blocked on the gate: no longer
+    // "queued", but the write is still in flight.
+    expect(mocks.select).toHaveBeenCalledTimes(1)
+    expect(hasPendingPrefsWrite('learner-1')).toBe(true)
+
+    releaseSelect()
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(false)
+  })
+
+  it('returns to false after a failed write-through -- a rejected guard would block every row writer forever', async () => {
+    mocks.select.mockImplementationOnce(() => { throw new Error('offline') })
+    const { Wrapper } = wrapper()
+    const { result } = renderHook(() => useWellnessPrefsMutation('learner-1'), { wrapper: Wrapper })
+
+    act(() => { result.current.mutate(() => ({ dailyGoal: 4 })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(false)
+  })
+
+  it('is scoped per user id', () => {
+    const { Wrapper } = wrapper()
+    const { result } = renderHook(() => useWellnessPrefsMutation('learner-1'), { wrapper: Wrapper })
+    act(() => { result.current.mutate(() => ({ dailyGoal: 4 })) })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(true)
+    expect(hasPendingPrefsWrite('learner-2')).toBe(false)
   })
 })

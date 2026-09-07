@@ -10,6 +10,7 @@ import { DEFAULT_WELLNESS } from '@/lib/contracts'
 import { ATTEMPT_ACTIVE_KEY } from '@/lib/wellness/timers'
 import { resetReminderBadgeForTests } from '@/lib/wellness/reminderBadge'
 import { resetDockPrefsCacheForTests } from '@/lib/wellness/dock'
+import { resetWellnessPrefsWriterForTests } from '@/app/(app)/account/prefsMutation'
 import { Dock } from './Dock'
 
 // A controllable stand-in for the shared 1Hz clock (its own tests live in
@@ -90,6 +91,12 @@ afterEach(() => {
   try { sessionStorage.clear() } catch { /* jsdom always has sessionStorage */ }
   resetReminderBadgeForTests()
   resetDockPrefsCacheForTests()
+  // X3 fix: prefs writes now go through the shared, module-level writer in
+  // `prefsMutation.ts` (the same module every test in this file's `userId`
+  // shares) rather than a mutation scoped to this render's own QueryClient --
+  // an unflushed timer left pending by one test would otherwise fire mid a
+  // later, unrelated test.
+  resetWellnessPrefsWriterForTests()
 })
 
 function wrapper(userId: string | null) {
@@ -131,16 +138,56 @@ describe('Dock', () => {
     const toggle = await screen.findByRole('switch', { name: /fajr reminder/i })
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(toggle)
+    // Applied to the cache (and so painted) the same frame the toggle is
+    // clicked -- the shared writer's 400ms debounce (X3 fix: prayer toggles
+    // go through `useWellnessPrefsMutation` now, not their own immediate
+    // mutation) only delays the write-through, never the optimistic UI.
     await vi.waitFor(() => {
       expect(screen.getByRole('switch', { name: /fajr reminder/i }).getAttribute('aria-checked')).toBe('false')
     })
-    expect(mocks.update).toHaveBeenCalledWith(
-      'wellness',
-      expect.objectContaining({ prefs: expect.objectContaining({ prayerReminders: expect.objectContaining({ fajr: false }) }), updated_at: expect.any(String) }),
-      'user_id',
-      'learner-one',
-    )
+    await vi.waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith(
+        'wellness',
+        expect.objectContaining({ prefs: expect.objectContaining({ prayerReminders: expect.objectContaining({ fajr: false }) }), updated_at: expect.any(String) }),
+        'user_id',
+        'learner-one',
+      )
+    })
     expect(mocks.insert).not.toHaveBeenCalled()
+  })
+
+  // X3 (Wave 2 review): a row write (water/pomodoro columns) shares
+  // `qk.wellness` with the shared prefs writer but is not itself a prefs
+  // write. Without `hasPendingPrefsWrite`'s guard, this row write's own
+  // settle-invalidate would refetch while the toggle above is still
+  // debouncing, landing the server's still-stale `prefs` (fajr still `true`)
+  // back over the optimistic toggle -- the exact "flips back under the
+  // learner's finger" scenario the review traces.
+  it('X3: logging water while a prayer toggle is still debouncing does not revert the toggle', async () => {
+    render(<Vertical />, { wrapper: wrapper('learner-one') })
+    const toggle = await screen.findByRole('switch', { name: /fajr reminder/i })
+    const logWater = await screen.findByRole('button', { name: /log water/i })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+
+    fireEvent.click(toggle) // arms the shared writer's 400ms debounce
+    fireEvent.click(logWater) // a row write, moments later, well inside that window
+
+    await vi.waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith('wellness', expect.objectContaining({ water_log: expect.any(Array) }), 'user_id', 'learner-one')
+    })
+    // The row write has already settled -- a clobber would show up right here.
+    expect(screen.getByRole('switch', { name: /fajr reminder/i }).getAttribute('aria-checked')).toBe('false')
+
+    await vi.waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith(
+        'wellness',
+        expect.objectContaining({ prefs: expect.objectContaining({ prayerReminders: expect.objectContaining({ fajr: false }) }) }),
+        'user_id',
+        'learner-one',
+      )
+    })
+    // Still not reverted once the debounced prefs write lands either.
+    expect(screen.getByRole('switch', { name: /fajr reminder/i }).getAttribute('aria-checked')).toBe('false')
   })
 
   it('persists a water log tap via update, not upsert', async () => {

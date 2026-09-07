@@ -1,48 +1,38 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { Clo } from '@/lib/contracts'
 import { fetchReportData } from './data'
 
-const cloRow = {
+const cloRow: Clo = {
   id: 'INFS1101-1', course: 'INFS1101', ordinal: 1, outcome: 'Write a loop that accumulates a total',
-  topics: ['loops'], prerequisites: [], patterns: ['accumulate'], assessable_in_code: true, draft: false,
+  topics: ['loops'], prerequisites: [], patterns: ['accumulate'], assessableInCode: true,
 }
 
+/** X4: the report has no `clos` table leg any more -- every CLO comes from
+ *  the static bundle's `closFor`, so these cases hand it rows through this
+ *  mock rather than a Postgres client stub. */
+const closForMock = vi.fn((course: string) => (course === 'INFS1101' ? [cloRow] : []))
+vi.mock('@/lib/curriculum', () => ({ closFor: (course: string) => closForMock(course) }))
+
 function makeClient(overrides: {
-  clos?: { data: unknown; error: unknown }
   wellness?: { data: unknown; error: unknown }
   attempts?: { data: unknown; error: unknown }
 } = {}) {
-  const closResult = overrides.clos ?? { data: [cloRow], error: null }
   const wellnessResult = overrides.wellness ?? { data: { drill_results: [] }, error: null }
   const attemptsResult = overrides.attempts ?? { data: [], error: null }
-  const cloFilters: unknown[] = []
+  const tablesRead: string[] = []
   const attemptCalls: { select: string; column: string; value: unknown; order: string; options: unknown; limit: number }[] = []
 
   return {
     client: {
       from: (table: string) => {
-        if (table === 'clos') {
-          return {
-            select: (columns: string) => {
-              expect(columns).toContain('assessable_in_code')
-              return {
-                eq: (column: string, value: unknown) => {
-                  cloFilters.push([column, value])
-                  return { order: (orderColumn: string) => {
-                    expect(orderColumn).toBe('ordinal')
-                    return Promise.resolve(closResult)
-                  } }
-                },
-              }
-            },
-          }
-        }
+        tablesRead.push(table)
         if (table === 'wellness') {
           return {
             select: (columns: string) => {
               expect(columns).toBe('drill_results')
-              return { eq: (column: string, value: unknown) => {
+              return { eq: (column: string) => {
                 expect(column).toBe('user_id')
                 return { maybeSingle: () => Promise.resolve(wellnessResult) }
               } }
@@ -66,16 +56,17 @@ function makeClient(overrides: {
         throw new Error(`Unexpected table: ${table}`)
       },
     },
-    cloFilters,
+    tablesRead,
     attemptCalls,
   }
 }
 
 describe('fetchReportData', () => {
-  it('loads every clo for the current course, drafts included, and maps every field', async () => {
-    const { client, cloFilters } = makeClient()
+  it('reads every clo for the current course from the static bundle, drafts included, and maps every field', async () => {
+    closForMock.mockClear()
+    const { client } = makeClient()
     const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
-    expect(cloFilters).toEqual([['course', 'INFS1101']])
+    expect(closForMock).toHaveBeenCalledWith('INFS1101')
     expect(result.clos).toEqual([{
       id: 'INFS1101-1', course: 'INFS1101', ordinal: 1, outcome: 'Write a loop that accumulates a total',
       topics: ['loops'], prerequisites: [], patterns: ['accumulate'], assessableInCode: true,
@@ -83,15 +74,23 @@ describe('fetchReportData', () => {
   })
 
   it('marks a draft clo with a " (draft)" outcome suffix instead of excluding it', async () => {
-    const { client } = makeClient({ clos: { data: [{ ...cloRow, draft: true }], error: null } })
+    closForMock.mockReturnValueOnce([{ ...cloRow, draft: true }])
+    const { client } = makeClient()
     const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
     expect(result.clos).toEqual([expect.objectContaining({ outcome: 'Write a loop that accumulates a total (draft)' })])
   })
 
-  it('never queries a different course than the one requested', async () => {
-    const { client, cloFilters } = makeClient()
+  it('never reads a different course than the one requested', async () => {
+    closForMock.mockClear()
+    const { client } = makeClient()
     await fetchReportData(client as never, 'user-1', 'CSCI2001')
-    expect(cloFilters[0]).toEqual(['course', 'CSCI2001'])
+    expect(closForMock).toHaveBeenCalledWith('CSCI2001')
+  })
+
+  it('never issues a `clos` Postgres request -- CLOs come from the static bundle only', async () => {
+    const { client, tablesRead } = makeClient()
+    await fetchReportData(client as never, 'user-1', 'INFS1101')
+    expect(tablesRead).not.toContain('clos')
   })
 
   it('maps attempt rows to camelCase Attempt records, stamps the given userId, and backfills code/results as empty', async () => {
@@ -136,9 +135,9 @@ describe('fetchReportData', () => {
     expect(emptyResult.drillResults).toEqual([])
   })
 
-  it('surfaces a clear error when the clos query fails', async () => {
-    const { client } = makeClient({ clos: { data: null, error: { message: 'db down' } } })
-    await expect(fetchReportData(client as never, 'user-1', 'INFS1101')).rejects.toThrow('Unable to load your course outcomes.')
+  it('surfaces a clear error when the wellness query fails', async () => {
+    const { client } = makeClient({ wellness: { data: null, error: { message: 'db down' } } })
+    await expect(fetchReportData(client as never, 'user-1', 'INFS1101')).rejects.toThrow('Unable to load your de-rot scores.')
   })
 
   it('never selects from the exercises table', () => {

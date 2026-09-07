@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { SessionProvider } from '@/components/shell/SessionProvider'
+import { resetWellnessPrefsWriterForTests } from '@/app/(app)/account/prefsMutation'
 import { SoundToggle } from './SoundToggle'
 
 // A stateful fake `wellness` table (rather than a fixed mockResolvedValue) is
@@ -64,6 +65,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  // X3 fix: this now shares the module-level writer in `prefsMutation.ts`
+  // (keyed only by user id) with every other `wellness.prefs` writer -- an
+  // unflushed debounce timer left pending by one test would otherwise fire
+  // mid a later, unrelated test that reuses the same 'learner-one' id.
+  resetWellnessPrefsWriterForTests()
 })
 
 function wrapper(userId: string | null) {
