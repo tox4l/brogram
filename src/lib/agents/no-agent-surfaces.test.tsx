@@ -158,6 +158,24 @@ vi.mock('gsap', async (importOriginal) => {
 })
 vi.mock('canvas-confetti', () => ({ default: vi.fn() }))
 
+// F5 (W4FIX-B2 re-check): the onboarding block below (`answerFirstFive`)
+// renders the real `<Onboarding>` page, whose first question's hook line
+// goes through `<Reveal mode="chars" surface="onboarding-hook">` -- a real,
+// UNMOCKED `gsap/SplitText` here (this file only mocked `gsap`'s own tween
+// functions, above) calls the real `SplitText.create`, which wraps every
+// character in its own `aria-hidden="true"` span once `Reveal`'s two-rAF
+// defer fires. Every default text query (`findByText` included) skips
+// `aria-hidden` content, so a split that lands mid-loop hides the very
+// question text `answerFirstFive` is about to look for next -- a timing
+// race against real gsap that surfaced only under full-suite CPU
+// contention (reproduced identically three sessions running, isolated runs
+// always green). Mocked here exactly the way
+// `src/app/(app)/onboarding/page.test.tsx` already mocks it for the same
+// component: shape-only, `create` never invokes `onSplit`, so the plain
+// question text stays in place for every query below.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 // getQueryClient (the module-level singleton `useExerciseLoop` invalidates
 // through) is overridden; `makeQueryClient` -- used throughout this file to
 // build a real, per-test `QueryClient` for `<QueryClientProvider>` -- stays real.

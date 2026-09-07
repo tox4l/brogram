@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { QueryProvider } from '@/components/shell/QueryProvider'
 
 // sonner's Toaster (mounted by the wellness rail) reads window.matchMedia for OS theme
 // detection. Real browsers always have it; jsdom does not.
@@ -91,7 +92,16 @@ describe('preview layout gate', () => {
 describe('preview page', () => {
   it('renders every gallery section heading', async () => {
     const { default: PreviewPage } = await import('./page')
-    render(<PreviewPage />)
+    // F1 (W4FIX-B2 re-check): `PreviewPage` always renders nested inside
+    // `src/app/preview/layout.tsx`'s own `<QueryProvider>` in production --
+    // wrapping it here too matches that, and matters for the no-alert
+    // assertion below: without it, every `useQuery`/`useQueryClient` call in
+    // the gallery (the shell header controls, the wellness dock, the buddy
+    // drawer) throws "No QueryClient set", and `Section.tsx`'s own
+    // `SectionErrorBoundary` catches it and renders "This section could not
+    // render: ..." in that section's place -- the exact regression this
+    // assertion exists to catch.
+    render(<QueryProvider><PreviewPage /></QueryProvider>)
 
     // The buddy drawer's own section opens by default, and the underlying Drawer
     // primitive marks the rest of the page aria-hidden while it is open (correct
@@ -113,5 +123,15 @@ describe('preview page', () => {
     // only rendering empty shells.
     expect(screen.getByText('First late train')).toBeTruthy()
     expect(screen.getByTestId('report-pages-stub')).toBeTruthy()
+
+    // F1 (W4FIX-B2 re-check): every `useQuery`/`useQueryClient` call on this
+    // page (the buddy drawer, the shell dashboard section) needs a
+    // `QueryClientProvider` above it. Before `layout.tsx` supplied one, each
+    // threw "No QueryClient set" and React rendered a `role="alert"` error
+    // boundary in that section's place instead -- a failure the heading
+    // assertions above never catch, since a heading can render fine while
+    // the content beneath it is an alert box. This is the one assertion
+    // that would have caught it.
+    expect(screen.queryAllByRole('alert', { hidden: true }).map((node) => node.textContent).join()).not.toMatch(/could not render/)
   })
 })

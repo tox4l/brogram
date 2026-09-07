@@ -2,9 +2,13 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BuddyButton } from './BuddyButton'
 
-// The drawer itself has its own test file (`src/components/buddy/Drawer.test.tsx`)
-// -- what is under test here is the header trigger alone.
-vi.mock('@/components/buddy/Drawer', () => ({ BuddyDrawer: () => null }))
+// The drawer itself has its own test file (`src/components/buddy/Drawer.test.tsx`),
+// and `DynamicDrawer`'s own `DynamicDrawer.test.ts` pins that it wraps the
+// real `BuddyDrawer` in `next/dynamic({ ssr: false })` -- what is under test
+// here is the header trigger alone. F4 (W4FIX-B2 re-check): `BuddyButton` now
+// renders `DynamicBuddyDrawer` (`@/components/buddy/DynamicDrawer`), not
+// `BuddyDrawer` directly, so the mock is re-pointed at that module.
+vi.mock('@/components/buddy/DynamicDrawer', () => ({ default: () => null }))
 
 afterEach(() => cleanup())
 

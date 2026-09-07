@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -114,13 +114,32 @@ describe('MotionAttributeStatic', () => {
     expect(container.innerHTML).toBe('')
   })
 
+  // N1 (W4FIX-B2 re-check, round 2): the two rules a source-scan guard
+  // cannot enforce, so they are written out here instead --
+  //   1. A negative assertion never goes inside `waitFor`. `waitFor` proves
+  //      a value ARRIVES; it evaluates its callback once, synchronously,
+  //      before any flush, so it can return on a stale pre-update value and
+  //      never observe a later clobber. A claim that "X never happens"
+  //      needs a real flush (`act(async () => ...)`) followed by a direct,
+  //      un-wrapped `expect`.
+  //   2. The opening wait in a race test must be for a value only the
+  //      component under test can produce. The race case below starts the
+  //      OS at "not reducing" specifically so the opening
+  //      `waitFor('reduced')` cannot be satisfied by `MotionAttributeStatic`
+  //      own OS-only write (which would write 'full') -- only the
+  //      prefs-aware `MotionAttribute`, once its wellness query resolves,
+  //      can produce 'reduced' here. Starting the OS already agreeing with
+  //      the stored preference (the previous version of this test) lets the
+  //      opening wait pass before the query has resolved at all, which is
+  //      exactly the vacuous shape the re-check found: 5/5 green with the
+  //      whole claim mechanism deleted.
   describe('the two-writer race (F3, W4FIX-B2 re-check)', () => {
     it("an OS motion change mid-session does not override the learner's stored preference", async () => {
-      // OS starts by asking to reduce motion, agreeing with the learner's
-      // own 'reduced' setting -- so the first write, whichever component
-      // makes it, looks correct either way. The bug only shows up once the
-      // OS signal disagrees with the stored preference.
-      const mql = installMatchMedia(true)
+      // OS starts NOT reducing -- disagreeing with the learner's stored
+      // 'reduced' setting, so the opening wait below is discriminating (see
+      // rule 2 above): only the prefs-aware writer, once its query
+      // resolves, can produce 'reduced' while the OS itself says 'full'.
+      const mql = installMatchMedia(false)
       mockAuth('user-1', 'reduced')
       const { MotionAttributeStatic } = await import('./MotionAttributeStatic')
       const { MotionAttribute } = await import('./MotionAttribute')
@@ -135,18 +154,30 @@ describe('MotionAttributeStatic', () => {
         </>,
       )
 
+      // Discriminating (rule 2): with the OS quiet, only the prefs-aware
+      // writer can produce 'reduced', so this cannot pass until the
+      // wellness query has resolved.
       await waitFor(() => expect(document.documentElement.dataset.motion).toBe('reduced'))
 
-      // The OS turns "reduce motion" OFF mid-session (e.g. Windows' battery
-      // saver leaving) while the learner's own setting stays 'reduced'.
-      // This re-runs MotionAttributeStatic's effect with a new OS-only
-      // resolution ('full') -- before the fix, that write went straight
-      // through and clobbered the learner's preference. It must bail out
-      // instead, because MotionAttribute still claims ownership and its own
-      // resolved value ('reduced', from the explicit preference) never
-      // changed.
-      mql.set(false)
-      await waitFor(() => expect(document.documentElement.dataset.motion).toBe('reduced'))
+      // The OS toggles "reduce motion" ON then OFF mid-session (e.g.
+      // Windows' battery saver flipping) while the learner's own setting
+      // stays 'reduced'. Each `mql.set()` re-runs MotionAttributeStatic's
+      // effect with a new OS-only resolution -- before the fix, the final
+      // 'full' write went straight through and clobbered the learner's
+      // preference. It must bail out instead, because MotionAttribute
+      // still claims ownership and its own resolved value ('reduced', from
+      // the explicit preference) never changed.
+      await act(async () => { mql.set(true); await Promise.resolve() })
+      await act(async () => { mql.set(false); await Promise.resolve() })
+
+      // Direct assertion, not `waitFor` (rule 1): this is a negative claim
+      // ("the clobber never lands"), and `waitFor` evaluating once
+      // synchronously against an already-stale value would let a real
+      // clobber slip past unnoticed. The two `act(async () => ...)` calls
+      // above are real flushes -- the store update, the re-render and the
+      // passive effects all drain before this line runs -- so this sees the
+      // settled value.
+      expect(document.documentElement.dataset.motion).toBe('reduced')
     })
 
     it('releases ownership back to the OS-only writer once MotionAttribute unmounts', async () => {
@@ -190,10 +221,21 @@ describe('MotionAttributeStatic', () => {
       expect(document.documentElement.dataset.motion).toBe('reduced')
 
       // Ownership is now free: the OS-only writer resumes on the next OS
-      // change, exactly as it should once nobody is signed in.
-      mql.set(true)
-      await waitFor(() => expect(document.documentElement.dataset.motion).toBe('reduced'))
-      mql.set(false)
+      // change. The discriminating assertion is the flip to 'full' below --
+      // OS-false differs from 'reduced', the last prefs-aware write, so it
+      // can only pass if MotionAttributeStatic is genuinely back in
+      // control (a still-claimed writer would leave the attribute stuck at
+      // 'reduced'). `mql.set(true)` first is not itself asserted on: it
+      // exists only to give the fake media query list a real, COMMITTED
+      // state transition to notify listeners with, each in its own `act()`
+      // -- two bare `mql.set()` calls back to back, with no flush between
+      // them, let React coalesce both notifications into one check of
+      // `getSnapshot()` after both have already run (false -> true -> false
+      // nets out to the same value the last render already cached), which
+      // bails out with no re-render at all and leaves the effect never
+      // re-running.
+      act(() => { mql.set(true) })
+      act(() => { mql.set(false) })
       await waitFor(() => expect(document.documentElement.dataset.motion).toBe('full'))
     })
   })

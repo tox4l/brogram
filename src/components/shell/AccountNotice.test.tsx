@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { IntegrityBreakdown } from '@/lib/integrity/breakdown'
 import { line } from '@/lib/voice/lines'
 import { AccountNotice, BannedAccount } from './AccountNotice'
@@ -20,6 +20,28 @@ function serverBreakdown(total: number, pasteEvents = 0): IntegrityBreakdown {
 function localBreakdown(): IntegrityBreakdown {
   return { rows: [], total: 0, source: 'local' }
 }
+
+// F4 (W4FIX-B2 re-check): `Banner` now renders `DynamicIntegrityReceipt`
+// (`next/dynamic(() => import('@/components/account/IntegrityPanel')...)`,
+// see `AccountNotice.tsx`'s own doc) instead of calling `IntegrityPanel`/
+// `useIntegrityBreakdown` directly. `React.lazy`'s resolved-component cache
+// is a MODULE-level singleton, not per-test: the first render of a
+// warned/restricted `Banner` anywhere in this file suspends for one
+// microtask tick while the (mocked) chunk resolves, and every render after
+// that is synchronous again for the rest of the process. Pre-warming it once
+// here, before any test's assertion depends on synchronous rendering, keeps
+// every test below free to render and assert in the same tick exactly as it
+// could before the dynamic split -- without this, only the FIRST test in the
+// file to render a warned/restricted account would flakily see the
+// not-yet-resolved (empty) state, an ordering accident rather than a real
+// assertion about behaviour.
+beforeAll(async () => {
+  mocks.useIntegrityBreakdown.mockReturnValue({ data: undefined })
+  render(<AccountNotice status="warned" restrictedUntil={null} />)
+  await waitFor(() => expect(screen.getByTestId('integrity-panel')).toBeTruthy())
+  cleanup()
+  vi.clearAllMocks()
+})
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
