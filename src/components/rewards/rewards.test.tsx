@@ -512,6 +512,16 @@ describe('Celebration', () => {
     within(visibleCard()).getByText(line('pass.first', 'celebration-1'))
   })
 
+  it('small round 3: the epic moment renders its text on a `.celebration-plate`, not bare over the scrim', async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    render(<Celebration />)
+    act(() => celebrate('first-win'))
+    const plate = visibleCard().querySelector('.celebration-plate')
+    expect(plate).not.toBeNull()
+    // The line lives inside the plate, not as a sibling floating on the scrim.
+    expect(plate?.textContent).toBe(line('pass.first', 'celebration-1'))
+  })
+
   it('collapses three queued achievement unlocks into one card and opens the shelf on request', async () => {
     const onOpenShelf = vi.fn()
     const { Celebration, celebrate } = await freshCelebration()

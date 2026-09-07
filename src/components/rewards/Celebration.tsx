@@ -330,15 +330,34 @@ function CelebrationPresentation(props: {
   }
 }
 
-/** (b) First-ever win and course cleared: a full-viewport moment -- dimmed
- *  backdrop, large type, the confetti burst already timed with the reveal
- *  (fired at enqueue, see the queue-watching effect above), dismissed by
- *  any key or a click anywhere.
+/**
+ * (b) First-ever win and course cleared: a full-viewport moment -- dimmed
+ * backdrop, large type, the confetti burst already timed with the reveal
+ * (fired at enqueue, see the queue-watching effect above), dismissed by any
+ * key or a click anywhere.
  *
- *  Fix round 2 minor: a plain `div[role="presentation"]` instead of a
- *  `<motion.button>` wrapping a `<motion.p>` -- a `<p>` is not phrasing
- *  content, and a full-screen focusable control sitting in the tab order
- *  for ~2.8s bought nothing the existing key handler did not already cover. */
+ * Small round 3: on the exercise route, an 85%-opacity `--background` scrim
+ * behind bare `text-foreground` type was not enough over a busy syntax-
+ * highlighted editor and results panel -- code's own high local colour
+ * contrast bled through the blur, and the line read as an oversized wash
+ * rather than a moment (it read fine on the plain preview page, which has
+ * nothing but flat background behind it). Two independent fixes, not one:
+ * the scrim dims to the spec's 40-60% band (a moment, not a full block --
+ * `LOCKDOWN`'s idle guard is the 85% cover, and that is a different
+ * register entirely, R9.6), and the text now sits on its own fully opaque
+ * `.celebration-plate` (`--celebration`/`--celebration-foreground`, the one
+ * token pair T0.6 guarantees contrast for) -- legibility no longer depends
+ * on how much of the workspace shows through the scrim at all. The line
+ * itself is `clamp()`-sized to the viewport with a hard cap so it can never
+ * grow past a comfortable reading size, and the plate is capped at
+ * `min(90vw, 42rem)` with generous padding so it always sits inside the
+ * safe area instead of touching the viewport edges.
+ *
+ * Fix round 2 minor: a plain `div[role="presentation"]` instead of a
+ * `<motion.button>` wrapping a `<motion.p>` -- a `<p>` is not phrasing
+ * content, and a full-screen focusable control sitting in the tab order
+ * for ~2.8s bought nothing the existing key handler did not already cover.
+ */
 interface ScaleMotionProps {
   initial: { opacity: number; scale: number }
   animate: { opacity: number; scale: number }
@@ -368,11 +387,23 @@ function EpicCelebration({ text, reducedMotion, onDismiss }: { text: string; red
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: EXIT_S } }}
       transition={{ duration: ENTER_S }}
-      className="pointer-events-auto fixed inset-0 z-50 flex cursor-pointer items-center justify-center bg-background/85 backdrop-blur-sm"
+      // 50%, inside the spec's 40-60% band for a full-viewport MOMENT --
+      // never the 85% `LOCKDOWN` reserves for an enforcement cover (R9.6:
+      // different register entirely). The plate below is what actually
+      // guarantees legibility; the scrim only has to read as "dimmed."
+      className="pointer-events-auto fixed inset-0 z-50 flex cursor-pointer items-center justify-center bg-background/50 p-6 backdrop-blur-md"
     >
-      <motion.p {...entrance} className="max-w-xl px-6 text-center text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-        {text}
-      </motion.p>
+      <motion.div
+        {...entrance}
+        className="celebration-plate max-w-[min(90vw,42rem)] rounded-3xl bg-celebration px-8 py-7 shadow-[0_0_0_1px_var(--glow),0_24px_64px_rgba(0,0,0,0.35)]"
+      >
+        <p
+          className="text-center font-semibold leading-tight tracking-tight text-celebration-foreground"
+          style={{ fontSize: 'clamp(1.375rem, 4vw, 2.5rem)' }}
+        >
+          {text}
+        </p>
+      </motion.div>
     </motion.div>
   )
 }
