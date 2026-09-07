@@ -338,10 +338,12 @@ export interface DockProps {
 /**
  * The wellness dock (T2.4, spec section 6). Renders one of five placements
  * via `orientation`/`collapsed` (computed by `WellnessSlot` from
- * `wellness.prefs.dock`, `src/lib/wellness/dock.ts`); every write here is a
- * patch through the shared optimistic mutation (`useOptimistic`), never a
- * whole resolved `WellnessPrefs` blob. `<Toaster/>` lives in `ShellLayout`
- * now (C4), mounted once regardless of dock state.
+ * `wellness.prefs.dock`, `src/lib/wellness/dock.ts`); every `prefs` write
+ * here (X3 fix) is a patch through the one shared writer
+ * (`useWellnessPrefsMutation`/`useDockPrefsMutation`), never a whole
+ * resolved `WellnessPrefs` blob or a mutation local to this component.
+ * `<Toaster/>` lives in `ShellLayout` now (C4), mounted once regardless of
+ * dock state.
  */
 export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCornerChange }: DockProps) {
   const { user } = useSession()
