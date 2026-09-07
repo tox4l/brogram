@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { BannedAccount } from '@/components/shell/AccountNotice'
 import { createClient } from '@/lib/supabase/client'
+import { ShaderSurface } from '@/components/visual/ShaderSurface'
+import { Reveal } from '@/components/motion/Reveal'
+import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 
 // Magic links wait for a custom SMTP sender; keep the flow in this file, gated, so
 // flipping the flag is the only step needed once a mailer exists.
@@ -37,6 +40,8 @@ async function destinationAfterSignIn(supabase: SupabaseClient, userId: string):
   const state = learner as { state?: { profile?: { onboardingComplete?: boolean } } } | null
   return state?.state?.profile?.onboardingComplete === true ? '/dashboard' : '/onboarding'
 }
+
+const FIELD_LABEL_CLASS = 'text-micro uppercase tracking-[0.06em] text-muted-foreground'
 
 function PasswordLoginForm() {
   const router = useRouter()
@@ -84,9 +89,9 @@ function PasswordLoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="mt-9 space-y-5">
+    <form onSubmit={submit} className="space-y-6">
       <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-medium">Email</label>
+        <label htmlFor="email" className={FIELD_LABEL_CLASS}>Email</label>
         <Input
           id="email"
           type="email"
@@ -95,11 +100,11 @@ function PasswordLoginForm() {
           value={email}
           disabled={submitting}
           onChange={(event) => setEmail(event.target.value)}
-          className="h-12 text-base"
+          className="h-12 text-body"
         />
       </div>
       <div className="space-y-2">
-        <label htmlFor="password" className="text-sm font-medium">Password</label>
+        <label htmlFor="password" className={FIELD_LABEL_CLASS}>Password</label>
         <Input
           id="password"
           type="password"
@@ -108,14 +113,16 @@ function PasswordLoginForm() {
           value={password}
           disabled={submitting}
           onChange={(event) => setPassword(event.target.value)}
-          className="h-12 text-base"
+          className="h-12 text-body"
         />
       </div>
-      {error && <p role="alert" className="whitespace-pre-wrap text-sm text-foreground">{error}</p>}
-      <Button type="submit" disabled={submitting} className="h-12 w-full bg-emerald-300 text-primary-foreground hover:bg-emerald-200">
-        {submitting ? 'Signing in…' : 'Sign in'}
-      </Button>
-      <p className="text-xs leading-relaxed text-muted-foreground">Accounts are issued by Velocity. Ask for yours.</p>
+      {error && <p role="alert" className="whitespace-pre-wrap text-small text-foreground">{error}</p>}
+      <div className="space-y-4 border-t border-rule pt-6">
+        <Button type="submit" disabled={submitting} className="h-12 w-full">
+          {submitting ? 'Signing in…' : 'Sign in'}
+        </Button>
+        <p className="text-micro text-muted-foreground">Accounts are issued by Velocity. Ask for yours.</p>
+      </div>
     </form>
   )
 }
@@ -145,11 +152,11 @@ function MagicLinkForm() {
   }
 
   return (
-    <div className="mt-8 border-t border-border pt-8">
-      <h2 className="text-sm font-medium">Or sign in with a magic link</h2>
+    <div className="mt-8 border-t border-rule pt-8">
+      <h2 className="text-h4 text-foreground">Or sign in with a magic link</h2>
       <form onSubmit={submit} className="mt-4 space-y-4">
         <div className="space-y-2">
-          <label htmlFor="magic-link-email" className="text-sm font-medium">Email</label>
+          <label htmlFor="magic-link-email" className={FIELD_LABEL_CLASS}>Email</label>
           <Input
             id="magic-link-email"
             type="email"
@@ -159,12 +166,12 @@ function MagicLinkForm() {
             disabled={sending}
             onChange={(event) => { setEmail(event.target.value); setSent(false) }}
             aria-describedby="magic-link-email-help"
-            className="h-12 text-base"
+            className="h-12 text-body"
           />
-          <p id="magic-link-email-help" className="text-xs leading-relaxed text-muted-foreground">Use your .edu.qa email. Beta access is by invitation.</p>
+          <p id="magic-link-email-help" className="text-micro text-muted-foreground">Use your .edu.qa email. Beta access is by invitation.</p>
         </div>
-        {error && <p role="alert" className="whitespace-pre-wrap text-sm text-foreground">{error}</p>}
-        {sent && <p role="status" className="text-sm leading-relaxed text-emerald-300">Check your email for a sign-in link. You can close this tab once it arrives.</p>}
+        {error && <p role="alert" className="whitespace-pre-wrap text-small text-foreground">{error}</p>}
+        {sent && <p role="status" className="text-small text-success">Check your email for a sign-in link. You can close this tab once it arrives.</p>}
         <Button type="submit" disabled={sending} variant="outline" className="h-12 w-full">
           {sending ? 'Sending link…' : 'Send magic link'}
         </Button>
@@ -181,22 +188,41 @@ function LoginForm() {
 
   return (
     <>
-      <h1 className="max-w-xl text-4xl font-medium tracking-tight sm:text-5xl">A little practice.<br /><span className="text-emerald-300">A lot of progress.</span></h1>
-      <p className="mt-5 max-w-sm text-base leading-relaxed text-muted-foreground">Sign in to your coding space.</p>
-      {linkError && <p role="alert" className="mt-4 text-sm text-muted-foreground">{linkError}</p>}
+      {linkError && <p role="alert" className="mb-6 text-small text-muted-foreground">{linkError}</p>}
       <PasswordLoginForm />
       {MAGIC_LINK_ENABLED && <MagicLinkForm />}
-      {params.get('error') === 'state-unavailable' && <Link className="mt-4 inline-block text-sm underline underline-offset-4" href="/dashboard">Open dashboard</Link>}
+      {params.get('error') === 'state-unavailable' && (
+        <Link className="mt-4 inline-block text-small font-medium underline underline-offset-4" href="/dashboard">Open dashboard</Link>
+      )}
     </>
   )
 }
 
+/**
+ * W4 §9: "the full statement and the only screen that is nearly all stage."
+ * One `--measure-form` column, one wordmark on a masked-line reveal, one
+ * filled button. `<ShaderSurface>` paints the CSS floor everywhere and the
+ * settle-and-freeze field behind this same card in Eclipse; the card itself
+ * is the required >= 0.92 alpha scrim (spec §6.2 rule 6 — no control ever
+ * sits directly over live shader pixels), so every string on this screen,
+ * wordmark included, lives inside it rather than loose on the stage.
+ */
 export default function LoginPage() {
+  const reducedMotion = useReducedMotion()
+
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8 sm:px-10">
-      <Link href="/" className="w-fit text-xl font-semibold tracking-tight">BroGram<span className="text-emerald-300">.</span></Link>
-      <div className="mx-auto my-auto w-full max-w-md py-16">
-        <Suspense fallback={<p className="text-muted-foreground">The coding space is ready. Preparing sign-in…</p>}><LoginForm /></Suspense>
+    <main className="relative flex w-full flex-1 items-center justify-center overflow-hidden px-6 py-16">
+      <ShaderSurface motionPref="system" className="z-0" />
+      <div className="relative z-10 w-full max-w-[34rem] rounded-2xl border border-rule bg-card/95 p-8 shadow-xs">
+        <h1 className="font-display text-hero text-foreground">
+          <Reveal mode="lines" reduced={reducedMotion}>BroGram.</Reveal>
+        </h1>
+        <p className="mt-3 text-lede text-muted-foreground">Sign in to your coding space.</p>
+        <div className="mt-8">
+          <Suspense fallback={<p className="text-small text-muted-foreground">The coding space is ready. Preparing sign-in…</p>}>
+            <LoginForm />
+          </Suspense>
+        </div>
       </div>
     </main>
   )

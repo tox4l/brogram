@@ -11,17 +11,17 @@ export function MistakeTrend({ data }: MistakeTrendProps) {
   return (
     <section className="flex flex-col gap-3" data-section="mistake-trend">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Mistake trend</h2>
-        <span className="text-xs text-muted-foreground">{data.totalMistakes} in the last 12 weeks</span>
+        <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Mistake trend</h2>
+        <span className="text-micro text-muted-foreground">{data.totalMistakes} in the last 12 weeks</span>
       </div>
       {data.totalMistakes === 0 ? (
-        <p className="text-sm text-muted-foreground">No mistakes logged in the last 12 weeks. Clean run.</p>
+        <p className="text-small text-muted-foreground">No mistakes logged in the last 12 weeks. Clean run.</p>
       ) : (
         <div className="flex flex-col gap-1">
           {data.weeks.map(week => (
             <div key={week.weekKey} className="grid grid-cols-[3rem_1fr_1.5rem] items-center gap-2">
               <span className="text-[10px] text-muted-foreground">{week.label}</span>
-              <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full rounded-full"
                   style={{ width: `${(week.count / maxCount) * 100}%`, backgroundColor: 'var(--report-accent)' }}

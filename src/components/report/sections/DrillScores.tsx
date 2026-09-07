@@ -39,17 +39,17 @@ interface DrillScoresProps {
 export function DrillScores({ groups }: DrillScoresProps) {
   return (
     <section className="flex flex-col gap-3" data-section="drill-scores">
-      <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">De-rot scores</h2>
+      <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">De-rot scores</h2>
       {groups.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">No de-rot runs yet. Scores appear here after the first one.</p>
       ) : (
         <div className="flex flex-col gap-4">
           {groups.map(group => (
             <div key={group.lane} className="flex flex-col gap-2">
-              <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{LANE_LABELS[group.lane]}</h3>
+              <h3 className="text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">{LANE_LABELS[group.lane]}</h3>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                 {group.rows.map(row => (
-                  <div key={row.kind} className="flex items-center justify-between border-b border-border pb-1.5">
+                  <div key={row.kind} className="flex items-center justify-between border-b border-rule pb-2">
                     <span className="text-[11px] font-medium text-foreground">{DRILL_META[row.kind]?.title ?? row.kind}</span>
                     <span className="text-[11px] text-muted-foreground tabular-nums">
                       best {row.best} · mean {row.mean} · {row.count} run{row.count === 1 ? '' : 's'}

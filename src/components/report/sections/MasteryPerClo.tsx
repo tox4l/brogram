@@ -11,9 +11,9 @@ const GRID_COLS = 'grid-cols-[2.5rem_1fr_6rem_3.5rem_5rem]'
 export function MasteryPerClo({ rows }: MasteryPerCloProps) {
   return (
     <section className="flex flex-1 flex-col gap-2" data-section="mastery-per-clo">
-      <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Mastery per learning outcome</h2>
+      <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Mastery per learning outcome</h2>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No course selected yet. Mastery appears here once a course starts.</p>
+        <p className="text-small text-muted-foreground">No course selected yet. Mastery appears here once a course starts.</p>
       ) : (
         <div className="flex flex-col divide-y divide-border">
           <div className={`grid ${GRID_COLS} gap-3 pb-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase`}>
@@ -29,7 +29,7 @@ export function MasteryPerClo({ rows }: MasteryPerCloProps) {
               <span className="truncate text-[11px] text-foreground" title={row.outcome}>
                 {row.outcome}
               </span>
-              <div className="flex items-center gap-1.5 [&_[data-slot=progress-indicator]]:!bg-[var(--report-accent)] [&_[data-slot=progress-track]]:!h-1.5 [&_[data-slot=progress-track]]:!bg-neutral-100">
+              <div className="flex items-center gap-2 [&_[data-slot=progress-indicator]]:!bg-[var(--report-accent)] [&_[data-slot=progress-track]]:!h-1.5 [&_[data-slot=progress-track]]:!bg-muted">
                 <Progress value={row.score} className="flex-1" />
                 <span className="w-6 shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">{row.score}</span>
               </div>

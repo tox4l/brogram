@@ -37,14 +37,11 @@ export type AllowlistEntry = {
 }
 
 const T4_4_LESSON = ['src/components/lesson', 'src/app/(app)/lesson']
-const T4_5_SHELL = [
-  'src/components/shell',
-  'src/components/wellness',
-  'src/components/buddy',
-  'src/components/ui',
-  'src/app/(app)/account',
-  'src/components/account',
-]
+// T4_5_SHELL (src/components/shell, src/components/wellness, src/components/buddy, src/components/ui,
+// src/app/(app)/account, src/components/account): every rule cleared to zero across the whole row
+// except two narrow, load-bearing exceptions -- see the individual 'src/components/wellness' (spacing-
+// scale), 'src/components/buddy'/'src/components/ui' (radii) and 'src/components/ui' (motion-css)
+// entries below, each with its own comment. No blanket prefix constant remains.
 const T4_6_COURSE = ['src/app/(app)/dashboard', 'src/app/(app)/courses', 'src/app/(app)/course', 'src/components/course']
 // T4_7_EXERCISE (src/app/(app)/exercise, src/components/exercise): every rule below cleared to
 // zero for T4.7's own paths, so no allowlist entry -- and therefore no prefix constant -- remains.
@@ -78,7 +75,9 @@ const CARRIED_DEBT_NOTE =
 export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
   'raw-text-scale': [
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
-    ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
+    // T4.5's entry deleted: shell/wellness/buddy/account (ui is out of this
+    // rule's scope by design) now hold zero raw type-scale classes -- every
+    // site maps to the additive scale (--text-micro|small|body|lede|h1..h3).
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
     // T4.7's entry deleted: exercise/exercise-components now hold zero raw
     // type-scale classes.
@@ -103,7 +102,25 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
   ],
   'spacing-scale': [
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
-    ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
+    // T4.5's entry narrowed from the whole shell/wellness/buddy/ui/account
+    // row to one component: `src/components/wellness/PrayerTimes.tsx`'s
+    // toggle-switch knob is inset `top-0.5 left-0.5` (2px) inside a `h-4`
+    // (16px) track around a `size-3` (12px) knob -- (16 - 12) / 2 = 2px
+    // exactly. Moving to the nearest rhythm step (`top-1 left-1`, 4px)
+    // leaves only 8px for a 12px knob and clips it. Every other spacing
+    // utility under shell/wellness/buddy/ui/account now sits on the
+    // eight-step rhythm.
+    ...entriesFor('T4.5', ['src/components/wellness'], 'PrayerTimes.tsx toggle-knob inset is load-bearing geometry, not a rhythm miss -- see the comment above this entry.'),
+    // `src/components/ui` (badge/button/drawer/input/tabs): the fractional
+    // Tailwind paddings/gaps (py-0.5, px-2.5, gap-1.5, ...) are base-ui/
+    // shadcn primitive internals tuned against those components' own fixed
+    // pixel heights (h-5/h-6/h-7/h-8) to keep icon and label vertically
+    // centred at each size step -- rounding every one onto the eight-step
+    // rhythm changes the vertical centring of text and icons inside a fixed-
+    // height control used on every screen in the app, which is a visual
+    // regression risk this pure-presentation sweep does not have the
+    // rendered-screenshot coverage to verify safely across every consumer.
+    ...entriesFor('T4.5', ['src/components/ui'], 'shadcn/base-ui primitive micro-padding tuned to fixed control heights (h-5..h-8) -- see the comment above this entry.'),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
     // T4.7's entry deleted: exercise/exercise-components now sit on the
     // eight-step rhythm.
@@ -113,7 +130,19 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
   ],
   radii: [
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
-    ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
+    // T4.5's entry narrowed from the whole shell/wellness/buddy/ui/account
+    // row to one component: `src/components/buddy/Drawer.tsx`'s full-height
+    // side panel is flush with three screen edges (`inset-y-0 right-0`), so
+    // `rounded-none` is the correct shape for a sheet with nowhere to show a
+    // corner -- rounding it to any of lg/xl/2xl/full would visibly clip a
+    // corner off the viewport edge. `src/components/ui/drawer.tsx`'s
+    // `rounded-[inherit]` on `DrawerContent` is the second remaining site:
+    // it mirrors whichever per-direction radius `DrawerPrimitive.Popup`
+    // actually renders (`rounded-t-xl`, `rounded-l-xl`, ...) so the content's
+    // own overflow-clip matches the popup's real corner without re-deriving
+    // the same four-way conditional a second time. Every other radius under
+    // shell/wellness/buddy/ui/account now sits on rounded-(lg|xl|2xl|full).
+    ...entriesFor('T4.5', ['src/components/buddy', 'src/components/ui'], 'Drawer.tsx (buddy) rounded-none and drawer.tsx (ui) rounded-[inherit] are load-bearing shape, not a scale miss -- see the comment above this entry.'),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
     // T4.7's entry deleted: exercise/exercise-components now sit on
     // rounded-(lg|xl|2xl|full).

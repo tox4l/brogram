@@ -4,8 +4,8 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import type { LearnerState } from '@/lib/contracts'
-import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ErrorRetry } from '@/components/lesson/ErrorRetry'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
 import { useAchievements, useWellness } from '@/lib/query/hooks'
@@ -90,27 +90,22 @@ function ReportTab({ userId, courseCode, learnerState }: { userId: string | null
   const focus = (learnerState as LearnerState & { focus?: string }).focus || FOCUS_FALLBACK
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">Mastery per outcome, patterns passed, mistakes over time, time spent, and de-rot scores. Rendered in the browser; nothing is generated on the server.</p>
+        <p className="max-w-[68ch] text-small text-muted-foreground">Mastery per outcome, patterns passed, mistakes over time, time spent, and de-rot scores. Rendered in the browser; nothing is generated on the server.</p>
         {report.data && <DownloadReportButton containerRef={downloadSourceRef} fileName={fileName} />}
       </div>
 
-      {report.loading && <p role="status" className="text-sm text-muted-foreground">Preparing the report.</p>}
+      {report.loading && <p role="status" className="text-small text-muted-foreground">Preparing the report.</p>}
 
-      {report.failed && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-          <p className="text-sm text-foreground">The report could not load.</p>
-          <Button variant="outline" onClick={report.retry}>Try again</Button>
-        </div>
-      )}
+      {report.failed && <ErrorRetry message="The report could not load." onRetry={report.retry} />}
 
       {report.data && (
         <>
           <div
             ref={previewWrapperRef}
             data-testid="report-preview"
-            className="overflow-x-auto rounded-xl border border-border bg-muted/30 p-4"
+            className="overflow-x-auto rounded-xl border border-rule bg-muted/30 p-4"
           >
             <div style={{ width: REPORT_PAGE_WIDTH_PX * scale, height: naturalHeight * scale }}>
               <div style={{ width: REPORT_PAGE_WIDTH_PX, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
@@ -170,29 +165,29 @@ export default function ReportsPage() {
 
   if (!courseCode) {
     return (
-      <div className="space-y-5">
-        <h1 className="text-2xl font-medium tracking-tight">Progress</h1>
-        <div className="rounded-xl border border-dashed border-input p-6">
-          <p className="text-sm font-medium">Choose a course to see progress.</p>
-          <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-muted-foreground">A progress report is built from a course&apos;s outcomes, mastery, and de-rot scores, so pick a course first.</p>
-          <Link href="/onboarding" className="mt-3 inline-block rounded-sm text-sm font-medium text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring">Choose a course</Link>
+      <div className="space-y-8">
+        <h1 className="text-h1 text-foreground">Progress</h1>
+        <div className="max-w-[68ch] space-y-3">
+          <p className="text-lede text-foreground">Choose a course to see progress.</p>
+          <p className="text-body text-muted-foreground">A progress report is built from a course&apos;s outcomes, mastery, and de-rot scores, so pick a course first.</p>
+          <Link href="/onboarding" className="inline-flex rounded-lg text-small font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">Choose a course</Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-medium tracking-tight">Progress</h1>
+    <div className="space-y-6">
+      <h1 className="text-h1 text-foreground">Progress</h1>
       <Tabs value={tab} onValueChange={(value) => setTab(value as ReportsTab)}>
         <TabsList aria-label="Progress views">
           <TabsTrigger value="trophies">Trophies</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
-        <TabsContent value="trophies" className="pt-5">
+        <TabsContent value="trophies" className="pt-6">
           <TrophyShelf motionPref={motionPref} unlockedThisSession={unlockedThisSession} />
         </TabsContent>
-        <TabsContent value="report" className="pt-5">
+        <TabsContent value="report" className="pt-6">
           {learnerState && <ReportTab userId={user?.id ?? null} courseCode={courseCode} learnerState={learnerState} />}
         </TabsContent>
       </Tabs>

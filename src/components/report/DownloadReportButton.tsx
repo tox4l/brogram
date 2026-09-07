@@ -37,7 +37,7 @@ export function DownloadReportButton({ containerRef, fileName = 'brogram-progres
   }
 
   return (
-    <div className={cn('flex flex-col items-start gap-1.5', className)}>
+    <div className={cn('flex flex-col items-start gap-2', className)}>
       <Button onClick={handleClick} disabled={status === 'busy'} data-slot="download-report-button">
         {status === 'busy' ? (
           <>
@@ -51,7 +51,7 @@ export function DownloadReportButton({ containerRef, fileName = 'brogram-progres
           </>
         )}
       </Button>
-      {status === 'error' && <p className="text-xs text-destructive">Could not generate the PDF. Try again.</p>}
+      {status === 'error' && <p className="text-small text-destructive">Could not generate the PDF. Try again.</p>}
     </div>
   )
 }

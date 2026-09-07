@@ -119,6 +119,17 @@ describe('reports page', () => {
     expect(mocks.fetchReportData).not.toHaveBeenCalled()
   })
 
+  // Spec §8 (W4.24): "Never a dashed box with a hard-coded link --
+  // reports/page.tsx:164-167 ... dies this wave." The designed empty state
+  // is a lede headline plus a body sentence and one action, no dashed
+  // container and no hard-coded palette class anywhere in it.
+  it('renders the empty state as a headline and a sentence, never a dashed box (spec section 8)', () => {
+    mocks.session.mockReturnValue(session(learnerState({ currentCourse: null })))
+    const { container } = render(<ReportsPage />, { wrapper: wrapper() })
+    expect(container.querySelector('.border-dashed')).toBeNull()
+    expect(container.innerHTML).not.toMatch(/emerald|neutral-\d/)
+  })
+
   it('defaults to the Trophies tab, never fetching the report until it is opened', async () => {
     render(<ReportsPage />, { wrapper: wrapper() })
     expect((await screen.findByRole('tab', { name: 'Trophies' })).getAttribute('aria-selected')).toBe('true')

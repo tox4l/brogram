@@ -12,6 +12,7 @@ import { clearQueuedCompletion, queueCompletion, readQueuedCompletion } from '@/
 import { provisionalProfile } from '@/lib/onboarding/derive'
 import { QUESTIONS } from '@/lib/onboarding/questions'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { Reveal } from '@/components/motion/Reveal'
 import { qk } from '@/lib/query/keys'
 import { useSession } from '@/store/session'
 import { mergeProfileDelta, messageOf, writeLearnerState } from './lib'
@@ -211,16 +212,14 @@ export default function Onboarding() {
     : { enter: { x: 24, opacity: 0 }, center: { x: 0, opacity: 1 }, exit: { x: -24, opacity: 0 } }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 py-10">
+    <div className="mx-auto max-w-2xl space-y-8 py-16">
       <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">Question {index + 1} of {QUESTIONS.length}</p>
-        <div aria-hidden="true" className="flex gap-1.5">
-          {QUESTIONS.map((q, i) => (
-            <span
-              key={q.id}
-              className={`h-1.5 flex-1 rounded-full transition-colors motion-reduce:transition-none ${i <= index ? 'bg-primary' : 'bg-muted'}`}
-            />
-          ))}
+        <p className="text-micro text-muted-foreground">Question {index + 1} of {QUESTIONS.length}</p>
+        <div aria-hidden="true" className="h-px w-full bg-rule">
+          <div
+            className="h-px bg-primary transition-transform duration-200 ease-out motion-reduce:transition-none"
+            style={{ transform: `scaleX(${(index + 1) / QUESTIONS.length})`, transformOrigin: 'left' }}
+          />
         </div>
       </div>
       <AnimatePresence initial={false}>
@@ -235,7 +234,13 @@ export default function Onboarding() {
           transition={{ duration: CARD_DURATION, ease: MOVE_EASE }}
           className="space-y-8 outline-none"
         >
-          <h1 className="max-w-xl text-2xl font-medium leading-relaxed tracking-tight">{question.text}</h1>
+          <h1 className="max-w-xl text-h1 text-foreground">
+            {index === 0 ? (
+              <Reveal mode="chars" reduced={reducedMotion} surface="onboarding-hook">{question.text}</Reveal>
+            ) : (
+              question.text
+            )}
+          </h1>
           <div role="radiogroup" aria-label="Choose one" className="grid gap-3 sm:grid-cols-2">
             {question.options.map((option) => (
               <button
@@ -245,7 +250,7 @@ export default function Onboarding() {
                 disabled={selected !== null}
                 aria-checked={selected === option.value}
                 onClick={() => selectOption(option.value)}
-                className={`relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-primary hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default motion-reduce:transition-none ${selected !== null && selected !== option.value ? 'opacity-50' : ''}`}
+                className={`relative min-h-11 overflow-hidden rounded-xl border border-border bg-card p-4 text-left text-body outline-none transition-colors hover:border-primary hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default motion-reduce:transition-none ${selected !== null && selected !== option.value ? 'opacity-50' : ''}`}
               >
                 {!reducedMotion && selected === option.value && (
                   <motion.span

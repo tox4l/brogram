@@ -20,6 +20,14 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mocks.replace }),
 }))
 
+// The hero wordmark renders through `<Reveal mode="lines">`, which calls the real
+// `SplitText.create` under non-reduced motion. jsdom has no layout (SplitText measures
+// real line boxes), so this suite mocks it exactly as src/components/motion/Reveal.test.tsx
+// and src/components/lesson/lesson.test.tsx do -- shape-only, never invoking `onSplit`
+// itself, which leaves the plain "BroGram." text node in place for every query below.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 async function submitPassword(email = 'learner@uni.edu.qa', password = 'correct-horse') {
   const { default: Login } = await import('./page')
   render(<Login />)
@@ -33,6 +41,7 @@ describe('email and password login', () => {
     vi.resetAllMocks()
     mocks.params = new URLSearchParams()
     mocks.maybeSingle.mockResolvedValue({ data: null, error: null })
+    splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
   })
   afterEach(() => {
     cleanup()

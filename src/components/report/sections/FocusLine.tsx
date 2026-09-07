@@ -10,12 +10,12 @@ export function FocusLine({ data }: FocusLineProps) {
     <header className="flex flex-col gap-4 border-b border-border pb-6" data-section="focus-line">
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Progress report</p>
-          <h1 className="mt-1 text-2xl font-semibold text-foreground">{data.displayName}</h1>
+          <p className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Progress report</p>
+          <h1 className="mt-1 text-h2 text-foreground">{data.displayName}</h1>
         </div>
-        <p className="shrink-0 text-sm text-muted-foreground">Generated {data.generatedAtLabel}</p>
+        <p className="shrink-0 text-small text-muted-foreground">Generated {data.generatedAtLabel}</p>
       </div>
-      <p className="rounded-lg px-4 py-3 text-base leading-relaxed text-foreground" style={{ backgroundColor: 'var(--report-accent-soft)' }}>
+      <p className="rounded-lg px-4 py-3 text-body text-foreground" style={{ backgroundColor: 'var(--report-accent-soft)' }}>
         {data.focus || 'No focus set yet. Keep attempting exercises to get a plan from the Planner.'}
       </p>
     </header>

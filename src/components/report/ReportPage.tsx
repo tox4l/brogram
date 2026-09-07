@@ -60,7 +60,7 @@ export function ReportPage({ children, className }: ReportPageProps) {
   return (
     <div
       data-report-page
-      className={cn('relative shrink-0 overflow-hidden bg-white text-neutral-900', className)}
+      className={cn('relative shrink-0 overflow-hidden bg-background text-foreground', className)}
       style={{
         ...REPORT_THEME_VARS,
         width: REPORT_PAGE_WIDTH_PX,

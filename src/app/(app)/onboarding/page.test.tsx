@@ -37,6 +37,18 @@ vi.mock('@/lib/agents/client', () => ({ callAgent: mocks.call }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: mocks.from }) }))
 vi.mock('sonner', () => ({ toast: mocks.toast }))
 
+// The first question's hook line renders through `<Reveal mode="chars"
+// surface="onboarding-hook">` (W4.14 -- the onboarding hook is one of the two
+// surfaces licensed for a character reveal), which calls the real
+// `SplitText.create` under non-reduced motion. jsdom has no layout (SplitText
+// measures real line boxes), so this suite mocks it exactly as
+// src/components/motion/Reveal.test.tsx and src/components/lesson/lesson.test.tsx
+// do -- shape-only, never invoking `onSplit` itself, which leaves the plain
+// question text in place for every `getByText`/`getByRole('heading', ...)`
+// query below.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 const envelope = (reply: unknown, fallback = false): AgentEnvelope<unknown> => ({
   ok: true, agent: 'profiler', reply, fallback, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 },
 })
@@ -142,10 +154,13 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   mocks.session.mockReturnValue(session())
   mocks.from.mockImplementation(() => learnerStateBuilder())
+  splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
 })
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
+  // @ts-expect-error test-only cleanup of a global a couple of tests below own
+  delete window.matchMedia
 })
 
 describe('onboarding', () => {
@@ -332,5 +347,34 @@ describe('onboarding', () => {
     expect(mocks.redirect).toHaveBeenCalledWith('/courses')
     expect(screen.queryByText(QUESTIONS[0].text)).toBeNull()
     expect(mocks.call).not.toHaveBeenCalled()
+  })
+
+  // Plan T4.9 acceptance: "a test that the onboarding character reveal is
+  // absent under reduced motion and that textContent is unchanged" (W4.14 /
+  // W4.15 -- the onboarding hook line is one of the two surfaces licensed
+  // for <Reveal mode="chars">, and under reduced motion Reveal never calls
+  // SplitText.create at all).
+  it('renders the hook line as a character reveal, and never splits it under reduced motion (W4.14/W4.15)', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { name: QUESTIONS[0].text }).textContent).toBe(QUESTIONS[0].text)
+    // Not reduced (the default in this suite -- no matchMedia stub, no
+    // stored preference): Reveal's mode="chars" branch does call SplitText.
+    expect(splitTextMocks.create).toHaveBeenCalledTimes(1)
+    const [, vars] = splitTextMocks.create.mock.calls[0] as [HTMLElement, Record<string, unknown>]
+    expect(vars).toMatchObject({ type: 'chars' })
+    cleanup()
+    splitTextMocks.create.mockClear()
+
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+
+    renderPage()
+    const heading = screen.getByRole('heading', { name: QUESTIONS[0].text })
+    expect(heading.textContent).toBe(QUESTIONS[0].text)
+    expect(splitTextMocks.create).not.toHaveBeenCalled()
   })
 })

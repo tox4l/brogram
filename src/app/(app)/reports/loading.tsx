@@ -5,15 +5,15 @@
  */
 export default function ReportsLoading() {
   return (
-    <div role="status" aria-label="Opening progress" className="space-y-5">
+    <div role="status" aria-label="Opening progress" className="space-y-6">
       <div className="h-7 w-32 animate-pulse rounded-full bg-muted" />
-      <div className="flex h-8 w-56 items-center gap-2 rounded-lg bg-muted p-[3px]">
-        <div className="h-full w-1/2 animate-pulse rounded-md bg-background" />
-        <div className="h-full w-1/2 animate-pulse rounded-md bg-muted-foreground/10" />
+      <div className="flex h-8 w-56 items-center gap-2 rounded-lg bg-muted p-1">
+        <div className="h-full w-1/2 animate-pulse rounded-lg bg-background" />
+        <div className="h-full w-1/2 animate-pulse rounded-lg bg-muted-foreground/10" />
       </div>
-      <div className="grid grid-cols-2 gap-3 pt-5 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 pt-6 sm:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: 8 }, (_, i) => (
-          <div key={i} className="h-28 animate-pulse rounded-xl border border-dashed border-input bg-muted/40" />
+          <div key={i} className="h-28 animate-pulse rounded-xl border border-rule bg-muted/40" />
         ))}
       </div>
     </div>
