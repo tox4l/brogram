@@ -396,6 +396,86 @@ describe('I5: ThemeQuickSwitch swatches stay pinned to the real tokens', () => {
   })
 })
 
+// A11Y-01 (wave 2 review, section 7): 15 `focus-visible:ring-emerald-300`
+// sites measured 1.39:1 on Paper/Folio -- invisible keyboard focus on the
+// shell header, onboarding and Account -- plus three `text-emerald-200`
+// links at 1.17:1 there and one `bg-emerald-300` state fill that made
+// ring-vs-control 1.00:1. All were swapped for theme tokens (`ring-ring`,
+// `text-primary`/`text-success`, `bg-primary`) in the files this fix lane
+// owns; this is the "source-scan assertion" the review's fix prescribes,
+// scoped to exactly those files rather than the whole tree.
+//
+// Deliberately NOT a tree-wide gate, and NOT folded into T4.1's own
+// `palette-classes` allowlist (`src/lib/design/allowlist.ts`): that rule is
+// path-prefix scoped, and every prefix this lane's files sit under
+// (`src/components/shell`, `src/app/(app)/account`, `src/app/(app)/
+// dashboard`, `src/app/(app)/courses`, `src/components/course`,
+// `src/app/(app)/onboarding`, `src/app/(app)/reports`, `src/components/
+// wellness`) still carries other, real palette-class debt in sibling files
+// this lane does not own (e.g. `PrayerTimes.tsx`, `DockControl.tsx`,
+// `NodeItem.tsx`) that Wave 4's own screen sweeps (T4.5/T4.6/T4.9) are
+// still mid-flight on -- concurrently, in this same tree, while this lane
+// ran. Deleting or narrowing those prefix entries here would either be a
+// no-op (debt remains) or falsely claim a prefix clean when it is not, and
+// `src/lib/design/allowlist.ts` was itself being actively rewritten by
+// T4.1's own fix round during this lane's work. This assertion is the
+// honestly-scoped alternative: it names exactly the files this lane fixed
+// and holds them at zero, permanently, regardless of what the broader gate
+// still allows elsewhere.
+describe('A11Y-01: the tokens the fix lane routed every swept ring/link/fill to actually clear the floor, on both background and card, in all five palettes', () => {
+  it.each(THEME_IDS)('%s: ring clears WCAG 3:1 (SC 1.4.11) on both background and card', (id) => {
+    const tokens = THEMES[id]
+    const ring = resolve(tokens, 'ring')
+    expect(wcagRatio(ring, resolve(tokens, 'background'))).toBeGreaterThanOrEqual(3)
+    expect(wcagRatio(ring, resolve(tokens, 'card'))).toBeGreaterThanOrEqual(3)
+  })
+
+  it.each(THEME_IDS)('%s: primary -- the token every swept link/border/fill now resolves to -- clears WCAG 4.5:1 as text on both background and card', (id) => {
+    const tokens = THEMES[id]
+    const primary = resolve(tokens, 'primary')
+    expect(wcagRatio(primary, resolve(tokens, 'background'))).toBeGreaterThanOrEqual(4.5)
+    expect(wcagRatio(primary, resolve(tokens, 'card'))).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('A11Y-01: the shell header, Account, dashboard, courses, onboarding, reports and wellness-dock surfaces this fix lane swept carry no raw focus-ring, link-text or state-fill palette class', () => {
+  const SCANNED_FILES: string[][] = [
+    ['components', 'shell', 'AppShell.tsx'],
+    ['components', 'shell', 'ShellHeaderControls.tsx'],
+    ['app', '(app)', 'account', 'page.tsx'],
+    // A concurrent lane (V7, wave 2 review) split this route's markup out of
+    // `page.tsx` into `CoursesClient.tsx` (a server/client split so the seed
+    // JSON's authoring note stays server-only) partway through this fix
+    // lane's own work; `page.tsx` is now a thin wrapper with no classes of
+    // its own, and the real focus-ring fix lives in the file below.
+    ['app', '(app)', 'courses', 'CoursesClient.tsx'],
+    ['app', '(app)', 'dashboard', 'page.tsx'],
+    ['app', '(app)', 'onboarding', 'page.tsx'],
+    ['app', '(app)', 'reports', 'page.tsx'],
+    ['components', 'wellness', 'Dock.tsx'],
+    ['components', 'course', 'CourseCard.tsx'],
+    ['app', 'preview', 'sections', 'OnboardingSection.tsx'],
+    ['app', 'preview', 'sections', 'ShellDashboardSection.tsx'],
+  ]
+  // Exactly the review's own prescribed shape: (ring|bg|text|border|fill|
+  // stroke)-<hue>-<shade>. Deliberately excludes `from-`/`to-`/`via-`
+  // gradient stops (e.g. dashboard's `from-emerald-200/[0.06]`) -- those are
+  // real debt too, but outside the review's named regex and this lane's
+  // named findings; they stay with Wave 4's broader 81-class sweep.
+  const RAW_PALETTE_RE =
+    /\b(ring|bg|text|border|fill|stroke)-(emerald|amber|red|green|blue|slate|zinc|gray|neutral|stone|sky|violet|rose|orange|yellow|lime|teal|cyan|indigo|purple|fuchsia|pink)-\d+\b/g
+
+  it('every scanned file is clean', () => {
+    const violations: string[] = []
+    for (const segments of SCANNED_FILES) {
+      const content = readFileSync(join(SRC_DIR, ...segments), 'utf8')
+      const matches = content.match(RAW_PALETTE_RE)
+      if (matches) violations.push(`${segments.join('/')}: ${matches.join(', ')}`)
+    }
+    expect(violations).toEqual([])
+  })
+})
+
 describe('contrast.ts sanity (pins the implementation against a known reference)', () => {
   it('black on white is WCAG 21:1 and APCA Lc ~106 (the canonical APCA reference pair)', () => {
     expect(wcagRatio('oklch(0 0 0)', 'oklch(1 0 0)')).toBeCloseTo(21, 0)

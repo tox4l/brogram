@@ -237,7 +237,7 @@ export default function Dashboard() {
         <section aria-labelledby="resume-heading" className="rounded-xl border border-dashed border-input p-5">
           <h2 id="resume-heading" className="text-sm font-medium">Pick a course</h2>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">A course gives your practice a direction. You can change it anytime.</p>
-          <Link href="/onboarding" className={cn(buttonVariants({ variant: 'default' }), 'mt-3 h-9 bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
+          <Link href="/onboarding" className={cn(buttonVariants({ variant: 'default' }), 'mt-3 h-9')}>
             Choose a course<ArrowUpRight aria-hidden="true" />
           </Link>
         </section>
@@ -285,7 +285,7 @@ export default function Dashboard() {
         <div className="min-w-0 py-1">
           <p className="text-xs text-muted-foreground">Today&apos;s goal</p>
           <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{wins} / {prefs.dailyGoal}</p>
-          <Progress value={goalPercent} aria-label="Today's goal" className="mt-2 h-1.5 [&_[data-slot=progress-indicator]]:bg-emerald-200" />
+          <Progress value={goalPercent} aria-label="Today's goal" className="mt-2 h-1.5" />
           {goalReached && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Goal met today.</p>}
         </div>
         <StatTile label="Points" value={points.toLocaleString('en-US')} note="Earned through practice." />
@@ -302,14 +302,14 @@ export default function Dashboard() {
           <h2 id="level-heading" className="text-sm font-medium">Level {level} &middot; {band}</h2>
           <p className="text-xs text-muted-foreground">{points.toLocaleString('en-US')} XP</p>
         </div>
-        <Progress value={levelPercent} aria-label="Level progress" className="mt-3 h-1.5 [&_[data-slot=progress-indicator]]:bg-emerald-200" />
+        <Progress value={levelPercent} aria-label="Level progress" className="mt-3 h-1.5" />
         <div className="mt-4">
           <h3 className="text-xs font-medium text-muted-foreground">Last trophies</h3>
           {trophies.length ? (
             <ul className="mt-2 flex flex-wrap gap-3">
               {trophies.map((trophy) => (
                 <li key={trophy.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs">
-                  <Trophy className="size-3.5 text-emerald-200" aria-hidden="true" />
+                  <Trophy className="size-3.5 text-primary" aria-hidden="true" />
                   <span className="font-medium text-foreground">{trophy.name}</span>
                 </li>
               ))}
@@ -325,7 +325,7 @@ export default function Dashboard() {
           <h2 className="text-sm font-medium">A change of pace</h2>
           <p className="mt-1 text-sm text-muted-foreground">{derotDays > 0 ? `De-rot streak: ${derotDays} ${derotDays === 1 ? 'day' : 'days'}.` : 'Train your attention with a short coding drill.'}</p>
         </div>
-        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">
+        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">
           Try a de-rot drill<ArrowUpRight className="size-4" aria-hidden="true" />
         </Link>
       </section>

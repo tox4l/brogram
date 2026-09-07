@@ -8,6 +8,10 @@ import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
 import { THEMES } from '@/lib/theme/themes'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { useSession } from '@/store/session'
+import { useWellness } from '@/lib/query/hooks'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { useWellnessPrefsMutation } from '@/app/(app)/account/prefsMutation'
 import type { ThemeName } from '@/lib/contracts'
 
 const THEME_IDS = THEMES.map((entry) => entry.id)
@@ -27,7 +31,17 @@ function isThemeName(value: string | undefined): value is ThemeName {
  */
 export function ThemeQuickSwitch() {
   const { theme, setTheme } = useTheme()
-  const reducedMotion = useReducedMotion()
+  const userId = useSession((session) => session.user?.id ?? null)
+  // V4/A11Y-03 (wave 2 review): a bare `useReducedMotion()` call means
+  // 'system' -- it can never see a learner who chose Reduced (or Full) in
+  // the app on an OS that reports no preference either way, which is
+  // exactly the load-bearing case this control's own view-transition wipe
+  // exists to respect. `(app)/layout.tsx` already seeds the resolved
+  // wellness row into the query cache, so this costs no extra request.
+  const wellnessQuery = useWellness()
+  const motionPref = resolveWellnessPrefs(wellnessQuery.data?.prefs).motion
+  const reducedMotion = useReducedMotion(motionPref)
+  const prefsMutation = useWellnessPrefsMutation(userId)
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -86,7 +100,13 @@ export function ThemeQuickSwitch() {
    *  style-tag trick misses -- belt and suspenders, not a replacement for
    *  it. Minor 3 (review): one timeout ref, cleared and rescheduled on every
    *  call, so two switches in quick succession (arrowing through the group)
-   *  can't have the first one's timer strip the attribute mid-transition. */
+   *  can't have the first one's timer strip the attribute mid-transition.
+   *
+   *  X5 (wave 2 review): also writes the choice through to `wellness.prefs`
+   *  (the single writer every other prefs control already uses), the same
+   *  write the Account picker's own `applyTheme` makes -- so a theme picked
+   *  from the header quick-switch, not only from Account, follows the
+   *  learner to their next sign-in (`src/lib/theme/useThemeSync.ts`). */
   function applyTheme(id: ThemeName) {
     if (id === active) return
     const root = document.documentElement
@@ -99,6 +119,7 @@ export function ThemeQuickSwitch() {
       root.removeAttribute('data-theme-switching')
       switchingTimeoutRef.current = null
     }, 350)
+    prefsMutation.mutate(() => ({ theme: id }))
   }
 
   /** Click, Enter, Space: choose and dismiss, same as a menu item. */

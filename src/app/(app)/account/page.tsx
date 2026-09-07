@@ -153,8 +153,8 @@ function RadioPills<T extends string>({ label, options, value, onChange }: {
               onClick={() => onChange(option.value)}
               onKeyDown={(event) => roving.onKeyDown(event, index)}
               className={cn(
-                'rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
-                checked ? 'border-emerald-300 bg-emerald-300/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
+                'rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                checked ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
               )}
             >
               {option.label}
@@ -182,7 +182,7 @@ function SettingToggle({ id, label, checked, onChange, reducedMotion }: {
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={cn('relative h-6 w-11 shrink-0 rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-emerald-300', checked ? 'bg-emerald-300' : 'bg-muted')}
+        className={cn('relative h-6 w-11 shrink-0 rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring', checked ? 'bg-primary' : 'bg-muted')}
       >
         {/* Spec 10.11: "toggles animate their own knob and nothing else." */}
         <span
@@ -238,6 +238,16 @@ export default function AccountPage() {
   const mounted = useMounted()
   const activeTheme: ThemeName | null = mounted && isThemeName(theme) ? theme : null
 
+  // X5 (wave 2 review): the canonical theme picker only ever called
+  // `setTheme`, so a choice made here never left `localStorage` -- signing in
+  // on another device re-seeded a theme from the OS instead of carrying this
+  // one across. `prefsMutation` is the same single wellness-prefs writer
+  // every other control on this page already uses (W2FIX-F4); writing
+  // `{ theme: id }` through it is symmetrical with `ThemeQuickSwitch`'s own
+  // write (`src/lib/theme/useThemeSync.ts`'s doc comment records the one
+  // known gap this pair still has: `prefsPatch` strips a value equal to
+  // `DEFAULT_WELLNESS`, so an explicit re-pick of the seeded default,
+  // Midnight, is indistinguishable from "never chosen").
   function applyTheme(id: ThemeName) {
     if (!mounted || id === activeTheme) return
     const root = document.documentElement
@@ -246,6 +256,7 @@ export default function AccountPage() {
     if (canAnimate) document.startViewTransition!(() => flushSync(() => setTheme(id)))
     else setTheme(id)
     window.setTimeout(() => root.removeAttribute('data-theme-switching'), 350)
+    prefsMutation.mutate(() => ({ theme: id }))
   }
 
   const themeRoving = useRovingRadioGroup(THEME_IDS, Math.max(0, THEME_IDS.indexOf(activeTheme ?? THEME_IDS[0])), applyTheme)
@@ -321,8 +332,8 @@ export default function AccountPage() {
                   onClick={() => applyTheme(entry.id)}
                   onKeyDown={(event) => themeRoving.onKeyDown(event, index)}
                   className={cn(
-                    'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
-                    checked ? 'border-emerald-300 ring-1 ring-emerald-300/50' : 'border-border hover:border-ring/50',
+                    'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    checked ? 'border-ring ring-1 ring-ring/50' : 'border-border hover:border-ring/50',
                   )}
                 >
                   <span className="flex gap-1" aria-hidden="true">
@@ -492,8 +503,8 @@ export default function AccountPage() {
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">Use at least {MIN_PASSWORD_LENGTH} characters.</p>
           {error && <p role="alert" className="text-sm text-foreground">{error}</p>}
-          {success && <p role="status" className="text-sm leading-relaxed text-emerald-300">Password changed.</p>}
-          <Button type="submit" disabled={submitting} className="h-12 w-full bg-emerald-300 text-primary-foreground hover:bg-emerald-200">
+          {success && <p role="status" className="text-sm leading-relaxed text-success">Password changed.</p>}
+          <Button type="submit" disabled={submitting} className="h-12 w-full">
             {submitting ? 'Changing password…' : 'Change password'}
           </Button>
         </form>

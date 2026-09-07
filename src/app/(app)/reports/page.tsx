@@ -175,7 +175,7 @@ export default function ReportsPage() {
         <div className="rounded-xl border border-dashed border-input p-6">
           <p className="text-sm font-medium">Choose a course to see progress.</p>
           <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-muted-foreground">A progress report is built from a course&apos;s outcomes, mastery, and de-rot scores, so pick a course first.</p>
-          <Link href="/onboarding" className="mt-3 inline-block rounded-sm text-sm font-medium text-emerald-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Choose a course</Link>
+          <Link href="/onboarding" className="mt-3 inline-block rounded-sm text-sm font-medium text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring">Choose a course</Link>
         </div>
       </div>
     )

@@ -36,7 +36,7 @@ function ProgressRing({ value, label }: { value: number; label: string }) {
         <circle
           cx="20" cy="20" r={radius} strokeWidth="4" strokeLinecap="round"
           strokeDasharray={circumference} strokeDashoffset={offset}
-          className="fill-none stroke-emerald-200"
+          className="fill-none stroke-primary"
         />
       </svg>
       <span className="absolute font-mono text-[10px] text-muted-foreground">{clamped}%</span>
@@ -96,7 +96,7 @@ export function CourseCard(props: CourseCardProps) {
           type="button"
           aria-disabled="true"
           onClick={(event) => event.preventDefault()}
-          className="w-full cursor-default rounded-xl border border-dashed border-input p-4 text-left opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+          className="w-full cursor-default rounded-xl border border-dashed border-input p-4 text-left opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="block text-sm font-medium">{props.title}</span>
           <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language}</span>
@@ -121,8 +121,8 @@ export function CourseCard(props: CourseCardProps) {
         aria-current={props.isCurrent ? 'true' : undefined}
         className={cn(
           'flex w-full items-center gap-4 rounded-xl border bg-card p-4 text-left outline-none transition-colors',
-          'hover:border-emerald-300 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none',
-          props.isCurrent ? 'border-emerald-300' : 'border-border',
+          'hover:border-primary hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
+          props.isCurrent ? 'border-primary' : 'border-border',
         )}
       >
         <ProgressRing value={props.progress} label={`${props.title} progress`} />
@@ -130,7 +130,7 @@ export function CourseCard(props: CourseCardProps) {
           <span className="flex items-center gap-2">
             <span className="block truncate text-sm font-medium">{props.title}</span>
             {props.isCurrent && (
-              <span className="shrink-0 rounded-full bg-emerald-200/20 px-2 py-0.5 text-[10px] font-medium text-emerald-200">Current</span>
+              <span className="shrink-0 rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">Current</span>
             )}
           </span>
           <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language} · Level {props.level}</span>

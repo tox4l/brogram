@@ -213,6 +213,17 @@ describe('Account page', () => {
       expect(mocks.setTheme).toHaveBeenCalledWith('amber')
     })
 
+    // X5 (wave 2 review): the picker used to only ever call `setTheme` --
+    // the choice never left this device. It now writes through the same
+    // single `wellness.prefs` writer every other control on this page uses.
+    it('X5: writes the chosen theme through to wellness.prefs', async () => {
+      render(<AccountPage />, { wrapper: wrapper().Wrapper })
+      fireEvent.click(screen.getByRole('radio', { name: 'Amber' }))
+      await waitFor(() => expect(mocks.wellnessUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ prefs: expect.objectContaining({ theme: 'amber' }) }),
+      ))
+    })
+
     // I2, fix round 1: `next-themes` reports `theme: undefined` on the
     // server render and the first client render, before it hydrates from
     // storage/the DOM attribute. The old code fell back to 'midnight' in

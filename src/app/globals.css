@@ -233,12 +233,18 @@
   --text-display--line-height: 3.5rem;
   --text-display--letter-spacing: -0.02em;
   --text-display--font-weight: 600;
+  /* T4.0 fix round 3 (N1): §3.3's Hero row is weight 800-900. Explicit here
+     so the scale carries it rather than every call site, and so it holds
+     even where `.display-caps` (Eclipse only) is not applied -- Folio's
+     Hero also uses `--font-display` at this weight. */
   --text-hero: 3.5rem;
   --text-hero--line-height: 1.05;
   --text-hero--letter-spacing: -0.025em;
+  --text-hero--font-weight: 800;
   --text-hero-lg: 4.5rem;
   --text-hero-lg--line-height: 1.0;
   --text-hero-lg--letter-spacing: -0.03em;
+  --text-hero-lg--font-weight: 800;
   --text-h1: 2rem;
   --text-h1--line-height: 2.5rem;
   --text-h1--letter-spacing: -0.015em;
@@ -688,10 +694,25 @@ body {
 /* W4 §3.2: the uppercase display treatment. Uppercase inverts the tracking
  * sign -- negative tracking is for mixed case at >= 24px, but all-caps
  * Archivo at 56-72px needs positive tracking or the counters close up.
- * Applied through this one utility, never by editing a scale token. */
+ * Applied through this one utility, never by editing a scale token.
+ *
+ * T4.0 fix round 3 (N1): the fix round 2 self-hosted Archivo/Newsreader as
+ * static instances (no `fvar`), which silently made `font-variation-
+ * settings` inert -- the element fell back to CSS `font-weight` alone,
+ * inherited `400`, and CSS Fonts 4 S5.2.3 matched that to the nearest
+ * available face at or above it: the 700/`wdth 100` file, not the
+ * 850/`wdth 118` one this utility exists to render. `font-weight: 850`
+ * closes that: Eclipse has a real 850 face at `wdth 118` and matches
+ * exactly; Folio's Newsreader faces are 700/800 (Newsreader's own `wght`
+ * axis maxes at 800, unlike Archivo's 900), so a desired 850 finds nothing
+ * at or above it and steps down to 800 -- Newsreader's own ceiling, not a
+ * synthetic weight. `font-variation-settings` stays: harmless on a static
+ * face today, correct again the moment a variable Archivo or a bought
+ * Integral CF lands (spec §3.1's override point). */
 @utility display-caps {
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  font-weight: 850;
   font-variation-settings: 'wdth' 118, 'wght' 850;
 }
 
@@ -736,6 +757,60 @@ body {
 :root[data-motion='reduced'] ::view-transition-group(*) {
   animation-duration: 0s !important;
   animation-delay: 0s !important;
+}
+
+/* V3/A11Y-04 (wave 2 review, section 5): before this block, `globals.css`
+ * had no `prefers-reduced-motion` rule and no `data-motion` selector at all
+ * outside the two view-transition blocks above -- every `animate-pulse`/
+ * `animate-bounce`/`animate-ping` loop in the app (skeleton screens on
+ * eleven routes, `LessonSkeleton`, the Buddy typing dots, the admin
+ * dashboard) kept looping under both a learner's in-app "Reduced" choice
+ * and an OS-level "reduce motion" setting, on the single manual sweep line
+ * that checks exactly this ("set motion to reduced and walk every screen --
+ * nothing ... loops").
+ *
+ * Three-state, matching `useReducedMotion`'s own `resolveMotion` contract
+ * (`src/lib/motion/useReducedMotion.ts`) rather than a bare OS media query:
+ *   - `:root[data-motion='reduced']` freezes regardless of the OS signal --
+ *     the in-app choice always wins once it has been written.
+ *   - `@media (prefers-reduced-motion: reduce) :root:not([data-motion='full'])`
+ *     freezes from an OS signal alone, but backs off the instant an explicit
+ *     `data-motion="full"` is written -- `resolveMotion('full', true) ===
+ *     false` is documented as the load-bearing case a bare media query
+ *     cannot honour: a learner who opted back into motion on a reduce-OS
+ *     must not get frozen skeletons.
+ *   - Neither attribute written yet (the gap between a server-rendered
+ *     skeleton's first paint and this app's client hydration, since the
+ *     attribute is written from a mount effect, not a pre-hydration script
+ *     the way `data-theme` is) still resolves correctly for both an OS that
+ *     asks for less and one that does not, because `:not([data-motion=
+ *     'full'])` matches an attribute-less root too.
+ *
+ * Deliberately targets the three *looping* utilities by class, not a bare
+ * `*` selector: `animate-spin` is excluded on purpose. Every current use of
+ * it (`DownloadReportButton`'s download spinner, the Toaster's own loading
+ * icon) is an indeterminate progress indicator, and freezing it removes the
+ * one signal it exists to give -- the review's own fix note calls this out
+ * by name ("an essential progress indicator"). A blanket `*` selector would
+ * also have caught transitions and animations this app does not own the
+ * markup for (sonner's own toast entry, a future third-party widget); this
+ * scan-verified class list (`src/lib/motion/reducedMotionCss.test.ts`)
+ * cannot regress that the way a wildcard silently could.
+ */
+:root[data-motion='reduced'] .animate-pulse,
+:root[data-motion='reduced'] .animate-bounce,
+:root[data-motion='reduced'] .animate-ping {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) .animate-pulse,
+  :root:not([data-motion='full']) .animate-bounce,
+  :root:not([data-motion='full']) .animate-ping {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 @layer base {

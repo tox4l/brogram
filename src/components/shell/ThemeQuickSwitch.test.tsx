@@ -1,9 +1,48 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import type { PropsWithChildren } from 'react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
+import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeQueryClient } from '@/lib/query/client'
+import { SessionProvider } from '@/components/shell/SessionProvider'
+import { resetWellnessPrefsWriterForTests } from '@/app/(app)/account/prefsMutation'
 import { ThemeQuickSwitch } from './ThemeQuickSwitch'
 
 const STORAGE_KEY = 'brogram:theme'
+const USER_ID = 'learner-one'
+
+const db = vi.hoisted(() => ({ row: null as { prefs?: unknown } | null }))
+const mocks = vi.hoisted(() => ({ select: vi.fn(), update: vi.fn(), insert: vi.fn() }))
+
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => { mocks.select(table); return { data: db.row, error: null } },
+        }),
+      }),
+      update: (patch: { prefs?: unknown }) => ({
+        eq: (column: string, value: string) => ({
+          select: () => ({
+            maybeSingle: async () => {
+              mocks.update(table, patch, column, value)
+              if (!db.row) return { data: null, error: null }
+              db.row = { ...db.row, ...patch }
+              return { data: { user_id: value }, error: null }
+            },
+          }),
+        }),
+      }),
+      insert: async (payload: { user_id: string; prefs: unknown }) => {
+        mocks.insert(table, payload)
+        db.row = { prefs: payload.prefs }
+        return { data: null, error: null }
+      },
+    }),
+  }),
+}))
 
 // next-themes registers a `matchMedia` listener unconditionally on mount
 // (even with `enableSystem={false}`), and `useReducedMotion` reads it too.
@@ -22,30 +61,49 @@ function installMatchMedia(reducedMotion = false) {
   })) as unknown as typeof window.matchMedia
 }
 
-function renderSwitch() {
-  return render(
-    <ThemeProvider
-      attribute="data-theme"
-      themes={['midnight', 'amber', 'eclipse', 'paper', 'arcade']}
-      defaultTheme="midnight"
-      enableSystem={false}
-      storageKey={STORAGE_KEY}
-      disableTransitionOnChange
-    >
-      <ThemeQuickSwitch />
-    </ThemeProvider>,
-  )
+/** X5/V4 (wave 2 review): the quick-switch now reads `useWellness()` (for
+ *  the resolved motion preference) and writes through `useWellnessPrefsMutation`
+ *  (for the theme choice) -- both need a QueryClient and a signed-in session
+ *  in context, matching how `SoundToggle.test.tsx` and `DockControl.test.tsx`
+ *  already wrap the sibling controls that share those same two hooks. */
+function renderSwitch(initialPrefs: Record<string, unknown> = {}) {
+  const client = makeQueryClient()
+  db.row = { prefs: initialPrefs }
+  function Wrapper({ children }: PropsWithChildren) {
+    return (
+      <QueryClientProvider client={client}>
+        <SessionProvider initialState={{ user: { id: USER_ID } as User, profile: null, learnerState: null }}>
+          <ThemeProvider
+            attribute="data-theme"
+            themes={['midnight', 'amber', 'eclipse', 'paper', 'arcade']}
+            defaultTheme="midnight"
+            enableSystem={false}
+            storageKey={STORAGE_KEY}
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+        </SessionProvider>
+      </QueryClientProvider>
+    )
+  }
+  return { client, ...render(<ThemeQuickSwitch />, { wrapper: Wrapper }) }
 }
 
 beforeEach(() => {
   installMatchMedia()
+  vi.useFakeTimers()
   window.localStorage.clear()
   document.documentElement.removeAttribute('data-theme')
 })
 
 afterEach(() => {
+  vi.runOnlyPendingTimers()
+  vi.useRealTimers()
   cleanup()
   vi.restoreAllMocks()
+  vi.resetAllMocks()
+  resetWellnessPrefsWriterForTests()
 })
 
 describe('ThemeQuickSwitch', () => {
@@ -174,6 +232,45 @@ describe('ThemeQuickSwitch', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Arcade' }))
 
     expect(attributeWhenCallbackReturns).toBe('arcade')
+  })
+
+  // V4/A11Y-03 (wave 2 review): a bare `useReducedMotion()` used to ignore
+  // an in-app motion preference on an OS that reports no preference either
+  // way -- exactly the case the review's fix names.
+  it("V4: reads the learner's own motion preference, not only the OS media query -- Reduced in prefs wins even when the OS asks for full motion", async () => {
+    installMatchMedia(false) // OS: no preference (full motion)
+    const startViewTransition = vi.fn((callback: () => void) => {
+      callback()
+      return {} as ViewTransition
+    })
+    document.startViewTransition = startViewTransition as unknown as typeof document.startViewTransition
+
+    renderSwitch({ motion: 'reduced' })
+    // Let the wellness fetch resolve so `motionPref` reflects the seeded
+    // row (`reduced`), not the pre-fetch default (`system`).
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Arcade' }))
+
+    expect(startViewTransition).not.toHaveBeenCalled()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('arcade')
+  })
+
+  // X5 (wave 2 review): the theme picked here follows the learner across
+  // devices via `wellness.prefs.theme`, the same single writer every other
+  // prefs control uses.
+  it('X5: writes the chosen theme through to wellness.prefs, debounced like every other prefs control', async () => {
+    renderSwitch()
+    fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Eclipse' }))
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(mocks.update).toHaveBeenCalledWith(
+      'wellness',
+      expect.objectContaining({ prefs: expect.objectContaining({ theme: 'eclipse' }) }),
+      'user_id',
+      USER_ID,
+    )
   })
 })
 

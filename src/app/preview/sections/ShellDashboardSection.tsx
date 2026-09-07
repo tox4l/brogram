@@ -79,7 +79,7 @@ function PreviewDashboard() {
                   <span className="block text-sm font-medium text-foreground">{exercise.title}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABEL[exercise.language] ?? exercise.language} · {difficultyWord(exercise.difficulty as Difficulty)}</span>
                 </span>
-                <ArrowRight className="size-4 shrink-0 text-emerald-200" aria-hidden="true" />
+                <ArrowRight className="size-4 shrink-0 text-primary" aria-hidden="true" />
               </span>
             </li>
           ))}
@@ -97,12 +97,12 @@ function PreviewDashboard() {
             const score = mastery?.score ?? 0
             return (
               <div key={outcome.id} className="rounded-lg border border-border p-4">
-                <div className="flex items-center justify-between gap-3 text-xs"><span className="text-muted-foreground">Outcome {outcome.ordinal}</span><span className={mastery?.closed ? 'text-emerald-200' : 'text-muted-foreground'}>{mastery?.closed ? 'Complete' : mastery ? 'In progress' : 'Not started'}</span></div>
+                <div className="flex items-center justify-between gap-3 text-xs"><span className="text-muted-foreground">Outcome {outcome.ordinal}</span><span className={mastery?.closed ? 'text-primary' : 'text-muted-foreground'}>{mastery?.closed ? 'Complete' : mastery ? 'In progress' : 'Not started'}</span></div>
                 <h4 className="mt-2 text-sm font-medium leading-relaxed">
                   {outcome.outcome}
                   {outcome.draft && <span className="ml-2 align-middle text-[10px] font-normal tracking-wide text-muted-foreground uppercase">Draft outcome</span>}
                 </h4>
-                <div className="mt-4 flex items-center gap-3"><Progress value={score} aria-label={outcome.outcome} className="flex-1 [&_[data-slot=progress-indicator]]:bg-emerald-200" /><span className="font-mono text-xs text-muted-foreground">{score}%</span></div>
+                <div className="mt-4 flex items-center gap-3"><Progress value={score} aria-label={outcome.outcome} className="flex-1" /><span className="font-mono text-xs text-muted-foreground">{score}%</span></div>
               </div>
             )
           })}
@@ -111,7 +111,7 @@ function PreviewDashboard() {
 
       <section aria-label="De-rot practice" className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
         <div><h3 className="text-sm font-medium">A change of pace</h3><p className="mt-1 text-sm text-muted-foreground">Keep your attention streak going with a short drill.</p></div>
-        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">Try a de-rot drill<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">Try a de-rot drill<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </section>
     </div>
   )

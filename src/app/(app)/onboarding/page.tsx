@@ -218,7 +218,7 @@ export default function Onboarding() {
           {QUESTIONS.map((q, i) => (
             <span
               key={q.id}
-              className={`h-1.5 flex-1 rounded-full transition-colors motion-reduce:transition-none ${i <= index ? 'bg-emerald-300' : 'bg-muted'}`}
+              className={`h-1.5 flex-1 rounded-full transition-colors motion-reduce:transition-none ${i <= index ? 'bg-primary' : 'bg-muted'}`}
             />
           ))}
         </div>
@@ -245,12 +245,12 @@ export default function Onboarding() {
                 disabled={selected !== null}
                 aria-checked={selected === option.value}
                 onClick={() => selectOption(option.value)}
-                className={`relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-emerald-300 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-default motion-reduce:transition-none ${selected !== null && selected !== option.value ? 'opacity-50' : ''}`}
+                className={`relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-primary hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default motion-reduce:transition-none ${selected !== null && selected !== option.value ? 'opacity-50' : ''}`}
               >
                 {!reducedMotion && selected === option.value && (
                   <motion.span
                     aria-hidden="true"
-                    className="absolute inset-0 bg-emerald-300/30"
+                    className="absolute inset-0 bg-primary/30"
                     style={{ transformOrigin: 'left' }}
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}

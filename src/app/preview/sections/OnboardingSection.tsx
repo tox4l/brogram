@@ -41,7 +41,7 @@ export function OnboardingSection() {
             {question.options.map((option) => (
               <button key={option} type="button"
                 onClick={() => { setSelected(option); setPhase((current) => (current === 1 ? 2 : 1)) }}
-                className="rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-emerald-300 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none">
+                className="rounded-xl border border-border bg-card p-5 text-left text-sm font-medium leading-relaxed outline-none transition-colors hover:border-primary hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
                 {option}
               </button>
             ))}
