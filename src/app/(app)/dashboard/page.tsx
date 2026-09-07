@@ -2,79 +2,85 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, LockKeyhole } from 'lucide-react'
+import { ArrowUpRight, Flame, LockKeyhole, Trophy } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import type { LearnerState } from '@/lib/contracts'
-import { createClient } from '@/lib/supabase/client'
+import type { CourseCode } from '@/lib/contracts'
+import { ACHIEVEMENTS, levelForXp, xpToReach } from '@/lib/contracts'
+import { course as courseMeta, loadCourseBundle, type CourseBundle } from '@/lib/curriculum'
+import { buildMap, currentCloId, nextUp } from '@/lib/course/map'
+import { buildRewardContext } from '@/lib/rewards/context'
+import { goalMet, levelBand, winsToday } from '@/lib/rewards/goal'
+import { flameState } from '@/lib/rewards/streaks'
+import { useAchievements, useAttempts, useLessonProgress, useWellness } from '@/lib/query/hooks'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { getRuntime } from '@/lib/runtimes'
+import { NextUpStack } from '@/components/course/NextUpStack'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/store/session'
 
-/**
- * The Planner's `focus` line is not part of the frozen LearnerState contract; it rides
- * along as an extra jsonb key written by onboarding and by useExerciseLoop's plan-refresh
- * on CLO close. This sentence is the same fallback the Planner itself uses when it has
- * nothing to say yet (see src/lib/agents/planner.ts and the reports page).
- */
-const FOCUS_FALLBACK = 'Your next exercises are still being prepared.'
+/** A skill closes at three passes (`src/lib/course/map.ts`'s `CHAIN_TARGET`, restated
+ *  here because that constant is not exported and this screen only needs the number
+ *  for the resume card's "you were N of 3 into {skill}" line). */
+const CHAIN_TARGET = 3
 
-type CourseDetails = { code: string; title: string; language: string }
-type OutcomeDetails = { id: string; ordinal: number; outcome: string; draft: boolean }
-type ExerciseDetails = { id: string; title: string; difficulty: number; language: string; clo_id: string }
-type Curriculum = { course: CourseDetails | null; outcomes: OutcomeDetails[]; exercises: ExerciseDetails[] }
-type CurriculumResult = { key: string; data: Curriculum | null; failed: boolean }
-
-const languages: Record<string, string> = {
-  python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript',
-  java: 'Java', sql: 'SQL', mongo: 'MongoDB', web: 'HTML, CSS & JavaScript',
+interface BundleState {
+  code: CourseCode
+  bundle: CourseBundle | null
+  failed: boolean
 }
 
-function useCurriculum(userId: string | null, courseCode: string | null, exerciseKey: string) {
+/**
+ * The static curriculum bundle for the learner's current course (R5.1: zero
+ * Supabase round trips; a CDN-cached static file, memoised per session by
+ * `loadCourseBundle` itself). This is the only fetch this screen makes, and
+ * it is what the resume card and Next-up stack need for titles and reps --
+ * everything else on this page (streak, goal, level, trophies) comes straight
+ * out of the layout-seeded query cache and the session store. `setState` only
+ * ever runs inside the promise callbacks below, never synchronously in the
+ * effect body.
+ */
+function useCourseBundle(code: CourseCode | null) {
+  const [state, setState] = useState<BundleState | null>(null)
   const [attempt, setAttempt] = useState(0)
-  const [result, setResult] = useState<CurriculumResult | null>(null)
-  const key = JSON.stringify([userId, courseCode, exerciseKey, attempt])
-  const needed = Boolean(userId && (courseCode || exerciseKey !== '[]'))
 
   useEffect(() => {
-    if (!needed) return
+    if (!code) return
     let cancelled = false
-
-    async function load() {
-      try {
-        const client = createClient()
-        const ids: string[] = JSON.parse(exerciseKey)
-        const [course, outcomes, exercises] = await Promise.all([
-          courseCode ? client.from('courses').select('code,title,language').eq('code', courseCode).maybeSingle() : { data: null, error: null },
-          // Draft CLOs (no syllabus yet) are still usable, not hidden; a "draft outcome"
-          // marker is shown beside them below instead of filtering them out.
-          courseCode ? client.from('clos').select('id,ordinal,outcome,draft').eq('course', courseCode).order('ordinal') : { data: [], error: null },
-          ids.length ? client.from('exercises_public').select('id,title,difficulty,language,clo_id').eq('verified', true).in('id', ids) : { data: [], error: null },
-        ])
-        if (course.error || outcomes.error || exercises.error) throw new Error('Curriculum unavailable')
-        if (!cancelled) setResult({
-          key, failed: false,
-          data: { course: course.data, outcomes: outcomes.data ?? [], exercises: exercises.data ?? [] },
-        })
-      } catch {
-        if (!cancelled) setResult({ key, data: null, failed: true })
-      }
-    }
-
-    void load()
+    loadCourseBundle(code)
+      .then((bundle) => { if (!cancelled) setState({ code, bundle, failed: false }) })
+      .catch(() => { if (!cancelled) setState({ code, bundle: null, failed: true }) })
     return () => { cancelled = true }
-  }, [courseCode, exerciseKey, key, needed])
+  }, [code, attempt])
 
-  // A changed account, course, or plan must never render the previous response.
-  const current = needed && result?.key === key ? result : null
+  const current = state && code && state.code === code ? state : null
   return {
-    data: current?.data ?? null,
+    bundle: current?.bundle ?? null,
+    loading: Boolean(code) && current === null,
     failed: current?.failed ?? false,
-    loading: needed && !current,
     retry: () => setAttempt((value) => value + 1),
   }
 }
 
-function Statistic({ label, value, note }: { label: string; value: string; note: string }) {
+/** requestIdleCallback with the documented setTimeout(…, 1) fallback for
+ *  engines that lack it (spec 5.4). Returns a canceller so the effect that
+ *  scheduled it can clean up on unmount without leaking a callback. */
+function onIdle(run: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  const w = window as typeof window & {
+    requestIdleCallback?: (cb: () => void) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+  if (typeof w.requestIdleCallback === 'function') {
+    const handle = w.requestIdleCallback(run)
+    return () => w.cancelIdleCallback?.(handle)
+  }
+  const handle = setTimeout(run, 1)
+  return () => clearTimeout(handle)
+}
+
+function StatTile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div role="group" aria-label={label} className="min-w-0 py-1">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -85,108 +91,219 @@ function Statistic({ label, value, note }: { label: string; value: string; note:
 }
 
 export default function Dashboard() {
-  const { user, learnerState, profile } = useSession()
-  const exerciseIds = [...new Set(learnerState?.nextExerciseIds ?? [])].slice(0, 3)
-  const curriculum = useCurriculum(user?.id ?? null, learnerState?.currentCourse ?? null, JSON.stringify(exerciseIds))
-  const { course, outcomes, exercises } = curriculum.data ?? { course: null, outcomes: [], exercises: [] }
-  const orderedExercises = exerciseIds.flatMap((id) => {
-    const exercise = exercises.find((item) => item.id === id)
-    return exercise ? [exercise] : []
-  })
+  const { learnerState, profile } = useSession()
   const restricted = profile?.account_status === 'restricted'
-  const focusLine = (learnerState as (LearnerState & { focus?: string }) | null)?.focus || FOCUS_FALLBACK
-  const displayName = learnerState?.profile.displayName.trim()
+
+  // Every read below is either the session store the layout already seeded
+  // before paint, or a query key the layout seeded through `QuerySeed` --
+  // `staleTime: Infinity` (or a fresh 30s window for `attempts`, seeded in
+  // the same request) means none of these fires a Supabase read on mount.
+  const attemptsQuery = useAttempts()
+  const lessonProgressQuery = useLessonProgress()
+  const wellnessQuery = useWellness()
+  const achievementsQuery = useAchievements()
+
+  const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
+  const reducedMotion = useReducedMotion(prefs.motion)
+
+  const { bundle, failed: bundleFailed, retry: retryBundle } = useCourseBundle(learnerState?.currentCourse ?? null)
+  const bundleLoading = Boolean(learnerState?.currentCourse) && !bundle && !bundleFailed
+
+  const meta = learnerState?.currentCourse ? courseMeta(learnerState.currentCourse) : null
+  const currentClo = bundle && learnerState ? currentCloId(learnerState.path, learnerState.mastery) : null
+  const cards = bundle && learnerState
+    ? nextUp({
+      currentCloId: currentClo,
+      clos: bundle.clos,
+      lessons: bundle.lessons,
+      lessonProgress: lessonProgressQuery.data ?? [],
+      nextExerciseIds: learnerState.nextExerciseIds,
+      exercises: bundle.exercises,
+    })
+    : []
+  const nodes = bundle && learnerState
+    ? buildMap({ clos: bundle.clos, code: learnerState.currentCourse as CourseCode, mastery: learnerState.mastery, lessonProgress: lessonProgressQuery.data ?? [], lessons: bundle.lessons, path: learnerState.path })
+    : []
+  const lockedIn = nodes.filter((node) => node.state === 'locked-in').length
+
+  // Prefetch ladder step 1 (spec 5.4): curriculum already resolved from the
+  // bundle above with zero requests; warm the runtime for the top card that
+  // actually needs one, at idle, so a normal connection never pays the cold
+  // start on the click that follows. This never guarantees a warm runtime
+  // (R5.4) -- the exercise screen keeps its own real-progress warming.
+  const warmupLanguage = cards.find((card) => card.language)?.language
+  useEffect(() => {
+    if (!warmupLanguage) return
+    return onIdle(() => { void getRuntime(warmupLanguage).warmup() })
+  }, [warmupLanguage])
+
+  const now = new Date()
+  const rewardCtx = learnerState ? buildRewardContext({
+    state: learnerState,
+    attempts: attemptsQuery.data ?? [],
+    activityDays: [],
+    lessonProgress: lessonProgressQuery.data ?? [],
+    drillResults: wellnessQuery.data?.drill_results ?? [],
+    prefs,
+    courseLessonCounts: {},
+    now,
+  }) : null
+  const wins = rewardCtx ? winsToday(rewardCtx) : 0
+  const goalReached = rewardCtx ? goalMet(rewardCtx) : false
+  const goalPercent = prefs.dailyGoal > 0 ? Math.min(100, Math.round((wins / prefs.dailyGoal) * 100)) : 0
+
   const exerciseDays = learnerState?.streak.exerciseDays ?? 0
   const derotDays = learnerState?.streak.derotDays ?? 0
-  const completed = outcomes.filter((outcome) => learnerState?.mastery[outcome.id]?.closed).length
+  const countedToday = learnerState?.streak.lastExerciseDate === (rewardCtx?.today ?? now.toISOString().slice(0, 10))
+  // justTransitioned is always false here (fix round 1, streaks.ts): this is
+  // a plain mount-time read, never the on-load "did it just die" comparison
+  // or a fresh win -- both of those belong to the mutation that actually
+  // records an action, not to rendering "Today".
+  const flame = flameState(exerciseDays, countedToday, now.getHours(), now.getUTCHours(), false)
+  const flameCopy = flame === 'at-risk'
+    ? { label: 'Streak at risk', note: 'No rep yet today. One keeps it alive.' }
+    : exerciseDays > 0
+      ? { label: 'Streak kept', note: 'One day at a time.' }
+      : { label: 'Streak reset', note: 'Today is a good day to start it.' }
+
+  const points = learnerState?.points ?? 0
+  const level = levelForXp(points)
+  const band = levelBand(level)
+  const levelFloor = xpToReach(level)
+  const levelCeiling = xpToReach(level + 1)
+  const levelPercent = levelCeiling > levelFloor ? Math.min(100, Math.round(((points - levelFloor) / (levelCeiling - levelFloor)) * 100)) : 100
+
+  const trophies = [...(achievementsQuery.data ?? [])]
+    .sort((a, b) => Date.parse(b.unlockedAt) - Date.parse(a.unlockedAt))
+    .slice(0, 3)
+    .flatMap((unlocked) => {
+      const meta = ACHIEVEMENTS.find((achievement) => achievement.id === unlocked.achievementId)
+      return meta ? [{ ...meta, unlockedAt: unlocked.unlockedAt }] : []
+    })
+
+  const currentMastery = currentClo && learnerState ? learnerState.mastery[currentClo] : undefined
+  const currentProgress = currentClo ? (lessonProgressQuery.data ?? []).find((row) => row.cloId === currentClo) : undefined
+  const currentTitle = bundle?.clos.find((clo) => clo.id === currentClo)?.outcome
+  const resumeChain = currentMastery && currentMastery.chain > 0 && !currentMastery.closed ? currentMastery.chain : null
+  const resumeWalkthrough = currentProgress?.status === 'started' ? currentProgress : null
 
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="max-w-4xl text-2xl font-medium tracking-tight sm:text-3xl">{displayName ? `Keep building, ${displayName}.` : 'Your next step starts here.'}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{learnerState?.currentCourse ? 'A little practice. A clearer understanding.' : 'Choose a course and make space for your first small win.'}</p>
+        <h1 className="max-w-4xl text-2xl font-medium tracking-tight sm:text-3xl">
+          {learnerState?.profile.displayName.trim() ? `Keep building, ${learnerState.profile.displayName.trim()}.` : 'Today.'}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {learnerState?.currentCourse ? 'Pick up where you left off.' : 'Choose a course and make space for your first small win.'}
+        </p>
       </div>
 
-      <section id="course" aria-labelledby="course-heading" className="scroll-mt-6 rounded-xl border border-border bg-linear-to-br from-emerald-200/[0.06] to-transparent p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h2 id="course-heading" className="text-xs font-medium text-muted-foreground">Current course</h2>
-            <p className="mt-2 text-xl font-medium tracking-tight">{course?.title ?? (curriculum.loading ? 'Opening your course' : curriculum.failed ? 'Your course details are unavailable' : 'Find your starting point.')}</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{course ? `${languages[course.language] ?? course.language} · ${completed} of ${outcomes.length} outcomes complete` : learnerState?.currentCourse ? 'Your saved progress is kept below.' : 'A course gives your practice a direction. You can change it anytime.'}</p>
-            {learnerState?.currentCourse && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{focusLine}</p>}
-          </div>
-          <Link href={learnerState?.currentCourse ? '/courses' : '/onboarding'} className={cn(buttonVariants({ variant: learnerState?.currentCourse ? 'outline' : 'default' }), learnerState?.currentCourse ? 'h-9' : 'h-9 bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
-            {learnerState?.currentCourse ? 'Change course' : 'Choose a course'}<ArrowUpRight aria-hidden="true" />
+      {!learnerState?.currentCourse ? (
+        <section aria-labelledby="resume-heading" className="rounded-xl border border-dashed border-input p-5">
+          <h2 id="resume-heading" className="text-sm font-medium">Pick a course</h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">A course gives your practice a direction. You can change it anytime.</p>
+          <Link href="/onboarding" className={cn(buttonVariants({ variant: 'default' }), 'mt-3 h-9 bg-emerald-200 text-primary-foreground hover:bg-emerald-100')}>
+            Choose a course<ArrowUpRight aria-hidden="true" />
           </Link>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-3 gap-3 border-b border-border pb-5 sm:gap-6">
-        <Statistic label="Exercise streak" value={`${exerciseDays} ${exerciseDays === 1 ? 'day' : 'days'}`} note={exerciseDays ? 'One day at a time.' : 'Your first pass starts it.'} />
-        <Statistic label="De-rot streak" value={`${derotDays} ${derotDays === 1 ? 'day' : 'days'}`} note={derotDays ? 'Attention takes practice.' : 'Make time for a short drill.'} />
-        <Statistic label="Points" value={(learnerState?.points ?? 0).toLocaleString('en-US')} note="Earned through practice." />
-      </div>
-
-      {curriculum.loading && <p role="status" className="text-sm text-muted-foreground">Loading your course and exercise details. Your saved progress is ready.</p>}
-      {curriculum.failed && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input p-4">
-          <p className="text-sm text-foreground">Course and exercise details could not load. Your saved progress is still here.</p>
-          <Button variant="outline" onClick={curriculum.retry}>Try again</Button>
-        </div>
+        </section>
+      ) : (
+        <section aria-labelledby="resume-heading" className="rounded-xl border border-border bg-linear-to-br from-emerald-200/[0.06] to-transparent p-5">
+          <h2 id="resume-heading" className="text-xs font-medium text-muted-foreground">{meta?.title ?? 'Your course'}</h2>
+          {bundleFailed ? (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-foreground">Your course details could not load. Your saved progress is still here.</p>
+              <Button variant="outline" onClick={retryBundle}>Try again</Button>
+            </div>
+          ) : resumeWalkthrough && currentTitle ? (
+            <>
+              <p className="mt-2 text-lg font-medium tracking-tight">Continue the walkthrough</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">You were partway through {currentTitle}.</p>
+            </>
+          ) : resumeChain && currentTitle ? (
+            <>
+              <p className="mt-2 text-lg font-medium tracking-tight">Pick up where you left off</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">You were {resumeChain} of {CHAIN_TARGET} into {currentTitle}.</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-lg font-medium tracking-tight">Ready when you are</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{lockedIn} of {nodes.length} skills locked in.</p>
+            </>
+          )}
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link href={`/course/${learnerState.currentCourse}`} className={cn(buttonVariants({ variant: 'outline' }), 'h-9')}>
+              Open your course<ArrowUpRight aria-hidden="true" />
+            </Link>
+            <Link href="/courses" className="inline-flex h-9 items-center rounded-md px-3 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+              Change course
+            </Link>
+          </div>
+        </section>
       )}
 
-      <section aria-labelledby="next-heading">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 id="next-heading" className="text-base font-medium">Next exercises</h2>
-          {orderedExercises.length > 0 && <p className="text-xs text-muted-foreground">Your practice path</p>}
+      <div className="grid grid-cols-3 gap-3 border-b border-border pb-5 sm:gap-6">
+        <div role="group" aria-label="Exercise streak" className="min-w-0 py-1">
+          <p className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Flame className="size-3" aria-hidden="true" />{flameCopy.label}</p>
+          <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{exerciseDays} {exerciseDays === 1 ? 'day' : 'days'}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{flameCopy.note}</p>
         </div>
-        {restricted && <p className="mt-2 text-sm text-muted-foreground">Exercises are paused while your account is restricted.</p>}
-        {orderedExercises.length ? (
-          <ol className="mt-3 divide-y divide-border border-y border-border">
-            {orderedExercises.map((exercise, index) => {
-              const contents = <><span className="w-5 shrink-0 font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, '0')}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">{exercise.title}</span><span className="mt-1 block text-xs text-muted-foreground">{languages[exercise.language] ?? exercise.language} · Difficulty {exercise.difficulty} of 5</span></span>{restricted ? <LockKeyhole className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ArrowRight className="size-4 shrink-0 text-emerald-200" aria-hidden="true" />}</>
-              return <li key={exercise.id}>{restricted ? <div className="flex items-center gap-4 py-4">{contents}</div> : <Link href={`/exercise/${encodeURIComponent(exercise.id)}`} className="flex items-center gap-4 rounded-md py-4 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none">{contents}</Link>}</li>
-            })}
-          </ol>
-        ) : (
-          <div className="mt-3 rounded-xl border border-dashed border-input p-5">
-            <p className="text-sm font-medium">{curriculum.loading ? 'Your recommendations are on their way.' : curriculum.failed ? 'Your exercise list is waiting to reconnect.' : exerciseIds.length ? 'These exercises are no longer available.' : 'Your next exercises start here.'}</p>
-            <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-muted-foreground">{exerciseIds.length ? 'Review your course to prepare a fresh practice path.' : 'Once your course and learning profile are ready, your next three exercises will appear here.'}</p>
-            {!curriculum.loading && !curriculum.failed && exerciseIds.length > 0 && <Link href="/courses" className="mt-3 inline-block rounded-sm text-sm font-medium text-emerald-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Review your course</Link>}
-          </div>
-        )}
-        {orderedExercises.length > 0 && orderedExercises.length < exerciseIds.length && <p className="mt-3 text-sm text-muted-foreground">Some recommendations are no longer available. Change your course to refresh your path.</p>}
-      </section>
+        <div className="min-w-0 py-1">
+          <p className="text-xs text-muted-foreground">Today&apos;s goal</p>
+          <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{wins} / {prefs.dailyGoal}</p>
+          <Progress value={goalPercent} aria-label="Today's goal" className="mt-2 h-1.5 [&_[data-slot=progress-indicator]]:bg-emerald-200" />
+          {goalReached && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Goal met today.</p>}
+        </div>
+        <StatTile label="Points" value={points.toLocaleString('en-US')} note="Earned through practice." />
+      </div>
 
-      <section aria-labelledby="mastery-heading">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 id="mastery-heading" className="text-base font-medium">Course mastery</h2>
-          {outcomes.length > 0 && <p className="text-xs text-muted-foreground">{completed} / {outcomes.length} complete</p>}
+      {bundleLoading ? (
+        <p role="status" className="text-sm text-muted-foreground">Loading your next reps. Your saved progress is ready.</p>
+      ) : (
+        <NextUpStack cards={cards} reducedMotion={reducedMotion} restricted={restricted} />
+      )}
+
+      <section aria-labelledby="level-heading" className="rounded-xl border border-border p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 id="level-heading" className="text-sm font-medium">Level {level} &middot; {band}</h2>
+          <p className="text-xs text-muted-foreground">{points.toLocaleString('en-US')} XP</p>
         </div>
-        {outcomes.length ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {outcomes.map((outcome) => {
-              const mastery = learnerState?.mastery[outcome.id]
-              const score = mastery?.score ?? 0
-              return (
-                <div key={outcome.id} className="rounded-lg border border-border p-4">
-                  <div className="flex items-center justify-between gap-3 text-xs"><span className="text-muted-foreground">Outcome {outcome.ordinal}</span><span className={mastery?.closed ? 'text-emerald-200' : 'text-muted-foreground'}>{mastery?.closed ? 'Complete' : mastery ? 'In progress' : 'Not started'}</span></div>
-                  <h3 className="mt-2 text-sm font-medium leading-relaxed">
-                    {outcome.outcome}
-                    {outcome.draft && <span className="ml-2 align-middle text-[10px] font-normal tracking-wide text-muted-foreground uppercase">Draft outcome</span>}
-                  </h3>
-                  <div className="mt-4 flex items-center gap-3"><Progress value={score} aria-label={outcome.outcome} className="flex-1 [&_[data-slot=progress-indicator]]:bg-emerald-200" /><span className="font-mono text-xs text-muted-foreground">{score}%</span></div>
-                </div>
-              )
-            })}
-          </div>
-        ) : <div className="mt-3 rounded-xl border border-dashed border-input p-5"><p className="text-sm font-medium">{curriculum.loading ? 'Opening your learning outcomes.' : curriculum.failed ? 'Your mastery details will return when reconnected.' : 'Your outcomes will appear here.'}</p><p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">Practice across different patterns to build confidence in each outcome.</p></div>}
+        <Progress value={levelPercent} aria-label="Level progress" className="mt-3 h-1.5 [&_[data-slot=progress-indicator]]:bg-emerald-200" />
+        <div className="mt-4">
+          <h3 className="text-xs font-medium text-muted-foreground">Last trophies</h3>
+          {trophies.length ? (
+            <ul className="mt-2 flex flex-wrap gap-3">
+              {trophies.map((trophy) => (
+                <li key={trophy.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs">
+                  <Trophy className="size-3.5 text-emerald-200" aria-hidden="true" />
+                  <span className="font-medium text-foreground">{trophy.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">Nothing on the shelf yet. First pass puts something here.</p>
+          )}
+        </div>
       </section>
 
       <section aria-label="De-rot practice" className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
-        <div><h2 className="text-sm font-medium">A change of pace</h2><p className="mt-1 text-sm text-muted-foreground">{derotDays > 0 ? 'Keep your attention streak going with a short drill.' : 'Train your attention with a short coding drill.'}</p></div>
-        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">Try a de-rot drill<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+        <div>
+          <h2 className="text-sm font-medium">A change of pace</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{derotDays > 0 ? `De-rot streak: ${derotDays} ${derotDays === 1 ? 'day' : 'days'}.` : 'Train your attention with a short coding drill.'}</p>
+        </div>
+        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">
+          Try a de-rot drill<ArrowUpRight className="size-4" aria-hidden="true" />
+        </Link>
       </section>
+
+      <p className="text-sm text-muted-foreground">
+        Stuck on something, or want a second opinion? Ask your Buddy from the header, any time.
+      </p>
+
+      {restricted && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <LockKeyhole className="size-3.5" aria-hidden="true" />Exercises are paused while your account is restricted. Walkthroughs and De-rot stay open.
+        </p>
+      )}
     </div>
   )
 }

@@ -10,6 +10,10 @@ export async function updateSession(request: NextRequest) {
   const pendingCookies = new Map<string, { name: string; value: string; options: CookieOptions }>()
   const cacheHeaders = new Headers({ 'Cache-Control': 'private, no-store' })
   let account: { account_status: string; restricted_until: string | null } | null = null
+  // Set as soon as `getClaims` verifies the session, below — forwarded so
+  // `(app)/layout.tsx` never has to call `auth.getUser()` a second time just
+  // to learn who is signed in (T2.1).
+  let userId: string | undefined
 
   function finish(destination?: string) {
     // Read headers after getClaims: its cookie rotation must reach the Server Components too.
@@ -18,10 +22,12 @@ export async function updateSession(request: NextRequest) {
     // Always overwrite inbound values; these headers are trusted only inside the app.
     forwarded.delete('x-brogram-account-status')
     forwarded.delete('x-brogram-restricted-until')
+    forwarded.delete('x-brogram-user-id')
     if (account) {
       forwarded.set('x-brogram-account-status', account.account_status)
       forwarded.set('x-brogram-restricted-until', account.restricted_until ?? '')
     }
+    if (userId) forwarded.set('x-brogram-user-id', userId)
     const response = destination
       ? NextResponse.redirect(new URL(destination, request.url))
       : NextResponse.next({ request: { headers: forwarded } })
@@ -48,7 +54,7 @@ export async function updateSession(request: NextRequest) {
       },
     })
     const { data, error } = await supabase.auth.getClaims()
-    const userId = data?.claims?.sub
+    userId = data?.claims?.sub
     // Keep the recovery page reachable when a valid identity cannot load its account.
     const recoveringAccount = request.nextUrl.searchParams.get('error') === 'account-unavailable'
     if (pathname === '/login' && !recoveringAccount && !error && userId) return finish('/dashboard')
