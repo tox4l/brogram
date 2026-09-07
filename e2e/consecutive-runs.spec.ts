@@ -123,7 +123,12 @@ test('three consecutive web submissions, in place, all pass with no run over bud
       expect(elapsedMs, `${label} took ${elapsedMs}ms`).toBeLessThan(10_000)
     }
     const advance = async (isLast: boolean) => {
-      const button: Locator = page.getByRole('button', { name: /Next exercise|Back to your path/, exact: false })
+      // T2.2 round 3 (f703e81): the open-CLO label reads with the bank's rep wording now
+      // (src/lib/voice/glossary.ts's `repWord()` -> 'rep'), so "Next exercise" is stale here.
+      // The closed-CLO label is unchanged -- src/app/(app)/exercise/[id]/page.tsx still reads
+      // literally `loop.closed ? 'Back to your path' : \`Next ${repWord()}\`` -- so that
+      // alternative stays as-is; line 136 below already asserts it verbatim.
+      const button: Locator = page.getByRole('button', { name: /Next rep|Back to your path/, exact: false })
       // queueNext's own bank fetch, and the Reviewer call that always precedes
       // it, are real (non-dry-run) agent round trips against this suite's
       // already-running dev server - generous, matching python-run.spec.ts's

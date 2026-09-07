@@ -96,7 +96,10 @@ test('runs a Python exercise in a real browser worker: stdout from Run, then a f
       await expect(results).toContainText(`${smoke.tests.length} / ${smoke.tests.length} passed`, { timeout: 5_000 })
     }).toPass({ timeout: 100_000 })
     for (const t of smoke.tests) if (!t.hidden) await expect(results).toContainText(t.name!)
-    await expect(page.getByRole('button', { name: 'Next exercise', exact: true })).toBeEnabled()
+    // T2.2 round 3 (f703e81): the advance button reads with the bank's rep wording
+    // (src/lib/voice/glossary.ts's `repWord()` -> 'rep') while the CLO is still open,
+    // which it is here after a single pass.
+    await expect(page.getByRole('button', { name: 'Next rep', exact: true })).toBeEnabled()
 
     const attempts = await service.from('attempts').select('passed').eq('user_id', userId).eq('exercise_id', exerciseId)
     if (attempts.error) throw attempts.error

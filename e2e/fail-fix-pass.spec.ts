@@ -66,9 +66,12 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     await typeCode(smoke.referenceSolution)
     await page.getByRole('button', { name: 'Submit', exact: true }).click()
     await expect(page.getByRole('region', { name: 'Results' })).toContainText('6 / 6 passed')
-    await expect(page.getByRole('button', { name: 'Next exercise', exact: true })).toBeEnabled()
+    // T2.2 round 3 (f703e81): the advance button now reads with the bank's rep wording
+    // (src/lib/voice/glossary.ts's `repWord()` -> 'rep'; src/app/(app)/exercise/[id]/page.tsx:
+    // `Next ${repWord()}`) whenever the CLO is still open, which it is here after one pass.
+    await expect(page.getByRole('button', { name: 'Next rep', exact: true })).toBeEnabled()
     expect(agents.filter((agent) => agent === 'reviewer')).toHaveLength(1)
-    await page.getByRole('button', { name: 'Next exercise', exact: true }).click()
+    await page.getByRole('button', { name: 'Next rep', exact: true }).click()
     await expect(workspace).not.toHaveAttribute('data-exercise-id', exerciseId)
     await expect(workspace).not.toHaveAttribute('data-pattern', 'guard')
     const attempts = await service.from('attempts').select('passed,hint_count').eq('user_id', userId).order('created_at')
