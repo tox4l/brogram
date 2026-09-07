@@ -123,17 +123,6 @@ const mocks = vi.hoisted(() => ({
   streamAgent: vi.fn(),
   play: vi.fn(),
   recordGoalDay: vi.fn(),
-  // F6-5: `complete()` reads attempts off `getQueryClient().getQueryData(...)`
-  // directly rather than mounting `useAttempts()`. Production wires
-  // `getQueryClient()`'s module-level singleton into the very same
-  // `QueryClientProvider` every hook reads (`QueryProvider.tsx`) -- this
-  // suite's `wrapper()` uses its own per-test `makeQueryClient()` instance
-  // instead (so one test's cache can never leak into another's), which is
-  // not that singleton. Mocking just `getQueryData` here (real
-  // `makeQueryClient` passes through unmocked below) is the same seam
-  // `derot/arcade/[kind]/page.test.tsx` already uses for this exact call
-  // shape, and needs no wiring beyond a plain spy.
-  getQueryData: vi.fn<(key?: unknown) => unknown>(() => undefined),
 }))
 
 const db = vi.hoisted(() => ({
@@ -163,43 +152,6 @@ vi.mock('@/lib/agents/client', () => ({
 vi.mock('@/lib/sound/manager', () => ({
   play: mocks.play,
 }))
-
-// F6-5: keep `makeQueryClient` real (`wrapper()` below still needs it for a
-// genuine `QueryClientProvider`) and mock only `getQueryClient` -- the module
-// singleton `complete()` reads attempts off, distinct in this suite's setup
-// from the per-test client the provider actually wraps (see the `mocks`
-// comment above).
-vi.mock('@/lib/query/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/query/client')>()
-  return {
-    ...actual,
-    // `optimistic.ts` (the lesson-progress mutation's own cache write-back)
-    // ALSO calls the real `getQueryClient()` singleton's `getQueryData` --
-    // for the `qk.lessonProgress` key, on every 'opened'/'block-advanced'/
-    // 'check'/'completed' dispatch -- plus `invalidateQueries` /
-    // `removeQueries` / `setQueryData` on every commit in this suite
-    // already. Swapping out the whole client, or `getQueryData`
-    // unconditionally, would silently break that unrelated flow (or hand it
-    // this test's seeded `attempts` row). Only a call keyed on `qk.attempts`
-    // is redirected to `mocks.getQueryData`; every other key reads the real
-    // client exactly as before.
-    getQueryClient: () => {
-      const real = actual.getQueryClient()
-      return new Proxy(real, {
-        get(target, prop) {
-          if (prop === 'getQueryData') {
-            return (key: unknown) => (Array.isArray(key) && key[0] === 'attempts' ? mocks.getQueryData(key) : target.getQueryData(key as never))
-          }
-          // Bound to `target`, not the proxy receiver -- `QueryClient`'s own
-          // methods read its private fields, which only work with `this` as
-          // the real instance.
-          const value = Reflect.get(target, prop)
-          return typeof value === 'function' ? value.bind(target) : value
-        },
-      })
-    },
-  }
-})
 
 // X7: `recordGoalDay`'s own internal logic (`shouldRecordGoalDay`, the write,
 // the once-per-day celebration) is already covered by `record.test.ts`
@@ -237,12 +189,13 @@ vi.mock('@/lib/supabase/client', () => ({
           },
         }
       }
-      // F6-5: `complete()` reads `attempts` straight off the already-seeded
-      // query cache (`getQueryClient().getQueryData`) instead of subscribing
-      // to `useAttempts()` for this screen's whole lifetime -- so no branch
-      // here for the `attempts` table at all. A stray call to it now trips
-      // this catch-all, which is itself the regression guard for F6-5: this
-      // route is budgeted at zero Supabase round trips.
+      // F6-5 + R1: `complete()` reads `attempts` off an inert `useQuery`
+      // observer (`enabled: false`, its `queryFn` never invoked) that only
+      // keeps the row `QuerySeed` already put in the cache from being
+      // garbage-collected -- it never subscribes to `useAttempts()` or hits
+      // this table itself. A stray call to it now trips this catch-all,
+      // which is itself the regression guard for F6-5: this route is
+      // budgeted at zero Supabase round trips.
       throw new Error(`lesson.test.tsx: unexpected table "${table}"`)
     },
   }),
@@ -273,9 +226,15 @@ function setCurriculum(lesson: LessonPublic, coursePackages?: string[]) {
   mocks.lessonFor.mockReturnValue(lesson)
 }
 
+// R1: exposes the per-test `QueryClient` as `.client` on the returned
+// component so a test can seed it directly (`client.setQueryData(...)`),
+// the same way `QuerySeed` seeds the real one in production -- needed by the
+// F6-5/R1 tests below now that `LessonView` reads `attempts` through a real
+// `useQuery` observer bound to this provider's client, not a mocked module
+// singleton. Every other test ignores the property and is unaffected.
 function wrapper(userId = 'learner-1', learnerState: LearnerState | null = null) {
   const client = makeQueryClient()
-  return function Wrapper({ children }: PropsWithChildren) {
+  function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={client}>
         <SessionProvider initialState={{ user: { id: userId } as User, profile: null, learnerState }}>
@@ -284,6 +243,8 @@ function wrapper(userId = 'learner-1', learnerState: LearnerState | null = null)
       </QueryClientProvider>
     )
   }
+  Wrapper.client = client
+  return Wrapper
 }
 
 /** X7: `recordGoalDay`'s call site needs a real `LearnerState` in the
@@ -681,19 +642,20 @@ describe('LessonView', () => {
     expect(ctx.lessonProgress).toContainEqual(expect.objectContaining({ lessonId: ALL_KINDS_LESSON.cloId, status: 'completed' }))
   })
 
-  it('F6-5: attempts already in the query cache are read at completion, without a new subscription', async () => {
+  it('F6-5: attempts already seeded in the query cache are read at completion, without a new subscription', async () => {
     setCurriculum(ALL_KINDS_LESSON)
     const state = learnerStateFixture('learner-attempts')
     // The same seeded-cache shape `(app)/layout.tsx` produces in production
-    // (QuerySeed) -- `complete()` must read this off the cache directly via
-    // `getQueryClient().getQueryData(qk.attempts(userId))` rather than
-    // mounting its own `useAttempts()` subscription (F6-5).
+    // (`QuerySeed`) -- `complete()` must read this off the cache through the
+    // inert `useQuery` observer mounted in `useLessonRunner`, rather than
+    // mounting its own live `useAttempts()` subscription (F6-5).
     const seededAttempt: Attempt = {
       id: 'attempt-1', userId: 'learner-attempts', exerciseId: 'ex-1', code: 'print(1)',
       results: [], passed: true, durationMs: 500, hintCount: 0, createdAt: '2026-09-01T00:00:00.000Z',
     }
-    mocks.getQueryData.mockReturnValueOnce([seededAttempt])
-    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper('learner-attempts', state) })
+    const Wrapper = wrapper('learner-attempts', state)
+    Wrapper.client.setQueryData(qk.attempts('learner-attempts'), [seededAttempt])
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: Wrapper })
     await screen.findByText(ALL_KINDS_LESSON.title)
 
     fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
@@ -702,10 +664,50 @@ describe('LessonView', () => {
     // If this mounted its own `useAttempts()` subscription instead, the
     // mocked Supabase client's catch-all (no `attempts` branch any more)
     // would throw and this test would fail well before this assertion.
-    expect(mocks.getQueryData).toHaveBeenCalledWith(qk.attempts('learner-attempts'))
     expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
     const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { attempts: Attempt[] }]
     expect(ctx.attempts).toEqual([seededAttempt])
+  })
+
+  it('R1: the seeded attempts row survives an idle five minutes on this screen, so a mixed day still counts at completion', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    const state = learnerStateFixture('learner-idle')
+    const seededAttempt: Attempt = {
+      id: 'attempt-idle', userId: 'learner-idle', exerciseId: 'ex-1', code: 'print(1)',
+      results: [], passed: true, durationMs: 500, hintCount: 0, createdAt: '2026-09-01T00:00:00.000Z',
+    }
+    // `shouldAdvanceTime` keeps real wall-clock time ticking underneath the
+    // faked one, so testing-library's own MutationObserver-driven
+    // `findBy*`/`waitFor` calls below still resolve -- only the explicit
+    // `vi.advanceTimersByTimeAsync` call actually jumps the five minutes.
+    // Enabled before the query is even seeded, so the `setTimeout` TanStack
+    // schedules for that query's garbage collection is itself one of the
+    // faked timers this test controls, not a real one ticking in the
+    // background unaffected by the advance below.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const Wrapper = wrapper('learner-idle', state)
+      Wrapper.client.setQueryData(qk.attempts('learner-idle'), [seededAttempt])
+      render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: Wrapper })
+      await screen.findByText(ALL_KINDS_LESSON.title)
+
+      // R1: with no observer on this key, TanStack's default `gcTime` for a
+      // browser client (five minutes) deletes an unobserved seeded query --
+      // well inside an ordinary walkthrough's reading time -- and a bare
+      // `getQueryData` read at completion would silently see `undefined`.
+      // `LessonView`'s inert `useQuery` observer must keep this row resident
+      // past that mark.
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1_000)
+
+      fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+      await screen.findByRole('link', { name: /back to your path/i })
+
+      expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
+      const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { attempts: Attempt[] }]
+      expect(ctx.attempts).toEqual([seededAttempt])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('X7: a lesson that is only skipped, never completed, never calls recordGoalDay', async () => {

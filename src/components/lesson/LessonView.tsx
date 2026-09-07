@@ -9,7 +9,6 @@ import { clo, course as findCourse, lessonFor, loadCourseBundle } from '@/lib/cu
 import { nextProgress, isStale, type LessonEvent } from '@/lib/lesson/progress'
 import { useLessonProgress, useWellness } from '@/lib/query/hooks'
 import { optimistic } from '@/lib/query/optimistic'
-import { getQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { buildRewardContext } from '@/lib/rewards/context'
 import { recordGoalDay } from '@/lib/rewards/record'
@@ -77,6 +76,28 @@ function useLessonRunner(cloId: CloId, prefs: WellnessPrefs, drillResults: reado
 
   const progressQuery = useLessonProgress()
   const prevRow = progressQuery.data?.find((row) => row.lessonId === cloId) ?? null
+
+  // R1 (F6-5 follow-up): this route is budgeted at zero Supabase round trips
+  // (T3.2), so this cannot mount `useAttempts()` -- but a bare
+  // `getQueryClient().getQueryData(qk.attempts(userId))` read at completion
+  // time (the first F6-5 fix) has no observer on that key, and TanStack's
+  // default `gcTime` for a browser client deletes an unobserved query five
+  // minutes after it is seeded (`QuerySeed`, on document load) regardless of
+  // `staleTime` -- an ordinary walkthrough read easily outlasts that, at
+  // which point `getQueryData` silently returns `undefined` and a mixed day
+  // (an exercise pass plus this walkthrough) under-counts. `enabled: false`
+  // still registers a real observer without ever calling `queryFn`, and
+  // TanStack clears a query's pending gc timer the moment any observer
+  // attaches -- so mounting this for the life of the screen, with its own
+  // `gcTime: Infinity`, keeps the seeded row resident with no network
+  // request, the same zero-round-trip guarantee F6-5 asked for.
+  const attemptsQuery = useQuery({
+    queryKey: qk.attempts(userId ?? ''),
+    queryFn: () => Promise.resolve([] as Attempt[]),
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  })
 
   // One state object, not two: `staleNotice` is only knowable at the exact
   // moment the 'opened' event folds a possibly-stale `seed` into `progress`,
@@ -179,17 +200,14 @@ function useLessonRunner(cloId: CloId, prefs: WellnessPrefs, drillResults: reado
     // achievement predicates this call site does not invoke).
     if (userId && session.learnerState && next) {
       const lessonProgress = [...(progressQuery.data ?? []).filter((row) => row.lessonId !== next.lessonId), next]
-      // F6-5: read the already-seeded window directly off the query cache at
-      // completion time instead of subscribing to it (`useAttempts()`) for
-      // the whole life of this screen -- this route is budgeted at zero
-      // Supabase round trips (T3.2), and a mount-time subscription with a
-      // 30s `staleTime` (unlike `wellness`/`lessonProgress`'s `Infinity`)
-      // issues a fresh `attempts` request whenever the learner lingers on
-      // the dashboard for over half a minute before opening a walkthrough.
-      // Real attempts are still threaded through so a mixed day (a
-      // walkthrough plus an exercise pass) sums correctly from this call
-      // alone.
-      const attempts = getQueryClient().getQueryData<Attempt[]>(qk.attempts(userId)) ?? []
+      // F6-5 + R1: read the already-seeded window off the inert observer
+      // above rather than mounting a live `useAttempts()` subscription (this
+      // route stays at zero Supabase round trips) -- and rather than a bare
+      // `getQueryData` call, whose seeded row a five-minute idle read would
+      // find already garbage-collected. Real attempts are still threaded
+      // through so a mixed day (a walkthrough plus an exercise pass) sums
+      // correctly from this call alone.
+      const attempts = attemptsQuery.data ?? []
       const ctx = buildRewardContext({
         state: session.learnerState,
         attempts,
