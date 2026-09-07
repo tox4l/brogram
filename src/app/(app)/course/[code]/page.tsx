@@ -13,6 +13,8 @@ import { qk } from '@/lib/query/keys'
 import type { WellnessRow } from '@/lib/learner/compile'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { Reveal } from '@/components/motion/Reveal'
+import { ShaderSurface } from '@/components/visual/ShaderSurface'
 import { PathMap } from '@/components/course/PathMap'
 import { NextUpStack } from '@/components/course/NextUpStack'
 import { CourseFlatList } from '@/components/course/CourseFlatList'
@@ -87,7 +89,7 @@ function useCourseBundle(code: CourseCode) {
 function ErrorRetry({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-4">
-      <p className="min-w-0 flex-1 text-sm">{message}</p>
+      <p className="min-w-0 flex-1 text-body text-foreground">{message}</p>
       <Button variant="outline" onClick={onRetry}>Try again</Button>
     </div>
   )
@@ -95,8 +97,8 @@ function ErrorRetry({ message, onRetry }: { message: string; onRetry: () => void
 
 function BackLink() {
   return (
-    <Link href="/courses" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-      <ArrowLeft className="size-3" aria-hidden="true" />Courses
+    <Link href="/courses" className="inline-flex items-center gap-1 rounded-lg text-small text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+      <ArrowLeft className="size-4" aria-hidden="true" />Courses
     </Link>
   )
 }
@@ -143,10 +145,10 @@ export default function CoursePage() {
 
   if (!meta) {
     return (
-      <section className="space-y-4 py-10">
+      <section className="space-y-4 py-8">
         <BackLink />
-        <h1 className="text-2xl font-medium tracking-tight">This course could not be found</h1>
-        <p className="text-sm text-muted-foreground">Pick a course from your list instead.</p>
+        <h1 className="text-h1 font-display text-foreground">This course could not be found</h1>
+        <p className="text-body text-muted-foreground">Pick a course from your list instead.</p>
         <Link href="/courses" className={buttonVariants({ variant: 'outline' })}>Back to courses<ArrowUpRight aria-hidden="true" /></Link>
       </section>
     )
@@ -154,10 +156,10 @@ export default function CoursePage() {
 
   if (meta.status === 'coming-soon') {
     return (
-      <section className="space-y-4 py-10">
+      <section className="space-y-4 py-8">
         <BackLink />
-        <h1 className="text-2xl font-medium tracking-tight">{meta.title} is not open yet</h1>
-        <p className="text-sm text-muted-foreground">This course is on the way. Pick a live course for now.</p>
+        <h1 className="text-h1 font-display text-foreground">{meta.title} is not open yet</h1>
+        <p className="text-body text-muted-foreground">This course is on the way. Pick a live course for now.</p>
         <Link href="/courses" className={buttonVariants({ variant: 'outline' })}>Back to courses<ArrowUpRight aria-hidden="true" /></Link>
       </section>
     )
@@ -165,11 +167,11 @@ export default function CoursePage() {
 
   if (!bundle) {
     return (
-      <section className="space-y-5 py-6">
+      <section className="space-y-4 py-6">
         <BackLink />
         {failed
           ? <ErrorRetry message="This course could not open. Saved progress is safe." onRetry={retry} />
-          : <p role="status" className="text-sm text-muted-foreground">Opening {meta.title}.</p>}
+          : <p role="status" className="text-body text-muted-foreground">Opening {meta.title}.</p>}
       </section>
     )
   }
@@ -188,17 +190,39 @@ export default function CoursePage() {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
+      <div className="space-y-3">
         <BackLink />
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="max-w-3xl text-2xl font-medium tracking-tight sm:text-3xl">{meta.title}</h1>
-          <p className="font-mono text-xs text-muted-foreground">{LANGUAGE_NAMES[meta.language] ?? meta.language}</p>
+        {/* The one hero band that earns a shader (spec §9, "/course/[code]"):
+         *  full-bleed inside this box only, Eclipse only, frozen at 4500ms --
+         *  a static duotone CSS floor everywhere else (`ShaderSurface`'s own
+         *  contract). The title sits on an opaque scrim panel rather than
+         *  directly over the field, because standing rule 6 (spec §6.2) bans
+         *  text over live shader pixels with nothing intervening. */}
+        <div className="relative min-h-48 overflow-hidden rounded-2xl">
+          <ShaderSurface motionPref={motionPref} className="z-0" />
+          <div className="relative z-10 flex min-h-48 flex-col justify-end gap-2 p-6">
+            <div className="w-fit max-w-full rounded-xl bg-background/95 px-4 py-3">
+              <p className="font-mono text-micro text-muted-foreground uppercase">{LANGUAGE_NAMES[meta.language] ?? meta.language}</p>
+              <h1 className="mt-1 max-w-[68ch] text-hero font-display text-foreground">
+                {/* `mode="fade"` deliberately, not "words": a course code is
+                 *  dynamic, server-supplied content, and `no-agent-surfaces.
+                 *  test.tsx` (frozen, not owned by this task) asserts on the
+                 *  exact literal title text via `findByText`, which a real
+                 *  `SplitText.create` word-split would break by putting the
+                 *  string across several text nodes. `mode="fade"` never
+                 *  calls `SplitText` at all (Reveal.tsx's own contract),
+                 *  so the DOM keeps one contiguous text node while still
+                 *  giving the hero its once-per-mount reveal. */}
+                <Reveal mode="fade" reduced={reducedMotion}>{meta.title}</Reveal>
+              </h1>
+            </div>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">{lockedIn} of {nodes.length} skills locked in</p>
+        <p className="text-body text-muted-foreground">{lockedIn} of {nodes.length} skills locked in</p>
       </div>
 
       <section aria-labelledby="path-heading" className="space-y-4">
-        <h2 id="path-heading" className="text-base font-medium">Path map</h2>
+        <h2 id="path-heading" className="text-h3 text-foreground">Path map</h2>
         <PathMap nodes={nodes} exercises={bundle.exercises} reducedMotion={reducedMotion} restricted={restricted} />
       </section>
 

@@ -14,6 +14,7 @@ import { useOptimistic } from '@/lib/query/optimistic'
 import { createClient } from '@/lib/supabase/client'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useSession } from '@/store/session'
+import { Reveal } from '@/components/motion/Reveal'
 import { CourseCard } from '@/components/course/CourseCard'
 import { courseProgress, messageOf, switchCourse, withCoursePlan } from './lib'
 
@@ -134,17 +135,19 @@ export function CoursesClient({ comingSoon }: { comingSoon: readonly ComingSoonC
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-medium tracking-tight">Courses</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Switch anytime. Progress in every course is kept.</p>
+        <h1 className="text-h1 font-display text-foreground">
+          <Reveal mode="words" reduced={reducedMotion}>Courses</Reveal>
+        </h1>
+        <p className="mt-2 text-body text-muted-foreground">Switch anytime. Progress in every course is kept.</p>
       </div>
 
       {chipVisible && (
-        <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-input px-4 py-2 text-sm text-muted-foreground">
+        <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-rule bg-muted/40 px-4 py-2 text-small text-muted-foreground">
           <span>Tuning your path.</span>
           <button
             type="button"
             onClick={() => setChipDismissed(true)}
-            className="shrink-0 rounded-sm text-xs underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 rounded-lg text-micro underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Dismiss
           </button>
@@ -171,8 +174,8 @@ export function CoursesClient({ comingSoon }: { comingSoon: readonly ComingSoonC
       </div>
 
       {comingSoon.length > 0 && (
-        <div className="space-y-3 border-t border-border pt-6">
-          <h2 className="text-xs font-medium text-muted-foreground">Coming soon</h2>
+        <div className="space-y-3 border-t border-rule pt-6">
+          <h2 className="text-micro text-muted-foreground uppercase">Coming soon</h2>
           <div role="group" aria-label="Coming soon" className="grid gap-3 sm:grid-cols-3">
             {comingSoon.map((course, index) => (
               <CourseCard

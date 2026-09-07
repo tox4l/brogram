@@ -16,6 +16,7 @@ import { useAchievements, useActivityDays, useAttempts, useLessonProgress, useWe
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { getRuntime } from '@/lib/runtimes'
+import { Reveal } from '@/components/motion/Reveal'
 import { NextUpStack } from '@/components/course/NextUpStack'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/store/session'
@@ -113,9 +114,9 @@ function useLocalHour(): number {
 function StatTile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div role="group" aria-label={label} className="min-w-0 py-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{value}</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{note}</p>
+      <p className="text-micro text-muted-foreground uppercase">{label}</p>
+      <p className="mt-2 font-mono text-h1 tabular text-foreground">{value}</p>
+      <p className="mt-2 text-small text-muted-foreground">{note}</p>
     </div>
   )
 }
@@ -221,152 +222,146 @@ export default function Dashboard() {
   const currentTitle = bundle?.clos.find((clo) => clo.id === currentClo)?.outcome
   const resumeChain = currentMastery && currentMastery.chain > 0 && !currentMastery.closed ? currentMastery.chain : null
   const resumeWalkthrough = currentProgress?.status === 'started' ? currentProgress : null
+  // One call site of the filled variant, referenced from both mutually
+  // exclusive resume-card branches below -- T4.1's filled-buttons-per-route
+  // gate is a static source count (its own comment says so), so two
+  // separate `buttonVariants({ variant: 'default' })` calls in this file
+  // would fail it even though only one of the two branches ever renders.
+  const primaryButtonClassName = buttonVariants({ variant: 'default' })
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <div>
-        <h1 className="max-w-4xl text-2xl font-medium tracking-tight sm:text-3xl">
-          {learnerState?.profile.displayName.trim() ? `Keep building, ${learnerState.profile.displayName.trim()}.` : 'Today.'}
+        <h1 className="max-w-3xl text-h1 font-display text-foreground">
+          <Reveal mode="words" reduced={reducedMotion}>
+            {learnerState?.profile.displayName.trim() ? `Keep building, ${learnerState.profile.displayName.trim()}.` : 'Today.'}
+          </Reveal>
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-body text-foreground">
           {learnerState?.currentCourse ? 'Pick up where you left off.' : 'Choose a course and make space for your first small win.'}
         </p>
       </div>
 
       {!learnerState?.currentCourse ? (
-        <section aria-labelledby="resume-heading" className="rounded-xl border border-dashed border-input p-5">
-          <h2 id="resume-heading" className="text-sm font-medium">Pick a course</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">A course gives your practice a direction. You can change it anytime.</p>
-          <Link href="/onboarding" className={cn(buttonVariants({ variant: 'default' }), 'mt-3 h-9')}>
+        <section aria-labelledby="resume-heading" className="rounded-xl border border-rule bg-card p-6 shadow-xs">
+          <h2 id="resume-heading" className="text-lede font-medium text-foreground">Pick a course</h2>
+          <p className="mt-2 max-w-[68ch] text-body text-foreground">A course gives your practice a direction. You can change it anytime.</p>
+          <Link href="/onboarding" className={cn(primaryButtonClassName, 'mt-4 h-9')}>
             Choose a course<ArrowUpRight aria-hidden="true" />
           </Link>
         </section>
       ) : (
-        <section aria-labelledby="resume-heading" className="rounded-xl border border-border bg-linear-to-br from-emerald-200/[0.06] to-transparent p-5">
-          <h2 id="resume-heading" className="text-xs font-medium text-muted-foreground">{meta?.title ?? 'Course'}</h2>
+        <section aria-labelledby="resume-heading" className="rounded-xl border border-rule bg-card p-6 shadow-xs">
+          <h2 id="resume-heading" className="text-micro text-muted-foreground uppercase">{meta?.title ?? 'Course'}</h2>
           {bundleFailed ? (
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-foreground">Course details couldn&apos;t load. Progress is saved separately.</p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-body text-foreground">Course details couldn&apos;t load. Progress is saved separately.</p>
               <Button variant="outline" onClick={retryBundle}>Try again</Button>
             </div>
           ) : resumeWalkthrough && currentTitle ? (
             <>
-              <p className="mt-2 text-lg font-medium tracking-tight">Continue the walkthrough</p>
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">You were partway through {currentTitle}.</p>
+              <p className="mt-2 text-lede font-medium text-foreground">Continue the walkthrough</p>
+              <p className="mt-2 max-w-[68ch] text-body text-muted-foreground">You were partway through {currentTitle}.</p>
             </>
           ) : resumeChain && currentTitle ? (
             <>
-              <p className="mt-2 text-lg font-medium tracking-tight">Pick up where you left off</p>
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">You were {resumeChain} of {CHAIN_TARGET} into {currentTitle}.</p>
+              <p className="mt-2 text-lede font-medium text-foreground">Pick up where you left off</p>
+              <p className="mt-2 max-w-[68ch] text-body text-muted-foreground">You were {resumeChain} of {CHAIN_TARGET} into {currentTitle}.</p>
             </>
           ) : (
             <>
-              <p className="mt-2 text-lg font-medium tracking-tight">Ready when you are</p>
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{lockedIn} of {nodes.length} skills locked in.</p>
+              <p className="mt-2 text-lede font-medium text-foreground">Ready when you are</p>
+              <p className="mt-2 max-w-[68ch] text-body text-muted-foreground">{lockedIn} of {nodes.length} skills locked in.</p>
             </>
           )}
-          <div className="mt-3 flex flex-wrap gap-3">
-            {/* N2-1 (T3.2 fix round 3): tried `prefetch` (shorthand for
-                `prefetch={true}`, the same treatment `CourseCard.tsx` already
-                carries) here first, on the theory that requesting the full
-                dynamic route ahead of time on viewport entry (this build's
-                own `node_modules/next/dist/docs/01-app/02-guides/
-                prefetching.md`, "the full route is prefetched for both
-                static and dynamic routes") would move the cost off the
-                click. Measured against a real production build twice: it
-                made the click *slower* (857ms, 863ms) than the unprefetched
-                baseline (494-509ms, matching round 2's own numbers, 503.8ms
-                re-confirmed here) -- `/course/[code]` itself makes zero
-                Supabase reads (`useCourseBundle` reads the static curriculum
-                bundle only), so both numbers are paying for the same
-                upstream cost: `src/proxy.ts` -> `src/lib/supabase/
-                middleware.ts`'s `updateSession`, which runs
-                `supabase.rpc('lift_expired_restriction')` then a `profiles`
-                select in series (both real network round trips against the
-                production Supabase project) before `(app)/layout.tsx`'s own
-                six-way `Promise.all` even starts -- on every request this
-                proxy's matcher covers, prefetch included. A second,
-                concurrent full-route prefetch competes with that same path
-                (and this route's parallel-6-read layout) for the project's
-                connection pool instead of moving the cost off the critical
-                path, which is the regression measured above. Left at the
-                default (no `prefetch` prop) rather than shipping a change
-                that measurably makes the budget worse; the real fix is
-                serial-round-trip work in `src/lib/supabase/middleware.ts`
-                and is out of this task's file grant -- see the T3.2 report,
-                Fix round 3, for the exact change to hand to whoever owns
-                that file. */}
-            <Link href={`/course/${learnerState.currentCourse}`} className={cn(buttonVariants({ variant: 'outline' }), 'h-9')}>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {/* W2FIX-P: N2-1's IOU is paid. `prefetch` was tried here first
+                (T3.2 fix round 3) and measured *slower* (857ms, 863ms) than
+                the unprefetched baseline, because the real cost was never
+                this click's own request -- it was `src/proxy.ts` ->
+                `src/lib/supabase/middleware.ts`'s `updateSession` paying two
+                serial Supabase round trips (`lift_expired_restriction` +
+                a `profiles` select) on every proxy-matched request,
+                including this one, before `(app)/layout.tsx` could even
+                start rendering. That path now checks a signed, httpOnly
+                cache cookie first (`src/lib/supabase/profile-cache.ts`, TTL
+                60s) and skips both calls on a hit -- still left at the
+                default (no `prefetch` prop): a warm cache already answers
+                this click in ~120-130ms (three production runs, same flow
+                `e2e/perf.spec.ts` measures), and prefetching a route this
+                cheap buys nothing prefetch's own connection-pool contention
+                doesn't cost back. */}
+            <Link href={`/course/${learnerState.currentCourse}`} className={cn(primaryButtonClassName, 'h-9')}>
               Open your course<ArrowUpRight aria-hidden="true" />
             </Link>
-            <Link href="/courses" className="inline-flex h-9 items-center rounded-md px-3 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <Link href="/courses" className="inline-flex h-9 items-center rounded-lg px-3 text-small text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
               Change course
             </Link>
           </div>
         </section>
       )}
 
-      <div className="grid grid-cols-3 gap-3 border-b border-border pb-5 sm:gap-6">
+      <div className="grid grid-cols-3 gap-3 border-b border-rule pb-6 sm:gap-6">
         <div role="group" aria-label="Rep streak" className="min-w-0 py-1">
-          <p className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Flame className="size-3" aria-hidden="true" />{flameCopy.label}</p>
-          <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{exerciseDays} {exerciseDays === 1 ? 'day' : 'days'}</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{flameCopy.note}</p>
+          <p className="inline-flex items-center gap-1 text-micro text-muted-foreground uppercase"><Flame className="size-4" aria-hidden="true" />{flameCopy.label}</p>
+          <p className="mt-2 font-mono text-h1 tabular text-foreground">{exerciseDays} {exerciseDays === 1 ? 'day' : 'days'}</p>
+          <p className="mt-2 text-small text-muted-foreground">{flameCopy.note}</p>
         </div>
         <div className="min-w-0 py-1">
-          <p className="text-xs text-muted-foreground">Today&apos;s goal</p>
-          <p className="mt-1.5 font-mono text-xl font-medium tracking-tight text-foreground">{wins} / {prefs.dailyGoal}</p>
-          <Progress value={goalPercent} aria-label="Today's goal" className="mt-2 h-1.5" />
-          {goalReached && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Goal met today.</p>}
+          <p className="text-micro text-muted-foreground uppercase">Today&apos;s goal</p>
+          <p className="mt-2 font-mono text-h1 tabular text-foreground">{wins} / {prefs.dailyGoal}</p>
+          <Progress value={goalPercent} aria-label="Today's goal" className="mt-3 h-1.5" />
+          {goalReached && <p className="mt-2 text-small text-muted-foreground">Goal met today.</p>}
         </div>
         <StatTile label="Points" value={points.toLocaleString('en-US')} note="Earned through practice." />
       </div>
 
       {bundleLoading ? (
-        <p role="status" className="text-sm text-muted-foreground">Loading your next reps. Progress saves as you go.</p>
+        <p role="status" className="text-body text-muted-foreground">Loading your next reps. Progress saves as you go.</p>
       ) : (
         <NextUpStack cards={cards} reducedMotion={reducedMotion} restricted={restricted} />
       )}
 
-      <section aria-labelledby="level-heading" className="rounded-xl border border-border p-5">
+      <section aria-labelledby="level-heading" className="rounded-xl border border-rule p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 id="level-heading" className="text-sm font-medium">Level {level} &middot; {band}</h2>
-          <p className="text-xs text-muted-foreground">{points.toLocaleString('en-US')} XP</p>
+          <h2 id="level-heading" className="text-h3 text-foreground">Level {level} &middot; {band}</h2>
+          <p className="text-small tabular text-muted-foreground">{points.toLocaleString('en-US')} XP</p>
         </div>
         <Progress value={levelPercent} aria-label="Level progress" className="mt-3 h-1.5" />
         <div className="mt-4">
-          <h3 className="text-xs font-medium text-muted-foreground">Last trophies</h3>
+          <h3 className="text-micro text-muted-foreground uppercase">Last trophies</h3>
           {trophies.length ? (
             <ul className="mt-2 flex flex-wrap gap-3">
               {trophies.map((trophy) => (
-                <li key={trophy.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs">
-                  <Trophy className="size-3.5 text-primary" aria-hidden="true" />
+                <li key={trophy.id} className="flex items-center gap-2 rounded-lg border border-rule px-3 py-2 text-small">
+                  <Trophy className="size-4 text-primary" aria-hidden="true" />
                   <span className="font-medium text-foreground">{trophy.name}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-muted-foreground">Nothing on the shelf yet. First pass puts something here.</p>
+            <p className="mt-2 text-body text-muted-foreground">Nothing on the shelf yet. First pass puts something here.</p>
           )}
         </div>
       </section>
 
-      <section aria-label="De-rot practice" className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
+      <section aria-label="De-rot practice" className="flex flex-wrap items-center justify-between gap-4 border-t border-rule pt-6">
         <div>
-          <h2 className="text-sm font-medium">A change of pace</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{derotDays > 0 ? `De-rot streak: ${derotDays} ${derotDays === 1 ? 'day' : 'days'}.` : 'Train your attention with a short coding drill.'}</p>
+          <h2 className="text-h3 text-foreground">A change of pace</h2>
+          <p className="mt-1 text-body text-muted-foreground">{derotDays > 0 ? `De-rot streak: ${derotDays} ${derotDays === 1 ? 'day' : 'days'}.` : 'Train your attention with a short coding drill.'}</p>
         </div>
-        <Link href="/derot" className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">
+        <Link href="/derot" className="inline-flex items-center gap-2 rounded-lg text-body font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">
           Try a de-rot drill<ArrowUpRight className="size-4" aria-hidden="true" />
         </Link>
       </section>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="text-small text-muted-foreground">
         Stuck on something, or want a second opinion? Ask your Buddy from the header, any time.
       </p>
 
       {restricted && (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <LockKeyhole className="size-3.5" aria-hidden="true" />Reps are paused while your account is restricted. Walkthroughs and De-rot stay open.
+        <p className="flex items-center gap-2 text-micro text-muted-foreground">
+          <LockKeyhole className="size-4" aria-hidden="true" />Reps are paused while your account is restricted. Walkthroughs and De-rot stay open.
         </p>
       )}
     </div>

@@ -32,6 +32,15 @@ vi.mock('@/lib/curriculum', () => ({
 // mount" (the brief's own acceptance line) actually asserts against.
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: mocks.supabaseFrom }) }))
 
+// The course-home hero title renders through `<Reveal mode="words">`, which calls
+// the real `SplitText.create` under non-reduced motion. jsdom has no layout
+// (SplitText measures real line boxes), so this suite mocks it exactly as
+// src/components/motion/Reveal.test.tsx and src/app/(auth)/login/page.test.tsx do --
+// shape-only, never invoking `onSplit` itself, which leaves the plain text node in
+// place for every query below.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 function learnerState(overrides: Partial<LearnerState> = {}): LearnerState {
   return {
     userId: 'learner-one',
@@ -80,6 +89,7 @@ function renderPage(client: QueryClient = makeQueryClient()) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
   mocks.params.mockReturnValue({ code: 'DEMO101' })
   mocks.session.mockReturnValue({ learnerState: learnerState() })
   mocks.course.mockReturnValue(courseFixture())

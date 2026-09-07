@@ -6,13 +6,13 @@
  */
 export default function DashboardLoading() {
   return (
-    <div role="status" aria-label="Opening your dashboard" className="space-y-7">
+    <div role="status" aria-label="Opening your dashboard" className="space-y-8">
       <div className="space-y-2">
         <div className="h-7 w-2/3 animate-pulse rounded-full bg-muted" />
         <div className="h-3 w-1/3 animate-pulse rounded-full bg-muted" />
       </div>
-      <div className="h-24 animate-pulse rounded-xl border border-border bg-muted/40" />
-      <div className="grid grid-cols-3 gap-3 border-b border-border pb-5 sm:gap-6">
+      <div className="h-24 animate-pulse rounded-xl border border-rule bg-muted/40" />
+      <div className="grid grid-cols-3 gap-3 border-b border-rule pb-6 sm:gap-6">
         {Array.from({ length: 3 }, (_, i) => (
           <div key={i} className="space-y-2 py-1">
             <div className="h-3 w-16 animate-pulse rounded-full bg-muted" />
@@ -24,11 +24,11 @@ export default function DashboardLoading() {
         <div className="h-4 w-20 animate-pulse rounded-full bg-muted" />
         <div className="grid gap-3 sm:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
+            <div key={i} className="h-28 animate-pulse rounded-xl border border-rule bg-muted/40" />
           ))}
         </div>
       </div>
-      <div className="h-16 animate-pulse rounded-xl border border-border bg-muted/40" />
+      <div className="h-16 animate-pulse rounded-xl border border-rule bg-muted/40" />
     </div>
   )
 }

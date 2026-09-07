@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { motion } from 'motion/react'
 import type { CourseCode, Language } from '@/lib/contracts'
 import { STAGGER } from '@/lib/motion/tokens'
+import { Reveal } from '@/components/motion/Reveal'
 import { cn } from '@/lib/utils'
 
 /** A `<Link>` is what actually gets prefetched (spec 4.3 / wave-1 review I1) —
@@ -39,7 +40,7 @@ function ProgressRing({ value, label }: { value: number; label: string }) {
           className="fill-none stroke-primary"
         />
       </svg>
-      <span className="absolute font-mono text-[10px] text-muted-foreground">{clamped}%</span>
+      <span className="absolute font-mono text-micro tabular text-muted-foreground">{clamped}%</span>
     </span>
   )
 }
@@ -96,11 +97,13 @@ export function CourseCard(props: CourseCardProps) {
           type="button"
           aria-disabled="true"
           onClick={(event) => event.preventDefault()}
-          className="w-full cursor-default rounded-xl border border-dashed border-input p-4 text-left opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full cursor-default rounded-xl border-t-2 border-rule bg-background p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="block text-sm font-medium">{props.title}</span>
-          <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language}</span>
-          <span className="mt-2 block text-xs text-muted-foreground">{props.reason}</span>
+          <span className="block max-w-[68ch] text-body font-medium text-foreground">
+            <Reveal mode="words" reduced={props.reducedMotion}>{props.title}</Reveal>
+          </span>
+          <span className="mt-1 block text-small text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language}</span>
+          <span className="mt-2 block text-small text-muted-foreground">{props.reason}</span>
         </button>
       </motion.div>
     )
@@ -128,13 +131,15 @@ export function CourseCard(props: CourseCardProps) {
         <ProgressRing value={props.progress} label={`${props.title} progress`} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="block truncate text-sm font-medium">{props.title}</span>
+            <span className="block max-w-[68ch] truncate text-body font-medium text-foreground">
+              <Reveal mode="words" reduced={props.reducedMotion}>{props.title}</Reveal>
+            </span>
             {props.isCurrent && (
-              <span className="shrink-0 rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">Current</span>
+              <span className="shrink-0 rounded-full bg-primary/20 px-2 py-1 text-micro font-medium text-primary">Current</span>
             )}
           </span>
-          <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language} · Level {props.level}</span>
-          <span className="mt-1 block text-xs text-muted-foreground">{props.hasPath ? 'You have a path here.' : 'No path started yet.'}</span>
+          <span className="mt-1 block text-small text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language} · Level {props.level}</span>
+          <span className="mt-1 block text-small text-muted-foreground">{props.hasPath ? 'You have a path here.' : 'No path started yet.'}</span>
         </span>
       </MotionLink>
     </motion.div>

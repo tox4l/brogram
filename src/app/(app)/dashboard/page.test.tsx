@@ -32,6 +32,15 @@ const mocks = vi.hoisted(() => ({
   supabaseFrom: vi.fn(), warmup: vi.fn(), query: vi.fn(),
 }))
 
+// The "Today"/"Keep building, {name}." H1 renders through `<Reveal mode="words">`,
+// which calls the real `SplitText.create` under non-reduced motion. jsdom has no
+// layout (SplitText measures real line boxes), so this suite mocks it exactly as
+// src/components/motion/Reveal.test.tsx and src/app/(auth)/login/page.test.tsx do --
+// shape-only, never invoking `onSplit` itself, which leaves the plain text node in
+// place for every query below.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 // T2.1: every read this screen makes beyond the session store comes from a
 // query key `(app)/layout.tsx` already seeded through `QuerySeed` — so
 // `useSession` has to honour a selector the way the real store does (T2.1's
@@ -124,6 +133,7 @@ function renderDashboard(client: QueryClient = seededClient()) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
   mocks.pathname.mockReturnValue('/dashboard')
   mocks.session.mockReturnValue(session())
   mocks.course.mockReturnValue(courseFixture())

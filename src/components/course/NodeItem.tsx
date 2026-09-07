@@ -45,9 +45,9 @@ function NodeMarker({ node }: { node: MapNode }) {
   if (node.state === 'in-progress') {
     return (
       <span data-node-shape="in-progress" className={cn(base, 'border-solid border-primary')}>
-        <span className="flex gap-0.5" aria-hidden="true">
+        <span className="flex gap-1" aria-hidden="true">
           {Array.from({ length: 3 }, (_, i) => (
-            <span key={i} className={cn('size-1.5 rounded-xs', i < node.chain ? 'bg-primary' : 'border border-primary/50 bg-transparent')} />
+            <span key={i} className={cn('size-1.5 rounded-full', i < node.chain ? 'bg-primary' : 'border border-primary/50 bg-transparent')} />
           ))}
         </span>
       </span>
@@ -56,16 +56,16 @@ function NodeMarker({ node }: { node: MapNode }) {
   if (node.state === 'walkthrough-ready') {
     return (
       <span data-node-shape="walkthrough-ready" className={cn(base, 'relative border-solid border-primary')}>
-        <Circle className="size-3 fill-primary text-primary" aria-hidden="true" />
-        <span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-xs border border-border bg-background">
-          <BookOpen className="size-2.5" aria-hidden="true" />
+        <Circle className="size-4 fill-primary text-primary" aria-hidden="true" />
+        <span className="absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full border border-rule bg-background">
+          <BookOpen className="size-4" aria-hidden="true" />
         </span>
       </span>
     )
   }
   return (
     <span data-node-shape="available" className={cn(base, 'border-solid border-primary')}>
-      <Circle className="size-3 fill-primary text-primary" aria-hidden="true" />
+      <Circle className="size-4 fill-primary text-primary" aria-hidden="true" />
     </span>
   )
 }
@@ -136,18 +136,18 @@ export function NodeItem({
 
   const content = (
     <>
-      <span aria-hidden="true" className="block text-sm font-medium text-foreground">
+      <span aria-hidden="true" className="block max-w-[68ch] text-body font-medium text-foreground">
         {node.title}
-        {node.draft && <span className="ml-2 align-middle text-[10px] font-normal tracking-wide text-muted-foreground uppercase">Drafted</span>}
-        {node.skipped && <span className="ml-2 align-middle text-[10px] font-normal tracking-wide text-muted-foreground uppercase">Skipped</span>}
+        {node.draft && <span className="ml-2 align-middle text-micro tracking-wide text-muted-foreground uppercase">Drafted</span>}
+        {node.skipped && <span className="ml-2 align-middle text-micro tracking-wide text-muted-foreground uppercase">Skipped</span>}
       </span>
       {extraPrerequisiteTitles.map((title) => (
-        <span key={title} aria-hidden="true" className="mt-1 block text-[11px] text-muted-foreground/70">
+        <span key={title} aria-hidden="true" className="mt-1 block text-small text-muted-foreground/70">
           Builds on {title}.
         </span>
       ))}
       {node.externalPrerequisites.length > 0 && (
-        <span aria-hidden="true" className="mt-1 block text-[11px] text-muted-foreground/70">
+        <span aria-hidden="true" className="mt-1 block text-small text-muted-foreground/70">
           Also builds on a skill from another course.
         </span>
       )}
@@ -155,7 +155,7 @@ export function NodeItem({
   )
 
   const interactiveClassName = cn(
-    'min-w-0 flex-1 rounded-lg border border-transparent px-3 py-2.5 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring',
+    'min-w-0 flex-1 rounded-lg border border-transparent px-3 py-3 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring',
     !reducedMotion && 'transition-[transform,background-color] hover:-translate-y-0.5',
     node.state === 'locked' && 'opacity-70',
   )
@@ -168,7 +168,7 @@ export function NodeItem({
           <svg aria-hidden="true" width="2" height="32" className="mt-1" data-connector={drawConnectorForward ? 'true' : 'false'}>
             <line
               x1="1" y1="0" x2="1" y2="32" strokeWidth="2"
-              className={cn(drawConnectorForward ? 'stroke-border' : 'stroke-transparent', drawConnectorForward && justLockedIn && 'stroke-celebration')}
+              className={cn(drawConnectorForward ? 'stroke-rule' : 'stroke-transparent', drawConnectorForward && justLockedIn && 'stroke-celebration')}
             />
           </svg>
         )}
@@ -176,7 +176,7 @@ export function NodeItem({
       {blocked ? (
         <div aria-label={label} data-node-state={node.state} className={cn(interactiveClassName, 'flex cursor-not-allowed items-start justify-between gap-3 hover:translate-y-0 hover:bg-transparent')}>
           <div className="min-w-0 flex-1">{content}</div>
-          <LockKeyhole className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <LockKeyhole className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </div>
       ) : (
         <Link

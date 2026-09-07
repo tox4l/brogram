@@ -37,6 +37,15 @@ vi.mock('@/lib/curriculum', () => ({
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => mocks.createClient() }))
 vi.mock('sonner', () => ({ toast: mocks.toast }))
 
+// The screen H1 and every course-card title render through `<Reveal mode="words">`,
+// which calls the real `SplitText.create` under non-reduced motion. jsdom has no
+// layout (SplitText measures real line boxes), so this suite mocks it exactly as
+// src/components/motion/Reveal.test.tsx and src/app/(auth)/login/page.test.tsx do --
+// shape-only, never invoking `onSplit` itself, which leaves the plain text node in
+// place for every query below.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 /** Deferred promise, so a test controls exactly when the Planner call settles. */
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -159,6 +168,7 @@ function renderPage(state: LearnerState, row: Row) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  splitTextMocks.create.mockReset().mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
   mocks.session.mockReturnValue(session())
   mocks.liveCourses.mockReturnValue([COURSE_ONE, COURSE_TWO])
   mocks.closFor.mockImplementation((code: string) => (code === 'C1' ? CLOS_C1 : code === 'C2' ? CLOS_C2 : []))

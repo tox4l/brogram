@@ -25,7 +25,7 @@ export default function CourseLoading() {
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {Array.from({ length: 3 }, (_, i) => (
-          <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
+          <div key={i} className="h-28 animate-pulse rounded-xl border border-rule bg-muted/40" />
         ))}
       </div>
     </div>

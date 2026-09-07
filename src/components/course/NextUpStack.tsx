@@ -29,10 +29,10 @@ const LANGUAGE_NAMES: Record<Language, string> = {
 export function NextUpStack({ cards, reducedMotion, restricted }: { cards: NextUpCard[]; reducedMotion: boolean; restricted: boolean }) {
   return (
     <section aria-labelledby="next-up-heading" className="space-y-3">
-      <h2 id="next-up-heading" className="text-base font-medium">Next up</h2>
-      {restricted && <p className="text-sm text-muted-foreground">Reps are paused while your account is restricted.</p>}
+      <h2 id="next-up-heading" className="text-h3 text-foreground">Next up</h2>
+      {restricted && <p className="text-body text-muted-foreground">Reps are paused while your account is restricted.</p>}
       {cards.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Pick a course to see your next three reps here.</p>
+        <p className="text-body text-muted-foreground">Pick a course to see your next three reps here.</p>
       ) : (
         <ol className="grid gap-3 sm:grid-cols-3">
           {cards.map((card) => {
@@ -45,24 +45,24 @@ export function NextUpStack({ cards, reducedMotion, restricted }: { cards: NextU
             const body = (
               <>
                 <div>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 text-micro text-muted-foreground uppercase">
                     {card.kind === 'walkthrough'
-                      ? <><BookOpen className="size-3.5" aria-hidden="true" />Walkthrough</>
+                      ? <><BookOpen className="size-4" aria-hidden="true" />Walkthrough</>
                       : <>{card.language ? (LANGUAGE_NAMES[card.language] ?? card.language) : ''} · {card.difficulty ? difficultyWord(card.difficulty) : ''}</>}
                   </span>
-                  <p className="mt-1.5 text-sm font-medium text-foreground">{card.title}</p>
+                  <p className="mt-2 max-w-[68ch] text-body font-medium text-foreground">{card.title}</p>
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   {card.pickedForYou && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Sparkles className="size-3" aria-hidden="true" />Picked for you
+                    <span className="inline-flex items-center gap-1 text-micro text-muted-foreground">
+                      <Sparkles className="size-4" aria-hidden="true" />Picked for you
                     </span>
                   )}
                   {blocked
                     ? <LockKeyhole className="ml-auto size-4 text-muted-foreground" aria-hidden="true" />
                     : <ArrowRight className="ml-auto size-4 text-primary" aria-hidden="true" />}
                 </div>
-                {card.caption && <p className="text-xs text-muted-foreground">{card.caption}</p>}
+                {card.caption && <p className="text-small text-muted-foreground">{card.caption}</p>}
               </>
             )
             return (
