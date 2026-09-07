@@ -27,7 +27,7 @@ function sortInvites(rows: InviteRow[]): InviteRow[] {
 export function InvitesTable({ rows, onRevoke }: InvitesTableProps) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-body text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-small text-muted-foreground">
         No invites yet. Mint one above.
       </div>
     )

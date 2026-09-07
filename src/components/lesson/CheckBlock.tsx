@@ -69,7 +69,7 @@ function SpotTheBugLines({ code, selected, onToggle, disabled }: {
             onClick={() => onToggle(lineNumber)}
             className={`flex w-full items-baseline gap-3 px-3 py-1 text-left font-mono text-code outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60 ${checked ? 'bg-primary/10 text-primary' : ''}`}
           >
-            <span aria-hidden="true" className="w-6 shrink-0 text-right text-muted-foreground">{lineNumber}</span>
+            <span aria-hidden="true" className="w-6 shrink-0 text-right text-micro text-muted-foreground">{lineNumber}</span>
             <code className="whitespace-pre">{line || ' '}</code>
           </button>
         )

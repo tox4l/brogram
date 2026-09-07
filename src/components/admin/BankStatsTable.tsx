@@ -16,7 +16,7 @@ function cellLabel(seedCount: number, verifiedCount: number, generatedCount: num
 export function BankStatsTable({ rows, clos }: BankStatsTableProps) {
   if (clos.length === 0 || rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-body text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-small text-muted-foreground">
         No bank data yet. Seed or generate exercises to see coverage.
       </div>
     )
