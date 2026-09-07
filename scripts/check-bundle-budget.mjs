@@ -41,7 +41,21 @@ function fail(message) {
 
 function loadBudget() {
   if (!existsSync(BUDGET_FILE)) fail(`${BUDGET_FILE} is missing`)
-  return JSON.parse(readFileSync(BUDGET_FILE, 'utf8'))
+  const budget = JSON.parse(readFileSync(BUDGET_FILE, 'utf8'))
+
+  // Rule (a), enforced rather than just documented: no route's budgetBytes
+  // may exceed its v1Bytes, ever — even when the fix round that would let a
+  // route pass has not landed yet. Raising a ceiling above v1 to make the
+  // gate green is exactly the failure mode this script exists to prevent.
+  for (const [route, limits] of Object.entries(budget.routes)) {
+    if (limits.v1Bytes != null && limits.budgetBytes > limits.v1Bytes) {
+      fail(
+        `${route}: budgetBytes (${limits.budgetBytes}) exceeds its v1Bytes (${limits.v1Bytes}) — rule (a) forbids raising a ceiling above v1, ever.`,
+      )
+    }
+  }
+
+  return budget
 }
 
 function findManifests(dir, out = []) {
@@ -99,7 +113,58 @@ function measureRoutes() {
 function measurePublicTrackedBytes() {
   const output = execFileSync('git', ['ls-files', '-z', 'public'], { cwd: ROOT, encoding: 'utf8' })
   const files = output.split('\0').filter(Boolean)
-  return files.reduce((total, relPath) => total + statSync(join(ROOT, relPath)).size, 0)
+  return files.reduce((total, relPath) => {
+    const abs = join(ROOT, relPath)
+    if (!existsSync(abs)) fail(`git tracks ${relPath} under public/, but it is not on disk`)
+    return total + statSync(abs).size
+  }, 0)
+}
+
+/** Rule (b) is unenforceable if `ledger[].route` stays free text — nothing
+ *  can join "every route above" to a route key. Every ledger entry also
+ *  carries `routes: string[]`; this collects the union so both checks below
+ *  can ask "does some row name this route" instead of parsing prose. */
+function ledgerRouteSet(budget) {
+  const set = new Set()
+  for (const entry of budget.ledger ?? []) {
+    for (const route of entry.routes ?? []) set.add(route)
+  }
+  return set
+}
+
+/** Step 1's contract is "for each route", not "for each route in a
+ *  hand-picked list": a route the build produces but perf-budget.json does
+ *  not name must never be silently ungated. It either gets a real budget
+ *  row, or an explicit, reasoned entry in `unbudgetedRoutes` — never
+ *  neither. */
+function checkEveryMeasuredRouteIsAccountedFor(budget, measured) {
+  const budgeted = new Set(Object.keys(budget.routes))
+  const explicitlyUnbudgeted = new Set((budget.unbudgetedRoutes ?? []).map((entry) => entry.route))
+  const uncovered = [...measured.keys()].filter((route) => !budgeted.has(route) && !explicitlyUnbudgeted.has(route))
+  if (uncovered.length) {
+    fail(
+      `these routes exist in the build but have no perf-budget.json row and no unbudgetedRoutes entry: ${uncovered.join(', ')}. Add a budget row or an explicit, reasoned unbudgetedRoutes entry — a route this script cannot see is a gate that can pass on a red tree.`,
+    )
+  }
+}
+
+/** Rule (b), enforced rather than just asked for: every route whose
+ *  measured size exceeds the spec's target must be named in at least one
+ *  ledger row. */
+function checkEveryOverageIsLedgered(budget, measured, coveredRoutes) {
+  const missing = []
+  for (const [route, limits] of Object.entries(budget.routes)) {
+    if (limits.specTargetBytes == null) continue
+    const bytes = measured.get(route)
+    if (bytes !== undefined && bytes > limits.specTargetBytes && !coveredRoutes.has(route)) {
+      missing.push(route)
+    }
+  }
+  if (missing.length) {
+    fail(
+      `these routes measure above their specTargetBytes but no ledger row's "routes" array names them: ${missing.join(', ')}. Rule (b): every overage against the spec's target needs a named ledger row saying which library or page code is responsible.`,
+    )
+  }
 }
 
 function fmtKB(bytes) {
@@ -110,6 +175,9 @@ function main() {
   const budget = loadBudget()
   const measured = measureRoutes()
   let failed = false
+
+  checkEveryMeasuredRouteIsAccountedFor(budget, measured)
+  checkEveryOverageIsLedgered(budget, measured, ledgerRouteSet(budget))
 
   console.log('\nBundle budget — JS payload per route, uncompressed (perf-budget.json)\n')
   const rows = []
@@ -143,7 +211,13 @@ function main() {
   if (budget.ledger?.length) {
     console.log('\nLedger (named overages against the spec\'s §5.6 direction — see perf-budget.json):')
     for (const entry of budget.ledger) {
-      console.log(`  - [${entry.status}] ${entry.route}: ${entry.library} (~${fmtKB(entry.bytes)}) — ${entry.note}`)
+      // `bytes: 0` on a `split` row is literally true of the entry payload
+      // (it costs nothing in *this* budget, by design), but printing
+      // "(~0.0 KB)" reads as "this library is free", which it isn't — its
+      // real, measured cost lives in the prose note. `countedInBudget:
+      // false` renders that honestly instead.
+      const cost = entry.countedInBudget === false ? 'deferred, not in budget' : `~${fmtKB(entry.bytes)}`
+      console.log(`  - [${entry.status}] ${entry.route}: ${entry.library} (${cost}) — ${entry.note}`)
     }
   }
 
