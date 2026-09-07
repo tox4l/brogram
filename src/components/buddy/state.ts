@@ -1,12 +1,27 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DrillLane, LearnerState } from '@/lib/contracts'
 import { isArcadeKind, isPlayKind } from '@/app/(app)/derot/lib'
-import { REFUSAL } from '@/lib/agents/buddy'
 import type { WellnessRow } from '@/lib/learner/compile'
 import type { LineKey } from '@/lib/voice/lines'
 
 export const MAX_MESSAGES = 50
-export { REFUSAL }
+
+/**
+ * W4FIX-B2: this used to be `import { REFUSAL } from '@/lib/agents/buddy'`
+ * re-exported from here. `buddy.ts` also exports `buddyReply` (a zod
+ * schema) and imports `zod` itself -- a plain, non-type-only import from
+ * this drawer's own module graph, so every route pulled zod 4 plus every
+ * agent schema into its client bundle whether or not the drawer was ever
+ * opened (measured: 375,465 bytes on every authenticated route). `buddy.ts`
+ * is `src/lib/agents/buddy.ts`, T2.10's frozen contract file and outside
+ * this lane's owned paths (only `client*.ts` under `src/lib/agents/` is),
+ * so the fix has to live entirely on this side: a byte-for-byte duplicate
+ * of the frozen string, never imported from the schema module. Drift is
+ * pinned by `state.test.ts`'s own equality assertion against the real
+ * `@/lib/agents/buddy` export (a test file, never bundled to the client, so
+ * it can safely import the zod-bearing module to prove the two agree).
+ */
+export const REFUSAL = 'I only talk about coding and how you get better at it. Ask me anything in that lane.'
 
 export interface BuddyMessage {
   id: string

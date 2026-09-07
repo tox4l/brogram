@@ -57,7 +57,11 @@ describe('handleSuggestionClick', () => {
 })
 
 describe('REFUSAL', () => {
-  it('re-exports the single fixed refusal sentence owned by the buddy agent module', () => {
+  // W4FIX-B2: no longer a re-export (that non-type-only import from
+  // `@/lib/agents/buddy` was the zod leak this fix removes) -- a
+  // byte-for-byte duplicate, pinned against the real agent module's own
+  // constant here so the two can never silently drift apart.
+  it('matches the single fixed refusal sentence owned by the buddy agent module, byte for byte', () => {
     expect(REFUSAL).toBe(AGENT_REFUSAL)
   })
 })

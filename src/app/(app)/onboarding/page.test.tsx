@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, LearnerState } from '@/lib/contracts'
 import { qk } from '@/lib/query/keys'
@@ -355,12 +355,17 @@ describe('onboarding', () => {
   // W4.15 -- the onboarding hook line is one of the two surfaces licensed
   // for <Reveal mode="chars">, and under reduced motion Reveal never calls
   // SplitText.create at all).
-  it('renders the hook line as a character reveal, and never splits it under reduced motion (W4.14/W4.15)', () => {
+  it('renders the hook line as a character reveal, and never splits it under reduced motion (W4.14/W4.15)', async () => {
     renderPage()
     expect(screen.getByRole('heading', { name: QUESTIONS[0].text }).textContent).toBe(QUESTIONS[0].text)
     // Not reduced (the default in this suite -- no matchMedia stub, no
-    // stored preference): Reveal's mode="chars" branch does call SplitText.
-    expect(splitTextMocks.create).toHaveBeenCalledTimes(1)
+    // stored preference): Reveal's mode="chars" branch does call SplitText,
+    // but only after the two-frame defer W4FIX-B's fix round added (F2:
+    // loading gsap synchronously on the first commit meant a reduced-motion
+    // learner still downloaded it, since the server snapshot is always
+    // `reduced === false`) -- so this assertion has to wait for it instead
+    // of reading it in the same tick as `renderPage()` (W4FIX-B re-check F1).
+    await waitFor(() => expect(splitTextMocks.create).toHaveBeenCalledTimes(1))
     const [, vars] = splitTextMocks.create.mock.calls[0] as [HTMLElement, Record<string, unknown>]
     expect(vars).toMatchObject({ type: 'chars' })
     cleanup()
@@ -376,6 +381,17 @@ describe('onboarding', () => {
     renderPage()
     const heading = screen.getByRole('heading', { name: QUESTIONS[0].text })
     expect(heading.textContent).toBe(QUESTIONS[0].text)
+    // The negative needs to outlast the same two-frame defer, or it passes
+    // vacuously against a `Reveal` that would have split anyway (W4FIX-B
+    // re-check F1): a plain double-microtask flush cannot reach a load
+    // scheduled behind two nested `requestAnimationFrame`s. jsdom's rAF is
+    // real in this suite (`Reveal.test.tsx` relies on it unstubbed), so this
+    // flush actually reaches -- or, under reduced motion, confirms nothing
+    // ever schedules -- the load.
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      await Promise.resolve()
+    })
     expect(splitTextMocks.create).not.toHaveBeenCalled()
   })
 

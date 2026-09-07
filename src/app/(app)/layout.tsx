@@ -14,6 +14,7 @@ import { AccountNotice } from '@/components/shell/AccountNotice'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { QueryProvider } from '@/components/shell/QueryProvider'
 import { QuerySeed } from '@/components/shell/QuerySeed'
+import { AppEffects } from './providers'
 
 /** Mirrors `ATTEMPTS_CAP` in `src/lib/query/hooks.ts` — the seed and the
  *  client hook must agree on the same window or a mutation's invalidation
@@ -258,6 +259,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <QueryProvider>
+      <AppEffects />
       <QuerySeed
         key={userId}
         userId={userId}
