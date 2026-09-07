@@ -3,27 +3,44 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { LessonPublicBlock } from '@/lib/contracts'
+import { CodeGuide, type GuideSpan } from './CodeGuide'
 
 type WorkedBlockData = Extract<LessonPublicBlock, { type: 'worked' }>
-
-const LINE_HEIGHT_PX = 24
 
 function lineRange(line: number | [number, number]): [number, number] {
   return Array.isArray(line) ? line : [line, line]
 }
 
+/** Spec 7.2: token-level guidance draws only when a step's `say` holds
+ *  **exactly one** backticked span -- any other count (none, or several)
+ *  is left for `CodeGuide` to fall back to line level on its own. */
+function singleBacktickToken(say: string): string | undefined {
+  const matches = [...say.matchAll(/`([^`]+)`/g)]
+  return matches.length === 1 ? matches[0][1] : undefined
+}
+
+/** Spec 7.4: "the step text carries the location" -- a visually-hidden
+ *  prefix on every callout, e.g. "Step 2 of 4, lines 3 to 5.". */
+function stepLabel(index: number, total: number, line: number | [number, number]): string {
+  const [start, end] = lineRange(line)
+  const where = start === end ? `line ${start}` : `lines ${start} to ${end}`
+  return `Step ${index + 1} of ${total}, ${where}.`
+}
+
 /**
  * Steps reveal one at a time (spec 3.3). Advancing is a real click or Enter
  * on the "Next step" button -- native `<button>` activation already covers
- * both, so no extra key handler is needed for that half of "click or Enter".
- * The previous callout fades to 40%, and the highlight band slides to the
- * new lines on the move curve over 200ms (spec 10.5); under reduced motion
- * both transitions are suppressed, holding a static state instead.
+ * both, so no extra key handler is needed for that half of "click or Enter"
+ * (Space comes free from native button semantics too -- spec 7.4). There is
+ * no timer anywhere in this path: the learner is the only thing that ever
+ * calls `setStepIndex`.
  *
- * Fix round 1 (I5): the band is a fixed 1-line box repositioned and resized
- * with `transform: translateY(...) scaleY(...)` only -- `top`/`height` are
- * never animated (spec 7.8's timing law bans both), so this is a
- * compositor-only move, not a layout+paint on every step.
+ * The previous callout fades to 40% opacity on the move curve; the guide
+ * band and rail (now `CodeGuide`, spec 7.2/ruling W4.19) slide to the new
+ * lines on the same curve. Under reduced motion every transition collapses
+ * to `none` -- the band still lands on the correct lines, just without the
+ * animated move (ruling W4.16's one exception: losing the band's position
+ * would delete the teaching, not the motion).
  *
  * Fix round 1 (I3): the "Next step" button unmounts on the click that
  * reaches the last step, which would otherwise drop focus to `<body>`.
@@ -31,9 +48,7 @@ function lineRange(line: number | [number, number]): [number, number] {
  */
 export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduced: boolean }) {
   const [stepIndex, setStepIndex] = useState(0)
-  const lines = block.code.split('\n')
   const currentStep = block.steps[stepIndex]
-  const [start, end] = lineRange(currentStep?.line ?? 1)
   const isLast = stepIndex >= block.steps.length - 1
   const wasLast = useRef(false)
   const lastCalloutRef = useRef<HTMLParagraphElement>(null)
@@ -43,37 +58,36 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
     wasLast.current = isLast
   }, [isLast])
 
+  const active: GuideSpan | null = currentStep
+    ? { line: currentStep.line, token: singleBacktickToken(currentStep.say) }
+    : null
+
   return (
     <section aria-label="Worked example" className="space-y-3">
-      <div className="relative overflow-hidden rounded-lg border border-border bg-muted/30">
-        <pre className="relative z-10 overflow-x-auto p-4 font-mono text-sm leading-6">
-          <code>
-            {lines.map((line, index) => <div key={index}>{line || ' '}</div>)}
-          </code>
-        </pre>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-2 rounded-md bg-primary/15 ring-1 ring-inset ring-primary/40"
-          style={{
-            top: 16,
-            height: LINE_HEIGHT_PX,
-            transformOrigin: 'top',
-            transform: `translateY(${(start - 1) * LINE_HEIGHT_PX}px) scaleY(${end - start + 1})`,
-            transition: reduced ? 'none' : 'transform 200ms var(--ease-move)',
-          }}
+      <div className="overflow-hidden rounded-lg border border-border">
+        <CodeGuide
+          code={block.code}
+          language={block.language}
+          active={active}
+          reduced={reduced}
+          label="Code"
+          idPrefix={`worked-${block.id}`}
         />
       </div>
       <div className="space-y-2">
         {block.steps.slice(0, stepIndex + 1).map((step, index) => {
+          const isActive = index === stepIndex
           const isLastCallout = index === block.steps.length - 1
           return (
             <p
               key={index}
               ref={isLastCallout ? lastCalloutRef : undefined}
               tabIndex={isLastCallout ? -1 : undefined}
+              aria-current={isActive ? 'step' : undefined}
               className="rounded-lg border border-border bg-card p-3 text-sm leading-relaxed outline-none"
-              style={{ opacity: index === stepIndex ? 1 : 0.4, transition: reduced ? 'none' : 'opacity 200ms var(--ease-move)' }}
+              style={{ opacity: isActive ? 1 : 0.4, transition: reduced ? 'none' : 'opacity 200ms var(--ease-move)' }}
             >
+              <span className="sr-only">{stepLabel(index, block.steps.length, step.line)}</span>
               {step.say}
             </p>
           )

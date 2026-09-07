@@ -25,9 +25,18 @@
 //   5. every `fill-blank` template's __N__ markers must match the blank ids
 //      1:1, and filling the template with each blank's accept[0] must
 //      produce code that parses in the declared language.
+//   6. (Wave 4, ruling W4.23) every `worked` block and every `snippet`'s
+//      `highlight` -- structural, not execution, so this runs for Java
+//      lessons too: every step `line`/`highlight` range is inside the
+//      code's own line count; `worked`/`snippet` code holds no tab and no
+//      non-ASCII character; a step's one-and-only backticked `say` span
+//      must occur at least once inside its own line range; and `worked`
+//      steps must be in non-decreasing line order unless the block sets
+//      `readingOrder: 'semantic'`.
 // Java lessons are never executed here (no in-process JVM) and report
-// "unverified"; a Java `snippet` with runnable !== false is a hard failure
-// (spec R3.4 / lesson.schema.json x-invariants.javaSnippetsNotRunnable).
+// "unverified" when nothing above (including rule 6) failed; a Java
+// `snippet` with runnable !== false is a hard failure (spec R3.4 /
+// lesson.schema.json x-invariants.javaSnippetsNotRunnable).
 //
 // A LessonCheck (unlike an Exercise) carries no separate `fixture` field, so
 // for any language whose exercise-equivalent needs one (web, sql, mongo) a
@@ -47,13 +56,18 @@
 //          (its own args override the reference's); `expected` is the
 //          JSON-serialized result.
 //
-// Usage: node scripts/verify-lesson.mjs <file.json> [file2.json ...] [--json]
+// Usage: node scripts/verify-lesson.mjs [file.json ...] [--json]
+// With no file arguments, defaults to every seed/lessons/*.json (the
+// per-course files; not seed/lessons/by-clo/, the same content split
+// per-CLO).
 // Exit code: 0 if no check failed anywhere (unverified Java lessons do not
 // count as a failure); 1 otherwise. Failures are printed with the lesson id
 // and the failing block/check id.
 
 import fs from 'node:fs'
+import path from 'node:path'
 import vm from 'node:vm'
+import { fileURLToPath } from 'node:url'
 import { JSDOM } from 'jsdom'
 
 const TEST_TIMEOUT_MS = 10_000
@@ -120,7 +134,7 @@ async function getPyodide() {
 
 async function capturePythonStdout(code) {
   const pyodide = await getPyodide()
-  await pyodide.loadPackagesFromImports(code)
+  await pyodide.loadPackagesFromImports(code, { messageCallback: () => {} })
   const chunks = []
   pyodide.setStdout({ batched: (s) => chunks.push(s) })
   pyodide.setStderr({ batched: () => {} })
@@ -142,7 +156,7 @@ function detectPyFunctionName(starterCode, referenceSolution) {
 
 async function runPythonMicroCodeTests(check) {
   const pyodide = await getPyodide()
-  await pyodide.loadPackagesFromImports(check.referenceSolution)
+  await pyodide.loadPackagesFromImports(check.referenceSolution, { messageCallback: () => {} })
   const funcName = detectPyFunctionName(check.starterCode, check.referenceSolution)
   const results = []
   for (const test of check.tests) {
@@ -463,6 +477,76 @@ async function codeParses(code, language) {
 
 // -- per-block / per-check verification ------------------------------------------
 
+function lineRangeOf(line) {
+  return Array.isArray(line) ? line : [line, line]
+}
+
+/** Ruling W4.23 (spec 7.5): `worked` becomes verified content, as hard
+ *  failures, independent of the runtime-execution checks below (this runs
+ *  for a Java lesson's `worked` blocks too -- it is structural, not
+ *  execution). Checks 1, 2 and 3 apply to every `worked` block; check 4
+ *  (line order) is skipped when the block sets `readingOrder: 'semantic'`,
+ *  the escape hatch for content that deliberately steps out of file order
+ *  (a SQL block teaching clause evaluation order, say). */
+function verifyWorkedContent(lesson, block, failures) {
+  const lines = block.code.split('\n')
+  const lineCount = lines.length
+
+  if (/\t/.test(block.code)) fail(failures, lesson.id, block.id, 'worked code contains a tab character')
+  // eslint-disable-next-line no-control-regex -- deliberately matching any byte outside ASCII.
+  if (/[^\x00-\x7F]/.test(block.code)) fail(failures, lesson.id, block.id, 'worked code contains a non-ASCII character')
+
+  let previousStart = -Infinity
+  let outOfOrder = false
+  for (const step of block.steps) {
+    const [start, end] = lineRangeOf(step.line)
+    if (!(start >= 1 && end <= lineCount && start <= end)) {
+      fail(failures, lesson.id, block.id, `step line ${JSON.stringify(step.line)} is outside the code's ${lineCount} lines`)
+    }
+    if (start < previousStart) outOfOrder = true
+    previousStart = start
+
+    const backtickMatches = [...step.say.matchAll(/`([^`]+)`/g)]
+    if (backtickMatches.length === 1) {
+      const token = backtickMatches[0][1]
+      let hits = 0
+      for (let lineNumber = start; lineNumber <= end && lineNumber <= lineCount; lineNumber++) {
+        const text = lines[lineNumber - 1] ?? ''
+        let from = 0
+        for (;;) {
+          const at = text.indexOf(token, from)
+          if (at === -1) break
+          hits++
+          from = at + 1
+        }
+      }
+      if (hits === 0) {
+        fail(failures, lesson.id, block.id, `step references \`${token}\` which does not appear in lines ${start}-${end}`)
+      }
+    }
+  }
+
+  if (outOfOrder && block.readingOrder !== 'semantic') {
+    fail(failures, lesson.id, block.id, "steps are not in non-decreasing line order (set readingOrder: 'semantic' if this is deliberate)")
+  }
+}
+
+/** Ruling W4.23: `snippet.highlight` gets the same range and content checks
+ *  as `worked` (both feed the same `CodeGuide`, spec 7.2) -- no step order
+ *  or token-underline concept applies to a highlight, which is just a list
+ *  of static ranges. */
+function verifySnippetContent(lesson, block, failures) {
+  const lineCount = block.code.split('\n').length
+  if (/\t/.test(block.code)) fail(failures, lesson.id, block.id, 'snippet code contains a tab character')
+  // eslint-disable-next-line no-control-regex -- deliberately matching any byte outside ASCII.
+  if (/[^\x00-\x7F]/.test(block.code)) fail(failures, lesson.id, block.id, 'snippet code contains a non-ASCII character')
+  for (const [start, end] of block.highlight ?? []) {
+    if (!(start >= 1 && end <= lineCount && start <= end)) {
+      fail(failures, lesson.id, block.id, `highlight range [${start}, ${end}] is outside the code's ${lineCount} lines`)
+    }
+  }
+}
+
 async function verifySnippet(lesson, block, failures) {
   if (block.language === 'java') {
     if (block.runnable !== false) fail(failures, lesson.id, block.id, 'a Java snippet must have runnable: false')
@@ -542,20 +626,24 @@ function verifyChoose(lesson, check, failures) {
 }
 
 async function verifyLesson(lesson, failures) {
-  if (lesson.language === 'java') {
-    for (const block of lesson.blocks) {
-      if (block.type === 'snippet' && block.runnable !== false) {
-        fail(failures, lesson.id, block.id, 'a Java snippet must have runnable: false')
-      }
-    }
-    return { unverified: true }
-  }
+  const isJava = lesson.language === 'java'
 
   for (const block of lesson.blocks) {
+    if (block.type === 'worked') {
+      // Structural, not execution -- runs for Java lessons too (W4.23).
+      verifyWorkedContent(lesson, block, failures)
+      continue
+    }
     if (block.type === 'snippet') {
+      verifySnippetContent(lesson, block, failures)
+      if (isJava) {
+        if (block.runnable !== false) fail(failures, lesson.id, block.id, 'a Java snippet must have runnable: false')
+        continue
+      }
       await verifySnippet(lesson, block, failures)
       continue
     }
+    if (isJava) continue // java: never executed here (checks are runtime-only), structural checks only.
     if (block.type !== 'check') continue
     switch (block.kind) {
       case 'predict-output':
@@ -577,17 +665,35 @@ async function verifyLesson(lesson, failures) {
         fail(failures, lesson.id, block.id, `unknown check kind: ${block.kind}`)
     }
   }
-  return { unverified: false }
+  return { unverified: isJava }
 }
 
 // -- main -------------------------------------------------------------------------
 
+// Resolved from this file's own location, not process.cwd(), so
+// `node scripts/verify-lesson.mjs` (no arguments -- the acceptance command
+// in the Wave 4 plan and the wave gate) works the same regardless of where
+// it is invoked from. Only the per-course files directly in seed/lessons/
+// (seed/lessons/by-clo/<cloId>.json is the same 26 lessons split one per
+// file -- verifying both would just double-report the same content).
+const DEFAULT_LESSONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'seed', 'lessons')
+
+function defaultLessonFiles() {
+  if (!fs.existsSync(DEFAULT_LESSONS_DIR)) return []
+  return fs.readdirSync(DEFAULT_LESSONS_DIR)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => path.join(DEFAULT_LESSONS_DIR, name))
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   const jsonOutput = argv.includes('--json')
-  const files = argv.filter((a) => a !== '--json')
+  const explicitFiles = argv.filter((a) => a !== '--json')
+  const files = explicitFiles.length > 0 ? explicitFiles : defaultLessonFiles()
   if (files.length === 0) {
-    console.error('usage: node scripts/verify-lesson.mjs <file.json> [file2.json ...] [--json]')
+    console.error('usage: node scripts/verify-lesson.mjs [file.json ...] [--json]')
+    console.error(`(no files given, and none found under ${DEFAULT_LESSONS_DIR})`)
     process.exit(1)
   }
 

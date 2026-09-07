@@ -102,6 +102,16 @@ const NO_PACKAGES_LESSON: LessonPublic = {
   ],
 }
 
+// T4.4: LessonView's hook and RecapBlock's "remember" line now render
+// through `<Reveal mode="lines">`, which calls the real `SplitText.create`
+// under non-reduced motion. jsdom has no layout (SplitText measures real
+// line boxes), so this suite mocks it exactly as
+// src/components/motion/Reveal.test.tsx and src/components/rewards/rewards.test.tsx
+// do -- shape-only, never invoking `onSplit` itself, which leaves the plain
+// text node in place for every existing `getByText` query in this file.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 const mocks = vi.hoisted(() => ({
   clo: vi.fn(),
   course: vi.fn(),
@@ -311,6 +321,8 @@ beforeEach(() => {
   mocks.getRuntime.mockReturnValue({ run: mocks.run, warmup: vi.fn(), abort: vi.fn(), language: 'python' })
   observerSpy.mockClear();
   (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver = FakeIntersectionObserver
+  splitTextMocks.create.mockReset()
+  splitTextMocks.create.mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
 })
 
 afterEach(() => {
@@ -588,6 +600,58 @@ describe('LessonView', () => {
     await waitFor(() => expect(document.activeElement).toBe(lastCallout))
     // The button the learner just activated is gone -- focus did not fall to <body>.
     expect(screen.queryByRole('button', { name: /next step/i })).toBeNull()
+  })
+
+  // --- T4.4: the code guide ---------------------------------------------
+
+  it('T4.4: the active worked-example callout carries aria-current="step" and a visually-hidden "Step N of M" prefix', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    const first = await screen.findByText('Step one.')
+    const firstCallout = first.closest('p')!
+    expect(firstCallout.getAttribute('aria-current')).toBe('step')
+    expect(within(firstCallout).getByText('Step 1 of 2, line 1.', { selector: 'span' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /next step/i }))
+    const second = await screen.findByText('Step two.')
+    const secondCallout = second.closest('p')!
+    expect(secondCallout.getAttribute('aria-current')).toBe('step')
+    // The now-inactive first callout keeps its own prefix and drops aria-current.
+    expect(firstCallout.getAttribute('aria-current')).toBeNull()
+    expect(within(secondCallout).getByText('Step 2 of 2, line 2.', { selector: 'span' })).toBeTruthy()
+  })
+
+  it('T4.4: a spot-the-bug check (pre-answer) never renders a guide band -- it never uses CodeGuide at all', async () => {
+    setCurriculum(SPOT_THE_BUG_LESSON)
+    render(<LessonView cloId={SPOT_THE_BUG_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('Find the bug.')
+    expect(document.querySelector('[data-guide]')).toBeNull()
+  })
+
+  it('T4.4: a runnable snippet block never renders a guide band either (predict-output/micro-code/fill-blank all opt out too)', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+    // The worked block's own band/rail are the only `data-guide` elements on
+    // the page; the checks (predict-output, choose, spot-the-bug, fill-blank,
+    // micro-code) contribute none.
+    const guides = document.querySelectorAll('[data-guide="band"], [data-guide="rail"]')
+    expect(guides.length).toBe(2) // band + rail, from the one worked block's first step
+  })
+
+  it('T4.4: a static (non-runnable) snippet with LessonSnippet.highlight renders a passive tint, never an active band', async () => {
+    const lesson: LessonPublic = {
+      ...ALL_KINDS_LESSON,
+      id: 'TEST101-HL', cloId: 'TEST101-HL',
+      blocks: [
+        { type: 'snippet', id: 'hl1', language: 'python', code: 'a = 1\nb = 2', runnable: false, highlight: [[1, 1]] },
+      ],
+    }
+    setCurriculum(lesson)
+    render(<LessonView cloId={lesson.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('a = 1')
+    expect(document.querySelector('[data-guide="passive"]')).not.toBeNull()
+    expect(document.querySelector('[data-guide="band"]')).toBeNull()
   })
 
   it('I3: moves focus to "Back to your path" once the walkthrough completes', async () => {

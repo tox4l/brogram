@@ -6,12 +6,23 @@ import { Button } from '@/components/ui/button'
 import type { LessonPublicBlock, RunResult } from '@/lib/contracts'
 import { getRuntime, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
 import { play } from '@/lib/sound/manager'
+import { CodeGuide, type GuideSpan } from './CodeGuide'
 import { DynamicEditor } from './DynamicEditor'
 
 type SnippetBlockData = Extract<LessonPublicBlock, { type: 'snippet' }>
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'This snippet could not run.'
+}
+
+/** Ruling W4.21: `LessonSnippet.highlight` (1-indexed inclusive `[start,
+ *  end]` pairs) becomes `CodeGuide`'s `passive` prop -- a static tint, never
+ *  a stepped `active` band. Only meaningful for the static `<pre>` render
+ *  below; a runnable snippet's code is edited live in `DynamicEditor`
+ *  (CodeMirror), where a highlight authored against the ORIGINAL code would
+ *  drift out of position the moment a learner types. */
+function passiveSpans(highlight: [number, number][] | undefined): GuideSpan[] | undefined {
+  return highlight?.map(([start, end]): GuideSpan => ({ line: start === end ? start : [start, end] }))
 }
 
 /**
@@ -21,7 +32,7 @@ function messageOf(error: unknown): string {
  * `runnable: false` at the content layer (the validator rejects otherwise),
  * so the honest one-liner below only ever shows next to static code.
  */
-export function SnippetBlock({ block, packages }: { block: SnippetBlockData; packages: string[] }) {
+export function SnippetBlock({ block, packages, reduced }: { block: SnippetBlockData; packages: string[]; reduced: boolean }) {
   const [code, setCode] = useState(block.code)
   const [stdout, setStdout] = useState('')
   const [stderr, setStderr] = useState('')
@@ -70,7 +81,17 @@ export function SnippetBlock({ block, packages }: { block: SnippetBlockData; pac
     <section aria-label="Code example" className="overflow-hidden rounded-xl border border-border">
       {block.runnable
         ? <DynamicEditor value={code} onChange={setCode} language={block.language} logIntegrity={() => {}} label="Example code" />
-        : <pre className="overflow-x-auto bg-muted/50 p-4 font-mono text-sm leading-6"><code>{code}</code></pre>}
+        : (
+          <CodeGuide
+            code={code}
+            language={block.language}
+            active={null}
+            passive={passiveSpans(block.highlight)}
+            reduced={reduced}
+            label="Code"
+            idPrefix={`snippet-${block.id}`}
+          />
+        )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
         {block.caption && <p className="text-xs text-muted-foreground">{block.caption}</p>}
         {block.runnable && (

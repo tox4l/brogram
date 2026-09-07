@@ -102,7 +102,11 @@
           "maxItems": 6,
           "items": { "$ref": "#/$defs/lessonWorkedStep" }
         },
-        "caption": { "type": "string" }
+        "caption": { "type": "string" },
+        "readingOrder": {
+          "const": "semantic",
+          "description": "Wave 4 spec 7.5 (ruling W4.23, check 4): steps must step in non-decreasing line order unless this marker is present. Only for a block that deliberately steps out of file order to teach evaluation order (e.g. a SQL block walking clause evaluation rather than line order) -- omit it everywhere else."
+        }
       },
       "additionalProperties": false
     },

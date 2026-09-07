@@ -11,11 +11,17 @@
  *  showing block count", nothing about it speaking). The one moment worth
  *  announcing -- the walkthrough finishing -- already gets its own
  *  `role="status"` line in `LessonView` when it renders "Back to your
- *  path" / the skipped notice, so nothing here needs to double it. */
+ *  path" / the skipped notice, so nothing here needs to double it.
+ *
+ *  Wave 4 spec 4 ("Measure"): the reading surface reserves a 12rem (`w-48`)
+ *  rail alongside the outer `max-w-5xl` and the `max-w-[68ch]` prose column
+ *  in `LessonView.tsx`, so the prose cap actually binds instead of the
+ *  outer width winning by default. The dots themselves stay exactly as
+ *  wide as before -- only the column they sit in grows. */
 export function ProgressRail({ total, current }: { total: number; current: number }) {
   const position = Math.min(current + 1, Math.max(total, 1))
   return (
-    <nav aria-label="Walkthrough progress" className="hidden w-4 shrink-0 flex-col items-center gap-2 pt-2 sm:flex">
+    <nav aria-label="Walkthrough progress" className="hidden w-48 shrink-0 flex-col items-center gap-2 pt-2 sm:flex">
       <p className="sr-only">Block {position} of {total}</p>
       <ol className="flex flex-col gap-2" aria-hidden="true">
         {Array.from({ length: total }, (_, index) => (
