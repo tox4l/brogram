@@ -56,10 +56,10 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T2.9b De-rot Playground: six non-coding games (5a5b509, 0d83e17, 1b7f312, 6f1197a, eddaeec)
 - [x] T2.10 Agent identity rewrites (copy only, no schema touched) (7cbe723, 37c4f16, ef54318)
 - [x] T2.11 Buddy drawer polish (abd0c62, 098db02)
-- [ ] T3.1 The bundle budget, generated from a measurement
+- [x] T3.1 The bundle budget, generated from a measurement (c6fef80, fix d808ac6, approved 2026-09-07)
 - [ ] T3.2 Timings, vitals, and the local diagnostics buffer
 - [ ] T3.3 e2e updates
-- [ ] T3.4 The no-agent-surfaces test
+- [x] T3.4 The no-agent-surfaces test (57033b2, fix 3a006d5, approved 2026-09-07)
 - [ ] T3.5 Openness: the work items that make a fork real
 - [ ] T3.6 Whole-branch review (Group B)
 - [ ] T3.7 Deploy and the ten-minute acceptance run (Group C)
