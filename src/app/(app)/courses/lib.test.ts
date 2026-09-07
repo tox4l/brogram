@@ -83,6 +83,14 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** Narrows `switchCourse`'s `SwitchCourseResult | null` for tests that expect a real
+ *  write — `null` means "superseded", which has its own dedicated tests below. */
+async function mustSwitch(...args: Parameters<typeof switchCourse>) {
+  const result = await switchCourse(...args)
+  if (!result) throw new Error('expected switchCourse to write, not to report superseded')
+  return result
+}
+
 describe('switchCourse', () => {
   it('fires exactly one plan-refresh call to the Planner', async () => {
     mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1)])
@@ -107,7 +115,7 @@ describe('switchCourse', () => {
 
     const state = learnerState()
     const { client, currentRow } = fakeSupabase({ user_id: 'student', state, version: state.version })
-    const result = await switchCourse({ client: client as never, userId: 'student', code: 'C1', fallback: state })
+    const result = await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: state })
 
     expect(result.state.path).toEqual(['C1-1', 'C1-2'])
     expect(result.state.nextExerciseIds).toEqual(['e1', 'e2'])
@@ -137,7 +145,7 @@ describe('switchCourse', () => {
 
     const state = learnerState()
     const { client } = fakeSupabase({ user_id: 'student', state, version: state.version })
-    const result = await switchCourse({ client: client as never, userId: 'student', code: 'C1', fallback: state })
+    const result = await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: state })
 
     expect(result.pathTuned).toBe(true)
     expect(result.state.nextExerciseIds).toEqual(['e9'])
@@ -160,15 +168,104 @@ describe('switchCourse', () => {
     const { client, currentRow } = fakeSupabase({ user_id: 'student', state: initial, version: initial.version })
 
     // Switch to a second course.
-    let latest = (await switchCourse({ client: client as never, userId: 'student', code: 'C2', fallback: currentRow().state })).state
+    let latest = (await mustSwitch({ client: client as never, userId: 'student', code: 'C2', fallback: currentRow().state })).state
     expect(latest.currentCourse).toBe('C2')
 
     // Switch back to the first course.
-    latest = (await switchCourse({ client: client as never, userId: 'student', code: 'C1', fallback: latest })).state
+    latest = (await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: latest })).state
 
     expect(latest.currentCourse).toBe('C1')
     expect(latest.mastery['C1-1']).toEqual(initial.mastery['C1-1'])
     expect(latest.points).toBe(777)
+  })
+
+  it('sends the Planner a wide candidate set from the bundle, not just the three provisional picks (I1)', async () => {
+    mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1), clo('C1-2', 'C1', 2, ['C1-1'])])
+    // 15 exercises on the first open CLO alone — well past the three
+    // `provisionalPlan` would have picked, and past the 12-candidate floor.
+    const exercises = Array.from({ length: 15 }, (_, i) => exercise(`e${i}`, 'C1-1', `pattern-${i}`))
+    mocks.loadCourseBundle.mockResolvedValue({ code: 'C1', clos: [], lessons: [], exercises })
+    mocks.call.mockResolvedValue(envelope({ path: ['C1-1', 'C1-2'], nextExerciseIds: ['e0', 'e1', 'e2'], focus: 'Keep going.' }))
+
+    const state = learnerState()
+    const { client } = fakeSupabase({ user_id: 'student', state, version: state.version })
+    await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: state })
+
+    const sent = mocks.call.mock.calls[0][0] as { candidates: unknown[] }
+    expect(sent.candidates.length).toBeGreaterThanOrEqual(12)
+    // Strictly wider than the three ids `provisionalPlan` already picked — the
+    // Planner must have room to choose something other than what was handed to it.
+    expect(sent.candidates.length).toBeGreaterThan(3)
+  })
+
+  it('caps candidates at 30 and only offers CLOs that are not yet closed', async () => {
+    mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1), clo('C1-2', 'C1', 2, ['C1-1'])])
+    const open = Array.from({ length: 40 }, (_, i) => exercise(`open-${i}`, 'C1-2', `pattern-${i}`))
+    const closedClo = [exercise('closed-1', 'C1-1', 'guard')]
+    mocks.loadCourseBundle.mockResolvedValue({ code: 'C1', clos: [], lessons: [], exercises: [...closedClo, ...open] })
+    mocks.call.mockResolvedValue(envelope({ path: ['C1-1', 'C1-2'], nextExerciseIds: ['open-0'], focus: '' }))
+
+    const state = learnerState({
+      mastery: { 'C1-1': { userId: 'student', cloId: 'C1-1', score: 100, chain: 3, patternsPassed: ['guard'], closed: true, lastAttemptAt: null } },
+    })
+    const { client } = fakeSupabase({ user_id: 'student', state, version: state.version })
+    await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: state })
+
+    const sent = mocks.call.mock.calls[0][0] as { candidates: { cloId: string }[] }
+    expect(sent.candidates).toHaveLength(30)
+    expect(sent.candidates.every((c) => c.cloId === 'C1-2')).toBe(true)
+  })
+
+  it('persists the Planner\'s focus line with the plan (I2)', async () => {
+    mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1)])
+    mocks.loadCourseBundle.mockResolvedValue({ code: 'C1', clos: [], lessons: [], exercises: [exercise('e1', 'C1-1', 'guard')] })
+    mocks.call.mockResolvedValue(envelope({ path: ['C1-1'], nextExerciseIds: ['e1'], focus: 'Fresh focus for the new course.' }))
+
+    const state = learnerState()
+    const { client, currentRow } = fakeSupabase({ user_id: 'student', state, version: state.version })
+    const result = await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: state })
+
+    expect((result.state as LearnerState & { focus?: string }).focus).toBe('Fresh focus for the new course.')
+    expect((currentRow().state as LearnerState & { focus?: string }).focus).toBe('Fresh focus for the new course.')
+  })
+
+  it('clears a stale focus line rather than keeping the previous course\'s sentence when the Planner fails', async () => {
+    mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1)])
+    mocks.loadCourseBundle.mockResolvedValue({ code: 'C1', clos: [], lessons: [], exercises: [exercise('e1', 'C1-1', 'guard')] })
+    mocks.call.mockRejectedValue(new Error('DeepSeek is unavailable'))
+
+    const state: LearnerState & { focus?: string } = { ...learnerState(), focus: 'The old course\'s sentence.' }
+    const { client, currentRow } = fakeSupabase({ user_id: 'student', state, version: state.version })
+    const result = await mustSwitch({ client: client as never, userId: 'student', code: 'C1', fallback: state })
+
+    expect((result.state as LearnerState & { focus?: string }).focus).toBeUndefined()
+    expect((currentRow().state as LearnerState & { focus?: string }).focus).toBeUndefined()
+  })
+
+  it('returns null and writes nothing when superseded before the write (I3)', async () => {
+    mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1)])
+    mocks.loadCourseBundle.mockResolvedValue({ code: 'C1', clos: [], lessons: [], exercises: [exercise('e1', 'C1-1', 'guard')] })
+    mocks.call.mockResolvedValue(envelope({ path: ['C1-1'], nextExerciseIds: ['e1'], focus: '' }))
+
+    const state = learnerState()
+    const { client, updateCalls, currentRow } = fakeSupabase({ user_id: 'student', state, version: state.version })
+    const result = await switchCourse({ client: client as never, userId: 'student', code: 'C1', fallback: state, isSuperseded: () => true })
+
+    expect(result).toBeNull()
+    expect(updateCalls).toHaveLength(0)
+    expect(currentRow().state.currentCourse).toBeNull()
+  })
+
+  it('never calls the Planner once superseded, even after the bundle has already loaded', async () => {
+    mocks.closFor.mockReturnValue([clo('C1-1', 'C1', 1)])
+    mocks.loadCourseBundle.mockResolvedValue({ code: 'C1', clos: [], lessons: [], exercises: [exercise('e1', 'C1-1', 'guard')] })
+
+    const state = learnerState()
+    const { client } = fakeSupabase({ user_id: 'student', state, version: state.version })
+    const result = await switchCourse({ client: client as never, userId: 'student', code: 'C1', fallback: state, isSuperseded: () => true })
+
+    expect(result).toBeNull()
+    expect(mocks.call).not.toHaveBeenCalled()
   })
 })
 

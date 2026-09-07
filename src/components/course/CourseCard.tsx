@@ -10,13 +10,19 @@ const LANGUAGE_LABELS: Record<string, string> = {
   sql: 'SQL', mongo: 'MongoDB', web: 'HTML, CSS & JavaScript', cpp: 'C++', csharp: 'C#', php: 'PHP',
 }
 
-function ProgressRing({ value }: { value: number }) {
+function ProgressRing({ value, label }: { value: number; label: string }) {
   const clamped = Math.min(100, Math.max(0, value))
   const radius = 15
   const circumference = 2 * Math.PI * radius
   const offset = circumference * (1 - clamped / 100)
   return (
-    <span className="relative inline-flex size-10 shrink-0 items-center justify-center" role="img" aria-label={`${clamped} percent complete`}>
+    // Same `role="progressbar"` + `aria-valuenow` convention as the dashboard's
+    // linear <Progress> (src/app/(app)/dashboard/page.tsx) — one indicator
+    // pattern across the app, not two.
+    <span
+      className="relative inline-flex size-10 shrink-0 items-center justify-center"
+      role="progressbar" aria-label={label} aria-valuenow={clamped} aria-valuemin={0} aria-valuemax={100}
+    >
       <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" className="-rotate-90">
         <circle cx="20" cy="20" r={radius} strokeWidth="4" className="fill-none stroke-muted" />
         <circle
@@ -75,11 +81,14 @@ export function CourseCard(props: CourseCardProps) {
   if (props.status === 'coming-soon') {
     return (
       <motion.div {...entrance}>
+        {/* Not `disabled`: a disabled button is unreachable by keyboard, which would
+            hide the reason from anyone tabbing through instead of clicking. This is
+            reachable and announced but does nothing — there is nothing to select. */}
         <button
           type="button"
-          disabled
           aria-disabled="true"
-          className="w-full rounded-xl border border-dashed border-input p-4 text-left opacity-60"
+          onClick={(event) => event.preventDefault()}
+          className="w-full cursor-default rounded-xl border border-dashed border-input p-4 text-left opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
         >
           <span className="block text-sm font-medium">{props.title}</span>
           <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABELS[props.language] ?? props.language}</span>
@@ -102,7 +111,7 @@ export function CourseCard(props: CourseCardProps) {
           props.isCurrent ? 'border-emerald-300' : 'border-border',
         )}
       >
-        <ProgressRing value={props.progress} />
+        <ProgressRing value={props.progress} label={`${props.title} progress`} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span className="block truncate text-sm font-medium">{props.title}</span>

@@ -1,14 +1,31 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { CloId, CourseCode, LearnerState } from '@/lib/contracts'
+import type { CloId, CourseCode, ExercisePublic, LearnerState } from '@/lib/contracts'
 import { callAgent } from '@/lib/agents/client'
 import { closFor, loadCourseBundle } from '@/lib/curriculum'
-import { provisionalPlan } from '@/lib/learner/provisional'
+import { provisionalPlan, type ProvisionalPlan } from '@/lib/learner/provisional'
 
-type Plan = { path: CloId[]; nextExerciseIds: string[] }
+/** The provisional plan plus the Planner's one-sentence `focus` line, once it
+ *  has one. `focus` is not part of the frozen `LearnerState` contract — it
+ *  rides along as an extra jsonb key, same as onboarding's and the exercise
+ *  loop's own `plan-refresh` writes (`src/hooks/useExerciseLoop.ts:216-218`). */
+export type CoursePlan = ProvisionalPlan & { focus?: string }
 
-function samePlan(a: Plan, b: Plan): boolean {
+function samePlan(a: ProvisionalPlan, b: ProvisionalPlan): boolean {
   return a.path.length === b.path.length && a.path.every((id, index) => id === b.path[index]) &&
     a.nextExerciseIds.length === b.nextExerciseIds.length && a.nextExerciseIds.every((id, index) => id === b.nextExerciseIds[index])
+}
+
+/** The one place the switch's plan (path, next-up, focus) is folded onto a
+ *  `LearnerState` — used for the optimistic store/cache patch AND inside the
+ *  settled write's `build` callback, so the two can never drift apart. */
+export function withCoursePlan(base: LearnerState, code: CourseCode, plan: CoursePlan): LearnerState {
+  return { ...base, currentCourse: code, path: plan.path, nextExerciseIds: plan.nextExerciseIds, focus: plan.focus } as LearnerState
+}
+
+export function messageOf(error: unknown): string {
+  return error && typeof error === 'object' && 'message' in error
+    ? String((error as { message: unknown }).message)
+    : 'Something went wrong. Try again.'
 }
 
 /**
@@ -46,11 +63,34 @@ async function writeLearnerState(
   throw new Error('Your progress changed elsewhere. Try again.')
 }
 
+/**
+ * Candidates for the Planner: exercises across the first (up to three) CLOs
+ * in the path that are not yet closed, capped at 30 — the same shape v1 sent
+ * (`src/hooks/useExerciseLoop.ts:206-211`, trimmed under token pressure at
+ * `src/lib/agents/shared.ts:54`, floor pinned at `src/lib/agents/planner.test.ts:149`).
+ * `provisionalPlan`'s own three picks are the instant optimistic render, not
+ * the candidate set — the Planner's reply validator rejects any id outside
+ * `candidates` (`src/lib/agents/planner.ts:79-81`), so handing it only the
+ * three ids it is meant to choose *from* leaves it nothing to choose.
+ */
+function candidatesFor(path: CloId[], mastery: LearnerState['mastery'], exercises: readonly ExercisePublic[]) {
+  const openClos = path.filter((cloId) => !mastery[cloId]?.closed).slice(0, 3)
+  return exercises
+    .filter((exercise) => openClos.includes(exercise.cloId))
+    .slice(0, 30)
+    .map(({ id, cloId, pattern, difficulty, title }) => ({ id, cloId, pattern, difficulty, title }))
+}
+
 export interface SwitchCourseArgs {
   client: SupabaseClient
   userId: string
   code: CourseCode
   fallback: LearnerState
+  /** Checked before the bundle load resolves, before the write, and right after the
+   *  Planner settles: if a newer switch has started in the meantime, this run bails
+   *  out with no write and no store/cache update, rather than persisting a stale
+   *  course over whichever one the learner tapped last. */
+  isSuperseded?: () => boolean
 }
 
 export interface SwitchCourseResult {
@@ -66,22 +106,22 @@ export interface SwitchCourseResult {
  * called): a provisional plan computed from data already in the bundle, one
  * background `plan-refresh` call to the Planner, reconciliation, and exactly
  * one versioned `learner_state` write carrying whichever plan is final.
+ * Returns `null` (no write at all) when superseded by a later switch.
  *
  * A Planner failure is swallowed here, never thrown: "a course is never
  * unusable because a model call failed" (R4.4). The provisional plan is
  * still written — the learner keeps a usable path either way.
  */
-export async function switchCourse({ client, userId, code, fallback }: SwitchCourseArgs): Promise<SwitchCourseResult> {
+export async function switchCourse({ client, userId, code, fallback, isSuperseded }: SwitchCourseArgs): Promise<SwitchCourseResult | null> {
   const clos = closFor(code)
   const bundle = await loadCourseBundle(code)
+  if (isSuperseded?.()) return null
+
   const provisional = provisionalPlan({ code, clos, exercises: bundle.exercises, mastery: fallback.mastery })
 
-  let finalPlan: Plan = provisional
+  let finalPlan: CoursePlan = provisional
   try {
-    const candidates = provisional.nextExerciseIds.flatMap((id) => {
-      const exercise = bundle.exercises.find((row) => row.id === id)
-      return exercise ? [{ id: exercise.id, cloId: exercise.cloId, pattern: exercise.pattern, difficulty: exercise.difficulty, title: exercise.title }] : []
-    })
+    const candidates = candidatesFor(provisional.path, fallback.mastery, bundle.exercises)
     const envelope = await callAgent({
       agent: 'planner',
       trigger: 'plan-refresh',
@@ -93,17 +133,14 @@ export async function switchCourse({ client, userId, code, fallback }: SwitchCou
       clos: [...clos],
       candidates,
     })
-    finalPlan = { path: envelope.reply.path, nextExerciseIds: envelope.reply.nextExerciseIds }
+    finalPlan = { path: envelope.reply.path, nextExerciseIds: envelope.reply.nextExerciseIds, focus: envelope.reply.focus }
   } catch {
     finalPlan = provisional
   }
 
-  const state = await writeLearnerState(client, userId, fallback, (base) => ({
-    ...base,
-    currentCourse: code,
-    path: finalPlan.path,
-    nextExerciseIds: finalPlan.nextExerciseIds,
-  }))
+  if (isSuperseded?.()) return null
+
+  const state = await writeLearnerState(client, userId, fallback, (base) => withCoursePlan(base, code, finalPlan))
 
   return { state, pathTuned: !samePlan(provisional, finalPlan) }
 }
