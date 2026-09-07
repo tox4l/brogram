@@ -47,7 +47,12 @@ export function LaneSwitch({ lane, onChange, reduced = false }: LaneSwitchProps)
   }
 
   return (
-    <div ref={containerRef} role="tablist" aria-label="De-rot lane" className="relative inline-flex rounded-full border border-rule bg-muted p-1">
+    // Fix round (review T48-9): border-border, not border-rule -- --rule
+    // sits at 1.25-1.90:1 on --background (spec section 10 family A, a
+    // decorative-strip ratio), while WCAG 1.4.11 wants >= 3:1 on the
+    // boundary that identifies an interactive component. This tablist is
+    // interactive, so it keeps the same border tier as every other control.
+    <div ref={containerRef} role="tablist" aria-label="De-rot lane" className="relative inline-flex rounded-full border border-border bg-muted p-1">
       <div aria-hidden="true" data-flip-indicator className="absolute inset-y-1 left-1 rounded-full bg-background shadow-sm" />
       {LANES.map((entry, index) => (
         <button

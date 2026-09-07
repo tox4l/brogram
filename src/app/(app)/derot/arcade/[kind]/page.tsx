@@ -316,7 +316,9 @@ function RunnerBody({ kind }: { kind: DrillKind }) {
         {runner.phase === 'loading' && <p role="status" className="text-small text-muted-foreground">Opening your drill.</p>}
 
         {runner.phase === 'error' && (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule p-4">
+          // Fix round (review T48-9): border-border, not border-rule -- WCAG
+          // 1.4.11 wants >= 3:1 on the boundary of an alert panel.
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
             <p className="text-small text-foreground">{runner.error}</p>
             <Button variant="outline" onClick={runner.retry}>Try again</Button>
           </div>

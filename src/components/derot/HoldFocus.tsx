@@ -116,11 +116,17 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
         <CardDescription>Read the passage without scrolling, then answer the question. Leaving the page voids the drill.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* Fix round (review T48-7): text-body (16px, leading-relaxed) let the
+            tallest seeded passage plus the question and four options overflow
+            1280x800 -- this drill voids the run on any scroll, so an
+            overflow was an unwinnable run through no fault of the learner.
+            text-small matches the rest of the wave's sweep everywhere else
+            in this file. */}
         <div
           ref={containerRef}
           tabIndex={-1}
           aria-label="Reading passage"
-          className="rounded-lg bg-muted p-4 text-body leading-relaxed outline-none"
+          className="rounded-lg bg-muted p-4 text-small leading-relaxed outline-none"
           style={{ overflow: 'hidden' }}
         >
           {payload.passage}
@@ -132,7 +138,7 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
           </div>
         ) : (
           <>
-            <p className="text-body font-medium text-foreground">{payload.question}</p>
+            <p className="text-small font-medium text-foreground">{payload.question}</p>
             <div className="grid gap-2">
               {payload.options.map((option, idx) => {
                 const isAnswer = idx === payload.answerIndex
@@ -144,7 +150,7 @@ export function HoldFocus({ item, onResult, now = Date.now, paused = false }: Ho
                     disabled={submitted}
                     onClick={() => finish(idx, false, getElapsedMs())}
                     className={cn(
-                      'rounded-lg border border-border px-4 py-2 text-left text-body transition-colors disabled:cursor-default',
+                      'rounded-lg border border-border px-4 py-2 text-left text-small transition-colors disabled:cursor-default',
                       !submitted && 'hover:bg-accent',
                       submitted && isAnswer && 'border-primary/30 bg-primary/10',
                       submitted && isSelected && !isAnswer && 'border-destructive/30 bg-destructive/10'

@@ -8,7 +8,7 @@ export default function DerotHubLoading() {
       <div className="h-16 animate-pulse rounded-lg border border-rule bg-muted/40" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-40 animate-pulse rounded-xl border border-border bg-muted/40" />
+          <div key={i} className="h-40 animate-pulse rounded-xl border border-rule bg-muted/40" />
         ))}
       </div>
     </div>

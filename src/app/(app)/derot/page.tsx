@@ -8,7 +8,6 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShaderSurface } from '@/components/visual/ShaderSurface'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { line } from '@/lib/voice/lines'
@@ -164,7 +163,20 @@ function DrillCard({
             behind the glyph) is gone -- one 20px glyph optically aligned to
             the title's cap-height, decorative only (aria-hidden). */}
         <div className="flex items-center gap-2">
-          <Glyph aria-hidden="true" className={cn('size-5 shrink-0 text-primary', animate && 'animate-pulse')} />
+          {/* Fix round (review T48-6): `animate-pulse` is a 2s *infinite*
+              keyframe -- spec section 10 family D wants every animation's
+              duration <= 900ms after a navigation, and up to six of these
+              can run in view at once. A one-shot opacity tween on entry into
+              view keeps the idle micro-motion spec section 9 asks for
+              without an unbounded loop; it does not replay while the card
+              stays in view. */}
+          <span
+            aria-hidden="true"
+            className="inline-flex shrink-0"
+            style={reduced ? undefined : { opacity: animate ? 1 : 0.55, transition: 'opacity 700ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+          >
+            <Glyph className="size-5 text-primary" />
+          </span>
           <CardTitle>{meta.title}</CardTitle>
         </div>
         <CardDescription>{meta.description}</CardDescription>
@@ -218,30 +230,58 @@ function DerotSection() {
   const cardsForLane = kindsForLane.map((kind) => ({
     kind,
     stats: statsForKind(overview.results, kind),
+    // W2G-1: a Playground game is code, not a seeded `drills` row (R7.5) --
+    // gating it on `availableKinds` (built purely from that table) disables
+    // all six the moment migration 0009 (which writes their marker rows)
+    // has not been applied, even though the games themselves already ship in
+    // the bundle and run correctly when reached directly. Arcade kinds still
+    // need a real seeded row, so they stay gated on `availableKinds` alone.
     available: isPlayKind(kind) || overview.availableKinds.has(kind),
   }))
-  const primaryKind = (cardsForLane.find((c) => c.available && !c.stats.attempted) ?? cardsForLane[0])?.kind
+  // Fix round (review T48-4): the old fallback `?? cardsForLane[0]` could
+  // land on an unavailable kind (`predict-output` is never checked for
+  // `available`) whenever every available kind had already been attempted --
+  // DrillCard then renders the disabled outline Button regardless of
+  // `primary`, leaving zero filled Starts on the whole hub. The fallback now
+  // degrades through "any attempted-but-available kind" before ever
+  // reaching an index that was never checked for availability.
+  const primaryKind = (
+    cardsForLane.find((c) => c.available && !c.stats.attempted)
+    ?? cardsForLane.find((c) => c.available)
+    ?? cardsForLane[0]
+  )?.kind
 
   return (
     <div className="relative">
       {/* Low-amplitude ambient field, Eclipse only (spec section 6.1's per-
           screen table; W4.18's settle-and-freeze contract lives entirely
-          inside ShaderSurface/ShaderField, T4.3's owned files). Every text-
-          bearing block below carries its own opaque `bg-background` (the
-          page's own ground colour, painted as a solid fill rather than left
-          to show the animated canvas through) so the field is only ever
-          visible in the gaps between them -- rule 6.2.6: no text, icon or
-          control ever sits directly over live shader pixels. */}
+          inside ShaderSurface/ShaderField, T4.3's owned files).
+          Fix round (review T48-1): this used to mask each text block below
+          with its own opaque `bg-background`, so the field only ever showed
+          through the gaps between blocks -- and because the field's own
+          gradient varies spatially, different gaps sampled to different
+          tints next to perfectly flat blocks, reading as hard-edged grey
+          rectangles rather than a low ambient field (confirmed on real
+          captures: Folio's #F8F5F1 ground shifted to #F4F1EF..#EBE8E9 across
+          three gaps; Midnight's #0A0D13 lifted to #1B2231 between rows).
+          One uniform scrim across the whole hub replaces all five per-block
+          masks: every pixel of the hub gets the same light tint from the
+          field, so there is no seam between "masked" and "unmasked" areas
+          left to read as an artifact. Rule 6.2.6 still holds -- every text
+          and control block below is opaque on its own token (bg-card for
+          the drill cards, the scrim itself for loose text), so nothing ever
+          sits directly on live shader pixels. */}
       <ShaderSurface motionPref={overview.motionPref} className="opacity-60" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/95" />
       <div className="relative space-y-8">
         <Suspense fallback={null}><DrillQueryRedirect /></Suspense>
 
-        <div className="bg-background">
+        <div>
           <h1 className="font-display text-h1 text-foreground">De-rot</h1>
           <p className="mt-2 text-small text-muted-foreground">Short drills and games to keep your attention sharp between reps.</p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rule bg-background pb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rule pb-6">
           <div className="flex flex-wrap gap-8">
             <div>
               <p className="text-micro text-muted-foreground">De-rot streak</p>
@@ -259,9 +299,11 @@ function DerotSection() {
           </div>
         </div>
 
-        {overview.loading && <p role="status" className="bg-background text-small text-muted-foreground">Loading your de-rot progress.</p>}
+        {overview.loading && <p role="status" className="text-small text-muted-foreground">Loading your de-rot progress.</p>}
         {overview.failed && (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule bg-background p-4">
+          // Fix round (review T48-9): border-border, not border-rule -- WCAG
+          // 1.4.11 wants >= 3:1 on the boundary of an alert panel.
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background p-4">
             <p className="text-small text-foreground">{line('error.load')}</p>
             <Button variant="outline" onClick={overview.retry}>Try again</Button>
           </div>
@@ -276,7 +318,7 @@ function DerotSection() {
           // this line, a learner reading 95 next to 100 has no way to know
           // that gap is the ruler, not their play. Plain string pending a
           // voice-bank key -- listed in the T2.9a report for T2.7b.
-          <p className="-mt-2 bg-background text-micro text-muted-foreground">
+          <p className="-mt-2 text-micro text-muted-foreground">
             Best scores don&apos;t line up evenly across drills — four of them cap out near 95 by design.
           </p>
         )}

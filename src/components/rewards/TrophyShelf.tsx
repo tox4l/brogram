@@ -74,7 +74,11 @@ export function TrophyShelf({ motionPref, unlockedThisSession }: TrophyShelfProp
                 // repeated "the dashed borders go": a locked trophy is a
                 // designed, quieter fill on the same --rule edge, not a
                 // dashed placeholder.
-                isUnlocked ? 'border-rule bg-card' : 'border-rule bg-muted/50',
+                // Fix round (review T48-5): `bg-muted/50` at 50% resolved to
+                // the same lightness as `bg-card` in four of five palettes
+                // (Arcade: identical) -- full-alpha `bg-muted` is a real,
+                // separated step from `bg-card` in every palette.
+                isUnlocked ? 'border-rule bg-card' : 'border-rule bg-muted',
               )}
             >
               <motion.span

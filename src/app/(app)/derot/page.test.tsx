@@ -235,6 +235,27 @@ describe('the de-rot hub', () => {
     expect(playFilled).toHaveLength(1)
   })
 
+  it('fix round (review T48-4): falls back to an available kind for the filled Start when the recommended kind is unseeded', async () => {
+    // predict-output ('Call It') is missing from the seeded drills table and
+    // every other Arcade kind has already been attempted -- the old fallback
+    // (`?? cardsForLane[0]`, which is always predict-output) would land on
+    // an unavailable kind here, and DrillCard renders the disabled outline
+    // Button for an unavailable card regardless of `primary`, leaving zero
+    // filled Starts on the whole hub.
+    drillKinds = drillKinds.filter((kind) => kind !== 'predict-output')
+    wellnessRow = {
+      drill_results: ['spot-the-bug', 'trace', 'hold-focus', 'n-back', 'speed-type'].map((kind, i) =>
+        result({ drillId: `d${i}`, kind: kind as DrillResult['kind'], score: 80, at: '2026-09-04T10:00:00.000Z' })
+      ),
+    }
+    render(<DerotPage />)
+    await waitFor(() => expect(screen.getByText('Find the Break')).toBeTruthy())
+    const starts = screen.getAllByRole('link', { name: /Start/ })
+    const filled = starts.filter((el) => el.className.includes('bg-primary'))
+    expect(filled).toHaveLength(1)
+    expect(within(cardFor('Call It')).getByRole('button', { name: 'Start' })).toHaveProperty('disabled', true)
+  })
+
   it('redirects ?drill=trace straight to the Arcade runner', () => {
     mocks.searchParams.mockReturnValue(new URLSearchParams('drill=trace'))
     render(<DerotPage />)
