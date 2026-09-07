@@ -4,8 +4,10 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
 import { SessionProvider } from '@/components/shell/SessionProvider'
-import type { CourseCode, LearnerState, LessonPublic } from '@/lib/contracts'
+import { celebrate } from '@/lib/rewards/useCelebration'
+import type { Attempt, CourseCode, LearnerState, LessonPublic } from '@/lib/contracts'
 import goldenLessonFile from '../../../seed/lessons/INFS1101.json'
 import { LessonView } from './LessonView'
 
@@ -100,6 +102,16 @@ const NO_PACKAGES_LESSON: LessonPublic = {
   ],
 }
 
+// T4.4: LessonView's hook and RecapBlock's "remember" line now render
+// through `<Reveal mode="lines">`, which calls the real `SplitText.create`
+// under non-reduced motion. jsdom has no layout (SplitText measures real
+// line boxes), so this suite mocks it exactly as
+// src/components/motion/Reveal.test.tsx and src/components/rewards/rewards.test.tsx
+// do -- shape-only, never invoking `onSplit` itself, which leaves the plain
+// text node in place for every existing `getByText` query in this file.
+const splitTextMocks = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('gsap/SplitText', () => ({ SplitText: { create: splitTextMocks.create } }))
+
 const mocks = vi.hoisted(() => ({
   clo: vi.fn(),
   course: vi.fn(),
@@ -111,6 +123,17 @@ const mocks = vi.hoisted(() => ({
   streamAgent: vi.fn(),
   play: vi.fn(),
   recordGoalDay: vi.fn(),
+  // F6-5: `complete()` reads attempts off `getQueryClient().getQueryData(...)`
+  // directly rather than mounting `useAttempts()`. Production wires
+  // `getQueryClient()`'s module-level singleton into the very same
+  // `QueryClientProvider` every hook reads (`QueryProvider.tsx`) -- this
+  // suite's `wrapper()` uses its own per-test `makeQueryClient()` instance
+  // instead (so one test's cache can never leak into another's), which is
+  // not that singleton. Mocking just `getQueryData` here (real
+  // `makeQueryClient` passes through unmocked below) is the same seam
+  // `derot/arcade/[kind]/page.test.tsx` already uses for this exact call
+  // shape, and needs no wiring beyond a plain spy.
+  getQueryData: vi.fn<(key?: unknown) => unknown>(() => undefined),
 }))
 
 const db = vi.hoisted(() => ({
@@ -140,6 +163,43 @@ vi.mock('@/lib/agents/client', () => ({
 vi.mock('@/lib/sound/manager', () => ({
   play: mocks.play,
 }))
+
+// F6-5: keep `makeQueryClient` real (`wrapper()` below still needs it for a
+// genuine `QueryClientProvider`) and mock only `getQueryClient` -- the module
+// singleton `complete()` reads attempts off, distinct in this suite's setup
+// from the per-test client the provider actually wraps (see the `mocks`
+// comment above).
+vi.mock('@/lib/query/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/query/client')>()
+  return {
+    ...actual,
+    // `optimistic.ts` (the lesson-progress mutation's own cache write-back)
+    // ALSO calls the real `getQueryClient()` singleton's `getQueryData` --
+    // for the `qk.lessonProgress` key, on every 'opened'/'block-advanced'/
+    // 'check'/'completed' dispatch -- plus `invalidateQueries` /
+    // `removeQueries` / `setQueryData` on every commit in this suite
+    // already. Swapping out the whole client, or `getQueryData`
+    // unconditionally, would silently break that unrelated flow (or hand it
+    // this test's seeded `attempts` row). Only a call keyed on `qk.attempts`
+    // is redirected to `mocks.getQueryData`; every other key reads the real
+    // client exactly as before.
+    getQueryClient: () => {
+      const real = actual.getQueryClient()
+      return new Proxy(real, {
+        get(target, prop) {
+          if (prop === 'getQueryData') {
+            return (key: unknown) => (Array.isArray(key) && key[0] === 'attempts' ? mocks.getQueryData(key) : target.getQueryData(key as never))
+          }
+          // Bound to `target`, not the proxy receiver -- `QueryClient`'s own
+          // methods read its private fields, which only work with `this` as
+          // the real instance.
+          const value = Reflect.get(target, prop)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+    },
+  }
+})
 
 // X7: `recordGoalDay`'s own internal logic (`shouldRecordGoalDay`, the write,
 // the once-per-day celebration) is already covered by `record.test.ts`
@@ -177,14 +237,12 @@ vi.mock('@/lib/supabase/client', () => ({
           },
         }
       }
-      // X7: `LessonView` now also reads `useAttempts()` to build the reward
-      // context it hands `recordGoalDay` -- an empty, always-succeeding
-      // result here, distinct from `wellness`/`lesson_progress`, so every
-      // test in this file (not only the goal-day ones) never trips the
-      // catch-all below just from mounting.
-      if (table === 'attempts') {
-        return { select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) }
-      }
+      // F6-5: `complete()` reads `attempts` straight off the already-seeded
+      // query cache (`getQueryClient().getQueryData`) instead of subscribing
+      // to `useAttempts()` for this screen's whole lifetime -- so no branch
+      // here for the `attempts` table at all. A stray call to it now trips
+      // this catch-all, which is itself the regression guard for F6-5: this
+      // route is budgeted at zero Supabase round trips.
       throw new Error(`lesson.test.tsx: unexpected table "${table}"`)
     },
   }),
@@ -263,6 +321,8 @@ beforeEach(() => {
   mocks.getRuntime.mockReturnValue({ run: mocks.run, warmup: vi.fn(), abort: vi.fn(), language: 'python' })
   observerSpy.mockClear();
   (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver = FakeIntersectionObserver
+  splitTextMocks.create.mockReset()
+  splitTextMocks.create.mockImplementation(() => ({ revert: vi.fn(), lines: [], words: [], chars: [] }))
 })
 
 afterEach(() => {
@@ -504,6 +564,18 @@ describe('LessonView', () => {
     // text (hint swapped for explain) must still differ, or a
     // screen-reader learner hears nothing on this attempt.
     await waitFor(() => expect(liveRegion.textContent).not.toBe(firstAnnouncement))
+    const secondAnnouncement = liveRegion.textContent
+
+    // F6-3: from the third wrong attempt on, `gradeCheck` pins `reveal` to
+    // 'explain' for every attempt after the first (grade.ts) -- the explain
+    // paragraph itself no longer changes. Without the sr-only attempt
+    // counter living inside this same region (moved here by F6-3, off the
+    // focused verdict paragraph, where refocusing an already-focused element
+    // fires no focus event), a screen-reader learner wrong a third time
+    // would hear nothing at all.
+    fireEvent.change(textbox, { target: { value: 'wrong again' } })
+    submit()
+    await waitFor(() => expect(liveRegion.textContent).not.toBe(secondAnnouncement))
   })
 
   it('I3: moves focus to the verdict after grading a check, instead of dropping it to <body>', async () => {
@@ -528,6 +600,58 @@ describe('LessonView', () => {
     await waitFor(() => expect(document.activeElement).toBe(lastCallout))
     // The button the learner just activated is gone -- focus did not fall to <body>.
     expect(screen.queryByRole('button', { name: /next step/i })).toBeNull()
+  })
+
+  // --- T4.4: the code guide ---------------------------------------------
+
+  it('T4.4: the active worked-example callout carries aria-current="step" and a visually-hidden "Step N of M" prefix', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    const first = await screen.findByText('Step one.')
+    const firstCallout = first.closest('p')!
+    expect(firstCallout.getAttribute('aria-current')).toBe('step')
+    expect(within(firstCallout).getByText('Step 1 of 2, line 1.', { selector: 'span' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /next step/i }))
+    const second = await screen.findByText('Step two.')
+    const secondCallout = second.closest('p')!
+    expect(secondCallout.getAttribute('aria-current')).toBe('step')
+    // The now-inactive first callout keeps its own prefix and drops aria-current.
+    expect(firstCallout.getAttribute('aria-current')).toBeNull()
+    expect(within(secondCallout).getByText('Step 2 of 2, line 2.', { selector: 'span' })).toBeTruthy()
+  })
+
+  it('T4.4: a spot-the-bug check (pre-answer) never renders a guide band -- it never uses CodeGuide at all', async () => {
+    setCurriculum(SPOT_THE_BUG_LESSON)
+    render(<LessonView cloId={SPOT_THE_BUG_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('Find the bug.')
+    expect(document.querySelector('[data-guide]')).toBeNull()
+  })
+
+  it('T4.4: a runnable snippet block never renders a guide band either (predict-output/micro-code/fill-blank all opt out too)', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+    // The worked block's own band/rail are the only `data-guide` elements on
+    // the page; the checks (predict-output, choose, spot-the-bug, fill-blank,
+    // micro-code) contribute none.
+    const guides = document.querySelectorAll('[data-guide="band"], [data-guide="rail"]')
+    expect(guides.length).toBe(2) // band + rail, from the one worked block's first step
+  })
+
+  it('T4.4: a static (non-runnable) snippet with LessonSnippet.highlight renders a passive tint, never an active band', async () => {
+    const lesson: LessonPublic = {
+      ...ALL_KINDS_LESSON,
+      id: 'TEST101-HL', cloId: 'TEST101-HL',
+      blocks: [
+        { type: 'snippet', id: 'hl1', language: 'python', code: 'a = 1\nb = 2', runnable: false, highlight: [[1, 1]] },
+      ],
+    }
+    setCurriculum(lesson)
+    render(<LessonView cloId={lesson.cloId} />, { wrapper: wrapper() })
+    await screen.findByText('a = 1')
+    expect(document.querySelector('[data-guide="passive"]')).not.toBeNull()
+    expect(document.querySelector('[data-guide="band"]')).toBeNull()
   })
 
   it('I3: moves focus to "Back to your path" once the walkthrough completes', async () => {
@@ -555,6 +679,33 @@ describe('LessonView', () => {
     // The reward context built for this call carries the just-completed
     // lesson (X7's actual defect: this used to be permanently `[]`).
     expect(ctx.lessonProgress).toContainEqual(expect.objectContaining({ lessonId: ALL_KINDS_LESSON.cloId, status: 'completed' }))
+  })
+
+  it('F6-5: attempts already in the query cache are read at completion, without a new subscription', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    const state = learnerStateFixture('learner-attempts')
+    // The same seeded-cache shape `(app)/layout.tsx` produces in production
+    // (QuerySeed) -- `complete()` must read this off the cache directly via
+    // `getQueryClient().getQueryData(qk.attempts(userId))` rather than
+    // mounting its own `useAttempts()` subscription (F6-5).
+    const seededAttempt: Attempt = {
+      id: 'attempt-1', userId: 'learner-attempts', exerciseId: 'ex-1', code: 'print(1)',
+      results: [], passed: true, durationMs: 500, hintCount: 0, createdAt: '2026-09-01T00:00:00.000Z',
+    }
+    mocks.getQueryData.mockReturnValueOnce([seededAttempt])
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper('learner-attempts', state) })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+    await screen.findByRole('link', { name: /back to your path/i })
+
+    // If this mounted its own `useAttempts()` subscription instead, the
+    // mocked Supabase client's catch-all (no `attempts` branch any more)
+    // would throw and this test would fail well before this assertion.
+    expect(mocks.getQueryData).toHaveBeenCalledWith(qk.attempts('learner-attempts'))
+    expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
+    const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { attempts: Attempt[] }]
+    expect(ctx.attempts).toEqual([seededAttempt])
   })
 
   it('X7: a lesson that is only skipped, never completed, never calls recordGoalDay', async () => {
@@ -588,13 +739,22 @@ describe('LessonView', () => {
     const rail = screen.getByRole('navigation', { name: /walkthrough progress/i })
     const railLabel = within(rail).getByText(/block \d+ of \d+/i)
 
-    // Counted per OBSERVER CALLBACK (one microtask's worth of DOM changes),
-    // not per individual `MutationRecord` -- a real screen reader treats a
-    // single synchronous DOM update (React's one commit swapping the hint
-    // `<p>` for the explain `<p>` is two child-list operations, one remove
-    // and one add) as one announcement, not two.
+    // F6-2: the per-callback COUNT alone cannot tell a fixed `CheckBlock`
+    // from the pre-fix one that wraps the verdict paragraph inside the same
+    // `aria-live` div -- both shapes commit the verdict's own change and the
+    // hint/explain swap in one React commit, so both produce exactly one
+    // observer callback per attempt either way (verified against
+    // `989e4c6^`'s `CheckBlock.tsx`: this count is 10 under the old
+    // component too). What actually distinguishes them is WHICH nodes the
+    // observer sees mutate: the pre-fix verdict paragraph sits inside the
+    // live region, so its own mount/update shows up among the mutated live
+    // nodes; the fixed one, a sibling of the live region, never does. Every
+    // node touched by a mutation that also lands inside `[aria-live]` is
+    // collected below (not just a boolean), so the second assertion can
+    // check the fixed verdict paragraph is never among them.
     const railMutations: string[] = []
     const liveMutations: string[] = []
+    const liveTouchedNodes = new Set<Node>()
     const observer = new MutationObserver((records) => {
       let touchedRail = false
       let touchedLive = false
@@ -602,7 +762,11 @@ describe('LessonView', () => {
         if (record.target === railLabel || railLabel.contains(record.target)) touchedRail = true
         const node = record.target
         const el: Element | null = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
-        if (el?.closest('[aria-live]')) touchedLive = true
+        if (el?.closest('[aria-live]')) {
+          touchedLive = true
+          liveTouchedNodes.add(node)
+          for (const added of Array.from(record.addedNodes)) liveTouchedNodes.add(added)
+        }
       }
       if (touchedRail) railMutations.push(railLabel.textContent ?? '')
       if (touchedLive) liveMutations.push('announced')
@@ -611,18 +775,24 @@ describe('LessonView', () => {
 
     // Every check kind, wrong then right (the same sequence the "never calls
     // an agent" test already exercises) -- five checks, each graded twice.
+    // The verdict paragraph returned by each first `findByText('Not yet')`
+    // is the exact node `verdictRef` points at (I3 already proves it is the
+    // one thing that gets focused) -- captured once per check, since it is
+    // the same DOM node React reuses across that check's second attempt.
+    const verdictNodes: Node[] = []
+
     const predict = checkSection('What prints?')
     const predictBox = within(predict).getByRole('textbox')
     fireEvent.change(predictBox, { target: { value: 'wrong' } })
     fireEvent.click(within(predict).getByRole('button', { name: /check answer/i }))
-    await within(predict).findByText('Not yet')
+    verdictNodes.push(await within(predict).findByText('Not yet'))
     fireEvent.change(predictBox, { target: { value: '2' } })
     fireEvent.click(within(predict).getByRole('button', { name: /check answer/i }))
     await within(predict).findByText('Right')
 
     const choose = checkSection('Pick one.')
     fireEvent.click(within(choose).getByRole('radio', { name: 'A' }))
-    await within(choose).findByText('Not yet')
+    verdictNodes.push(await within(choose).findByText('Not yet'))
     fireEvent.click(within(choose).getByRole('radio', { name: 'B' }))
     await within(choose).findByText('Right')
 
@@ -630,7 +800,7 @@ describe('LessonView', () => {
     const bugLines = within(bug).getAllByRole('checkbox')
     fireEvent.click(bugLines[0])
     fireEvent.click(within(bug).getByRole('button', { name: /check answer/i }))
-    await within(bug).findByText('Not yet')
+    verdictNodes.push(await within(bug).findByText('Not yet'))
     fireEvent.click(bugLines[0])
     fireEvent.click(bugLines[2])
     fireEvent.click(within(bug).getByRole('button', { name: /check answer/i }))
@@ -640,7 +810,7 @@ describe('LessonView', () => {
     const blankBox = within(blank).getByRole('textbox')
     fireEvent.change(blankBox, { target: { value: 'wrong' } })
     fireEvent.click(within(blank).getByRole('button', { name: /check answer/i }))
-    await within(blank).findByText('Not yet')
+    verdictNodes.push(await within(blank).findByText('Not yet'))
     fireEvent.change(blankBox, { target: { value: '5' } })
     fireEvent.click(within(blank).getByRole('button', { name: /check answer/i }))
     await within(blank).findByText('Right')
@@ -648,13 +818,14 @@ describe('LessonView', () => {
     const micro = checkSection('Write a function.')
     mocks.run.mockResolvedValueOnce({ ok: false, results: [{ testId: 't1', passed: false, actual: '0', expected: '1', stdout: '', stderr: '', durationMs: 1 }], passedCount: 0, totalCount: 1, runtime: 'python' })
     fireEvent.click(within(micro).getByRole('button', { name: /run tests/i }))
-    await within(micro).findByText('Not yet')
+    verdictNodes.push(await within(micro).findByText('Not yet'))
     mocks.run.mockResolvedValueOnce({ ok: true, results: [{ testId: 't1', passed: true, actual: '1', expected: '1', stdout: '', stderr: '', durationMs: 1 }], passedCount: 1, totalCount: 1, runtime: 'python' })
     fireEvent.click(within(micro).getByRole('button', { name: /run tests/i }))
     await within(micro).findByText('Right')
 
     observer.disconnect()
 
+    expect(verdictNodes).toHaveLength(5)
     // A11Y-06: scrolling/answering through the whole lesson never queues a
     // rail announcement -- it carries no `aria-live` at all any more.
     expect(railMutations).toEqual([])
@@ -663,6 +834,14 @@ describe('LessonView', () => {
     // the same attempt, which is what the verdict's own now-removed
     // `aria-live` wrapper used to add on top of this.
     expect(liveMutations.length).toBe(10)
+    // F6-2: the actual regression guard -- none of the five verdict
+    // paragraphs the observer watched ever appeared among the nodes a
+    // live-region mutation touched. This is the assertion that fails
+    // against `989e4c6^`'s `CheckBlock.tsx`, where the verdict paragraph is
+    // one of the nodes `aria-live`'s own childList mutation adds.
+    for (const verdictNode of verdictNodes) {
+      expect(liveTouchedNodes.has(verdictNode)).toBe(false)
+    }
   })
 
   it('I4: a failed write is queued in localStorage without ever reverting the answered check locally', async () => {
@@ -802,5 +981,35 @@ describe('LessonView', () => {
 
     const request = mocks.run.mock.calls[0][0] as { packages?: string[] }
     expect(request.packages).toEqual([])
+  })
+
+  it('F6-1: the lesson route mounts the celebration layer, so a goal-day win completing a walkthrough is actually heard', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    const state = learnerStateFixture('learner-celebrate')
+    // `recordGoalDay` itself is mocked in this file (its own write/celebrate
+    // logic is covered by `record.test.ts`) -- this test only needs to prove
+    // that WHEN it fires `celebrate('goal', ...)`, this route actually has a
+    // layer mounted to pick that up. Before F6-1, `/lesson/[cloId]` mounted
+    // no `<Celebration />` at all, so this real, unmocked `celebrate` call
+    // (the same module `recordGoalDay` itself calls in production) would
+    // enqueue an item nobody on this route ever reads, and it would expire
+    // unseen (`goal`'s ~2.2s lifetime, useCelebration.ts) -- the learner
+    // hits their daily goal and gets nothing: no card (the tier is
+    // deliberately silent, spec 7.6(f)), no sound, no announcement.
+    mocks.recordGoalDay.mockImplementationOnce(async () => {
+      celebrate('goal', undefined, 'F6-1:goal:test')
+      return true
+    })
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper('learner-celebrate', state) })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+    await screen.findByRole('link', { name: /back to your path/i })
+
+    // `goal.done`'s one and only variant (src/lib/voice/lines.ts) -- the
+    // shared celebration layer's `aria-live` region is the one channel a
+    // silent-tier item like `goal` gets, and it is reachable by text query
+    // regardless of the `sr-only` class that hides it visually.
+    await screen.findByText('Daily goal, done. Anything past this is profit.')
   })
 })

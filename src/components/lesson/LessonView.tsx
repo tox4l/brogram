@@ -4,19 +4,22 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import type { CloId, CourseCode, DrillResult, LessonProgress, LessonPublic, WellnessPrefs } from '@/lib/contracts'
+import type { Attempt, CloId, CourseCode, DrillResult, LessonProgress, LessonPublic, WellnessPrefs } from '@/lib/contracts'
 import { clo, course as findCourse, lessonFor, loadCourseBundle } from '@/lib/curriculum'
 import { nextProgress, isStale, type LessonEvent } from '@/lib/lesson/progress'
-import { useAttempts, useLessonProgress, useWellness } from '@/lib/query/hooks'
+import { useLessonProgress, useWellness } from '@/lib/query/hooks'
 import { optimistic } from '@/lib/query/optimistic'
+import { getQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { buildRewardContext } from '@/lib/rewards/context'
 import { recordGoalDay } from '@/lib/rewards/record'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { Reveal } from '@/components/motion/Reveal'
 import { play } from '@/lib/sound/manager'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
+import { Celebration } from '@/components/rewards/Celebration'
 import { clearQueuedProgress, persistLessonProgressRow, queueProgress, readQueuedProgress } from './progressSync'
 import { RevealBlock } from './RevealBlock'
 import { ProgressRail } from './ProgressRail'
@@ -46,7 +49,6 @@ const SHAKE_STYLE = '@keyframes lesson-shake{0%,100%{transform:translateX(0)}25%
 function useLessonRunner(cloId: CloId, prefs: WellnessPrefs, drillResults: readonly DrillResult[]) {
   const session = useSession()
   const userId = session.user?.id ?? null
-  const attemptsQuery = useAttempts()
   const cloRecord = clo(cloId)
   const course: CourseCode | null = cloRecord?.course ?? null
 
@@ -170,18 +172,27 @@ function useLessonRunner(cloId: CloId, prefs: WellnessPrefs, drillResults: reado
     // here rather than read back off `progressQuery.data` (a snapshot from
     // this render, before the mutation's cache write has been committed) so
     // today's completion counts toward `winsToday` on the very call that
-    // caused it. `attempts`/`courseLessonCounts` are structurally required by
+    // caused it. `courseLessonCounts` is structurally required by
     // `buildRewardContext` but unread by `recordGoalDay`'s own logic
     // (goal.ts touches only `attempts`, `lessonProgress`, `drillResults`,
     // `prefs` and `today` -- `state` and `courseLessonCounts` feed the
-    // achievement predicates this call site does not invoke); real attempts
-    // are still threaded through so a mixed day (a walkthrough plus an
-    // exercise pass) sums correctly from this call alone.
+    // achievement predicates this call site does not invoke).
     if (userId && session.learnerState && next) {
       const lessonProgress = [...(progressQuery.data ?? []).filter((row) => row.lessonId !== next.lessonId), next]
+      // F6-5: read the already-seeded window directly off the query cache at
+      // completion time instead of subscribing to it (`useAttempts()`) for
+      // the whole life of this screen -- this route is budgeted at zero
+      // Supabase round trips (T3.2), and a mount-time subscription with a
+      // 30s `staleTime` (unlike `wellness`/`lessonProgress`'s `Infinity`)
+      // issues a fresh `attempts` request whenever the learner lingers on
+      // the dashboard for over half a minute before opening a walkthrough.
+      // Real attempts are still threaded through so a mixed day (a
+      // walkthrough plus an exercise pass) sums correctly from this call
+      // alone.
+      const attempts = getQueryClient().getQueryData<Attempt[]>(qk.attempts(userId)) ?? []
       const ctx = buildRewardContext({
         state: session.learnerState,
-        attempts: attemptsQuery.data ?? [],
+        attempts,
         activityDays: [],
         lessonProgress,
         drillResults,
@@ -246,10 +257,10 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   const skipped = progress?.status === 'skipped'
 
   return (
-    <div className="mx-auto flex max-w-3xl gap-6 py-10">
+    <div className="mx-auto flex max-w-5xl gap-6 py-10">
       <style>{SHAKE_STYLE}</style>
       <ProgressRail total={total} current={currentBlockIndex} />
-      <div className="min-w-0 max-w-[45rem] flex-1 space-y-6">
+      <div className="min-w-0 max-w-[68ch] flex-1 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
             <ArrowLeft className="size-3" aria-hidden="true" />Path map
@@ -262,7 +273,9 @@ export function LessonView({ cloId }: { cloId: CloId }) {
             <h1 className="text-2xl font-medium tracking-tight">{lesson.title}</h1>
             {lesson.draft && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Draft</span>}
           </div>
-          <p className="text-base text-muted-foreground">{lesson.hook}</p>
+          <p className="font-prose text-lede leading-[1.6] text-lesson-foreground">
+            <Reveal mode="lines" reduced={reducedMotion}>{lesson.hook}</Reveal>
+          </p>
         </div>
 
         {staleNotice && (
@@ -279,14 +292,24 @@ export function LessonView({ cloId }: { cloId: CloId }) {
         {lesson.blocks.map((block, index) => (
           <RevealBlock key={block.id} reduced={reducedMotion} onReveal={() => advanceBlock(index)}>
             {block.type === 'concept' && <ConceptBlock block={block} />}
-            {block.type === 'snippet' && <SnippetBlock block={block} packages={packages} />}
+            {block.type === 'snippet' && <SnippetBlock block={block} packages={packages} reduced={reducedMotion} />}
             {block.type === 'worked' && <WorkedBlock block={block} reduced={reducedMotion} />}
             {block.type === 'check' && <CheckBlock block={block} reduced={reducedMotion} onAnswered={answerCheck} packages={packages} />}
-            {block.type === 'recap' && <RecapBlock block={block} />}
+            {block.type === 'recap' && <RecapBlock block={block} reduced={reducedMotion} />}
             {block.type === 'bridge' && <BridgeBlock block={block} course={course ?? ''} completed={completed} onComplete={complete} />}
           </RevealBlock>
         ))}
       </div>
+      {/* F6-1: a walkthrough completion is a goal-day win (X7) whose only
+          channel -- 'goal' is a "silent" tier, spec 7.6(f), no visual card
+          of its own -- is this layer's shared `aria-live` announcement plus
+          its sound. `/lesson/[cloId]` never mounted `<Celebration />`, so a
+          goal hit here (queued by `recordGoalDay` in `complete()` above) had
+          no channel at all: `goal`'s short lifetime (useCelebration.ts) let
+          it expire unseen before the learner ever reached a route that did
+          mount the layer. Standing constraint 13 ("every reward has a
+          visible channel") needs this mounted here, not deferred. */}
+      <Celebration motionPref={prefs.motion} />
     </div>
   )
 }

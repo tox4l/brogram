@@ -296,10 +296,18 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
         >
           {verdict.right ? <Check aria-hidden="true" className="size-4" /> : <X aria-hidden="true" className="size-4" />}
           {verdict.right ? line('lesson.verdict.right') : line('lesson.verdict.notYet')}
-          {!verdict.right && <span className="sr-only"> — attempt {attempts}</span>}
         </p>
       )}
       <div aria-live="polite">
+        {/* F6-3: the attempt counter lives in the live region now, not on the
+            focused verdict paragraph above. Focusing an already-focused
+            element fires no focus event, so from a second wrong attempt
+            onward the verdict text alone ("Not yet" both times) announced
+            nothing new -- moving here means a third-and-later wrong attempt
+            still changes the region's text ("Attempt 2" -> "Attempt 3") even
+            when `gradeCheck` pins `reveal` to 'explain' for every attempt
+            after the first and the explain paragraph itself stops changing. */}
+        {verdict && !verdict.right && <span className="sr-only">Attempt {attempts}</span>}
         {verdict?.reveal === 'hint' && <p className="text-sm text-muted-foreground">{block.hint}</p>}
         {verdict?.reveal === 'explain' && <p className="text-sm text-muted-foreground">{block.explain}</p>}
       </div>
