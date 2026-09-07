@@ -24,6 +24,27 @@ const PRINTSCREEN_NOTE_AT = 3
  *  render or every blocked paste. */
 const PASTE_WHY = line('guard.paste.why')
 
+/**
+ * Matches `src/lib/runtimes/web.ts`'s `SANDBOX_MARKER` by value, not by
+ * import -- a plain DOM attribute is the whole contract between the runtime
+ * and this hook, so this file never has to know what an adapter is. Giving
+ * the grading sandbox a real off-screen layout box (`web.ts`'s own fix for
+ * the viewport bug) made it capable of taking top-level focus via a script
+ * inside the graded document calling `element.focus()`: confirmed live, and
+ * confirmed that `inert` and `visibility:hidden` do not stop it. That shows
+ * up here as a genuine `window` `blur` -- moving focus into a child frame
+ * fires one on the parent even though the tab itself never lost OS focus --
+ * which this hook would otherwise score as a weight-1 integrity violation
+ * against a learner who did nothing wrong, and would cover their workspace
+ * mid-grade. `web.ts` also restores focus once grading settles; this guard
+ * is what stops the false event from ever being scored in the meantime.
+ */
+const SANDBOX_MARKER = 'data-brogram-sandbox'
+function blurCameFromGradingSandbox(): boolean {
+  const active = document.activeElement
+  return active instanceof HTMLIFrameElement && active.hasAttribute(SANDBOX_MARKER)
+}
+
 export interface LockdownOptions { duringAttempt?: boolean; enabled?: boolean; idleGuard?: boolean }
 
 interface IntegrityRow {
@@ -159,7 +180,15 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
       }, LOCKDOWN.idleLogAfterS * 1_000)
     }
     activity.current = resetIdle
-    const blur = () => { setBlurred(true); logIntegrity('blur') }
+    const blur = () => {
+      // The grading sandbox stole top-level focus, not the learner leaving the
+      // tab -- ignore it outright (no score, no cover) and hand focus back as
+      // a backstop alongside `web.ts`'s own restoreFocus (belt and braces:
+      // whichever side notices first wins, and blurring an already-blurred
+      // element is a harmless no-op).
+      if (blurCameFromGradingSandbox()) { (document.activeElement as HTMLIFrameElement).blur(); return }
+      setBlurred(true); logIntegrity('blur')
+    }
     const focus = () => {
       if (document.hidden) return
       setBlurred(false)

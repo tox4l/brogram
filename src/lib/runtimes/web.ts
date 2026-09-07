@@ -21,6 +21,9 @@ type PendingRun = {
   cancelled: boolean
   finish(result: RunResult): void
   cancelTest?: () => void
+  /** Whatever had focus when this run started (typically the editor) - restored after every
+   *  test, not just at the very end, since a many-test run can steal focus repeatedly. */
+  previouslyFocused: Element | null
 }
 
 // One honest timeout line, shared with WorkerAdapter's languages (./shared) -
@@ -30,6 +33,38 @@ type PendingRun = {
 // per-test timer below is built from.
 function timeoutOutput(timeoutMs: number): ExecutionOutput {
   return testTimeoutOutput(browserTimeout(timeoutMs))
+}
+
+/**
+ * Marks every grading sandbox iframe so the parent side can recognize one on
+ * sight without any import between this file and `useLockdown` -- a plain
+ * DOM attribute is the whole contract. Giving the sandbox a real layout box
+ * (off-screen, not `display:none` -- see `createFrame()`) made it capable of
+ * taking top-level focus via a script-triggered `element.focus()` inside the
+ * graded document: confirmed live, and confirmed that neither `inert` nor
+ * `visibility:hidden` stop it (Chromium still honours the in-frame call).
+ * There is no `sandbox` token that blocks focus while still permitting
+ * script execution (the HTML sandboxing flags cover forms, modals, popups,
+ * pointer lock, top navigation and same-origin access, but nothing about
+ * focus), so the only authoritative fix is on the parent: `useLockdown`
+ * ignores a `blur` whose new `document.activeElement` carries this
+ * attribute (never logs it, never covers the workspace for it), and
+ * `restoreFocus` below hands focus back the instant a run settles.
+ */
+const SANDBOX_MARKER = 'data-brogram-sandbox'
+
+/**
+ * Belt-and-braces alongside the `useLockdown` guard: whatever had focus
+ * before this run (typically the code editor) gets it back the moment
+ * grading settles, regardless of pass/fail/error, so a sandbox that stole
+ * focus mid-run never leaves the student's editor unfocused afterward.
+ */
+function restoreFocus(previouslyFocused: Element | null): void {
+  const active = document.activeElement
+  if (active instanceof HTMLIFrameElement && active.hasAttribute(SANDBOX_MARKER)) active.blur()
+  if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected && document.activeElement !== previouslyFocused) {
+    previouslyFocused.focus({ preventScroll: true })
+  }
 }
 
 /** DOM exercises run in an opaque-origin iframe with no access to parent storage. */
@@ -62,6 +97,7 @@ export class WebAdapter implements RuntimeAdapter {
     element.style.border = '0'
     element.tabIndex = -1
     element.setAttribute('aria-hidden', 'true')
+    element.setAttribute(SANDBOX_MARKER, 'true')
     element.title = 'Web exercise runtime'
     element.setAttribute('sandbox', 'allow-scripts')
     element.referrerPolicy = 'no-referrer'
@@ -130,11 +166,16 @@ export class WebAdapter implements RuntimeAdapter {
 
   run(request: RunRequest): Promise<RunResult> {
     if (this.pending) this.abort()
+    // Captured before any sandbox exists for this run: typically the code
+    // editor, since that is what a student has focused when they click Run
+    // or Submit. Restored the instant this run settles (see `restoreFocus`).
+    const previouslyFocused = document.activeElement
     return new Promise<RunResult>((resolve) => {
       const pending: PendingRun = {
-        request, results: [], cancelled: false,
+        request, results: [], cancelled: false, previouslyFocused,
         finish: (result) => {
           if (this.pending === pending) this.pending = undefined
+          restoreFocus(previouslyFocused)
           resolve(result)
         },
       }
@@ -173,6 +214,11 @@ export class WebAdapter implements RuntimeAdapter {
         })
         if (pending.cancelled) return
         this.promote()
+        // Give focus back after every test, not just at the run's end -- a
+        // many-test submission can have a sandbox steal it repeatedly, and
+        // `dispose()` (inside `promote()`) removing the stolen-focus frame
+        // only ever sends focus to `document.body`, never back to the editor.
+        restoreFocus(pending.previouslyFocused)
         if (test) {
           pending.results.push(makeTestResult(test, output, performance.now() - started))
           if (output.failureKind === 'timeout') {

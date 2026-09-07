@@ -62,6 +62,40 @@ describe('useLockdown', () => {
     expect(result.current.overlay).toBeNull()
   })
 
+  it('ignores a blur caused by the grading sandbox taking focus, and hands it back', () => {
+    // The web runtime's sandbox iframe (src/lib/runtimes/web.ts) now has a real
+    // layout box instead of display:none, which makes it capable of stealing
+    // top-level focus via a script inside the graded document calling
+    // element.focus() -- confirmed live, and confirmed that this fires a real
+    // `window` blur even though the tab itself never lost OS focus. That must
+    // never read as the learner leaving the workspace.
+    const { result } = renderHook(() => useLockdown('exercise-1'))
+    const sandbox = document.createElement('iframe')
+    sandbox.setAttribute('data-brogram-sandbox', 'true')
+    document.body.appendChild(sandbox)
+    const blurSpy = vi.spyOn(sandbox, 'blur')
+    Object.defineProperty(document, 'activeElement', { configurable: true, value: sandbox })
+    fireEvent.blur(window)
+    expect(result.current.overlay).toBeNull()
+    expect(rows().filter(row => row.type === 'blur')).toHaveLength(0)
+    // Belt and braces alongside web.ts's own restoreFocus: this guard hands
+    // focus back itself rather than trusting the runtime side alone.
+    expect(blurSpy).toHaveBeenCalledTimes(1)
+    sandbox.remove()
+    delete (document as { activeElement?: unknown }).activeElement
+  })
+
+  it('still overlays and logs a genuine blur when the new focus target is not a grading sandbox', () => {
+    const { result } = renderHook(() => useLockdown('exercise-1'))
+    const somewhereElse = document.createElement('button')
+    document.body.appendChild(somewhereElse)
+    Object.defineProperty(document, 'activeElement', { configurable: true, value: somewhereElse })
+    fireEvent.blur(window)
+    expect(result.current.overlay).toBe('blur')
+    somewhereElse.remove()
+    delete (document as { activeElement?: unknown }).activeElement
+  })
+
   it('never overlays anything for PrintScreen (R9.1) but still inserts the event, including keyCode 44, and never touches the clipboard', async () => {
     const writeText = vi.fn()
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

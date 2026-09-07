@@ -71,7 +71,7 @@ test('three consecutive web submissions, in place, all pass with no run over bud
   test.skip(!hasEnv(env), 'Pending C5: configure Supabase and run node scripts/seed-load.mjs first.')
   // Three rounds, each tolerating a real (non-dry-run) agent round trip before
   // canAdvance -- well above playwright.config.ts's default 120s.
-  test.setTimeout(300_000)
+  test.setTimeout(450_000)
   const service = serviceClient(env as E2eEnv)
 
   const contactRow = await service.from('exercises').select('id,title').eq('clo_id', 'INFS2101-2').eq('title', 'Chat contact row').single()
@@ -131,9 +131,15 @@ test('three consecutive web submissions, in place, all pass with no run over bud
       const button: Locator = page.getByRole('button', { name: /Next rep|Back to your path/, exact: false })
       // queueNext's own bank fetch, and the Reviewer call that always precedes
       // it, are real (non-dry-run) agent round trips against this suite's
-      // already-running dev server - generous, matching python-run.spec.ts's
-      // own tolerance for a real cold external dependency.
-      await whileNudging(() => expect(button).toBeEnabled({ timeout: 45_000 }))
+      // already-running dev server. Confirmed by direct reproduction (route
+      // interception delaying /api/agent by 60s): canAdvance always recovers
+      // once that call actually settles -- this is bounded, honest waiting on
+      // a real network dependency (T2.2's own Ruling 3: "the button stays
+      // disabled only for the genuine remaining wait"), not a stuck loop. 45s
+      // was too tight against a busy shared dev server and a live agent API;
+      // 100s matches python-run.spec.ts's own tolerance for a real cold
+      // external dependency.
+      await whileNudging(() => expect(button).toBeEnabled({ timeout: 100_000 }))
       const label = await button.textContent()
       // The CLO closes at exactly three (src/lib/learner/score.ts) since all
       // three of this CLO's exercises carry distinct patterns - it must close

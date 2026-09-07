@@ -115,7 +115,41 @@ describe('WebAdapter', () => {
       expect(frame.element.style.height).toBe('768px')
       // Off-screen, not display:none or visibility:hidden -- the box still lays out.
       expect(frame.element.style.left).toBe('-10000px')
+      // Belt and braces with useLockdown's parent-side guard (src/hooks/useLockdown.ts):
+      // a plain DOM attribute is the whole contract between the two files.
+      expect(frame.element.getAttribute('data-brogram-sandbox')).toBe('true')
     }
+    adapter.abort()
+  })
+
+  it('restores focus to whatever had it if the sandbox steals it during a run', async () => {
+    // A real layout box (the viewport fix above) makes the sandbox capable of
+    // taking top-level focus via a script inside the graded document calling
+    // element.focus() - confirmed live. useLockdown ignores the resulting
+    // blur; this is the adapter's own half: hand focus back once grading
+    // settles (and after every test, not just at the end, since a many-test
+    // run can have it stolen repeatedly).
+    const { frames } = installFrames()
+    const adapter = new WebAdapter()
+    const editor = document.createElement('button')
+    document.body.appendChild(editor)
+    editor.focus()
+    expect(document.activeElement).toBe(editor)
+    const pending = adapter.run(request({ tests: [
+      { id: 'one', input: 'return "ok"', expected: 'ok', hidden: false },
+      { id: 'two', input: 'return "ok"', expected: 'ok', hidden: false },
+    ] }))
+    await vi.waitFor(() => expect(frames[0]?.requests.length).toBe(1))
+    // jsdom does not implement real cross-frame focus delegation, so stand in
+    // for the graded document's own `element.focus()` call reaching the
+    // parent (confirmed live in a real browser) by shadowing `activeElement`
+    // directly, the same way this suite already shims srcdoc/postMessage.
+    const activeElement = vi.spyOn(document, 'activeElement', 'get').mockReturnValue(frames[0].element)
+    const result = await pending
+    expect(result.ok).toBe(true)
+    activeElement.mockRestore()
+    expect(document.activeElement).toBe(editor)
+    editor.remove()
     adapter.abort()
   })
 

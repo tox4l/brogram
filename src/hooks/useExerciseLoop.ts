@@ -27,6 +27,39 @@ import { getQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { line } from '@/lib/voice/lines'
 
+/**
+ * Fix round (web-runtime hang investigation): `next()`'s own comment assumed
+ * `page.tsx`'s "no key={id}" means this hook's instance survives an in-place
+ * transition. It does not, in the live App Router: navigating to a new
+ * `/exercise/<id>` value remounts `useExerciseLoop` (confirmed with a DOM-
+ * identity probe against a real browser). A per-instance `useRef` cannot
+ * hand anything to the fresh instance that replaces it -- refs die with
+ * their component. `next()`'s old `handledExternally` ref, and the mount
+ * effect's "already handled, skip the reset-then-refetch" branch built on
+ * it, therefore never actually reached the new instance; instead the fresh
+ * instance's own effect ran its normal async reset-then-refetch path a
+ * moment after `next()`'s synchronous `applyLoadedExercise` call had already
+ * rendered the target exercise. Ordinarily "a moment" is sub-millisecond and
+ * invisible. Under real latency (a throttled CPU, in this investigation) the
+ * fresh instance's async path can land *after* the learner has already
+ * started typing into, and even submitting, the optimistically-rendered
+ * exercise -- and when it lands, it silently resets the code editor and
+ * results back to a fresh, unsubmitted state, discarding that work. This is
+ * a real mechanism for a "submitted, then nothing happened" hang distinct
+ * from any runtime adapter.
+ *
+ * The fix: survive the remount by holding the handoff at module scope, the
+ * same pattern `src/lib/runtimes/index.ts`'s adapter registry already uses
+ * for the identical problem (a singleton that must outlive any one
+ * component instance). `next()` stores the exercise it already resolved and
+ * rendered; the *next* mount effect to run for that exact exercise id -
+ * whether it belongs to the same instance or a freshly remounted one -
+ * consumes it and calls `applyLoadedExercise` with the already-known data
+ * instead of re-deriving it asynchronously. No network gap exists for a
+ * fresh instance to race against, so there is nothing left to overwrite.
+ */
+let pendingHandoff: { id: string; exercise: ExercisePublic; clo: Clo; packages: string[] } | null = null
+
 type Status = 'loading' | 'ready' | 'running' | 'graded' | 'submitting' | 'failed' | 'passed' | 'error'
 /** The durable pass/fail fact, known the instant local grading resolves. Never rolled back by a
  *  later network failure (brief step 3) -- `status` may keep moving (`graded` -> `submitting` on a
@@ -108,10 +141,6 @@ export function useExerciseLoop(exerciseId: string) {
   const lastCoachAt = useRef<number | null>(null); const lastHintCode = useRef('')
   const spentHints = useRef(0); const completed = useRef(false)
   const pending = useRef<Submission | null>(null)
-  /** Fix round C1: set by `next()`'s in-place transition to the id it just switched TO, so
-   *  the load effect -- which still fires because `exerciseId` (the URL param) changed --
-   *  recognizes the exercise is already fully loaded and skips its own reset/reload entirely. */
-  const handledExternally = useRef<string | null>(null)
   const reducedMotion = useReducedMotion()
   const [exercise, setExercise] = useState<ExercisePublic | null>(null)
   const [clo, setClo] = useState<Clo | null>(null)
@@ -205,20 +234,26 @@ export function useExerciseLoop(exerciseId: string) {
   }
 
   useEffect(() => {
-    // Fix round C1: `next()` already loaded the target exercise synchronously and stamped its id
-    // here before updating the URL -- this effect still fires (`exerciseId`, the URL param,
-    // changed), but recognizes the work is already done and only re-arms the progress
-    // subscription and the clock tick, never the reset-then-refetch cycle below.
-    const alreadyHandled = handledExternally.current === exerciseId
-    handledExternally.current = null
-    const token = alreadyHandled ? generation.current : ++generation.current
-    if (!alreadyHandled) { gate.current = false; completed.current = false; pending.current = null }
+    // `next()` already resolved and rendered the target exercise synchronously
+    // before updating the URL; this effect still fires (`exerciseId`, the URL
+    // param, changed, and a real remount runs this on a brand-new instance
+    // whose own state started fresh regardless). Consume the module-level
+    // handoff (see the comment above `pendingHandoff`) if it matches this
+    // exact exercise, and apply it directly and synchronously -- no async
+    // gap for a fresh instance's own state to race against. A mismatched or
+    // absent handoff (a genuine mount, a full reload, a deep link) falls
+    // through to the normal reset-then-refetch path below.
+    const handoff = pendingHandoff?.id === exerciseId ? pendingHandoff : null
+    pendingHandoff = null
+    const token = ++generation.current
     const active = () => generation.current === token
     const unsubscribe = subscribeRuntimeProgress(event => {
       const loaded = exerciseRef.current
       if (active() && loaded && event.language === (loaded.kind === 'schema' ? 'sql' : loaded.language)) setProgress(event)
     })
-    if (!alreadyHandled) {
+    if (handoff) {
+      applyLoadedExercise(handoff.exercise, handoff.clo, handoff.packages, token)
+    } else {
       void (async () => {
         await Promise.resolve()
         if (!active()) return
@@ -709,10 +744,12 @@ export function useExerciseLoop(exerciseId: string) {
    * Fix round C1: `next()` no longer routes through the load effect's reset-then-refetch cycle
    * at all -- `nextExercise` is already a complete `ExercisePublic` (fetched by `queueNext`'s
    * bank query or Author generation), so `applyLoadedExercise` swaps it in directly and
-   * synchronously. `handledExternally` tells the effect (which still fires once `exerciseId`,
-   * the URL param, catches up) that this transition is already done. `router.replace` is
-   * bookmarking, not data-fetching -- history-replace semantics because a chain of reps
-   * should not pile up the back stack.
+   * synchronously. The module-level `pendingHandoff` (see its own comment) tells the effect
+   * (which still fires once `exerciseId`, the URL param, catches up -- on this instance if it
+   * survives, or on a freshly remounted one if it does not) that this exact exercise is already
+   * resolved, so it applies the same data again instead of re-deriving it asynchronously.
+   * `router.replace` is bookmarking, not data-fetching -- history-replace semantics because a
+   * chain of reps should not pile up the back stack.
    *
    * Fix round I1: the browser's native View Transition needs the DOM change to happen
    * *synchronously inside* its callback, or it captures old-to-old and crossfades nothing
@@ -740,7 +777,7 @@ export function useExerciseLoop(exerciseId: string) {
     const url = `/exercise/${encodeURIComponent(target.id)}`
     const commit = () => {
       const token = ++generation.current
-      handledExternally.current = target.id
+      pendingHandoff = { id: target.id, exercise: target, clo: cloRow, packages: coursePackages }
       applyLoadedExercise(target, cloRow, coursePackages, token)
       router.replace(url)
     }
