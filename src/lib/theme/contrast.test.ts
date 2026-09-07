@@ -205,6 +205,10 @@ const BODY_TIER: [string, string][] = [
   ['muted-foreground', 'background'],
   ['muted-foreground', 'card'],
   ['muted-foreground', 'muted'],
+  // T4.0 fix round (M4): the two new wave-4 surface/foreground pairs, same
+  // shape as card-foreground/card, untested until now.
+  ['dock-foreground', 'dock'],
+  ['lesson-foreground', 'lesson-surface'],
 ]
 
 const UI_TIER: [string, string][] = [
@@ -214,12 +218,20 @@ const UI_TIER: [string, string][] = [
   ['warning-foreground', 'warning'],
   ['celebration-foreground', 'celebration'],
   ['accent-foreground', 'accent'],
+  // T4.0 fix round (F/M4): streak and XP are structurally identical
+  // saturated-fill/foreground pairs to the six above, new in wave 4 (§2.2)
+  // and untested until now.
+  ['streak-foreground', 'streak'],
+  ['xp-foreground', 'xp'],
 ]
 
-/** APCA-only, per Ruling 1: decorative dividers, not focus indicators. */
+/** APCA-only, per Ruling 1: decorative dividers, not focus indicators.
+ *  `input` is NOT here (T4.0 fix round, I3 follow-up): it draws a
+ *  meaningful field boundary under WCAG 2.2 SC 1.4.11, the same reasoning
+ *  I3 already applied to `ring`, so it gets the WCAG floor below instead of
+ *  living in the APCA-only decorative tier with `border`. */
 const DIVIDER_APCA_ONLY: [string, string][] = [
   ['border', 'background'],
-  ['input', 'background'],
 ]
 
 describe.each(THEME_IDS)('theme palette contrast: %s', (id) => {
@@ -252,6 +264,13 @@ describe.each(THEME_IDS)('theme palette contrast: %s', (id) => {
     expect(wcagRatio(fg, bg)).toBeGreaterThanOrEqual(3)
   })
 
+  it('I3 follow-up (T4.0 fix round): field border (input/background) clears APCA Lc 45 AND WCAG 3:1 (SC 1.4.11 -- an input outline is a UI component, not a decorative divider)', () => {
+    const fg = resolve(tokens, 'input')
+    const bg = resolve(tokens, 'background')
+    expect(apcaLc(fg, bg)).toBeGreaterThanOrEqual(45)
+    expect(wcagRatio(fg, bg)).toBeGreaterThanOrEqual(3)
+  })
+
   it('W4.5: muted-foreground sits at least 14 Lc below foreground on background', () => {
     const bg = resolve(tokens, 'background')
     const fgLc = apcaLc(resolve(tokens, 'foreground'), bg)
@@ -265,9 +284,9 @@ describe.each(THEME_IDS)('theme palette contrast: %s', (id) => {
     expect(ratio).toBeLessThanOrEqual(1.9)
   })
 
-  it('§2.2: apcaLc(rule, background) < apcaLc(border, background) (--rule is the more permissive tier)', () => {
+  it('§2.2: rule sits closer to background than border does, in OKLCH lightness (T4.0 fix round, F5: the APCA-Lc version of this ordering is vacuous in every dark theme, where a hairline this close to background clips to Lc 0 on both sides -- ΔL is non-degenerate in all five palettes)', () => {
     const bg = resolve(tokens, 'background')
-    expect(apcaLc(resolve(tokens, 'rule'), bg)).toBeLessThan(apcaLc(resolve(tokens, 'border'), bg))
+    expect(deltaL(resolve(tokens, 'rule'), bg)).toBeLessThan(deltaL(resolve(tokens, 'border'), bg))
   })
 
   it('§7.2: --guide clears WCAG 3:1 on --lesson-code-surface (a 1.4.11 graphic, not decoration)', () => {
@@ -299,10 +318,17 @@ describe.each(THEME_IDS)('theme palette contrast: %s', (id) => {
     expect(Math.abs(successL - warningL)).toBeGreaterThanOrEqual(0.1)
   })
 
-  it('W4.6: every authored oklch() value round-trips into sRGB ([-0.001, 1.001] per channel)', () => {
+  it('W4.6: every authored oklch() value round-trips into sRGB ([-0.001, 1.001] per channel), including one nested inside a compound value like --elevation-*', () => {
+    // T4.0 fix round (M7): matching only `raw.startsWith('oklch(')` skipped
+    // every oklch() embedded in a shadow/gradient shorthand (--elevation-md's
+    // `inset 0 1px 0 0 oklch(...), 0 4px 10px oklch(...)`, Arcade's glow).
+    // Matching every oklch(...) substring instead covers those too.
     for (const [key, raw] of Object.entries(tokens)) {
-      if (!raw.startsWith('oklch(')) continue
-      expect(isInGamut(raw), `[data-theme="${id}"] --${key}: ${raw} is out of gamut`).toBe(true)
+      const matches = raw.match(/oklch\([^)]*\)/g)
+      if (!matches) continue
+      for (const oklchValue of matches) {
+        expect(isInGamut(oklchValue), `[data-theme="${id}"] --${key}: ${oklchValue} (in "${raw}") is out of gamut`).toBe(true)
+      }
     }
   })
 })
@@ -319,6 +345,29 @@ describe('W4.3/W4.4: --card sits at an OKLCH ΔL from --background, not a WCAG r
     const tokens = THEMES.paper
     const d = deltaL(resolve(tokens, 'card'), resolve(tokens, 'background'))
     expect(d).toBeGreaterThanOrEqual(0.02)
+  })
+
+  // T4.0 fix round (F6): spec §2.4 fixes three more rungs of the same
+  // surface ladder in the four darks -- popover a further 0.03 above card,
+  // --lesson-surface at 0.055, --dock at 0.08 -- and none of them had an
+  // assertion. All pass today; this is coverage for the retune that flattens
+  // one onto its neighbour with nothing failing.
+  it.each(DARK_IDS)('%s: ΔL(popover, card) is close to 0.03', (id) => {
+    const tokens = THEMES[id]
+    const d = deltaL(resolve(tokens, 'popover'), resolve(tokens, 'card'))
+    expect(d).toBeCloseTo(0.03, 2)
+  })
+
+  it.each(DARK_IDS)('%s: ΔL(lesson-surface, background) is close to 0.055', (id) => {
+    const tokens = THEMES[id]
+    const d = deltaL(resolve(tokens, 'lesson-surface'), resolve(tokens, 'background'))
+    expect(d).toBeCloseTo(0.055, 3)
+  })
+
+  it.each(DARK_IDS)('%s: ΔL(dock, background) is at least 0.08', (id) => {
+    const tokens = THEMES[id]
+    const d = deltaL(resolve(tokens, 'dock'), resolve(tokens, 'background'))
+    expect(d).toBeGreaterThanOrEqual(0.08 - 1e-9)
   })
 })
 

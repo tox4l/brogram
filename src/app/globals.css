@@ -519,7 +519,7 @@ body {
   --xp: oklch(0.40 0.12 275);
   --xp-foreground: oklch(0.99 0.003 85);
   --border: oklch(0.60 0.012 70);
-  --input: oklch(0.66 0.012 70);
+  --input: oklch(0.645 0.012 70);
   --ring: oklch(0.40 0.12 275 / 0.8);
   --rule: oklch(0.86 0.008 70);
   --glow: oklch(0.40 0.12 275 / 0.18);
