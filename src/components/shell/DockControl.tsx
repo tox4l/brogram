@@ -1,35 +1,13 @@
 'use client'
 
-import { useMutation } from '@tanstack/react-query'
 import { PanelRightOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { prefsPatch, resolveWellnessPrefs } from '@/lib/wellness/prefs'
-import { createClient } from '@/lib/supabase/client'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useSession } from '@/store/session'
 import { useWellness } from '@/lib/query/hooks'
-import { useOptimistic } from '@/lib/query/optimistic'
-import { qk } from '@/lib/query/keys'
-import { recallDockPlacement, writeCachedDockPrefs } from '@/lib/wellness/dock'
+import { useDockPrefsMutation } from '@/components/wellness/useDockPrefs'
+import { recallDockPlacement } from '@/lib/wellness/dock'
 import { clearReminderBadge, useReminderBadge } from '@/lib/wellness/reminderBadge'
-import type { DockPlacement } from '@/lib/contracts'
-import type { WellnessRow } from '@/lib/learner/compile'
-
-/** Mirrors `SoundToggle`'s persist path (T0.5 I9): read the freshest row,
- *  patch only the non-default keys, plain update with an insert fallback. */
-async function persistDockPlacement(userId: string, placement: DockPlacement): Promise<void> {
-  const client = createClient()
-  const { data, error } = await client.from('wellness').select('prefs').eq('user_id', userId).maybeSingle()
-  if (error) throw error
-  const current = resolveWellnessPrefs((data as { prefs: unknown } | null)?.prefs)
-  const patch = prefsPatch({ ...current, dock: { ...current.dock, placement } })
-  const { data: updated } = await client
-    .from('wellness')
-    .update({ prefs: patch, updated_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .select('user_id')
-    .maybeSingle()
-  if (!updated) await client.from('wellness').insert({ user_id: userId, prefs: patch })
-}
 
 /**
  * The header's re-open glyph for the wellness dock (T0.7 seam, wired up by
@@ -44,6 +22,21 @@ async function persistDockPlacement(userId: string, placement: DockPlacement): P
  * is hidden (the reminder engine mounts headlessly, `WellnessSlot`), so this
  * glyph shows the same shared indicator the collapsed dock would, and
  * clicking it (reopening the dock) acknowledges it.
+ *
+ * Fix round 2, F1: this used to keep its own independent `useOptimistic`
+ * mutation directly on `wellness.prefs`, with its own read-modify-write and
+ * its own `localStorage` mirror call -- a second, uncoordinated writer on the
+ * exact blob `useWellnessPrefsMutation` (the shared queue every other prefs
+ * control uses) also writes, which could revert a concurrent Account/Dock
+ * change under the learner's finger and vice versa (X3). Routing through
+ * `useDockPrefsMutation` -- the same delegation `Dock.tsx`'s own placement
+ * control already uses -- puts this control on the one shared queue: the
+ * optimistic cache write and the `localStorage` mirror still land the same
+ * frame (`prefsMutation.ts`'s `applyToCache`/`mirrorDockCache`, generic over
+ * any resolved `dock` key, replaces the local `writeCachedDockPrefs` call
+ * this file used to make itself), and the network write is now the shared
+ * 400ms debounce instead of a one-shot call -- a fast double-click
+ * reopen/re-hide ships only the newest value, same as every other control.
  */
 export function DockControl() {
   const { user } = useSession()
@@ -51,35 +44,13 @@ export function DockControl() {
   const wellnessQuery = useWellness()
   const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
   const badge = useReminderBadge()
-
-  const mutation = useMutation(useOptimistic<WellnessRow, DockPlacement>({
-    key: qk.wellness(userId ?? ''),
-    apply: (previousRow, placement) => {
-      const current = resolveWellnessPrefs(previousRow?.prefs)
-      const nextDock = { ...current.dock, placement }
-      // N3 (fix round 2): this writer bypasses `useDockPrefsMutation`
-      // (it needs `recallDockPlacement`'s own placement resolution, and never
-      // debounces -- restoring the dock is a one-shot, deliberate action), so
-      // it has to mirror the local tier itself. Without this, the mirror kept
-      // saying `hidden` after the learner un-hid the dock, and a load where
-      // the query has not resolved yet would paint no dock and then reflow
-      // one in -- the exact flash the tier exists to prevent, pointed the
-      // other way.
-      writeCachedDockPrefs(nextDock, userId)
-      const patch = prefsPatch({ ...current, dock: nextDock })
-      return { ...(previousRow ?? {}), prefs: patch }
-    },
-    mutate: async (placement) => {
-      if (!userId) return
-      await persistDockPlacement(userId, placement)
-    },
-  }))
+  const dockPrefsMutation = useDockPrefsMutation(userId)
 
   if (prefs.dock.placement !== 'hidden') return null
 
   function handleClick() {
     clearReminderBadge()
-    mutation.mutate(recallDockPlacement())
+    dockPrefsMutation.mutate(() => ({ placement: recallDockPlacement() }))
   }
 
   return (
