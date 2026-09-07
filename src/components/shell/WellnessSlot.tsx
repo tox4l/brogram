@@ -49,7 +49,7 @@ export function WellnessSlot() {
   const { user } = useSession()
   const userId = user?.id ?? null
   const wellnessQuery = useWellness()
-  const cachedDock = useCachedDockPrefs()
+  const cachedDock = useCachedDockPrefs(userId)
   const dock: WellnessDockPrefs = wellnessQuery.data
     ? resolveWellnessPrefs(wellnessQuery.data.prefs).dock
     : (cachedDock ?? DEFAULT_WELLNESS.dock)
@@ -74,6 +74,11 @@ export function WellnessSlot() {
   const toggleCollapse = () => {
     if (collapsed) clearReminderBadge()
     if (routeForced) { setSessionExpanded((expanded) => !expanded); return }
+    // N2 (fix round 2): a relative change is safe here because
+    // `useDockPrefsMutation` resolves `change` against the cache exactly
+    // once, immediately, and debounces the already-*resolved* patch -- never
+    // a closure it would replay later against a separately re-read server
+    // row (see the comment there for the two-rapid-clicks failure that fixes).
     dockPrefsMutation.mutate((current) => ({ collapsed: !current.dock.collapsed }))
   }
   const changeCorner = (nextCornerValue: DockCorner) => dockPrefsMutation.mutate(() => ({ corner: nextCornerValue }))

@@ -339,5 +339,98 @@ describe('Dock', () => {
       // Flushing the queue back into a toast once the attempt ends is covered by
       // WaterStretch.test.tsx/PrayerTimes.test.tsx/Pomodoro.test.tsx's own R6.4 cases.
     })
+
+    // N5 (fix round 2): the case above only ever renders the dock expanded --
+    // not the state a reminder actually queues in during an attempt (R6.4's
+    // whole premise is the dock being route-collapsed on /exercise). Pin the
+    // collapsed handle directly too.
+    it('N5: shows the badge on the collapsed vertical handle too, not only when expanded', async () => {
+      sessionStorage.setItem(ATTEMPT_ACTIVE_KEY, 'true')
+      const start = 1_000
+      const { rerender } = render(
+        <Dock orientation="vertical" collapsed onToggleCollapse={noop} corner="br" onCornerChange={noop} />,
+        { wrapper: wrapper('learner-one') },
+      )
+      await screen.findAllByRole('button')
+      expect(screen.queryByTestId('dock-badge')).toBeNull()
+
+      tickMocks.now.mockReturnValue(start)
+      rerender(<Dock orientation="vertical" collapsed onToggleCollapse={noop} corner="br" onCornerChange={noop} />)
+      tickMocks.now.mockReturnValue(start + DEFAULT_WELLNESS.waterIntervalMin * 60_000)
+      rerender(<Dock orientation="vertical" collapsed onToggleCollapse={noop} corner="br" onCornerChange={noop} />)
+
+      await vi.waitFor(() => expect(screen.getByTestId('dock-badge')).toBeTruthy())
+      expect(toast).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('N1 (fix round 2): collapsing/expanding never remounts the reminder engine', () => {
+    it('a running pomodoro survives a collapse and an expand with its remaining time intact', () => {
+      // Synchronous queries throughout: `findBy*`/`waitFor` poll on real
+      // timers internally, which never elapse once fake timers are active.
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(0)
+        tickMocks.now.mockReturnValue(0)
+        const props = { onToggleCollapse: noop, corner: 'br' as const, onCornerChange: noop }
+        const { rerender } = render(<Dock orientation="vertical" collapsed={false} {...props} />, { wrapper: wrapper('learner-one') })
+        expect(screen.getByText('Wellness')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: /start pomodoro/i }))
+
+        const fiveMinutes = 5 * 60_000
+        vi.setSystemTime(fiveMinutes)
+        tickMocks.now.mockReturnValue(fiveMinutes)
+        rerender(<Dock orientation="vertical" collapsed={false} {...props} />)
+        expect(screen.getByText('20:00')).toBeTruthy()
+        expect(screen.getByText(/running/i)).toBeTruthy()
+
+        // Collapse: the countdown is not on screen, but the timer must keep running.
+        rerender(<Dock orientation="vertical" collapsed {...props} />)
+        expect(screen.queryByText('20:00')).toBeNull()
+
+        // Expand again at the exact same instant: a remount would show a freshly
+        // reset "25:00, paused"; the real, still-running timer shows "20:00, running".
+        rerender(<Dock orientation="vertical" collapsed={false} {...props} />)
+        expect(screen.getByText('20:00')).toBeTruthy()
+        expect(screen.getByText(/running/i)).toBeTruthy()
+        expect(screen.queryByText('25:00')).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('a reminder queued during an attempt while collapsed still toasts after the learner expands to look at the badge', async () => {
+      sessionStorage.setItem(ATTEMPT_ACTIVE_KEY, 'true')
+      const onToggleCollapse = vi.fn()
+      const start = 1_000
+      tickMocks.now.mockReturnValue(start)
+      const { rerender } = render(
+        <Dock orientation="vertical" collapsed onToggleCollapse={onToggleCollapse} corner="br" onCornerChange={noop} />,
+        { wrapper: wrapper('learner-one') },
+      )
+      const icons = await screen.findAllByRole('button')
+
+      // The water reminder comes due while collapsed and mid-attempt: queues, lights the badge.
+      tickMocks.now.mockReturnValue(start + DEFAULT_WELLNESS.waterIntervalMin * 60_000)
+      rerender(<Dock orientation="vertical" collapsed onToggleCollapse={onToggleCollapse} corner="br" onCornerChange={noop} />)
+      await vi.waitFor(() => expect(screen.getByTestId('dock-badge')).toBeTruthy())
+      expect(toast).not.toHaveBeenCalled()
+
+      // The learner clicks the icon rail to look at what's pending -- exactly
+      // the interaction that used to remount WaterStretch and discard the queue.
+      fireEvent.click(icons[0])
+      expect(onToggleCollapse).toHaveBeenCalled()
+      expect(screen.queryByTestId('dock-badge')).toBeNull() // acknowledged
+
+      // The parent (WellnessSlot in production) reacts to the toggle by expanding.
+      rerender(<Dock orientation="vertical" collapsed={false} onToggleCollapse={onToggleCollapse} corner="br" onCornerChange={noop} />)
+      await screen.findByText('Wellness')
+
+      // The attempt ends: if the queue survived the expand (no remount), it
+      // flushes as a toast now. If it was discarded, nothing ever toasts.
+      sessionStorage.setItem(ATTEMPT_ACTIVE_KEY, 'false')
+      rerender(<Dock orientation="vertical" collapsed={false} onToggleCollapse={onToggleCollapse} corner="br" onCornerChange={noop} />)
+      await vi.waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringMatching(/water/i)))
+    })
   })
 })

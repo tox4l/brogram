@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Toaster } from '@/components/ui/sonner'
 import { useWellness } from '@/lib/query/hooks'
+import { useSession } from '@/store/session'
 import { DEFAULT_WELLNESS } from '@/lib/contracts'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { gridTemplateFor, useCachedDockPrefs } from '@/lib/wellness/dock'
@@ -41,8 +42,9 @@ import { gridTemplateFor, useCachedDockPrefs } from '@/lib/wellness/dock'
  * has somewhere to land.
  */
 export function ShellLayout({ dock, children }: { dock: ReactNode; children: ReactNode }) {
+  const userId = useSession((session) => session.user?.id ?? null)
   const wellnessQuery = useWellness()
-  const cachedDock = useCachedDockPrefs()
+  const cachedDock = useCachedDockPrefs(userId)
   const placement = wellnessQuery.data
     ? resolveWellnessPrefs(wellnessQuery.data.prefs).dock.placement
     : (cachedDock?.placement ?? DEFAULT_WELLNESS.dock.placement)

@@ -9,7 +9,7 @@ import { useSession } from '@/store/session'
 import { useWellness } from '@/lib/query/hooks'
 import { useOptimistic } from '@/lib/query/optimistic'
 import { qk } from '@/lib/query/keys'
-import { recallDockPlacement } from '@/lib/wellness/dock'
+import { recallDockPlacement, writeCachedDockPrefs } from '@/lib/wellness/dock'
 import { clearReminderBadge, useReminderBadge } from '@/lib/wellness/reminderBadge'
 import type { DockPlacement } from '@/lib/contracts'
 import type { WellnessRow } from '@/lib/learner/compile'
@@ -56,7 +56,17 @@ export function DockControl() {
     key: qk.wellness(userId ?? ''),
     apply: (previousRow, placement) => {
       const current = resolveWellnessPrefs(previousRow?.prefs)
-      const patch = prefsPatch({ ...current, dock: { ...current.dock, placement } })
+      const nextDock = { ...current.dock, placement }
+      // N3 (fix round 2): this writer bypasses `useDockPrefsMutation`
+      // (it needs `recallDockPlacement`'s own placement resolution, and never
+      // debounces -- restoring the dock is a one-shot, deliberate action), so
+      // it has to mirror the local tier itself. Without this, the mirror kept
+      // saying `hidden` after the learner un-hid the dock, and a load where
+      // the query has not resolved yet would paint no dock and then reflow
+      // one in -- the exact flash the tier exists to prevent, pointed the
+      // other way.
+      writeCachedDockPrefs(nextDock, userId)
+      const patch = prefsPatch({ ...current, dock: nextDock })
       return { ...(previousRow ?? {}), prefs: patch }
     },
     mutate: async (placement) => {

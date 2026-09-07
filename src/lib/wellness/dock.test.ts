@@ -136,26 +136,37 @@ describe('useCachedDockPrefs / writeCachedDockPrefs (I2, step 4\'s local tier)',
   afterEach(() => resetDockPrefsCacheForTests())
 
   it('is null before anything has ever been cached', () => {
-    const { result } = renderHook(() => useCachedDockPrefs())
+    const { result } = renderHook(() => useCachedDockPrefs('learner-one'))
+    expect(result.current).toBeNull()
+  })
+
+  it('is null while signed out (no user id to key the mirror by)', () => {
+    const { result } = renderHook(() => useCachedDockPrefs(null))
     expect(result.current).toBeNull()
   })
 
   it('reflects a write immediately, in the same render pass callers observe it', () => {
-    const { result } = renderHook(() => useCachedDockPrefs())
+    const { result } = renderHook(() => useCachedDockPrefs('learner-one'))
     const dock: WellnessDockPrefs = { placement: 'left', collapsed: true, compactOnExercise: false, corner: 'tl' }
-    act(() => writeCachedDockPrefs(dock))
+    act(() => writeCachedDockPrefs(dock, 'learner-one'))
     expect(result.current).toEqual(dock)
   })
 
   it('a fresh subscriber (e.g. after a remount) sees a value written earlier', () => {
-    writeCachedDockPrefs({ placement: 'top', collapsed: false, compactOnExercise: true, corner: 'br' })
-    const { result } = renderHook(() => useCachedDockPrefs())
+    writeCachedDockPrefs({ placement: 'top', collapsed: false, compactOnExercise: true, corner: 'br' }, 'learner-one')
+    const { result } = renderHook(() => useCachedDockPrefs('learner-one'))
     expect(result.current).toEqual({ placement: 'top', collapsed: false, compactOnExercise: true, corner: 'br' })
   })
 
+  it('N3: is scoped per user id -- one account never sees another\'s cached placement', () => {
+    writeCachedDockPrefs({ placement: 'left', collapsed: false, compactOnExercise: true, corner: 'br' }, 'learner-a')
+    const { result } = renderHook(() => useCachedDockPrefs('learner-b'))
+    expect(result.current).toBeNull()
+  })
+
   it('ignores a malformed cache entry rather than crashing', () => {
-    localStorage.setItem('brogram:wellness:dock-cache', '{"placement":"sideways"}')
-    const { result } = renderHook(() => useCachedDockPrefs())
+    localStorage.setItem('brogram:wellness:dock-cache:learner-one', '{"placement":"sideways"}')
+    const { result } = renderHook(() => useCachedDockPrefs('learner-one'))
     expect(result.current).toBeNull()
   })
 })

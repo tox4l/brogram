@@ -232,28 +232,29 @@ function WellnessReminderEngine({ prefs, waterLog, prayerResult, onTogglePrayer,
   const now = useSecondTick()
   const attemptActive = isAttemptActive()
 
+  // N1 fix round 2: `WaterStretch`/`Pomodoro` each get exactly ONE slot with
+  // ONE element type (a `div` whose class -- not its existence -- reacts to
+  // `visible`/`compact`), never a ternary that swaps the div for the bare
+  // component. A ternary that changes the element TYPE at a fixed position
+  // is what actually remounts a child in React (not "conditional rendering"
+  // in general) -- and a remount here means `Pomodoro`'s running countdown
+  // resets and `WaterStretch`'s `queuedRef` (the very reminders the badge is
+  // advertising) is thrown away, exactly when the learner expands the dock
+  // to look at what the badge means. Keeping both components as permanent
+  // children of this always-mounted engine, at a stable slot, is what makes
+  // "no remount can ever reset their state" actually hold.
   return (
     <>
       <PrayerTimes prefs={prefs} onTogglePrayer={onTogglePrayer} result={prayerResult} now={now} attemptActive={attemptActive} compact={compact} visible={visible}
         onPendingChange={(pending) => onPendingChange('prayer', pending)} />
-      {visible && !compact ? (
-        <div className="border-t border-border pt-5">
-          <WaterStretch prefs={prefs} now={now} log={waterLog} onLog={onLog} attemptActive={attemptActive} visible={visible}
-            onPendingChange={(pending) => onPendingChange('wellness', pending)} />
-        </div>
-      ) : (
+      <div className={visible && !compact ? 'border-t border-border pt-5' : undefined}>
         <WaterStretch prefs={prefs} now={now} log={waterLog} onLog={onLog} attemptActive={attemptActive} compact={compact} visible={visible}
           onPendingChange={(pending) => onPendingChange('wellness', pending)} />
-      )}
-      {visible && !compact ? (
-        <div className="border-t border-border pt-5">
-          <Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={onSessionComplete} visible={visible}
-            onPendingChange={(pending) => onPendingChange('pomodoro', pending)} />
-        </div>
-      ) : (
+      </div>
+      <div className={visible && !compact ? 'border-t border-border pt-5' : undefined}>
         <Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={onSessionComplete} compact={compact} visible={visible}
           onPendingChange={(pending) => onPendingChange('pomodoro', pending)} />
-      )}
+      </div>
     </>
   )
 }

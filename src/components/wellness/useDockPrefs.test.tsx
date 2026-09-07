@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { resetDockPrefsCacheForTests } from '@/lib/wellness/dock'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import type { WellnessRow } from '@/lib/learner/compile'
 import { useDockPrefsMutation } from './useDockPrefs'
 
@@ -60,7 +61,7 @@ describe('useDockPrefsMutation', () => {
 
     const cached = client.getQueryData<WellnessRow>(qk.wellness('learner-one'))
     expect((cached?.prefs as { dock?: { placement?: string } })?.dock?.placement).toBe('left')
-    expect(localStorage.getItem('brogram:wellness:dock-cache')).toContain('"placement":"left"')
+    expect(localStorage.getItem('brogram:wellness:dock-cache:learner-one')).toContain('"placement":"left"')
     // The network write has not happened yet -- it is debounced.
     expect(mocks.update).not.toHaveBeenCalled()
   })
@@ -96,5 +97,55 @@ describe('useDockPrefsMutation', () => {
     const cached = client.getQueryData<WellnessRow>(qk.wellness(''))
     expect((cached?.prefs as { dock?: { collapsed?: boolean } })?.dock?.collapsed).toBe(true)
     expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  // N2 (fix round 2): a *relative* change (the collapse toggle) must resolve
+  // against the cache at each call, not replay a closure 400ms later against
+  // a separately re-read server row -- two rapid toggles used to send the
+  // opposite of what the cache (and the screen) had already settled on.
+  it('N2: two rapid relative toggles inside the debounce window send the final resolved value, not a replayed closure', async () => {
+    db.row = { prefs: { dock: { collapsed: false } } }
+    const { Wrapper, client } = wrapper()
+    const { result } = renderHook(() => useDockPrefsMutation('learner-one'), { wrapper: Wrapper })
+
+    const toggle = () => result.current.mutate((current) => ({ collapsed: !current.dock.collapsed }))
+    act(() => {
+      toggle() // false -> true
+      toggle() // true -> false (resolved against the cache's own update from the first call)
+    })
+
+    const cached = client.getQueryData<WellnessRow>(qk.wellness('learner-one'))
+    expect(resolveWellnessPrefs(cached?.prefs).dock.collapsed).toBe(false)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+
+    // The server receives the same final value the cache (and the screen)
+    // settled on -- not a stale relative flip computed against the
+    // still-unwritten server row (which would have sent `true`).
+    expect(mocks.update).toHaveBeenCalledTimes(1)
+    expect(resolveWellnessPrefs(db.row?.prefs).dock.collapsed).toBe(false)
+  })
+
+  // N4 (fix round 2): a change made shortly before the component unmounts
+  // (a route change, a tab close) must still reach the server -- otherwise
+  // the stale server value wins on the next load and the change silently
+  // reverts, even though `localStorage` (checked above) already has it.
+  it('N4: flushes a pending debounced write on unmount instead of dropping it', async () => {
+    const { Wrapper } = wrapper()
+    const { result, unmount } = renderHook(() => useDockPrefsMutation('learner-one'), { wrapper: Wrapper })
+
+    act(() => result.current.mutate(() => ({ placement: 'left' })))
+    expect(mocks.update).not.toHaveBeenCalled()
+
+    unmount()
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    expect(mocks.update).toHaveBeenCalledTimes(1)
+    expect(mocks.update).toHaveBeenCalledWith(
+      'wellness',
+      expect.objectContaining({ prefs: expect.objectContaining({ dock: expect.objectContaining({ placement: 'left' }) }) }),
+      'user_id',
+      'learner-one',
+    )
   })
 })

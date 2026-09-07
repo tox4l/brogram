@@ -122,11 +122,20 @@ export function recallDockPlacement(): DockPlacement {
 // still in flight -- the server value wins the instant it resolves (`read`
 // below is only ever consulted before that, by the callers' own priority
 // order, never after).
+//
+// Keyed per user id (fix round 2, N3): two accounts signed into the same
+// browser must never paint each other's placement before the query resolves
+// -- a shared key would let A's `left` flash on B's very first paint. `null`
+// (signed out, or the id genuinely not known yet) reads/writes nothing.
 // ---------------------------------------------------------------------------
 
-const DOCK_CACHE_KEY = 'brogram:wellness:dock-cache'
+const DOCK_CACHE_PREFIX = 'brogram:wellness:dock-cache'
 const ALL_PLACEMENTS: DockPlacement[] = ['left', 'right', 'top', 'float', 'hidden']
 const ALL_CORNERS: DockCorner[] = ['tl', 'tr', 'bl', 'br']
+
+function dockCacheKey(userId: string): string {
+  return `${DOCK_CACHE_PREFIX}:${userId}`
+}
 
 function isDockPrefsShape(value: unknown): value is WellnessDockPrefs {
   if (typeof value !== 'object' || value === null) return false
@@ -139,10 +148,10 @@ function isDockPrefsShape(value: unknown): value is WellnessDockPrefs {
   )
 }
 
-function readDockPrefsFromStorage(): WellnessDockPrefs | null {
+function readDockPrefsFromStorage(userId: string): WellnessDockPrefs | null {
   try {
     if (typeof localStorage === 'undefined') return null
-    const raw = localStorage.getItem(DOCK_CACHE_KEY)
+    const raw = localStorage.getItem(dockCacheKey(userId))
     if (!raw) return null
     const parsed: unknown = JSON.parse(raw)
     return isDockPrefsShape(parsed) ? parsed : null
@@ -154,16 +163,18 @@ function readDockPrefsFromStorage(): WellnessDockPrefs | null {
 // `useSyncExternalStore`'s `getSnapshot` must return a referentially stable
 // value when nothing has changed (React calls it more than once per commit to
 // check for tearing); re-parsing `localStorage` on every call would fail that
-// and trigger React's "getSnapshot should be cached" warning. Cache it.
-let dockPrefsCache: WellnessDockPrefs | null | undefined
+// and trigger React's "getSnapshot should be cached" warning. Cache it, one
+// slot per user id (a signed-in tab only ever needs its own).
+const dockPrefsCache = new Map<string, WellnessDockPrefs | null>()
 const dockPrefsListeners = new Set<() => void>()
 
-function getDockPrefsSnapshot(): WellnessDockPrefs | null {
-  if (dockPrefsCache === undefined) dockPrefsCache = readDockPrefsFromStorage()
-  return dockPrefsCache
+function getDockPrefsSnapshot(userId: string | null): WellnessDockPrefs | null {
+  if (!userId) return null
+  if (!dockPrefsCache.has(userId)) dockPrefsCache.set(userId, readDockPrefsFromStorage(userId))
+  return dockPrefsCache.get(userId) ?? null
 }
 
-function getDockPrefsServerSnapshot(): WellnessDockPrefs | null {
+function getDockPrefsServerSnapshot(): null {
   return null
 }
 
@@ -173,23 +184,31 @@ function subscribeDockPrefsCache(listener: () => void): () => void {
 }
 
 /** Mirrors the dock sub-object to `localStorage`, same frame as the optimistic
- *  cache update that should call this. */
-export function writeCachedDockPrefs(dock: WellnessDockPrefs): void {
-  dockPrefsCache = dock
-  try { localStorage.setItem(DOCK_CACHE_KEY, JSON.stringify(dock)) } catch { /* Best-effort; the network write is still the source of truth. */ }
+ *  cache update that should call this. A no-op when `userId` is unknown --
+ *  there is nothing to key the mirror by. */
+export function writeCachedDockPrefs(dock: WellnessDockPrefs, userId: string | null): void {
+  if (!userId) return
+  dockPrefsCache.set(userId, dock)
+  try { localStorage.setItem(dockCacheKey(userId), JSON.stringify(dock)) } catch { /* Best-effort; the network write is still the source of truth. */ }
   for (const listener of dockPrefsListeners) listener()
 }
 
-/** The locally-cached dock prefs, or `null` before anything has ever been
- *  cached (including on the server, where this is always `null` -- there is
- *  no `localStorage` to read, so the caller's own default applies until the
- *  client mounts and, moments later, `useWellness()` resolves). */
-export function useCachedDockPrefs(): WellnessDockPrefs | null {
-  return useSyncExternalStore(subscribeDockPrefsCache, getDockPrefsSnapshot, getDockPrefsServerSnapshot)
+/** The locally-cached dock prefs for this user, or `null` before anything has
+ *  ever been cached for them (including on the server, where this is always
+ *  `null` -- there is no `localStorage` to read, so the caller's own default
+ *  applies until the client mounts and, moments later, `useWellness()`
+ *  resolves) or while signed out. */
+export function useCachedDockPrefs(userId: string | null): WellnessDockPrefs | null {
+  return useSyncExternalStore(subscribeDockPrefsCache, () => getDockPrefsSnapshot(userId), getDockPrefsServerSnapshot)
 }
 
 /** Test-only: forgets whatever `useCachedDockPrefs` has memoized. */
 export function resetDockPrefsCacheForTests(): void {
-  dockPrefsCache = undefined
-  try { localStorage.removeItem(DOCK_CACHE_KEY) } catch { /* jsdom always has localStorage */ }
+  dockPrefsCache.clear()
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(DOCK_CACHE_PREFIX)) localStorage.removeItem(key)
+    }
+  } catch { /* jsdom always has localStorage */ }
 }
