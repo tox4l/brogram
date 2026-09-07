@@ -10,6 +10,8 @@ import type { CourseCode, LessonProgress } from '@/lib/contracts'
 import { course as courseMeta, loadCourseBundle, type CourseBundle } from '@/lib/curriculum'
 import { buildMap, currentCloId, nextUp } from '@/lib/course/map'
 import { qk } from '@/lib/query/keys'
+import type { WellnessRow } from '@/lib/learner/compile'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { PathMap } from '@/components/course/PathMap'
 import { NextUpStack } from '@/components/course/NextUpStack'
@@ -86,10 +88,21 @@ export default function CoursePage() {
   // paint (spec R5.1): reading it here, not through a query, is what keeps
   // this screen at zero Supabase round trips on mount.
   const { learnerState } = useSession()
-  const reducedMotion = useReducedMotion(undefined)
   const queryClient = useQueryClient()
   const userId = learnerState?.userId
   const lessonProgress = (userId ? queryClient.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) : undefined) ?? []
+  // Same passive, non-fetching cache peek as `lessonProgress`: `wellness` is
+  // not seeded by the layout either, so a subscribing `useWellness()` would
+  // fire a Supabase read on mount. Standing constraint 12 -- the learner's
+  // own `motion` choice, not the raw `prefers-reduced-motion` media query --
+  // must gate every animating component here.
+  const wellnessRow = userId ? queryClient.getQueryData<WellnessRow>(qk.wellness(userId)) : undefined
+  const motionPref = resolveWellnessPrefs(wellnessRow?.prefs).motion
+  const reducedMotion = useReducedMotion(motionPref)
+  // Spec §10.4 restricted state: "map read-only, walkthroughs still open" --
+  // the proxy already blocks `/exercise/*` itself; this only keeps the copy
+  // honest instead of silently bouncing a restricted learner to /dashboard.
+  const restricted = learnerState?.accountStatus === 'restricted'
 
   if (!meta) {
     return (
@@ -132,7 +145,7 @@ export default function CoursePage() {
   const nextExerciseIds = isCurrentCourse && learnerState ? learnerState.nextExerciseIds : []
 
   const current = currentCloId(path, mastery)
-  const nodes = buildMap({ clos: bundle.clos, code, mastery, lessonProgress })
+  const nodes = buildMap({ clos: bundle.clos, code, mastery, lessonProgress, lessons: bundle.lessons, path })
   const cards = nextUp({ currentCloId: current, clos: bundle.clos, lessons: bundle.lessons, lessonProgress, nextExerciseIds, exercises: bundle.exercises })
   const lockedIn = nodes.filter((node) => node.state === 'locked-in').length
 
@@ -149,12 +162,12 @@ export default function CoursePage() {
 
       <section aria-labelledby="path-heading" className="space-y-4">
         <h2 id="path-heading" className="text-base font-medium">Your path</h2>
-        <PathMap nodes={nodes} exercises={bundle.exercises} reducedMotion={reducedMotion} />
+        <PathMap nodes={nodes} exercises={bundle.exercises} reducedMotion={reducedMotion} restricted={restricted} />
       </section>
 
-      <NextUpStack cards={cards} />
+      <NextUpStack cards={cards} reducedMotion={reducedMotion} restricted={restricted} />
 
-      <CourseFlatList nodes={nodes} />
+      <CourseFlatList nodes={nodes} exercises={bundle.exercises} reducedMotion={reducedMotion} restricted={restricted} />
     </div>
   )
 }

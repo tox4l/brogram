@@ -1,8 +1,9 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LearnerState } from '@/lib/contracts'
 import { makeQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
 import CoursePage from './page'
 
 const mocks = vi.hoisted(() => ({
@@ -71,8 +72,7 @@ function bundleFixture() {
   }
 }
 
-function renderPage() {
-  const client = makeQueryClient()
+function renderPage(client: QueryClient = makeQueryClient()) {
   return render(<QueryClientProvider client={client}><CoursePage /></QueryClientProvider>)
 }
 
@@ -147,5 +147,26 @@ describe('course home', () => {
     const region = screen.getByRole('region', { name: 'Next up' })
     expect(region.querySelectorAll('a').length).toBeGreaterThan(0)
     expect(mocks.supabaseFrom).not.toHaveBeenCalled()
+  })
+
+  it('I3: keeps the map read-only but never bounces a restricted learner into /exercise (spec §10.4)', async () => {
+    mocks.session.mockReturnValue({ learnerState: learnerState({ accountStatus: 'restricted' }) })
+    renderPage()
+    await screen.findByText('Demo Course')
+    expect(screen.getByText('Exercises are paused while your account is restricted.')).toBeTruthy()
+    const region = screen.getByRole('region', { name: 'Next up' })
+    // DEMO101's fixture bundle carries no lessons, so every card and every
+    // path-map node is exercise-bound -- restricted must block all of them.
+    expect(within(region).queryAllByRole('link')).toHaveLength(0)
+    expect(screen.getByRole('list', { name: 'Skill path' }).querySelectorAll('a')).toHaveLength(0)
+  })
+
+  it('I5: resolves the learner\'s wellness.prefs.motion through a passive cache peek rather than the OS media query', async () => {
+    const client = makeQueryClient()
+    client.setQueryData(qk.wellness('learner-one'), { prefs: { motion: 'reduced' } })
+    renderPage(client)
+    await screen.findByText('Demo Course')
+    const link = within(screen.getByRole('list', { name: 'Skill path' })).getAllByRole('link')[0]
+    expect(link.className).not.toContain('hover:-translate-y-0.5')
   })
 })

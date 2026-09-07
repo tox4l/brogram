@@ -8,19 +8,26 @@ import { NodeItem } from './NodeItem'
 /**
  * The centrepiece of the course home (spec §3.5, §10.4): a progressive
  * enhancement over a real, ordered list of links -- the DOM here IS the
- * accessibility story, not a canvas with click targets layered over it. Each
- * `NodeItem` draws its own short decorative connector to the next node
- * (`aria-hidden`), so nothing here needs to measure the DOM to lay out a
- * shared SVG overlay.
+ * accessibility story, not a canvas with click targets layered over it.
+ *
+ * Edges are drawn from `Clo.prerequisites`, not from sequence (fix-round
+ * I2): `nodes` renders in `LearnerState.path` order, which is not always a
+ * straight chain (DSAI2201 branches: 1 feeds both 2 and 3; 3 and 4 both feed
+ * 5), so the adjacent connector below is only drawn when the next node in
+ * rendered order genuinely lists this one as a prerequisite. Every other
+ * in-course prerequisite renders as visible "Builds on {title}" text inside
+ * the node instead of a false line -- still with zero DOM measurement.
  */
 export function PathMap({
   nodes,
   exercises,
   reducedMotion,
+  restricted,
 }: {
   nodes: MapNode[]
   exercises: readonly ExercisePublic[]
   reducedMotion: boolean
+  restricted: boolean
 }) {
   // "A node that just locked in plays its fill once and then stays lit
   // permanently" -- detected as a `closed` transition across renders of the
@@ -41,19 +48,34 @@ export function PathMap({
     setPreviousNodes(nodes)
   }
 
+  const titleById = new Map(nodes.map((node) => [node.cloId, node.title]))
+
   return (
     <ol aria-label="Skill path" className="flex flex-col">
-      {nodes.map((node, index) => (
-        <NodeItem
-          key={node.cloId}
-          node={node}
-          index={index}
-          isLast={index === nodes.length - 1}
-          exercises={exercises}
-          reducedMotion={reducedMotion}
-          justLockedIn={justLockedIn.has(node.cloId)}
-        />
-      ))}
+      {nodes.map((node, index) => {
+        const nextNode = nodes[index + 1]
+        const previousNode = index > 0 ? nodes[index - 1] : undefined
+        const drawConnectorForward = Boolean(nextNode && nextNode.prerequisites.includes(node.cloId))
+        const coveredByIncoming = previousNode && node.prerequisites.includes(previousNode.cloId) ? previousNode.cloId : null
+        const extraPrerequisiteTitles = node.prerequisites
+          .filter((id) => id !== coveredByIncoming)
+          .map((id) => titleById.get(id) ?? id)
+
+        return (
+          <NodeItem
+            key={node.cloId}
+            node={node}
+            index={index}
+            isLast={index === nodes.length - 1}
+            exercises={exercises}
+            reducedMotion={reducedMotion}
+            restricted={restricted}
+            drawConnectorForward={drawConnectorForward}
+            extraPrerequisiteTitles={extraPrerequisiteTitles}
+            justLockedIn={justLockedIn.has(node.cloId)}
+          />
+        )
+      })}
     </ol>
   )
 }
