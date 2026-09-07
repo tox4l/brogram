@@ -2411,3 +2411,5 @@ npx playwright test
 npm run perf:bundle                                # from W3 on
 npm run perf:timings                               # from W3 on
 ```
+
+Ruling (18:47 Doha, 2026-09-07), T3.2: the @vercel/speed-insights mount is struck from the plan for now (production is not on Vercel analytics); the local vitals ring buffer and the perf-mark gate stand. The GRADED perf mark and the pending-prefs guard on the settle-invalidate inside src/hooks/useExerciseLoop.ts land as a named follow-up after Lane A (the exercise fix lane) is approved; until then the perf gate reports the graded mark as a named pending delta.
