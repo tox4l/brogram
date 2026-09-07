@@ -17,6 +17,15 @@ import { SHELL_READY, ROUTE_READY, GRADED, CHECK_VERDICT } from '../src/lib/perf
  * file's own ownership (`e2e/perf.spec.ts`). `npm run build` (part of this task's own
  * acceptance line) must have produced `.next` before this file runs; `beforeAll` fails fast
  * with a clear message if it has not.
+ *
+ * **Step 3 — two budgets are deliberately absent from this gate, not merely untested.**
+ * `AGENT_DRY_RUN=true` (above) means no assertion here can ever say anything about DeepSeek
+ * latency, so "hint click → first token < 1.5s" is not written as a test at all — it is a
+ * field-only observation read from Account → Diagnostics (`useVitals()`, `src/lib/perf/
+ * vitals.ts`) and Speed Insights. Likewise "the first Run of a session on a cold language is
+ * not user-visible" is contradicted by the very throttled profile the plan measures against
+ * (a 10 MB Pyodide fetch is not hidden by 3-8 seconds of dashboard idle) and is not asserted
+ * here either. A budget nobody can measure is a claim, and this file does not ship one.
  */
 const PERF_PORT = 3900
 const PERF_BASE_URL = `http://127.0.0.1:${PERF_PORT}`
@@ -257,13 +266,10 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     {
       const before = seen.length
       await clearMark(page, ROUTE_READY)
-      const clickedAt = Date.now()
       await page.getByRole('link', { name: 'Open your course' }).click()
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-      const wallClockMs = Date.now() - clickedAt
       const courseCalls = seen.slice(before)
       expect(courseCalls, `/course/[code] must be 0 round trips on an SPA transition; saw ${courseCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
-      void wallClockMs
       expect(requireMark(await readMark(page, ROUTE_READY), ROUTE_READY), 'course tile click -> course home painted').toBeLessThan(INTERACTION.courseTileClickToPaintMs)
     }
 
@@ -302,16 +308,13 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     // -------------------------------------------------------------------------------
     {
       const before = seen.length
-      const startedAt = Date.now()
       await page.goto(`${PERF_BASE_URL}/exercise/${exerciseId}`, { waitUntil: 'load' })
       await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible()
-      const loadMs = Date.now() - startedAt
       const exerciseCalls = seen.slice(before)
       expect(exerciseCalls.length, `/exercise/[id] (seed) should cost exactly 1 round trip; saw ${exerciseCalls.map((c) => c.pathname).join(', ')}`).toBe(1)
       const exercisePaint = await readPaintMetrics(page)
       if (exercisePaint.lcp !== null) expect(exercisePaint.lcp).toBeLessThanOrEqual(PAINT.lcpMsExercise)
       expect(exercisePaint.cls).toBeLessThanOrEqual(PAINT.clsMax)
-      void loadMs
     }
 
     // -------------------------------------------------------------------------------
