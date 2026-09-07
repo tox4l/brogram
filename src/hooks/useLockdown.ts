@@ -3,9 +3,27 @@
 import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type SyntheticEvent } from 'react'
 import { LOCKDOWN, type IntegrityEventType } from '@/lib/contracts'
 import { createClient } from '@/lib/supabase/client'
+import { recordLocalIntegrityEvent } from '@/lib/integrity/localLog'
+import { line } from '@/lib/voice/lines'
 import { useSession } from '@/store/session'
 
-export type LockdownReason = 'blur' | 'idle' | 'printscreen'
+export type LockdownReason = 'blur' | 'idle'
+
+/**
+ * R9.2: PrintScreen gets no overlay of its own any more (see the module doc
+ * below), but a pattern of presses is still worth one honest, non-blocking
+ * word -- exactly once, on the third press in a given exercise. This is a UI
+ * cadence, not a scored threshold (`INTEGRITY_WEIGHTS`/`INTEGRITY_THRESHOLDS`
+ * in `src/lib/contracts.ts` are untouched by it), so it lives here rather
+ * than in the contracts file this task does not own.
+ */
+const PRINTSCREEN_NOTE_AT = 3
+
+/** `guard.paste.why` carries exactly one, variable-free variant, so picking
+ *  it is a pure constant -- computed once at module load rather than on every
+ *  render or every blocked paste. */
+const PASTE_WHY = line('guard.paste.why')
+
 export interface LockdownOptions { duringAttempt?: boolean; enabled?: boolean; idleGuard?: boolean }
 
 interface IntegrityRow {
@@ -33,7 +51,7 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
   const userId = useSession(session => session.user?.id)
   const [blurred, setBlurred] = useState(false)
   const [idle, setIdle] = useState(false)
-  const [printscreen, setPrintscreen] = useState(false)
+  const [printscreenNote, setPrintscreenNote] = useState<string | null>(null)
   const [pasteMessage, setPasteMessage] = useState('')
   const [loggingError, setLoggingError] = useState<string | null>(null)
   const pending = useRef(new Map<IntegrityEventType, IntegrityRow>())
@@ -44,6 +62,7 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
   const attempt = useRef(duringAttempt)
   const activity = useRef<() => void>(() => {})
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const printscreenCount = useRef(0)
 
   useEffect(() => { attempt.current = duringAttempt }, [duringAttempt])
 
@@ -81,19 +100,29 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
     }
   }, [])
 
-  const logIntegrity = useCallback((type: IntegrityEventType) => {
-    if (!enabled) return
+  const logIntegrity = useCallback((type: IntegrityEventType): boolean => {
+    if (!enabled) return false
     if (type === 'paste-blocked') {
-      setPasteMessage("Type it. That's the whole point.")
+      // R9.3: a rotating line from the bank, never the same one twice in a
+      // row (`line()`'s own no-seed guarantee) -- the single static string
+      // this used to be was the owner's complaint verbatim ("the paste block
+      // only said 'Type it'").
+      setPasteMessage(line('guard.paste'))
       if (feedbackTimer.current !== null) clearTimeout(feedbackTimer.current)
       feedbackTimer.current = setTimeout(() => setPasteMessage(''), 3_500)
     }
-    if (!userId) return
+    if (!userId) return false
     const now = Date.now()
     // Editor and page handlers may observe the same bubbling event. Coalesce
     // each type, and retain the attempt status at the time it happened.
-    if (now - (lastLogged.current.get(type) ?? -Infinity) < 1_000) return
+    if (now - (lastLogged.current.get(type) ?? -Infinity) < 1_000) return false
     lastLogged.current.set(type, now)
+    // The same accepted (non-coalesced) event this browser is about to insert
+    // is also mirrored into the learner's own local log -- see
+    // `src/lib/integrity/localLog.ts` -- so the itemised receipt has
+    // something honest to show even on schema 0005, where
+    // `my_integrity_breakdown()` does not exist yet.
+    recordLocalIntegrityEvent(type, now)
     pending.current.set(type, {
       user_id: userId,
       exercise_id: exerciseId,
@@ -101,6 +130,7 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
       during_attempt: attempt.current ?? attemptIsActive(),
       created_at: new Date(now).toISOString(),
     })
+    return true
   }, [enabled, exerciseId, userId])
 
   useEffect(() => {
@@ -108,7 +138,6 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
     mounted.current = true
     let idleCoverTimer: ReturnType<typeof setTimeout>
     let idleLogTimer: ReturnType<typeof setTimeout>
-    let screenshotTimer: ReturnType<typeof setTimeout> | undefined
     const resetIdle = () => {
       setIdle(false)
       clearTimeout(idleCoverTimer)
@@ -128,18 +157,24 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
       resetIdle()
     }
     const visibility = () => { if (document.hidden) blur(); else focus() }
+    // R9.1: the two-second full-screen cover and the clipboard-clear attempt
+    // are gone -- by the time this `keyup` fires, the OS has already
+    // rasterised the frame, so that cover protected nothing and only
+    // punished a learner who pressed the key for an unrelated reason. The
+    // `keyup` listener and the weight-3 `printscreen` row stay: the log is
+    // the one genuine thing this guard ever produced.
     const keyup = (event: KeyboardEvent) => {
       if (event.key !== 'PrintScreen' && event.keyCode !== 44) return
-      setPrintscreen(true)
-      logIntegrity('printscreen')
-      clearTimeout(screenshotTimer)
-      screenshotTimer = setTimeout(() => setPrintscreen(false), 2_000)
-      try {
-        const cleared = navigator.clipboard?.writeText('')
-        void cleared?.catch(() => { /* Clipboard permission is browser-controlled. */ })
-      } catch { /* PrintScreen protection stays active even when the clipboard is denied. */ }
+      if (!logIntegrity('printscreen')) return
+      printscreenCount.current += 1
+      // R9.2: exactly once, on the third press in this exercise -- a
+      // non-blocking note, not a modal or a full-screen anything. Because
+      // `printscreenCount` only ever climbs by one and this branch fires on
+      // the exact value, later presses in the same exercise say nothing.
+      if (printscreenCount.current === PRINTSCREEN_NOTE_AT) setPrintscreenNote(line('guard.printscreen'))
     }
-    setPrintscreen(false)
+    printscreenCount.current = 0
+    setPrintscreenNote(null)
     setBlurred(document.hidden)
     setPasteMessage('')
     resetIdle()
@@ -162,7 +197,6 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
       window.removeEventListener('keyup', keyup)
       clearTimeout(idleCoverTimer)
       clearTimeout(idleLogTimer)
-      clearTimeout(screenshotTimer)
       clearInterval(batchTimer)
       if (feedbackTimer.current !== null) clearTimeout(feedbackTimer.current)
       activity.current = () => {}
@@ -186,11 +220,16 @@ export function useLockdown(exerciseId: string | null, { duringAttempt, enabled 
 
   const resume = useCallback(() => activity.current(), [])
   return {
-    overlay: enabled ? (blurred ? 'blur' : printscreen ? 'printscreen' : idle ? 'idle' : null) as LockdownReason | null : null,
+    overlay: enabled ? (blurred ? 'blur' : idle ? 'idle' : null) as LockdownReason | null : null,
     logIntegrity,
     containerProps,
     resume,
     pasteMessage,
+    /** R9.3's "why" affordance -- one honest, variable-free sentence, distinct from the rotating `pasteMessage`. */
+    pasteWhy: PASTE_WHY,
+    /** R9.2: non-null exactly once per exercise, on the third PrintScreen press. Not a toast -- meant for a
+     *  non-blocking inline note (e.g. in the results panel), never a modal or a full-screen overlay. */
+    printscreenNote,
     loggingError,
   }
 }
