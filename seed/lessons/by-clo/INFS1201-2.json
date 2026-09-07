@@ -1,0 +1,99 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1201-2",
+      "cloId": "INFS1201-2",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "Stop At The First Match",
+      "hook": "Most searches are over the second you find what you needed.",
+      "estimatedMinutes": 6,
+      "draft": true,
+      "tags": ["search", "loops", "built-ins"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Find it, then stop looking",
+          "body": "To find something in a list, look at each item in order from the start. The instant you find a match, stop and report where it was — checking what's left after that is wasted work. If all you need is a plain yes or no, or the first spot a value shows up, Python's `in` and `.index()` already do that exact walk for you, and they stop the moment they hit too. Reach for your own loop only when you need something extra along the way, like a count, a running total, or a custom rule for what counts as a match.",
+          "figure": ""
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "temps = [5, 3, -2, 8]\nprint(-2 in temps)\n\nfound = False\nfor t in temps:\n    if t == -2:\n        found = True\n        break\nprint(found)",
+          "runnable": true,
+          "expectedStdout": "True\nTrue\n",
+          "caption": "Same answer either way — `in` already does the walk on the left."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def first_below_zero(temps):\n    for i in range(len(temps)):\n        if temps[i] < 0:\n            return i\n    return -1",
+          "steps": [
+            { "line": 2, "say": "Walk from the front, in order, so the first match is the true first match." },
+            { "line": 3, "say": "Test each temperature only once you reach it, no peeking ahead." },
+            { "line": 4, "say": "Return the position right away, stop the walk the instant it hits." },
+            { "line": 5, "say": "Only fall through to here once every temperature failed the test." }
+          ],
+          "caption": "Index 2 is the first negative reading, so that's what comes back."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "You're checking whether a typed username already exists in a list of taken usernames. You don't need the position, just yes or no. What's the best move?",
+          "options": [
+            "Write a for loop that returns True the moment you find a match.",
+            "Use `username in taken_usernames` and read the result.",
+            "Call `taken_usernames.index(username)` and catch the error if it's missing.",
+            "Sort the list first, then scan it top to bottom."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Works, but you're rebuilding a scan Python already gives you for free.",
+            "This is exactly the yes-or-no scan you need, already written and stopped early.",
+            "Index makes you handle a lookup failure just to get a plain yes or no.",
+            "Sorting costs extra work you don't need for a single yes-or-no check."
+          ],
+          "hint": "Ask what you actually need back: a position, or just yes or no.",
+          "explain": "`in` walks the list the same way a hand-written loop would, stopping at the first match, so there's no reason to write that loop yourself for a plain yes-or-no answer."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write `first_passing(scores)`. It returns the index of the first score that is 60 or higher. If none qualify, return -1.",
+          "language": "python",
+          "starterCode": "def first_passing(scores):\n    pass",
+          "tests": [
+            { "id": "t1", "input": "[[40, 55, 82, 91]]", "expected": "2", "hidden": false, "name": "one qualifies" },
+            { "id": "t2", "input": "[[10, 20, 30]]", "expected": "-1", "hidden": false, "name": "none qualify" }
+          ],
+          "referenceSolution": "def first_passing(scores):\n    for i in range(len(scores)):\n        if scores[i] >= 60:\n            return i\n    return -1",
+          "hint": "Loop with the index, test the condition, and return the moment it's true.",
+          "explain": "Walking from index 0 and returning right away finds the first qualifying score without checking any others; falling through the whole loop means nothing matched, so -1 is correct."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Scan from the start; stop the second you find a match.",
+            "Reach for in or .index() when you just need yes or no.",
+            "Write your own loop only when you need more than that."
+          ],
+          "remember": "The built-in already stops early; don't rewrite the walk yourself."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next up: a real rep where you build binary search and bubble sort the same way."
+        }
+      ],
+      "exitLine": "Time for a real rep: build one of these searches yourself."
+    }
+  ]
+}

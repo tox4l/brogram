@@ -1,0 +1,98 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2201-5",
+      "cloId": "INFS2201-5",
+      "course": "INFS2201",
+      "language": "mongo",
+      "version": 1,
+      "title": "No Join, Just a Filter",
+      "hook": "Forget joins - one document already has everything a match needs.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["mongodb", "documents", "filters"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "A filter object plays the WHERE clause's role",
+          "body": "You already know how a WHERE clause narrows down rows. MongoDB keeps records as documents inside a collection instead of rows inside a table, and a find() call plays the same role a WHERE clause did. You hand find() a filter: an object where each key is a field name and each value is what that field must match. Plain values mean equals; operators like $gt, $gte, $lt and $ne compare instead. MongoDB checks every document in the collection against the filter and hands back every one that matches, in the shape it was already stored - no rows to reassemble, because nothing was split apart in the first place."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "mongo",
+          "code": "db.orders.insertMany([\n  { customer: \"Yara\", total: 42, delivered: true },\n  { customer: \"Omar\", total: 15, delivered: false },\n  { customer: \"Huda\", total: 30, delivered: true }\n])\n\ndb.orders.find({ delivered: true, total: { $gt: 20 } })",
+          "steps": [
+            { "line": [2, 4], "say": "Each document already holds every fact about one order, so there is nothing left to join." },
+            { "line": 7, "say": "delivered: true keeps only documents where that field equals true, nothing else." },
+            { "line": 7, "say": "total: { $gt: 20 } compares instead of matching, so only bigger orders survive." },
+            { "line": 7, "say": "Both conditions sit in the same object, so a document must satisfy both to match." }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A members collection stores { name, active, visits } per member. Which filter returns only members who are active and have logged more than 10 visits?",
+          "options": [
+            "{ active: true, visits: { $gt: 10 } }",
+            "{ active: true, visits: { $lt: 10 } }",
+            "{ active: \"true\", visits: { $gt: 10 } }",
+            "{ visits: { $gt: 10 } }"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right - active must equal true and visits must beat ten, both checked together.",
+            "$lt keeps visits under ten, the opposite of what the question asks for.",
+            "\"true\" as a string never matches the boolean true stored on active.",
+            "This only checks visits, so an inactive member with enough visits would still match."
+          ],
+          "hint": "Look at what each key checks and whether both conditions actually appear in the filter.",
+          "explain": "A filter object matches on every key inside it, so active: true and visits: { $gt: 10 } must both hold before a document counts."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A tickets collection stores { event, price, vip } per ticket. Write a query that returns every non-VIP ticket priced under 50.",
+          "language": "mongo",
+          "starterCode": "// collection: tickets\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "{\"op\":\"find\",\"args\":[{\"vip\":false,\"price\":{\"$lt\":50}}]}",
+              "expected": "[{\"event\":\"Finals\",\"price\":40,\"vip\":false},{\"event\":\"Opener\",\"price\":25,\"vip\":false}]",
+              "name": "example"
+            },
+            {
+              "id": "t2",
+              "input": "{\"op\":\"find\",\"args\":[{\"vip\":false,\"price\":{\"$lt\":50}}]}",
+              "expected": "[{\"event\":\"Finals\",\"price\":40,\"vip\":false},{\"event\":\"Opener\",\"price\":25,\"vip\":false}]",
+              "name": "vip ticket under fifty still excluded"
+            }
+          ],
+          "referenceSolution": "{\n  \"fixture\": [\n    {\"event\": \"Finals\", \"price\": 40, \"vip\": false},\n    {\"event\": \"Finals\", \"price\": 30, \"vip\": true},\n    {\"event\": \"Opener\", \"price\": 25, \"vip\": false},\n    {\"event\": \"Opener\", \"price\": 60, \"vip\": false}\n  ],\n  \"args\": [\n    {\"vip\": false, \"price\": {\"$lt\": 50}}\n  ]\n}",
+          "hint": "Match vip to false directly, then compare price with an operator instead of an exact value.",
+          "explain": "vip: false keeps only non-VIP tickets, and price: { $lt: 50 } narrows further to ones under fifty; both must hold together."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A document holds every fact about one record already assembled.",
+            "find() takes a filter object matching field names to conditions.",
+            "Operators like $gt and $lt compare instead of an exact match."
+          ],
+          "remember": "One filter object, checked against every document - no join required."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to write your own filters against a fresh collection, no examples to copy this time."
+        }
+      ],
+      "exitLine": "Go run a real filter against a real collection."
+    }
+  ]
+}

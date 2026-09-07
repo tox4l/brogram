@@ -1,0 +1,109 @@
+{
+  "lessons": [
+    {
+      "id": "DSAI2201-2",
+      "cloId": "DSAI2201-2",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Read a relationship in one number",
+      "hook": "Two columns, one number, and you already know if they move together.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["pandas", "correlation", "relationships"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "One number for how two columns move",
+          "body": "When you have two number columns, you want to know if they move together. Correlation gives you one number for that, always between -1 and 1. Near 1 means both rise together. Near -1 means one rises while the other falls. Near 0 means one tells you almost nothing about the other. In pandas, call `.corr()` on one numeric column and pass the other — it returns this number without you writing any formula. A high correlation only means a straight-line pattern exists between the two columns, not that one causes the other."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import pandas as pd\n\nx = pd.Series([1, 2, 3, 4, 5])\ny = pd.Series([10, 20, 30, 40, 50])\n\nprint(round(x.corr(y), 2))",
+          "runnable": true,
+          "expectedStdout": "1.0\n",
+          "caption": "Make y count down instead of up and run it again."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import pandas as pd\n\nhours = pd.Series([1, 2, 3, 4])\nwon = pd.Series([2, 3, 5, 4])\n\ncorr = hours.corr(won)\nprint(round(corr, 2))",
+          "steps": [
+            { "line": 1, "say": "Loading pandas first gives you .corr and the Series type used on the next two lines." },
+            { "line": [3, 4], "say": "Two Series of the same length line up index by index, so each row still means one practice session." },
+            { "line": 6, "say": "The .corr call measures the straight-line relationship between the columns without you writing the formula." },
+            { "line": 7, "say": "Rounding to two places keeps the printed number readable without losing the pattern it represents." }
+          ],
+          "caption": "Practice hours against games won, boiled down to one number."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "New columns, same idea. What does this print?",
+          "language": "python",
+          "code": "import pandas as pd\n\ntemp = pd.Series([1, 2, 3, 4, 5])\nsales = pd.Series([50, 40, 30, 20, 10])\n\nprint(round(temp.corr(sales), 2))",
+          "expected": "-1.0",
+          "normalize": "lines",
+          "hint": "temp climbs by the same step every row while sales drops by the same step. What does a perfectly opposite pattern round to?",
+          "explain": "temp rises by 1 each row while sales falls by 10 each row — a perfectly straight, opposite pattern — so the correlation lands exactly on -1, and rounding keeps it at -1.0."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "Which pair of columns is most likely to show a correlation near 0?",
+          "options": [
+            "Cups of coffee bought today, and the buyer's shoe size",
+            "Hours of study this week, and the exam score that follows",
+            "Minutes left on a countdown timer, and minutes already elapsed"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Shoe size has nothing to do with coffee habits, so knowing one tells you nothing about the other.",
+            "More study time tends to raise scores, so this pair moves together — near 1, not 0.",
+            "As elapsed time rises, remaining time falls in lockstep — near -1, not 0."
+          ],
+          "hint": "Which two things have no real reason to move together at all?",
+          "explain": "A correlation near 0 shows up when neither column predicts the other — no straight-line pattern connects coffee cups to shoe size, while the other two pairs move together in a clear direction."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write a function that returns the correlation between two equal-length lists of numbers, rounded to 2 decimal places. `rounded_corr(a, b)` should turn each list into a pandas Series, correlate them, and round the result.",
+          "language": "python",
+          "starterCode": "import pandas as pd\n\ndef rounded_corr(a, b):\n    pass\n",
+          "tests": [
+            { "id": "t1", "input": "[[1, 2, 3, 4], [10, 20, 30, 40]]", "expected": "1.0", "name": "rises together" },
+            { "id": "t2", "input": "[[1, 2, 3, 4], [40, 30, 20, 10]]", "expected": "-1.0", "name": "moves opposite" },
+            { "id": "t3", "input": "[[-2, -1, 0, 1, 2], [4, 1, 0, 1, 4]]", "expected": "0.0", "name": "no straight-line pattern" }
+          ],
+          "referenceSolution": "import pandas as pd\n\ndef rounded_corr(a, b):\n    x = pd.Series(a)\n    y = pd.Series(b)\n    return round(x.corr(y), 2)\n",
+          "hint": "Turn each list into a pandas Series, call .corr() the same way the walkthrough did, then round the result.",
+          "explain": "Wrapping each list in a Series lets .corr() line the values up index by index and compute the same straight-line measure from before; rounding to 2 decimals gives a clean value like 1.0, -1.0 or 0.0 depending on how the two lists move."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Correlation is one number between -1 and 1.",
+            "Near 1 or -1 means a strong straight-line pattern.",
+            "Near 0 means no straight-line pattern connects the columns."
+          ],
+          "remember": "A high correlation shows a pattern — it never proves one thing causes the other."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now try it on data nobody rigged to land on a clean number."
+        }
+      ],
+      "exitLine": "That's the number. Go find a relationship nobody rigged for you."
+    }
+  ]
+}

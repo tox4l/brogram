@@ -1,0 +1,109 @@
+{
+  "lessons": [
+    {
+      "id": "DSAI2201-5",
+      "cloId": "DSAI2201-5",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Split first, then pick the right score",
+      "hook": "A model that only sees its own training data is grading its own homework.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["scikit-learn", "train-test-split", "evaluation"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Split first, then pick the right score",
+          "body": "You have a model that fits the data. The real test is how it handles rows it has never seen. Before you fit anything, split your rows into a training set and a test set with train_test_split, then fit only on the training rows. Predict on the test rows and check those predictions against their true values, never the ones you trained on. Which score to read depends on what the model predicts. A model predicting categories gets scored on accuracy: the fraction of test rows it labeled correctly. A model predicting a number gets scored on r2_score instead, since counting exact matches makes no sense for a continuous number."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "from sklearn.model_selection import train_test_split\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score\n\nX = [[1], [2], [3], [4], [5], [6], [7], [8]]\ny = [0, 0, 0, 0, 1, 1, 1, 1]\nX_train, X_test, y_train, y_test = train_test_split(\n    X, y, test_size=0.25, random_state=0)\nmodel = LogisticRegression().fit(X_train, y_train)\npreds = model.predict(X_test)\nprint(accuracy_score(y_test, preds))",
+          "runnable": true,
+          "expectedStdout": "1.0\n",
+          "caption": "The fit call never touches X_test, so the score means something."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "from sklearn.model_selection import train_test_split\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score\n\nhours = [[1], [2], [3], [4], [5], [6], [7], [8], [9], [10]]\npassed = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]\n\nX_train, X_test, y_train, y_test = train_test_split(\n    hours, passed, test_size=0.3, random_state=1)\n\nmodel = LogisticRegression().fit(X_train, y_train)\npreds = model.predict(X_test)\n\nprint(round(accuracy_score(y_test, preds), 2))",
+          "steps": [
+            { "line": [8, 9], "say": "Splitting before fitting sets aside rows the model will never see while training." },
+            { "line": 11, "say": "Fitting only on X_train means the model can't just memorize the held-out answers." },
+            { "line": 12, "say": "Predicting on X_test asks the model to label hours it never trained on." },
+            { "line": 14, "say": "accuracy_score matches the target here: passed is a category, not a number." }
+          ],
+          "caption": "Ten rows in, three held back, and the score only reflects the held-back three."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A model predicts a house's price in dollars from its size. After splitting and fitting, which score tells you how good those price predictions are?",
+          "options": [
+            "accuracy_score, since it works for any kind of prediction",
+            "r2_score, since price is a continuous number, not a category",
+            "Whatever number .fit() reports, no extra step needed"
+          ],
+          "correctIndex": 1,
+          "why": [
+            "accuracy_score only counts exact matches; a predicted price almost never lands on the exact real one.",
+            "Right. Price is continuous, and r2_score is built to score numeric predictions like this one.",
+            ".fit() only adjusts the model's parameters; it never reports how predictions did on held-out rows."
+          ],
+          "hint": "Ask whether the model is outputting a category or a number, then match the score to that.",
+          "explain": "Price is a continuous number, not a label, so accuracy (which only counts exact matches) doesn't apply here; r2_score is built to measure how closely continuous predictions track the real values."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "predict-output",
+          "prompt": "This splits 8 rows before fitting anything. Without running it, what does the last line print?",
+          "language": "python",
+          "code": "from sklearn.model_selection import train_test_split\n\nrows = [[1], [2], [3], [4], [5], [6], [7], [8]]\nlabels = [0, 1, 0, 1, 0, 1, 0, 1]\n\nX_train, X_test, y_train, y_test = train_test_split(\n    rows, labels, test_size=0.25, random_state=3)\n\nprint(len(X_train), len(X_test))",
+          "expected": "6 2\n",
+          "normalize": "exact",
+          "hint": "test_size is a fraction of all 8 rows. Work out how many go to test, then how many are left for train.",
+          "explain": "0.25 of 8 rows is 2, so the test set gets 2 rows and the remaining 6 go to train; random_state only changes which specific rows land in each set, not how many."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write `evaluate_predictions(kind, y_true, y_pred)`. When `kind` is `\"classification\"`, return `accuracy_score(y_true, y_pred)` rounded to 2 places. Otherwise, return `r2_score(y_true, y_pred)` rounded to 2 places.",
+          "language": "python",
+          "starterCode": "from sklearn.metrics import accuracy_score, r2_score\n\ndef evaluate_predictions(kind, y_true, y_pred):\n    pass\n",
+          "tests": [
+            { "id": "t1", "input": "[\"classification\", [0, 1, 1, 0], [0, 1, 1, 0]]", "expected": "1.0", "hidden": false, "name": "labels all match" },
+            { "id": "t2", "input": "[\"classification\", [0, 1, 1, 0], [0, 1, 0, 0]]", "expected": "0.75", "hidden": false, "name": "one label wrong" },
+            { "id": "t3", "input": "[\"regression\", [3.0, 5.0, 7.0], [2.0, 5.0, 8.0]]", "expected": "0.75", "hidden": false, "name": "numeric target, not classification" }
+          ],
+          "referenceSolution": "from sklearn.metrics import accuracy_score, r2_score\n\ndef evaluate_predictions(kind, y_true, y_pred):\n    if kind == \"classification\":\n        return round(accuracy_score(y_true, y_pred), 2)\n    return round(r2_score(y_true, y_pred), 2)\n",
+          "hint": "Branch on kind: accuracy_score for \"classification\", r2_score for anything else, both rounded to 2 places.",
+          "explain": "The branch on kind picks the score that matches the target type: accuracy_score counts exact label matches for classification, and r2_score measures how well the numeric predictions track the real values otherwise."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Split before fitting, and only fit on the training rows.",
+            "Score only on the test rows the model never trained on.",
+            "Match the metric to the target: accuracy for labels, r2_score for numbers."
+          ],
+          "remember": "Score on held-out rows only, with the metric that matches what you're predicting."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you split, fit and score a model yourself, on data nobody set up for you."
+        }
+      ],
+      "exitLine": "That's the split-then-score protocol. Go fit something on rows you haven't peeked at."
+    }
+  ]
+}

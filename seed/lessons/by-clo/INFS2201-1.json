@@ -1,0 +1,84 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2201-1",
+      "cloId": "INFS2201-1",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "One Table Won't Hold It",
+      "hook": "Flat files fall apart the moment two facts need to change together.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": ["relational-model", "primary-key", "foreign-key"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Why one giant spreadsheet breaks",
+          "body": "Picture one giant spreadsheet holding every book and its author's name in every row. Rename an author and you have to fix every row they touch, or the data disagrees with itself. A database management system stores related facts in separate tables instead, then joins them back together for you. The relational model is this idea: split data into tables, one fact per row. Give each row a primary key, a value that identifies it and never repeats in that table. A foreign key sits in one table and points at another table's primary key, so the connection is stored once and checked, not copied everywhere."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "sql",
+          "code": "CREATE TABLE authors (\n  author_id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE books (\n  book_id INTEGER PRIMARY KEY,\n  title TEXT,\n  author_id INTEGER REFERENCES authors(author_id)\n);\n\nINSERT INTO authors VALUES (1, 'Octavia Butler');\nINSERT INTO books VALUES (101, 'Kindred', 1);\n\nSELECT title, name\nFROM books\nJOIN authors ON books.author_id = authors.author_id;",
+          "steps": [
+            { "line": 2, "say": "author_id is unique per row here, so no two authors can share one identity." },
+            { "line": 9, "say": "This foreign key points at authors, so every book must belong to a real one." },
+            { "line": [12, 13], "say": "The author is stored once; books just reference it instead of repeating the name." },
+            { "line": [15, 17], "say": "The join follows the foreign key back to authors to pull in the name." }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A gym's booking sheet repeats every trainer's phone number on every class row. One trainer changes numbers. What breaks in a flat file that a foreign key would prevent?",
+          "options": [
+            "Every class row with that trainer now shows the old number until each row is manually fixed.",
+            "The gym loses all its class history because flat files cannot store phone numbers.",
+            "Nothing breaks, because flat files update every copy of a value automatically.",
+            "The class rows delete themselves because they no longer match the trainer."
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right - the number lives in every row, so nothing points back to one shared value.",
+            "Flat files store phone numbers fine; the failure is duplication, not the data type.",
+            "A flat file never updates its copies together; each row holds its own separate value.",
+            "Rows do not vanish on their own; they just quietly disagree with each other."
+          ],
+          "hint": "Think about how many places that phone number actually lives in a flat file.",
+          "explain": "A foreign key stores the trainer once and every class row points at it, so a change happens in exactly one place instead of hundreds."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "spot-the-bug",
+          "prompt": "This enrollments table already has a foreign key back to students. One line still repeats data live in place, so an update can drift out of sync. Find it.",
+          "language": "sql",
+          "code": "CREATE TABLE students (\n  student_id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE enrollments (\n  enrollment_id INTEGER PRIMARY KEY,\n  student_id INTEGER REFERENCES students(student_id),\n  student_name TEXT,\n  course_code TEXT\n);",
+          "bugLines": [9],
+          "hint": "Look for a column that copies a fact the foreign key can already reach.",
+          "explain": "student_name repeats data already reachable through the student_id foreign key, so a name change here won't match students and the two disagree."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A relational database splits facts into tables instead of one repeated sheet.",
+            "A primary key names a row; a foreign key points back to one.",
+            "Keeping a fact in one place stops updates from drifting out of sync."
+          ],
+          "remember": "One fact, one place - the foreign key is the only copy you need."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now go tell the difference yourself, one messy sheet and one clean schema at a time."
+        }
+      ],
+      "exitLine": "Time to spot the real pattern in a real schema."
+    }
+  ]
+}

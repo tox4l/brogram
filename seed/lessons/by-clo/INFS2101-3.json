@@ -1,0 +1,148 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2101-3",
+      "cloId": "INFS2101-3",
+      "course": "INFS2101",
+      "language": "web",
+      "version": 1,
+      "title": "Stop the submit, then check it",
+      "hook": "preventDefault() is the one line standing between you and a page that reloads before you can check anything.",
+      "estimatedMinutes": 7,
+      "draft": false,
+      "tags": [
+        "forms",
+        "validation"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Events let your code react before the page moves on",
+          "body": "A page can react to what someone does — a click, a key press, a form submit — by listening for that action with addEventListener. Give it an event name and a function, and the browser calls your function the instant that action happens. A form's submit event normally reloads the page immediately, before you get a say. Call event.preventDefault() as the very first line of your handler and that reload never happens, so you get to look at what was typed first. Read a field's value, test it against a rule, and if it fails, write your own message onto the page and stop. If it passes, let the rest of your code run."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "web",
+          "code": "document.body.innerHTML = '<form id=\"f\"><input id=\"email\" value=\"taylor@brogram\"></form>';\nconst form = document.getElementById('f');\nform.addEventListener('submit', (e) => {\n  e.preventDefault();\n  const value = document.getElementById('email').value;\n  console.log(value.includes('@') ? 'sending' : 'fix that email');\n});\nform.dispatchEvent(new Event('submit', { cancelable: true }));",
+          "runnable": true,
+          "expectedStdout": "sending\n",
+          "caption": "Change the value so it has no @ and run it again. Watch which line logs."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "web",
+          "code": "<form id=\"signup\">\n<input id=\"name\">\n<button>Join</button>\n</form>\n<p id=\"error\"></p>\n<script>\nconst form = document.getElementById('signup');\nconst error = document.getElementById('error');\nform.addEventListener('submit', function (event) {\n  event.preventDefault();\n  const name = document.getElementById('name').value.trim();\n  if (name.length === 0) {\n    error.textContent = 'Enter a name before you join.';\n    return;\n  }\n  error.textContent = '';\n  console.log('joined as ' + name);\n});\n</script>",
+          "steps": [
+            {
+              "line": 9,
+              "say": "Listening for submit means your code runs the instant the button fires it."
+            },
+            {
+              "line": 10,
+              "say": "preventDefault stops the page reload, so your checks get to run before anything is sent."
+            },
+            {
+              "line": [
+                11,
+                15
+              ],
+              "say": "Trimming catches spaces-only input, and returning early stops a bad value from going any further."
+            },
+            {
+              "line": [
+                16,
+                17
+              ],
+              "say": "Clearing the old error first stops a stale message lingering after a fix."
+            }
+          ],
+          "caption": "One field, checked before it ever leaves the page."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same shape, a different form. What does this log when the button fires?",
+          "language": "web",
+          "code": "document.body.innerHTML =\n  '<form id=\"order\"><input id=\"qty\" value=\"0\"><button>Buy</button></form>';\nconst form = document.getElementById('order');\nform.addEventListener('submit', function (event) {\n  event.preventDefault();\n  const qty = Number(document.getElementById('qty').value);\n  if (qty <= 0) {\n    console.log('pick at least one');\n    return;\n  }\n  console.log('ordered ' + qty);\n});\nform.dispatchEvent(new Event('submit', { cancelable: true }));",
+          "expected": "pick at least one",
+          "normalize": "lines",
+          "hint": "Trace what qty becomes once the text '0' is turned into a number.",
+          "explain": "Number('0') is 0, and 0 is not greater than 0, so the guard catches it and logs the rejection message instead of ever reaching the order line."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "You delete event.preventDefault() from the handler above. The name field is empty and the button is clicked. What happens?",
+          "options": [
+            "Nothing changes — the check still stops the page from submitting.",
+            "The browser reloads the page as soon as submit fires, before the error message can be seen.",
+            "The error message shows twice instead of once."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "The check still runs and still writes the message, but nothing stops the browser's normal reload from happening right after.",
+            "Right. preventDefault is the only thing stopping the reload. Skip it, and the page reloads regardless of what the check decided.",
+            "The handler still only runs once per click, so nothing here would make a message double up."
+          ],
+          "hint": "Think about what preventDefault is actually stopping the browser from doing.",
+          "explain": "preventDefault is the only thing standing between your check and the browser's default reload. Remove it and the reload happens no matter what the check found, so the message never gets a chance to be read."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Finish the handler: an empty comment should set the status to 'Write something first.' and stop there; anything else should set it to 'Posted.'",
+          "language": "web",
+          "starterCode": "<form id=\"postForm\">\n<input id=\"comment\">\n<button>Post</button>\n</form>\n<p id=\"status\"></p>\n<script>\nconst form = document.getElementById('postForm');\nconst status = document.getElementById('status');\nform.addEventListener('submit', function (event) {\n  event.preventDefault();\n  const comment = document.getElementById('comment').value.trim();\n  // TODO: if comment is empty, set status.textContent to\n  // 'Write something first.' and stop here.\n  // otherwise set status.textContent to 'Posted.'\n});\n</script>",
+          "tests": [
+            {
+              "id": "t1",
+              "name": "empty comment",
+              "input": "document.getElementById('comment').value = '   ';\ndocument.getElementById('postForm').dispatchEvent(new Event('submit', { cancelable: true }));\nconst status = document.getElementById('status').textContent;\nreturn status === 'Write something first.' ? 'ok' : 'got: ' + status;",
+              "expected": "ok",
+              "hidden": false
+            },
+            {
+              "id": "t2",
+              "name": "real comment",
+              "input": "document.getElementById('comment').value = 'nice';\ndocument.getElementById('postForm').dispatchEvent(new Event('submit', { cancelable: true }));\nconst status = document.getElementById('status').textContent;\nreturn status === 'Posted.' ? 'ok' : 'got: ' + status;",
+              "expected": "ok",
+              "hidden": false
+            },
+            {
+              "id": "t3",
+              "name": "recovers after an empty submit",
+              "input": "document.getElementById('comment').value = '';\ndocument.getElementById('postForm').dispatchEvent(new Event('submit', { cancelable: true }));\ndocument.getElementById('comment').value = 'again';\ndocument.getElementById('postForm').dispatchEvent(new Event('submit', { cancelable: true }));\nconst status = document.getElementById('status').textContent;\nreturn status === 'Posted.' ? 'ok' : 'got: ' + status;",
+              "expected": "ok",
+              "hidden": false
+            }
+          ],
+          "referenceSolution": "<form id=\"postForm\">\n<input id=\"comment\">\n<button>Post</button>\n</form>\n<p id=\"status\"></p>\n<script>\nconst form = document.getElementById('postForm');\nconst status = document.getElementById('status');\nform.addEventListener('submit', function (event) {\n  event.preventDefault();\n  const comment = document.getElementById('comment').value.trim();\n  if (comment.length === 0) {\n    status.textContent = 'Write something first.';\n    return;\n  }\n  status.textContent = 'Posted.';\n});\n</script>",
+          "hint": "Guard first: check the length, set the message, and return before anything else runs.",
+          "explain": "An empty comment needs to stop immediately with its own message so nothing posts; anything else should fall through to the success line."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "addEventListener runs your code the moment an event happens.",
+            "preventDefault stops the reload so your check runs first.",
+            "Guard bad input early, then let good input through."
+          ],
+          "remember": "Check before you let it go — the page never gets a free pass."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Different form, real input. Time to write the check yourself."
+        }
+      ],
+      "exitLine": "That's the guard. Now go build one that has to hold up."
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2101-2",
+      "cloId": "INFS2101-2",
+      "course": "INFS2101",
+      "language": "web",
+      "version": 1,
+      "title": "Where The Leftover Space Goes",
+      "hook": "Flexbox lines things up in one move. The real skill is deciding where the leftover room goes.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["flexbox", "justify-content", "layout"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "justify-content decides where the leftover space lands",
+          "body": "Give a container display: flex and its direct children line up in a row by default, side by side instead of stacking. justify-content then decides what happens to whatever width is left over once the children are sized. flex-start pushes everything left, leaving the extra room after the last item. center bunches the children together and splits the extra room evenly before the first and after the last. space-between spreads the children across the full width so the first sits at the left edge, the last sits at the right edge, and the extra room becomes equal gaps only between the ones in the middle. Pick the value by where the leftover space should land."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "web",
+          "code": "<style>\n  .nav {\n    display: flex;\n    justify-content: space-between;\n  }\n  .nav a { padding: 8px; background: #ddd; }\n</style>\n<nav class=\"nav\">\n  <a href=\"#\">Home</a>\n  <a href=\"#\">Docs</a>\n  <a href=\"#\">About</a>\n</nav>",
+          "steps": [
+            { "line": 3, "say": "display: flex turns nav into a row container, so the three links sit side by side." },
+            { "line": 4, "say": "space-between hands the leftover width to the gaps between links, not to the links themselves." },
+            { "line": [8, 12], "say": "Only nav's direct children, the three links, become flex items here; nothing nested deeper counts." },
+            { "line": 4, "say": "Home stays pinned to the left edge and About stays pinned to the right; only the middle gap grows." }
+          ],
+          "caption": "One row, three links, the leftover width absorbed by the gaps between them."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "Same nav, but justify-content is changed to center instead of space-between. Where does the leftover width go now?",
+          "options": [
+            "Split into two equal margins, one before the first link and one after the last, with the links bunched together in the middle",
+            "Spread evenly only between the links, with nothing before the first or after the last",
+            "Added entirely after the last link, so the links pack against the left edge"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right. center treats the whole leftover width as two matching margins around the bunched-together group.",
+            "That description fits space-between, not center — center does not touch the space between individual links.",
+            "That fits flex-start, not center — center never leaves the group pressed against one edge."
+          ],
+          "hint": "center is about grouping the children, not spacing them apart. Where would two matching margins have to sit?",
+          "explain": "center treats the three links as one tight group and puts all of the leftover width into two equal margins, one before the group and one after it, so nothing opens up between the links themselves."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "spot-the-bug",
+          "prompt": "The three buttons should spread across the toolbar with space-between, but they are stacking as plain block elements instead. Which line breaks it?",
+          "language": "web",
+          "code": "<style>\n  .toolbar {\n    display: flexbox;\n    justify-content: space-between;\n  }\n  .toolbar button { padding: 6px 10px; }\n</style>\n<div class=\"toolbar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
+          "bugLines": [3],
+          "hint": "Check the value given to display on that line — is that a real CSS keyword?",
+          "explain": "display: flexbox is not a valid value; the keyword is flex. The browser drops that whole declaration, .toolbar never becomes a flex container, and justify-content has no row left to act on."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Fill in the two missing declarations in .toolbar so the three buttons form a flex row with the leftover width spread out as equal gaps between them, none before the first and none after the last.",
+          "language": "web",
+          "starterCode": "<style>\n  .toolbar {\n    /* add the two declarations that turn this\n       into a flex row with even gaps between\n       the buttons, none before or after them */\n  }\n</style>\n<div class=\"toolbar\" id=\"bar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
+          "tests": [
+            { "id": "t1", "input": "const bar = document.getElementById('bar');\nconst s = getComputedStyle(bar);\nreturn s.display === 'flex' ? 'ok' : 'not a flex row';", "expected": "ok", "hidden": false, "name": "container is a flex row" },
+            { "id": "t2", "input": "const bar = document.getElementById('bar');\nconst s = getComputedStyle(bar);\nreturn s.justifyContent === 'space-between' ? 'ok' : 'wrong leftover-space rule';", "expected": "ok", "hidden": false, "name": "leftover space goes between items" }
+          ],
+          "referenceSolution": "<style>\n  .toolbar {\n    display: flex;\n    justify-content: space-between;\n  }\n</style>\n<div class=\"toolbar\" id=\"bar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
+          "hint": "One property turns the container into a flex row. Another says how the leftover width should be shared.",
+          "explain": "display: flex turns .toolbar into a flex row, and justify-content: space-between sends every pixel of leftover width into the gaps between buttons, leaving none before the first or after the last."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "display: flex turns direct children into a row by default.",
+            "justify-content decides where leftover width goes, not item order.",
+            "space-between fills only the middle gaps; the edges stay pinned."
+          ],
+          "remember": "justify-content controls the leftover space, not the items themselves."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you write that rule yourself, on a layout you have not seen yet."
+        }
+      ],
+      "exitLine": "That's the leftover-space rule. Time to write it into a layout of your own."
+    }
+  ]
+}

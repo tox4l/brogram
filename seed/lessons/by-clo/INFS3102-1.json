@@ -1,0 +1,100 @@
+{
+  "lessons": [
+    {
+      "id": "INFS3102-1",
+      "cloId": "INFS3102-1",
+      "course": "INFS3102",
+      "language": "java",
+      "version": 1,
+      "title": "From Functions to Classes",
+      "hook": "Same program, but now the data finally lives where it's used.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": ["paradigms", "java-syntax", "classes-objects"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "c1",
+          "heading": "One Class, One Job",
+          "body": "When you write procedural code, you keep data in loose variables and pass them into separate functions that live on their own. Nothing forces your data and the code that changes it to stay together, so it's easy to lose track of which function is allowed to touch which variable. Object-oriented code fixes that by bundling data and the methods that act on it into one unit: a class. Every object you create from a class carries its own copy of that data, plus the methods allowed to change it. Rewriting a procedural program as classes means finding the data that travels together and giving it a home."
+        },
+        {
+          "type": "snippet",
+          "id": "s1",
+          "language": "java",
+          "code": "class Dog {\n    String name;\n    Dog(String name) { this.name = name; }\n    String bark() { return name + \": Woof!\"; }\n}\n\npublic class Main {\n    public static void main(String[] args) {\n        Dog d = new Dog(\"Rex\");\n        System.out.println(d.bark());\n    }\n}\n",
+          "runnable": false,
+          "expectedStdout": "Rex: Woof!",
+          "caption": "Same idea: the name and the behavior that uses it travel together in one object."
+        },
+        {
+          "type": "worked",
+          "id": "w1",
+          "language": "java",
+          "code": "class Player {\n    String name;\n    int score = 0;\n\n    Player(String name) { this.name = name; }\n\n    void addPoints(int points) { score += points; }\n}\n\npublic class Main {\n    public static void main(String[] args) {\n        Player p = new Player(\"Zed\");\n        p.addPoints(10);\n        p.addPoints(5);\n        System.out.println(p.score);\n    }\n}\n",
+          "steps": [
+            { "line": [1, 3], "say": "Player bundles the name and score together -- one object, not two variables floating separately." },
+            { "line": 5, "say": "The constructor sets initial state right when the object is created, so score always starts clean." },
+            { "line": 7, "say": "addPoints is a method on Player, not a standalone function -- it changes the object's own score directly." },
+            { "line": 12, "say": "Creating a Player object gives you one thing to pass around, instead of juggling separate name and score variables." },
+            { "line": 15, "say": "You read score straight off the object -- no separate function needed to fetch it." }
+          ],
+          "caption": "A running score rewritten as a class instead of a loose variable."
+        },
+        {
+          "type": "check",
+          "id": "chk1",
+          "kind": "choose",
+          "prompt": "A procedural version of Player would keep name and score as separate variables and pass them into standalone functions. What's the real difference once you switch to the class version above?",
+          "options": [
+            "The class version bundles score with the method that changes it, so a Player carries its own behavior.",
+            "The class version runs faster because Java optimizes classes automatically.",
+            "The class version needs no constructor because Java creates default values for every field.",
+            "The class version can only be used once, while procedural functions can be reused."
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right -- the object owns its own data and the method that updates it.",
+            "Speed is not the point; the code does the same work either way.",
+            "The class still needs a constructor to set score for you -- you wrote one above.",
+            "You can create as many Player objects as you want; that's part of the value."
+          ],
+          "hint": "Look at what lives inside Player versus what used to be separate variables and functions.",
+          "explain": "Grouping score and addPoints inside Player means the object always knows how to change its own state, instead of a function reaching in from outside."
+        },
+        {
+          "type": "check",
+          "id": "chk2",
+          "kind": "micro-code",
+          "prompt": "Finish the Rectangle class below so width and height get stored, and area() returns their product. main already builds a Rectangle from two numbers typed in and prints its area.",
+          "language": "java",
+          "starterCode": "import java.util.Scanner;\nclass Rectangle {\n    int width;\n    int height;\n    Rectangle(int w, int h) {\n        // TODO: store w and h\n    }\n    int area() {\n        return 0; // TODO: return the area\n    }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        int w = sc.nextInt();\n        int h = sc.nextInt();\n        System.out.println(new Rectangle(w, h).area());\n    }\n}\n",
+          "tests": [
+            { "id": "t1", "input": "3 4", "expected": "12", "hidden": false, "name": "small rectangle" },
+            { "id": "t2", "input": "5 5", "expected": "25", "hidden": false, "name": "square" },
+            { "id": "t3", "input": "7 2", "expected": "14", "hidden": false, "name": "wide rectangle" }
+          ],
+          "referenceSolution": "import java.util.Scanner;\nclass Rectangle {\n    int width;\n    int height;\n    Rectangle(int w, int h) {\n        width = w;\n        height = h;\n    }\n    int area() {\n        return width * height;\n    }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        int w = sc.nextInt();\n        int h = sc.nextInt();\n        System.out.println(new Rectangle(w, h).area());\n    }\n}",
+          "hint": "Assign the constructor's w and h into width and height, then multiply width by height in area().",
+          "explain": "The constructor's job is to save incoming state on the object; area() then just reads that state back arithmetically -- that's the whole shift from loose variables to a class."
+        },
+        {
+          "type": "recap",
+          "id": "r1",
+          "bullets": [
+            "Procedural code passes data between separate functions.",
+            "OOP bundles data and the methods that change it into one class.",
+            "A constructor sets an object's starting state the moment it's built."
+          ],
+          "remember": "If data and the function that changes it always travel together, make them a class."
+        },
+        {
+          "type": "bridge",
+          "id": "b1",
+          "say": "Time to turn a real procedural mess into your own class -- a real one's next."
+        }
+      ],
+      "exitLine": "Time to turn a real procedural mess into your own class -- a real one's next."
+    }
+  ]
+}

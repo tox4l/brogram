@@ -1,0 +1,86 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1101-1",
+      "cloId": "INFS1101-1",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "Plan Before You Type",
+      "hook": "The best programmers plan on paper before they touch a keyboard.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": ["problem-solving", "flowcharts", "input-output"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Input, Processing, Output",
+          "body": "Before you write any code, split the problem into three parts: what comes in, what happens to it, and what goes out. That is the input-processing-output model. Say them out loud for your problem — inputs, then the steps that use them, then the result — before touching a keyboard. The steps in between are the algorithm: the ordered plan for turning input into output. Code is only one way to write that plan down. Skip the plan and you are guessing your way through syntax instead of solving the problem, so you find bugs by accident instead of by design."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "scores = [78, 92, 85, 67]\n\ntotal = 0\nfor score in scores:\n    total = total + score\naverage = total / len(scores)\n\nprint(average)",
+          "caption": "Averaging a list, the plan first.",
+          "steps": [
+            { "line": 1, "say": "The input is named first, as its own line, so you can check it before any processing touches it." },
+            { "line": [3, 5], "say": "Processing builds the total one score at a time, so you can trace a wrong sum back to one step." },
+            { "line": 6, "say": "Division happens only after every score is added, because the plan said sum then divide — order matters." },
+            { "line": 8, "say": "Output is the last line on purpose: nothing runs after the answer is printed." }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "This program follows the same plan as the walkthrough, with different numbers. What does it print?",
+          "language": "python",
+          "code": "prices = [12, 8, 10]\ntotal = 0\nfor price in prices:\n    total = total + price\naverage = total / len(prices)\nprint(average)",
+          "expected": "10.0",
+          "normalize": "lines",
+          "hint": "Add the prices in order, then divide by how many there are — same three steps as before.",
+          "explain": "The steps match the walkthrough exactly: sum first, divide once, print the single result. 12 + 8 + 10 = 30, and 30 / 3 = 10.0."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "A friend reads a problem description and starts typing code immediately, with no plan. What is the biggest risk?",
+          "options": [
+            "Nothing — code is easier to fix than a plan, so start there.",
+            "They might solve the wrong problem, because they never named the inputs, steps, and output first.",
+            "The code will run slower without a plan.",
+            "Nothing changes; the plan and the code are the same thing."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Fixing code you do not understand costs more than planning it once would have.",
+            "Right — naming the three parts first is what catches a wrong plan early, before any code exists.",
+            "Speed depends on what the code does, not on whether a plan existed first.",
+            "The plan is the steps; the code is only one way to write those steps down."
+          ],
+          "hint": "Think about what you can check before any code exists at all.",
+          "explain": "Skipping the plan means a wrong idea only shows up once you test the code, which costs more than catching it in three plain sentences first."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Name inputs, steps, and output before writing any code.",
+            "The algorithm is the plan; code is one way to write it.",
+            "A wrong plan is cheaper to catch than a wrong program."
+          ],
+          "remember": "Plan first: inputs, steps, output. Code comes after."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you map a real problem's inputs and steps yourself, before any code exists."
+        }
+      ],
+      "exitLine": "Time to map a problem of your own — inputs, steps, output, then code."
+    }
+  ]
+}

@@ -4,7 +4,7 @@
 
 import type { Clo, Course, CourseCode } from '../contracts'
 
-export const BUILD_ID: string = "7a66c35e7f92aefcef8745a58b6a9a24e271e8e8"
+export const BUILD_ID: string = "608f921ac6f731249aa83d0d33a21d3ce92a0e2a"
 
 export const COURSES: readonly Course[] = [
   {
@@ -1002,10 +1002,10 @@ export const PATTERNS: readonly { id: string; name: string; description: string;
 ]
 
 export const COURSE_HASHES: Readonly<Record<CourseCode, string>> = {
-  "DSAI2201": "431323b81cad137e2d7efdb62b9ddc6d955d7660",
-  "INFS1101": "f78dfeb9556a175634ca5e9138141e6ade6a472c",
-  "INFS1201": "bfb8c7d898706d53e3c69c952a44ffcf24f82a1f",
-  "INFS2101": "844b3c98e6f59ed5dcaa671910a50035a0c3dbe0",
-  "INFS2201": "aefa27c707bd841c0b7fb5eb0450c61ed4186f53",
-  "INFS3102": "ffe8f5f15385456ad08ff4bed4b888cd130115f8"
+  "DSAI2201": "1378ac3980079a3c13b761177eed4dfdb580dbe5",
+  "INFS1101": "f8142a2c6dee310b007b831b5ecbcc41420f701d",
+  "INFS1201": "b9e450b21fbb8b4ca90594b43dc0535b383df52e",
+  "INFS2101": "83c2677bcce31216fb957c1b3799d8fc44298489",
+  "INFS2201": "c17c1791ade8578964a577865783cd0823e4ecb6",
+  "INFS3102": "a78923a67fb55f3383b38b1bfda6dbee28d11e75"
 }

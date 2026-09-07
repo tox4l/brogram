@@ -1,0 +1,98 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2201-4",
+      "cloId": "INFS2201-4",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "Join Tables, Then Group Them",
+      "hook": "JOIN plus GROUP BY is how two boring tables become one real answer.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["joins", "grouping", "aggregates"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Join first, then group, then sort",
+          "body": "A JOIN lines up rows from two tables using a shared key, so one row ends up carrying columns from both at once. Once matching rows sit side by side, GROUP BY can fold every row that shares one value into a single row, and an aggregate function like SUM or COUNT works out one number for each group. ORDER BY runs last, sorting those finished totals instead of the raw rows underneath them. That order is fixed: match rows first, fold them into groups second, sort the results third — never the other way around."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "sql",
+          "code": "CREATE TABLE members (id INTEGER, name TEXT);\nCREATE TABLE workouts (id INTEGER, member_id INTEGER, minutes INTEGER);\nINSERT INTO members VALUES (1,'Sam'),(2,'Ravi');\nINSERT INTO workouts VALUES\n  (1,1,30),(2,1,45),(3,2,20);\nSELECT members.name, SUM(workouts.minutes) AS total_minutes\nFROM members\nJOIN workouts ON workouts.member_id = members.id\nGROUP BY members.name\nORDER BY total_minutes DESC;",
+          "steps": [
+            { "line": [6, 8], "say": "JOIN lines up minutes with names first, so SUM only ever adds numbers that belong to the same member." },
+            { "line": 9, "say": "GROUP BY decides where one bucket ends and the next starts — one row in, one row out, per name." },
+            { "line": 10, "say": "ORDER BY sorts the finished totals, not the raw workout rows, so the biggest total lands on top." }
+          ],
+          "caption": "One join, one grouped sum, sorted so the biggest total lands first."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "Same query shape, new numbers: Sam logs 10 and 15 minutes, Ravi logs 40. Sorted by total minutes descending, which name comes first?",
+          "options": [
+            "Sam, because names sort alphabetically first.",
+            "Ravi, because 40 minutes beats Sam's combined 25.",
+            "Both tie, since only two rows are grouped."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Alphabetical order plays no part here; ORDER BY is sorting the summed total_minutes, not the name.",
+            "Right. GROUP BY adds Sam's rows to 25 total, and 40 beats that, so Ravi's row sorts first under DESC.",
+            "The totals differ, 25 versus 40, so nothing ties and one clearly outranks the other."
+          ],
+          "hint": "Add up Sam's two rows before comparing them to Ravi's single row.",
+          "explain": "GROUP BY first collapses Sam's two rows into one total of 25 and leaves Ravi's single row at 40; ORDER BY total_minutes DESC then puts the larger number, Ravi's 40, on top."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Two tables sit in front of you: books(id, title) and sales(id, book_id, copies). Write one query that joins them and returns each title with total_copies sold, highest total first.",
+          "language": "sql",
+          "starterCode": "-- books(id, title), sales(id, book_id, copies)\n-- return columns: title, total_copies (highest first)",
+          "tests": [
+            {
+              "id": "t1",
+              "name": "final-totals",
+              "input": "__STUDENT__",
+              "expected": "{\"columns\":[\"title\",\"total_copies\"],\"values\":[[\"Dune\",70],[\"Emma\",10]]}",
+              "hidden": false
+            },
+            {
+              "id": "t2",
+              "name": "joined-rows",
+              "input": "SELECT COUNT(*) AS n FROM books JOIN sales ON sales.book_id = books.id;",
+              "expected": "{\"columns\":[\"n\"],\"values\":[[3]]}",
+              "hidden": false
+            }
+          ],
+          "referenceSolution": "CREATE TABLE books (id INTEGER, title TEXT);\nCREATE TABLE sales (id INTEGER, book_id INTEGER, copies INTEGER);\nINSERT INTO books VALUES (1,'Dune'),(2,'Emma');\nINSERT INTO sales VALUES (1,1,50),(2,1,20),(3,2,10);\nSELECT books.title, SUM(sales.copies) AS total_copies\nFROM books\nJOIN sales ON sales.book_id = books.id\nGROUP BY books.title\nORDER BY total_copies DESC;",
+          "hint": "Join on book_id, group by title, then order the summed column, not the title, in descending order.",
+          "explain": "JOIN pairs each sale with its book by book_id, GROUP BY title folds every matching sale into one row per book, SUM adds copies inside each group, and ORDER BY total_copies DESC puts the best seller on top."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "JOIN matches rows across tables before anything else runs.",
+            "GROUP BY folds matching rows into one row per key.",
+            "ORDER BY sorts the finished totals, not the raw rows."
+          ],
+          "remember": "Join first, then group, then sort — in that order, every time."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to write that join yourself, on data you haven't seen yet."
+        }
+      ],
+      "exitLine": "That's the shape. Now go run it on a table you didn't build."
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2201-3",
+      "cloId": "INFS2201-3",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "Move it to where it belongs",
+      "hook": "One column parked in the wrong table, and every edit means chasing down every copy.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["normalization", "dependency", "keys"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Ask what a column actually depends on",
+          "body": "Every table should describe one kind of thing, keyed by one thing. If a column's value depends on only part of a multi-column key, or on some other ordinary column instead of the key, that fact gets copied onto every row sharing that value - and one edit can leave two rows disagreeing. First normal form breaks up a cell holding more than one value. Second normal form moves a column that depends on only part of the key into its own table, keyed by that part. Third normal form moves a column that depends on another ordinary column into a table of its own. Each step removes one way rows could drift apart."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "sql",
+          "code": "create table order_items(\n  order_id integer, product_id integer,\n  product_name text, quantity integer\n);\ninsert into order_items values\n  (1,7,'Drill',2),(2,7,'Drill',1),(3,9,'Saw',3);\n\nselect product_id, product_name\nfrom order_items;",
+          "runnable": true,
+          "expectedStdout": "7, Drill\n7, Drill\n9, Saw\n",
+          "caption": "Drill's name is typed twice. Rename it and you'd have to catch both rows."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "sql",
+          "code": "-- before: one table, key is (order_id, product_id)\ncreate table order_items(\n  order_id integer, product_id integer,\n  product_name text, product_price numeric,\n  quantity integer,\n  primary key (order_id, product_id)\n);\n\n-- after: product facts move to their own table\ncreate table products(\n  product_id integer primary key,\n  product_name text, product_price numeric\n);\ncreate table order_lines(\n  order_id integer, product_id integer, quantity integer,\n  primary key (order_id, product_id)\n);",
+          "steps": [
+            { "line": 6, "say": "Every column above is supposed to depend on both parts of this key together." },
+            { "line": 4, "say": "Name and price only need product_id, so copying them per order risks two rows disagreeing." },
+            { "line": [10, 13], "say": "Giving products its own key means a price fix lands in exactly one row." },
+            { "line": [14, 16], "say": "order_lines keeps only facts about the order, linked back through product_id." }
+          ],
+          "caption": "One split, and the update problem disappears."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A table enrollments(student_id, course_id, student_email, grade) is keyed on (student_id, course_id). student_email only depends on student_id. Which fix removes the risk of two rows disagreeing about the same student's email?",
+          "options": [
+            "Add a unique constraint on student_email.",
+            "Move student_email into a students table keyed on student_id alone.",
+            "Add student_email to the primary key alongside student_id and course_id."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Uniqueness stops duplicate emails, but the same email would still be retyped on every enrollment row.",
+            "Right. student_id alone identifies the student, so email belongs in its own table keyed on just that.",
+            "That makes the key even wider without fixing why the same email keeps getting copied per course."
+          ],
+          "hint": "Ask what student_email is really about - a fact about the student, or about the enrollment?",
+          "explain": "student_email depends only on student_id, not on course_id, so it is a partial dependency on part of the key. Moving it into a table keyed on student_id alone stores each student's email exactly once."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A table bookings(booking_id, room_id, room_type, nightly_rate, guest_name) is keyed on booking_id alone, but room_type and nightly_rate only depend on room_id. Write one query that returns the rows a separate rooms table should hold: one row per room_id, with columns room_id, room_type, nightly_rate, ordered by room_id ascending.",
+          "language": "sql",
+          "starterCode": "-- expected columns: room_id, room_type, nightly_rate\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "select distinct room_id, room_type, nightly_rate\nfrom bookings\norder by room_id;",
+              "expected": "{\"columns\":[\"room_id\",\"room_type\",\"nightly_rate\"],\"values\":[[101,\"Standard\",120],[102,\"Suite\",250]]}",
+              "hidden": false,
+              "name": "example"
+            },
+            {
+              "id": "t2",
+              "input": "__STUDENT__",
+              "expected": "{\"columns\":[\"room_id\",\"room_type\",\"nightly_rate\"],\"values\":[[101,\"Standard\",120],[102,\"Suite\",250]]}",
+              "hidden": false,
+              "name": "your query"
+            }
+          ],
+          "referenceSolution": "create table bookings(\n  booking_id integer primary key,\n  room_id integer,\n  room_type text,\n  nightly_rate numeric,\n  guest_name text\n);\ninsert into bookings values\n  (1,101,'Standard',120,'Huda'),\n  (2,102,'Suite',250,'Omar'),\n  (3,101,'Standard',120,'Layla');\n\nselect distinct room_id, room_type, nightly_rate\nfrom bookings\norder by room_id;",
+          "hint": "Which two columns are duplicated across bookings that share the same room_id?",
+          "explain": "room_type and nightly_rate depend only on room_id, not on booking_id, so distinct room_id, room_type, nightly_rate pulls out exactly the rows a rooms table should hold - one per room."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Ask what each column actually depends on, not just its table.",
+            "Move a column to the table its value truly belongs to.",
+            "Each split removes one way rows could disagree after an edit."
+          ],
+          "remember": "The key, the whole key, and nothing but the key."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "New tables, new dependencies to hunt down - time to split one yourself."
+        }
+      ],
+      "exitLine": "That's the split. Go find the next one."
+    }
+  ]
+}

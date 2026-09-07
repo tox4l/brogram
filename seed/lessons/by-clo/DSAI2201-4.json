@@ -1,0 +1,86 @@
+{
+  "lessons": [
+    {
+      "id": "DSAI2201-4",
+      "cloId": "DSAI2201-4",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Four Ways to Learn",
+      "hook": "Four flavors of learning, one dead giveaway each - spot it and you're basically done.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": ["ml-fundamentals", "learning-types"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Four ways a machine can learn",
+          "body": "Every setup comes down to what the machine gets to work with. Hand it examples that already carry the right answer, and it learns by matching new cases to those answers - that's supervised learning. Give it raw data with no answers attached, and it hunts for structure on its own - unsupervised learning. Label a few examples and leave the rest blank, and you land in between - semi-supervised learning. Skip labels entirely and instead reward good moves while punishing bad ones over many tries, and it learns through trial and error - reinforcement learning. The giveaway is always what's on offer: answers, structure, or a reward."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"\n\nprint(learning_type(has_labels=False, has_reward=False, some_labels=False))",
+          "steps": [
+            { "line": 2, "say": "Reward gets checked first - a reward signal means reinforcement no matter what labels exist." },
+            { "line": 4, "say": "Every example carries a correct answer and none are missing - that's the supervised case." },
+            { "line": 6, "say": "Some answers exist but most don't - a partial label set signals semi-supervised." },
+            { "line": 7, "say": "No labels and no reward left - only raw structure remains, so it's unsupervised." },
+            { "line": 9, "say": "All three flags false traces straight past every check to the last line." }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same function as above. What does this print?",
+          "language": "python",
+          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"\n\nprint(learning_type(has_labels=True, has_reward=False, some_labels=True))",
+          "expected": "semi-supervised",
+          "normalize": "lines",
+          "hint": "Reward is false, so skip that branch. Are all the examples labeled, or just some of them?",
+          "explain": "has_reward is false, so the first check fails. has_labels is true but some_labels is also true, meaning only part of the data is labeled - that's the semi-supervised branch."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "A shopping site hand-tags a few hundred products, then has millions more that were never tagged, and needs to sort the rest. Which kind of learning fits?",
+          "options": [
+            "Supervised learning",
+            "Unsupervised learning",
+            "Semi-supervised learning",
+            "Reinforcement learning"
+          ],
+          "correctIndex": 2,
+          "why": [
+            "Supervised needs a correct answer on every example, not just a few hundred of them.",
+            "Unsupervised assumes no labels exist anywhere, but a few hundred tagged ones already do.",
+            "Right - a handful of labels plus a mountain of unlabeled ones is the semi-supervised setup.",
+            "Reinforcement needs a reward signal tied to actions, and there isn't one described here."
+          ],
+          "hint": "Count how many products actually carry a tag, and how many don't.",
+          "explain": "Only a small slice of products is labeled and the rest have no ground truth at all - that split, part labeled and mostly not, defines semi-supervised learning."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A reward signal points straight to reinforcement, labels or not.",
+            "Full labels mean supervised; partial labels mean semi-supervised.",
+            "No labels and no reward means finding structure alone - unsupervised."
+          ],
+          "remember": "Ask what's actually on offer - answers, a reward, or nothing - and the type follows."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now size up a real scenario and name the learning type it needs, no hints attached."
+        }
+      ],
+      "exitLine": "Next up: a real scenario, no worked example to lean on."
+    }
+  ]
+}

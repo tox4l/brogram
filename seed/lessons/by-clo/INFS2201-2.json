@@ -1,0 +1,105 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2201-2",
+      "cloId": "INFS2201-2",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "The Foreign Key's Address",
+      "hook": "One line on the diagram decides which table needs the extra column.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["foreign-keys", "one-to-many", "cardinality"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-fk-placement",
+          "heading": "Where the foreign key lives",
+          "body": "Look at an entity-relationship diagram and find the arrow between two boxes. One side is 'one', the other is 'many' — a coach has many teams, but each team has exactly one coach. That direction tells you exactly where the foreign key belongs: on the many side, pointing at the one side's primary key. Put coach_id on the teams table, never a list of team ids on the coach table. Relational columns hold one value each, so the side that would otherwise need a list is the side that gets the pointer instead. Every one-to-many relationship in a diagram follows this same rule: many holds the key, one gets pointed at."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-customers-orders",
+          "language": "sql",
+          "code": "CREATE TABLE customers (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_id INTEGER REFERENCES customers(id)\n);",
+          "runnable": true,
+          "expectedStdout": "",
+          "caption": "orders holds customer_id; customers holds nothing extra."
+        },
+        {
+          "type": "worked",
+          "id": "worked-authors-books",
+          "language": "sql",
+          "code": "CREATE TABLE authors (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE books (\n  id INTEGER PRIMARY KEY,\n  title TEXT,\n  author_id INTEGER REFERENCES authors(id)\n);\n\nINSERT INTO authors VALUES (1, 'Okafor');\nINSERT INTO books VALUES\n  (1, 'Reef', 1),\n  (2, 'Drift', 1);",
+          "steps": [
+            { "line": 2, "say": "authors gets a plain primary key because it's the 'one' side — nothing here needs to point anywhere." },
+            { "line": 9, "say": "books gets author_id because each book has exactly one author, but authors can have many books." },
+            { "line": [13, 15], "say": "Two books reuse the same author_id, proving one author can back many rows without duplicating name data." }
+          ],
+          "caption": "One author, many books — the foreign key sits on books."
+        },
+        {
+          "type": "check",
+          "id": "check-department-fk",
+          "kind": "choose",
+          "prompt": "An employee works in exactly one department. A department has many employees. Which table should hold the foreign key?",
+          "options": [
+            "employees, with a department_id column",
+            "departments, with an employee_id column",
+            "both tables need a foreign key pointing at each other",
+            "neither table needs a foreign key"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right — employees is the many side, so it points at departments with department_id.",
+            "Departments is the one side; giving it employee_id would mean storing a list, which a column can't hold.",
+            "Only the many side needs a pointer; a two-way pointer just duplicates the same relationship twice.",
+            "Without a foreign key, nothing links an employee row back to its department at all."
+          ],
+          "hint": "Find the side that would need to store more than one value if you got this backwards.",
+          "explain": "employees is many, departments is one; department_id on employees points each row at exactly one parent without any list."
+        },
+        {
+          "type": "check",
+          "id": "check-teams-coach",
+          "kind": "micro-code",
+          "prompt": "Finish the teams table so each team has exactly one coach, but a coach can run many teams.",
+          "language": "sql",
+          "starterCode": "CREATE TABLE coaches (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\nINSERT INTO coaches VALUES (1, 'Reed'), (2, 'Diaz');\n\n-- Add the teams table here: id, name, and a link to one coach.\n\nINSERT INTO teams VALUES (1, 'Falcons', 1), (2, 'Wolves', 1), (3, 'Lions', 2);",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "SELECT teams.name AS team, coaches.name AS coach FROM teams JOIN coaches ON teams.coach_id = coaches.id ORDER BY teams.id;",
+              "expected": "{\"columns\":[\"team\",\"coach\"],\"values\":[[\"Falcons\",\"Reed\"],[\"Wolves\",\"Reed\"],[\"Lions\",\"Diaz\"]]}"
+            },
+            {
+              "id": "t2",
+              "input": "SELECT COUNT(*) AS n FROM teams WHERE coach_id = 1;",
+              "expected": "{\"columns\":[\"n\"],\"values\":[[2]]}"
+            }
+          ],
+          "referenceSolution": "CREATE TABLE coaches (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\nINSERT INTO coaches VALUES (1, 'Reed'), (2, 'Diaz');\nCREATE TABLE teams (\n  id INTEGER PRIMARY KEY,\n  name TEXT,\n  coach_id INTEGER REFERENCES coaches(id)\n);\nINSERT INTO teams VALUES (1, 'Falcons', 1), (2, 'Wolves', 1), (3, 'Lions', 2);\nSELECT teams.name AS team, coaches.name AS coach\nFROM teams JOIN coaches ON teams.coach_id = coaches.id\nORDER BY teams.id;",
+          "hint": "The many side needs a column pointing at the one side's primary key — call it coach_id.",
+          "explain": "coach_id on teams points at coaches.id; two teams can share a coach because a foreign key value is free to repeat on the many side."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "The many side holds the foreign key, not the one side.",
+            "One-to-many never needs a list column, just one pointer per row.",
+            "A repeated foreign key value is normal — that's the 'many' showing up."
+          ],
+          "remember": "Many holds the key, one gets pointed at."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to draw one yourself and turn it into tables that actually hold together."
+        }
+      ],
+      "exitLine": "Draw the next diagram, then let the arrows tell you where every key goes."
+    }
+  ]
+}

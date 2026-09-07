@@ -1,0 +1,91 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1201-3",
+      "cloId": "INFS1201-3",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "One Function, Two Answers",
+      "hook": "A function that returns two things beats two functions that don't talk to each other.",
+      "estimatedMinutes": 6,
+      "draft": true,
+      "tags": ["functions", "tuples", "dictionaries", "records"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Return more than one value",
+          "body": "A function normally hands back one value. Sometimes the real answer to a question is two or three things at once — a name split in half, a total and a count. Return more than one value by separating them with commas: return a, b. Python packs them into a tuple without you asking for one. On the calling side, catch them the same way you already unpack any tuple: x, y = the_call(). Each name grabs its matching value in the order it came back. No import, no new type — just more values after return, and more names catching them."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "def split_name(full):\n    first, last = full.split(\" \", 1)\n    return first, last\n\nfirst, last = split_name(\"Amara Musa\")\nprint(first, last)",
+          "runnable": true,
+          "expectedStdout": "Amara Musa\n",
+          "caption": "One tuple out, two names in."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def line_total(order):\n    return order[\"item\"], order[\"qty\"] * order[\"price\"]\n\ndef summarize(orders):\n    total = 0\n    count = 0\n    for order in orders:\n        item, subtotal = line_total(order)\n        total += subtotal\n        count += 1\n    return total, count\n\norders = [{\"item\": \"Pen\", \"qty\": 3, \"price\": 2}, {\"item\": \"Mug\", \"qty\": 1, \"price\": 8}]\ngrand_total, line_count = summarize(orders)\nprint(grand_total, line_count)",
+          "steps": [
+            { "line": [1, 2], "say": "line_total owns one record's math, so summarize never repeats that formula." },
+            { "line": 4, "say": "summarize takes the whole list, keeping per-record logic separate from the running total." },
+            { "line": 8, "say": "Unpacking here names both parts so the loop never confuses the item with its subtotal." },
+            { "line": 11, "say": "Returning total and count together saves the caller from looping twice for two answers." },
+            { "line": 14, "say": "Unpacking the call matches names to values in the same order they were returned." }
+          ],
+          "caption": "One helper returns a pair; the loop unpacks it every time through."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "This function returns two numbers from one list. What does the last line print?",
+          "language": "python",
+          "code": "def bounds(prices):\n    return min(prices), max(prices)\n\nlow, high = bounds([12, 4, 9])\nprint(low, high)",
+          "expected": "4 12\n",
+          "normalize": "exact",
+          "hint": "Check which value the return statement lists first, then match it to the name that unpacks first.",
+          "explain": "min(prices) is 4 and max(prices) is 12; low unpacks the first returned value and high the second, so it prints \"4 12\"."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write `totals(records)`. Each record is a dict with `hours` and `rate`. Return a tuple `(total_hours, total_pay)` — the sum of every record's hours, and the sum of every record's hours times rate. An empty list returns `(0, 0)`.",
+          "language": "python",
+          "starterCode": "def totals(records):\n    pass\n",
+          "tests": [
+            { "id": "t1", "input": "[[{\"hours\": 3, \"rate\": 10}, {\"hours\": 2, \"rate\": 15}]]", "expected": "[5, 60]", "hidden": false, "name": "two records" },
+            { "id": "t2", "input": "[[]]", "expected": "[0, 0]", "hidden": false, "name": "empty list" },
+            { "id": "t3", "input": "[[{\"hours\": 4, \"rate\": 20}]]", "expected": "[4, 80]", "hidden": false, "name": "single record" }
+          ],
+          "referenceSolution": "def totals(records):\n    total_hours = 0\n    total_pay = 0\n    for r in records:\n        total_hours += r[\"hours\"]\n        total_pay += r[\"hours\"] * r[\"rate\"]\n    return total_hours, total_pay",
+          "hint": "Add every record's hours to one running total and hours times rate to another as you loop.",
+          "explain": "Each record adds its hours to the first total and hours times rate to the second; an empty list never enters the loop, so both stay zero."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A function can return several values packed in one tuple.",
+            "Unpack a returned tuple into named variables in one line.",
+            "Loop over records, pulling each one's tuple apart as needed."
+          ],
+          "remember": "Return many values as one tuple — unpack them by position, not guesswork."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next up: pull two answers out of one function, using real records instead of examples."
+        }
+      ],
+      "exitLine": "Go turn a list of records into answers only your function can give."
+    }
+  ]
+}

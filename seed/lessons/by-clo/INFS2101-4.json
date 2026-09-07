@@ -1,0 +1,89 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2101-4",
+      "cloId": "INFS2101-4",
+      "course": "INFS2101",
+      "language": "web",
+      "version": 1,
+      "title": "One signal, three layers",
+      "hook": "One flipped attribute, and the whole page reacts — layout, text, everything.",
+      "estimatedMinutes": 7,
+      "draft": false,
+      "tags": ["layout", "toggle", "sync"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "One flipped signal, three layers in sync",
+          "body": "When a page needs to look different depending on what a person just did, resist wiring HTML, CSS, and JavaScript separately and hoping they stay in sync. Instead, pick one small signal — a class name, or a data attribute's value — that JavaScript flips on an interaction, and let the CSS rules key off that same signal. The markup only needs to declare the piece that can change. The script only needs to flip one thing. The stylesheet only needs to read it, and nothing else has to be told. If a menu is open, a form step is done, or a card is expanded, one flipped signal drives every visual change at once."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "web",
+          "code": "document.body.innerHTML = `\n  <button id=\"btn\">Open menu</button>\n  <nav id=\"menu\" data-state=\"closed\">Menu items here</nav>\n  <style>#menu[data-state=\"closed\"] { display: none; }</style>\n`;\nconst btn = document.querySelector('#btn');\nconst menu = document.querySelector('#menu');\nbtn.addEventListener('click', () => {\n  menu.dataset.state = menu.dataset.state === 'open' ? 'closed' : 'open';\n});",
+          "runnable": true,
+          "expectedStdout": "",
+          "caption": "Click the button. Only the attribute flips — the CSS rule is what does the rest."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "web",
+          "code": "<button id=\"toggle\">Show details</button>\n<article id=\"card\" data-view=\"compact\">\n  <h2>Water the plants</h2>\n  <p id=\"details\" hidden>Every morning before class, five minutes.</p>\n</article>\n<style>\n  #card[data-view=\"compact\"] { display: flex; align-items: center; gap: 8px; }\n  #card[data-view=\"expanded\"] { display: flex; flex-direction: column; gap: 4px; }\n</style>\n<script>\n  const toggle = document.querySelector('#toggle');\n  const card = document.querySelector('#card');\n  const details = document.querySelector('#details');\n  toggle.addEventListener('click', () => {\n    const expanded = card.dataset.view === 'expanded';\n    card.dataset.view = expanded ? 'compact' : 'expanded';\n    details.hidden = expanded;\n    toggle.textContent = expanded ? 'Show details' : 'Hide details';\n  });\n</script>",
+          "steps": [
+            { "line": [2, 5], "say": "The markup only holds the one piece that changes: an attribute, and a hidden paragraph." },
+            { "line": [7, 8], "say": "CSS reads that same attribute value, so there is no separate class logic to keep synced." },
+            { "line": [15, 16], "say": "One click reads the current state and flips it — the single fact everything else depends on." },
+            { "line": [17, 18], "say": "Revealing the paragraph and relabeling the button both fall out of that one flipped value." }
+          ],
+          "caption": "One attribute, read by CSS and flipped by JavaScript, drives the whole card."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same idea, a light/dark switch instead of a details card. The button is clicked three times before anything prints. What prints?",
+          "language": "web",
+          "code": "document.body.innerHTML = `\n  <button id=\"mode\">Toggle</button>\n  <p id=\"status\" data-theme=\"light\">status</p>\n`;\nconst btn = document.querySelector('#mode');\nconst status = document.querySelector('#status');\nbtn.addEventListener('click', () => {\n  status.dataset.theme = status.dataset.theme === 'light' ? 'dark' : 'light';\n});\nbtn.click();\nbtn.click();\nbtn.click();\nconsole.log(status.dataset.theme);",
+          "expected": "dark",
+          "normalize": "lines",
+          "hint": "Trace three flips starting from light. An odd number of flips never lands back where it started.",
+          "explain": "Each click flips data-theme once: light to dark, dark to light, light to dark. Three clicks is an odd number of flips, so it ends on dark, the opposite of where it began."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "The section starts hidden and the button starts labeled \"Show\". Finish the script so one click reveals the section and relabels the button, and a second click reverses both — using the data-open attribute the CSS already watches.",
+          "language": "web",
+          "starterCode": "<button id=\"expand\">Show</button>\n<section id=\"panel\" data-open=\"false\">\n  <p>More detail lives here.</p>\n</section>\n<style>\n  #panel[data-open=\"false\"] { display: none; }\n  #panel[data-open=\"true\"] { display: block; }\n</style>\n<script>\n  // your code here\n</script>",
+          "tests": [
+            { "id": "t1", "input": "document.querySelector('#expand').click(); const p = document.querySelector('#panel'); const b = document.querySelector('#expand'); return (p.dataset.open === 'true' && b.textContent === 'Hide') ? 'ok' : 'did not open';", "expected": "ok", "name": "one click opens" },
+            { "id": "t2", "input": "const b = document.querySelector('#expand'); b.click(); b.click(); const p = document.querySelector('#panel'); return (p.dataset.open === 'false' && b.textContent === 'Show') ? 'ok' : 'did not close again';", "expected": "ok", "name": "second click closes" }
+          ],
+          "referenceSolution": "<button id=\"expand\">Show</button>\n<section id=\"panel\" data-open=\"false\">\n  <p>More detail lives here.</p>\n</section>\n<style>\n  #panel[data-open=\"false\"] { display: none; }\n  #panel[data-open=\"true\"] { display: block; }\n</style>\n<script>\n  const btn = document.querySelector('#expand');\n  const panel = document.querySelector('#panel');\n  btn.addEventListener('click', () => {\n    const open = panel.dataset.open === 'true';\n    panel.dataset.open = open ? 'false' : 'true';\n    btn.textContent = open ? 'Show' : 'Hide';\n  });\n</script>",
+          "hint": "Read panel.dataset.open first, decide the opposite value, then set the attribute and the button text from that one decision.",
+          "explain": "Reading dataset.open before changing it lets one flipped value drive both the attribute CSS watches and the button's label, so the two never disagree."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Pick one small attribute or class as the single source of truth.",
+            "CSS reads that same value — nothing to keep in sync by hand.",
+            "One click flips it once, and every visual change follows from that."
+          ],
+          "remember": "One flipped signal can drive layout, text, and behaviour together."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to wire a whole page yourself — structure, style, and one signal between them."
+        }
+      ],
+      "exitLine": "That's the wiring. Now go build a page that holds together on its own."
+    }
+  ]
+}

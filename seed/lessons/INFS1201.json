@@ -1,0 +1,497 @@
+{
+  "$note": "BroGram walkthroughs. One per skill. No institution names, no pattern ids, no emoji.",
+  "course": "INFS1201",
+  "lessons": [
+    {
+      "id": "INFS1201-1",
+      "cloId": "INFS1201-1",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "Same List, Two Names",
+      "hook": "Two names, one list — this is where side effects sneak in.",
+      "estimatedMinutes": 6,
+      "draft": true,
+      "tags": [
+        "lists",
+        "aliasing",
+        "functions"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "c1",
+          "heading": "One List, Two Names",
+          "body": "When you assign one list to a new name, you don't get a fresh list — you get a second name pointing at the same one. Change it through either name, and both show the change, because there's only one list underneath. Passing a list into a function works the same way: the function receives that same list, not a duplicate, so anything it appends or removes inside stays changed after the function returns. Want a real, independent copy instead? Ask for one explicitly, with list(original) or original[:]. Numbers and strings don't have this problem — reassigning them just makes a new value. Lists, dictionaries and sets do, because they can change in place."
+        },
+        {
+          "type": "snippet",
+          "id": "s1",
+          "language": "python",
+          "code": "original = [1, 2, 3]\nother = original\nother.append(4)\nprint(original)\nprint(other)",
+          "runnable": true,
+          "expectedStdout": "[1, 2, 3, 4]\n[1, 2, 3, 4]\n",
+          "caption": "One list, two names, one change shows through both."
+        },
+        {
+          "type": "worked",
+          "id": "w1",
+          "language": "python",
+          "code": "def add_bonus(scores):\n    scores.append(100)\n    return scores\n\nclass_scores = [70, 85, 90]\nupdated = add_bonus(class_scores)\nprint(class_scores)\n\nsafe_scores = [70, 85, 90]\nprotected = add_bonus(safe_scores[:])\nprint(safe_scores)",
+          "steps": [
+            {
+              "line": 2,
+              "say": "Appending inside the function changes the actual list the caller passed in, not a private copy."
+            },
+            {
+              "line": 6,
+              "say": "class_scores and scores are two names for the same list, so the append shows up here too."
+            },
+            {
+              "line": 10,
+              "say": "Slicing with [:] builds a brand new list, so the function can't touch the original."
+            },
+            {
+              "line": 11,
+              "say": "safe_scores stays as it was, because add_bonus only saw the copy, never the real one."
+            }
+          ],
+          "caption": "One function, two calls: one mutates the caller, one doesn't."
+        },
+        {
+          "type": "check",
+          "id": "chk1",
+          "kind": "predict-output",
+          "prompt": "What does this print?",
+          "language": "python",
+          "code": "def double_first(nums):\n    nums[0] = nums[0] * 2\n    return nums\n\nstock = [10, 20, 30]\ndouble_first(stock)\nprint(stock)",
+          "expected": "[20, 20, 30]\n",
+          "normalize": "exact",
+          "hint": "Look at what nums[0] actually is inside the function — is it a copy?",
+          "explain": "nums and stock name the same list, so mutating nums[0] inside the function changes stock too."
+        },
+        {
+          "type": "check",
+          "id": "chk2",
+          "kind": "micro-code",
+          "prompt": "Write remove_last(items) that returns a new list with every item except the last one. Do not change the list you were given — build the copy with slicing. Example: remove_last([1, 2, 3]) returns [1, 2].",
+          "language": "python",
+          "starterCode": "def remove_last(items):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[1, 2, 3]]",
+              "expected": "[1, 2]",
+              "hidden": false,
+              "name": "three items"
+            },
+            {
+              "id": "t2",
+              "input": "[[5, 9]]",
+              "expected": "[5]",
+              "hidden": false,
+              "name": "two items"
+            },
+            {
+              "id": "t3",
+              "input": "[[7]]",
+              "expected": "[]",
+              "hidden": false,
+              "name": "single item"
+            }
+          ],
+          "referenceSolution": "def remove_last(items):\n    return items[:-1]\n",
+          "hint": "Slicing builds a brand new list — indexing or popping does not.",
+          "explain": "items[:-1] copies every item except the last into a new list, leaving items untouched."
+        },
+        {
+          "type": "recap",
+          "id": "r1",
+          "bullets": [
+            "Assigning a list to a new name shares the same list, not a copy.",
+            "A function parameter is another name for the list you passed in.",
+            "Slicing or list() makes a real, independent copy when you need one."
+          ],
+          "remember": "Two names, one list, until you deliberately copy it."
+        },
+        {
+          "type": "bridge",
+          "id": "b1",
+          "say": "Time for a real one — go work an angle where a copy has to survive the call."
+        }
+      ],
+      "exitLine": "Go put it to work on a real rep."
+    },
+    {
+      "id": "INFS1201-2",
+      "cloId": "INFS1201-2",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "Stop At The First Match",
+      "hook": "Most searches are over the second you find what you needed.",
+      "estimatedMinutes": 6,
+      "draft": true,
+      "tags": [
+        "search",
+        "loops",
+        "built-ins"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Find it, then stop looking",
+          "body": "To find something in a list, look at each item in order from the start. The instant you find a match, stop and report where it was — checking what's left after that is wasted work. If all you need is a plain yes or no, or the first spot a value shows up, Python's `in` and `.index()` already do that exact walk for you, and they stop the moment they hit too. Reach for your own loop only when you need something extra along the way, like a count, a running total, or a custom rule for what counts as a match.",
+          "figure": ""
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "temps = [5, 3, -2, 8]\nprint(-2 in temps)\n\nfound = False\nfor t in temps:\n    if t == -2:\n        found = True\n        break\nprint(found)",
+          "runnable": true,
+          "expectedStdout": "True\nTrue\n",
+          "caption": "Same answer either way — `in` already does the walk on the left."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def first_below_zero(temps):\n    for i in range(len(temps)):\n        if temps[i] < 0:\n            return i\n    return -1",
+          "steps": [
+            {
+              "line": 2,
+              "say": "Walk from the front, in order, so the first match is the true first match."
+            },
+            {
+              "line": 3,
+              "say": "Test each temperature only once you reach it, no peeking ahead."
+            },
+            {
+              "line": 4,
+              "say": "Return the position right away, stop the walk the instant it hits."
+            },
+            {
+              "line": 5,
+              "say": "Only fall through to here once every temperature failed the test."
+            }
+          ],
+          "caption": "Index 2 is the first negative reading, so that's what comes back."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A list of support tickets is stored newest first. You need the position of the oldest ticket still marked urgent. Which walk gives it to you?",
+          "options": [
+            "Walk from the front and return the position of the first urgent ticket.",
+            "Walk from the back and return the position of the first urgent ticket you hit.",
+            "Walk the whole list and count how many tickets are urgent.",
+            "Check whether an urgent ticket is anywhere in the list at all."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Front-first stops at the newest urgent ticket, the opposite end from the one you want.",
+            "Oldest sits last in a newest-first list, so the first hit from the back is it.",
+            "A count tells you how many there are, never where any single one sits.",
+            "A plain yes or no cannot hand you a position to report."
+          ],
+          "hint": "Work out which end of a newest-first list the oldest ticket sits at, then aim the walk at that end.",
+          "explain": "Stopping at the first match only lands on the right one when you start from the end the answer lives on; in a newest-first list the oldest urgent ticket is the last one, so the walk runs backwards."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write `first_full(levels)`. It returns the index of the first tank level that is 60 or higher. If none qualify, return -1.",
+          "language": "python",
+          "starterCode": "def first_full(levels):\n    pass",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[40, 55, 82, 91]]",
+              "expected": "2",
+              "hidden": false,
+              "name": "one qualifies"
+            },
+            {
+              "id": "t2",
+              "input": "[[10, 20, 30]]",
+              "expected": "-1",
+              "hidden": false,
+              "name": "none qualify"
+            }
+          ],
+          "referenceSolution": "def first_full(levels):\n    for i in range(len(levels)):\n        if levels[i] >= 60:\n            return i\n    return -1",
+          "hint": "Loop with the index, test the condition, and return the moment it's true.",
+          "explain": "Walking from index 0 and returning right away finds the first full tank without checking any others; falling through the whole loop means nothing matched, so -1 is correct."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Scan from the start; stop the second you find a match.",
+            "Reach for in or .index() when you just need yes or no.",
+            "Write your own loop only when you need more than that."
+          ],
+          "remember": "The built-in already stops early; don't rewrite the walk yourself."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next up: a real rep where you build binary search and bubble sort the same way."
+        }
+      ],
+      "exitLine": "Time for a real rep: build one of these searches yourself."
+    },
+    {
+      "id": "INFS1201-3",
+      "cloId": "INFS1201-3",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "One Function, Two Answers",
+      "hook": "A function that returns two things beats two functions that don't talk to each other.",
+      "estimatedMinutes": 6,
+      "draft": true,
+      "tags": [
+        "functions",
+        "tuples",
+        "dictionaries",
+        "records"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Return more than one value",
+          "body": "A function normally hands back one value. Sometimes the real answer to a question is two or three things at once — a name split in half, a total and a count. Return more than one value by separating them with commas: return a, b. Python packs them into a tuple without you asking for one. On the calling side, catch them the same way you already unpack any tuple: x, y = the_call(). Each name grabs its matching value in the order it came back. No import, no new type — just more values after return, and more names catching them."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "def split_name(full):\n    first, last = full.split(\" \", 1)\n    return first, last\n\nfirst, last = split_name(\"Amara Musa\")\nprint(first, last)",
+          "runnable": true,
+          "expectedStdout": "Amara Musa\n",
+          "caption": "One tuple out, two names in."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def leg_total(leg):\n    return leg[\"stop\"], leg[\"km\"] * leg[\"trips\"]\n\ndef summarize(legs):\n    total = 0\n    count = 0\n    for leg in legs:\n        stop, subtotal = leg_total(leg)\n        total += subtotal\n        count += 1\n    return total, count\n\nlegs = [{\"stop\": \"Depot\", \"km\": 3, \"trips\": 2}, {\"stop\": \"Yard\", \"km\": 1, \"trips\": 8}]\ngrand_total, leg_count = summarize(legs)\nprint(grand_total, leg_count)",
+          "steps": [
+            {
+              "line": [
+                1,
+                2
+              ],
+              "say": "leg_total owns one record's math, so summarize never repeats that formula."
+            },
+            {
+              "line": 4,
+              "say": "summarize takes the whole list, keeping per-record logic separate from the running total."
+            },
+            {
+              "line": 8,
+              "say": "Unpacking here names both parts so the loop never confuses the stop with its subtotal."
+            },
+            {
+              "line": 11,
+              "say": "Returning total and count together saves the caller from looping twice for two answers."
+            },
+            {
+              "line": 14,
+              "say": "Unpacking the call matches names to values in the same order they were returned."
+            }
+          ],
+          "caption": "One helper returns a pair; the loop unpacks it every time through."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "This function returns two numbers from one list. What does the last line print?",
+          "language": "python",
+          "code": "def bounds(lengths):\n    return min(lengths), max(lengths)\n\nlow, high = bounds([12, 4, 9])\nprint(low, high)",
+          "expected": "4 12\n",
+          "normalize": "exact",
+          "hint": "Check which value the return statement lists first, then match it to the name that unpacks first.",
+          "explain": "min(lengths) is 4 and max(lengths) is 12; low unpacks the first returned value and high the second, so it prints \"4 12\"."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write `totals(records)`. Each record is a dict with `hours` and `rate`. Return a tuple `(total_hours, total_pay)` — the sum of every record's hours, and the sum of every record's hours times rate. An empty list returns `(0, 0)`.",
+          "language": "python",
+          "starterCode": "def totals(records):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[{\"hours\": 3, \"rate\": 10}, {\"hours\": 2, \"rate\": 15}]]",
+              "expected": "[5, 60]",
+              "hidden": false,
+              "name": "two records"
+            },
+            {
+              "id": "t2",
+              "input": "[[]]",
+              "expected": "[0, 0]",
+              "hidden": false,
+              "name": "empty list"
+            },
+            {
+              "id": "t3",
+              "input": "[[{\"hours\": 4, \"rate\": 20}]]",
+              "expected": "[4, 80]",
+              "hidden": false,
+              "name": "single record"
+            }
+          ],
+          "referenceSolution": "def totals(records):\n    total_hours = 0\n    total_pay = 0\n    for r in records:\n        total_hours += r[\"hours\"]\n        total_pay += r[\"hours\"] * r[\"rate\"]\n    return total_hours, total_pay",
+          "hint": "Add every record's hours to one running total and hours times rate to another as you loop.",
+          "explain": "Each record adds its hours to the first total and hours times rate to the second; an empty list never enters the loop, so both stay zero."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A function can return several values packed in one tuple.",
+            "Unpack a returned tuple into named variables in one line.",
+            "Loop over records, pulling each one's tuple apart as needed."
+          ],
+          "remember": "Return many values as one tuple — unpack them by position, not guesswork."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Real rep next: pull two answers out of one function over real records."
+        }
+      ],
+      "exitLine": "Turn a pile of records into two answers, in one pass."
+    },
+    {
+      "id": "INFS1201-4",
+      "cloId": "INFS1201-4",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "Reading a csv without crashing",
+      "hook": "One blank cell in a file, and a careless script dies right there.",
+      "estimatedMinutes": 7,
+      "draft": true,
+      "tags": [
+        "csv",
+        "files",
+        "data-cleaning"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Rows become dictionaries",
+          "body": "A csv file is rows of text with commas between values, and the first row usually names each column. Python's csv module can hand you each row as a plain list, but csv.DictReader upgrades that: it reads the header once and turns every later row into a dictionary, so you pull a value by column name instead of counting commas. Real files are messy — a shopper skips a field, a price cell is left blank. If you assume every field holds a number and convert it, that one blank cell crashes the whole read. Check what actually came back before you trust it, and skip or replace an empty field instead of letting it blow up your program."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import csv, io\n\ntext = \"name,price\\nApple,1.50\\nBanana,0.75\\n\"\nreader = csv.DictReader(io.StringIO(text))\nfor row in reader:\n    print(row[\"name\"], row[\"price\"])",
+          "runnable": true,
+          "expectedStdout": "Apple 1.50\nBanana 0.75\n",
+          "caption": "Each row comes back keyed by header name, not by position."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import csv, io\n\ntext = \"item,price\\nMask,2.50\\nGloves,\\nWipes,1.20\\n\"\nreader = csv.DictReader(io.StringIO(text))\ntotal = 0.0\nskipped = 0\nfor row in reader:\n    price = row[\"price\"].strip()\n    if price == \"\":\n        skipped += 1\n        continue\n    total += float(price)\nprint(round(total, 2))\nprint(skipped)",
+          "steps": [
+            {
+              "line": 4,
+              "say": "DictReader turns the header row into keys, so you look values up by name, not position."
+            },
+            {
+              "line": 8,
+              "say": "Stripping the field catches a blank cell that reads as empty text, not a missing key."
+            },
+            {
+              "line": [
+                9,
+                11
+              ],
+              "say": "Checking for empty text before converting stops a blank row from crashing the whole read."
+            },
+            {
+              "line": 12,
+              "say": "Only a value that passed the check gets turned into a number, so bad data cannot break the loop."
+            }
+          ],
+          "caption": "Guard the field, then convert it — never the other way round."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "This one replaces a blank field instead of skipping it. Say exactly what it prints, line by line.",
+          "language": "python",
+          "code": "import csv, io\n\ntext = \"code,units\\nA1,4\\nB2,\\nC3,6\\nD4,\\n\"\nreader = csv.DictReader(io.StringIO(text))\nunits = []\nfor row in reader:\n    value = row[\"units\"].strip()\n    if value == \"\":\n        value = \"0\"\n    units.append(int(value))\nprint(units)\nprint(sum(units))",
+          "expected": "[4, 0, 6, 0]\n10",
+          "normalize": "lines",
+          "hint": "A replaced field still lands in the list - work out what it becomes before it is converted.",
+          "explain": "Both blank cells become \"0\" before the conversion, so they stay in the list as zeros and add nothing to the total."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write average_price(text): it takes csv text with header item,price and returns the mean of the valid prices rounded to 2 decimals, ignoring any row whose price is blank. With no valid price at all, return 0.0.",
+          "language": "python",
+          "starterCode": "import csv, io\n\ndef average_price(text):\n    pass",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[\"item,price\\nBolt,2.5\\nNut,\\nWasher,1.5\\n\"]",
+              "expected": "2.0",
+              "name": "mixed rows"
+            },
+            {
+              "id": "t2",
+              "input": "[\"item,price\\nBolt,\\nNut,\\n\"]",
+              "expected": "0.0",
+              "name": "no valid price"
+            },
+            {
+              "id": "t3",
+              "input": "[\"item,price\\nBolt,10\\nNut,5\\n\"]",
+              "expected": "7.5",
+              "name": "all valid"
+            }
+          ],
+          "referenceSolution": "import csv, io\n\ndef average_price(text):\n    reader = csv.DictReader(io.StringIO(text))\n    total = 0.0\n    count = 0\n    for row in reader:\n        price = row[\"price\"].strip()\n        if price == \"\":\n            continue\n        total += float(price)\n        count += 1\n    if count == 0:\n        return 0.0\n    return round(total / count, 2)",
+          "hint": "Count the prices you actually accepted, and decide what to return before you divide by that count.",
+          "explain": "Skipping a blank keeps one bad row from crashing the read, and checking the count before dividing keeps an all-blank file from raising a second error."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "DictReader keys each row by the header, not by position.",
+            "Check a field before converting it, so blanks cannot crash the read.",
+            "A guard skips one bad row instead of stopping the whole file."
+          ],
+          "remember": "A file only crashes you if you never look at what actually came back."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you'll clean a full file that's built to break naive code."
+        }
+      ],
+      "exitLine": "Real file next - make it give you numbers that hold up."
+    }
+  ]
+}

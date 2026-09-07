@@ -1,0 +1,676 @@
+{
+  "$note": "BroGram lessons. One lesson per CLO. No institution names, no pattern ids, no emoji.",
+  "course": "DSAI2201",
+  "lessons": [
+    {
+      "id": "DSAI2201-1",
+      "cloId": "DSAI2201-1",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Read The Shape Of A Dataset",
+      "hook": "A pile of numbers means nothing until you know where they sit and how far they spread.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "descriptive-stats",
+        "pandas",
+        "mean-median",
+        "standard-deviation"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "One call, the whole shape of a dataset",
+          "body": "When you get a new dataset, you want its shape before anything else: where the values sit, how spread out they are, and whether the data types match what you expect. Call .describe() on a DataFrame or Series and pandas hands you count, mean, standard deviation, minimum, the three quartiles, and the maximum in one table. The mean tells you the center; the standard deviation tells you how far values typically wander from it. Compare the mean to the median (the 50% row) to spot skew: when they differ a lot, a few extreme values are pulling the mean away from where most data actually sits."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import pandas as pd\n\nsalaries = pd.Series([40, 42, 45, 47, 300])\nprint(round(salaries.mean(), 1))\nprint(salaries.median())",
+          "runnable": true,
+          "expectedStdout": "94.8\n45.0\n",
+          "caption": "Mean and median disagree because one salary pulls the mean up."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import pandas as pd\n\ndf = pd.DataFrame({\n    \"route\": [\"north\", \"harbor\", \"airport\", \"old town\"],\n    \"minutes\": [88, 92, 79, 95],\n    \"on_time\": [True, True, False, True],\n})\n\nprint(round(df[\"minutes\"].mean(), 1))\nprint(round(df[\"minutes\"].std(), 1))\nprint(df.dtypes[\"on_time\"])",
+          "steps": [
+            {
+              "line": [
+                3,
+                7
+              ],
+              "say": "One row per route keeps minutes and on_time together, so every stat lines up with the right trip."
+            },
+            {
+              "line": 9,
+              "say": "Mean gives the center, but one slow trip can drag it away from where most routes cluster."
+            },
+            {
+              "line": 10,
+              "say": "Standard deviation shows how far trip times typically sit from that center, something the mean alone can't tell you."
+            },
+            {
+              "line": 11,
+              "say": "Checking dtype confirms on_time loaded as a boolean, not text, so later comparisons behave correctly."
+            }
+          ],
+          "caption": "Full summary stats plus a dtype check, all in a few lines."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "A gym logs five members' ages: 21, 22, 22, 23, 60. Predict exactly what this prints.",
+          "language": "python",
+          "code": "import pandas as pd\n\nages = pd.Series([21, 22, 22, 23, 60])\nprint(round(ages.mean(), 1))\nprint(ages.median())",
+          "expected": "29.6\n22.0",
+          "normalize": "lines",
+          "hint": "Add all five ages and divide by 5 for the first line; sort them and read off the middle value for the second.",
+          "explain": "The 60-year-old pulls the mean up to 29.6, well above everyone else's age, while the median stays at 22 because only the middle value counts."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "Four short lists all have a mean of 10. Which one has the largest standard deviation?",
+          "options": [
+            "[10, 10, 10, 10]",
+            "[9, 10, 10, 11]",
+            "[1, 5, 15, 19]",
+            "[8, 9, 11, 12]"
+          ],
+          "correctIndex": 2,
+          "why": [
+            "Every value already equals the mean, so nothing wanders from it and the spread is zero.",
+            "These stay within one of the mean, closer in than any list reaching further out.",
+            "Correct: these sit 9, 5, 5 and 9 away from the mean, further than any other list here.",
+            "These sit at most two away from the mean, so they wander less than the 1-to-19 list."
+          ],
+          "hint": "Work out how far each value sits from 10, then compare those distances list by list.",
+          "explain": "Standard deviation grows with distance from the mean. The 1-to-19 list puts values 5 and 9 away from 10, while every other list stays within two, so it is the one that spreads widest."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write `spread(values)` so it returns the standard deviation of a list of numbers, rounded to 1 decimal place, using pandas. For example, `spread([5, 5, 5, 5])` returns `0.0`.",
+          "language": "python",
+          "starterCode": "import pandas as pd\n\ndef spread(values):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[62, 71, 74, 78, 91]]",
+              "expected": "10.6",
+              "hidden": false,
+              "name": "mixed readings"
+            },
+            {
+              "id": "t2",
+              "input": "[[5, 5, 5, 5]]",
+              "expected": "0.0",
+              "hidden": false,
+              "name": "no spread"
+            },
+            {
+              "id": "t3",
+              "input": "[[100, 200]]",
+              "expected": "70.7",
+              "hidden": false,
+              "name": "two points"
+            }
+          ],
+          "referenceSolution": "import pandas as pd\n\ndef spread(values):\n    return round(pd.Series(values).std(), 1)",
+          "hint": "Wrap values in pd.Series(...), call .std() on it, then round the result to 1 decimal.",
+          "explain": "pd.Series(values).std() computes the sample standard deviation directly; rounding to 1 decimal keeps the answer readable."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            ".describe() gives count, mean, std, quartiles, and max in one call.",
+            "Compare mean to median to catch outliers pulling the average away.",
+            "Standard deviation says how spread out values are around the mean."
+          ],
+          "remember": "Mean plus median plus standard deviation together beat any single number alone."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to run these stats on a dataset of your own and see what the numbers actually say."
+        }
+      ],
+      "exitLine": "Grab a real dataset next and let pandas show you what it is actually made of."
+    },
+    {
+      "id": "DSAI2201-2",
+      "cloId": "DSAI2201-2",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Read a relationship in one number",
+      "hook": "Two columns, one number, and you already know if they move together.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "pandas",
+        "correlation",
+        "relationships"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "One number for how two columns move",
+          "body": "When you have two number columns, you want to know if they move together. Correlation gives you one number for that, always between -1 and 1. Near 1 means both rise together. Near -1 means one rises while the other falls. Near 0 means one tells you almost nothing about the other. In pandas, call `.corr()` on one numeric column and pass the other — it returns this number without you writing any formula. A high correlation only means a straight-line pattern exists between the two columns, not that one causes the other."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import pandas as pd\n\nx = pd.Series([1, 2, 3, 4, 5])\ny = pd.Series([10, 20, 30, 40, 50])\n\nprint(round(x.corr(y), 2))",
+          "runnable": true,
+          "expectedStdout": "1.0\n",
+          "caption": "Both Series climb in lockstep, so the number lands right on 1.0."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import pandas as pd\n\nwaterings = pd.Series([1, 2, 3, 4])\nblooms = pd.Series([2, 3, 5, 4])\n\ncorr = waterings.corr(blooms)\nprint(round(corr, 2))",
+          "steps": [
+            {
+              "line": 1,
+              "say": "Loading pandas first gives you .corr and the Series type used on the next two lines."
+            },
+            {
+              "line": [
+                3,
+                4
+              ],
+              "say": "Two Series of the same length line up index by index, so each row still means one week in the greenhouse."
+            },
+            {
+              "line": 6,
+              "say": "The .corr call measures the straight-line relationship between the columns without you writing the formula."
+            },
+            {
+              "line": 7,
+              "say": "Rounding to two places keeps the printed number readable without losing the pattern it represents."
+            }
+          ],
+          "caption": "Waterings per week against blooms counted, boiled down to one number."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "New columns, same idea. What does this print?",
+          "language": "python",
+          "code": "import pandas as pd\n\ntemp = pd.Series([1, 2, 3, 4, 5])\nsales = pd.Series([50, 40, 30, 20, 10])\n\nprint(round(temp.corr(sales), 2))",
+          "expected": "-1.0",
+          "normalize": "lines",
+          "hint": "temp climbs by the same step every row while sales drops by the same step. What does a perfectly opposite pattern round to?",
+          "explain": "temp rises by 1 each row while sales falls by 10 each row — a perfectly straight, opposite pattern — so the correlation lands exactly on -1, and rounding keeps it at -1.0."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "Which pair of columns is most likely to show a correlation near 0?",
+          "options": [
+            "Cups of coffee bought today, and the buyer's shoe size",
+            "Kilometres cycled this week, and calories burned that week",
+            "Minutes left on a countdown timer, and minutes already elapsed"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Shoe size has nothing to do with coffee habits, so knowing one tells you nothing about the other.",
+            "More cycling burns more calories, so this pair moves together — near 1, not 0.",
+            "As elapsed time rises, remaining time falls in lockstep — near -1, not 0."
+          ],
+          "hint": "Which two things have no real reason to move together at all?",
+          "explain": "A correlation near 0 shows up when neither column predicts the other — no straight-line pattern connects coffee cups to shoe size, while the other two pairs move together in a clear direction."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write a function that returns the correlation between two equal-length lists of numbers, rounded to 2 decimal places. `rounded_corr(a, b)` should turn each list into a pandas Series, correlate them, and round the result.",
+          "language": "python",
+          "starterCode": "import pandas as pd\n\ndef rounded_corr(a, b):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[1, 2, 3, 4], [10, 20, 30, 40]]",
+              "expected": "1.0",
+              "name": "rises together"
+            },
+            {
+              "id": "t2",
+              "input": "[[1, 2, 3, 4], [40, 30, 20, 10]]",
+              "expected": "-1.0",
+              "name": "moves opposite"
+            },
+            {
+              "id": "t3",
+              "input": "[[-2, -1, 0, 1, 2], [4, 1, 0, 1, 4]]",
+              "expected": "0.0",
+              "name": "no straight-line pattern"
+            }
+          ],
+          "referenceSolution": "import pandas as pd\n\ndef rounded_corr(a, b):\n    x = pd.Series(a)\n    y = pd.Series(b)\n    return round(x.corr(y), 2)\n",
+          "hint": "Turn each list into a pandas Series, call .corr() the same way the walkthrough did, then round the result.",
+          "explain": "Wrapping each list in a Series lets .corr() line the values up index by index and compute the same straight-line measure from before; rounding to 2 decimals gives a clean value like 1.0, -1.0 or 0.0 depending on how the two lists move."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Correlation is one number between -1 and 1.",
+            "Near 1 or -1 means a strong straight-line pattern.",
+            "Near 0 means no straight-line pattern connects the columns."
+          ],
+          "remember": "A high correlation shows a pattern — it never proves one thing causes the other."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now try it on data nobody rigged to land on a clean number."
+        }
+      ],
+      "exitLine": "That's the number. Go find a relationship nobody rigged for you."
+    },
+    {
+      "id": "DSAI2201-3",
+      "cloId": "DSAI2201-3",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Clean Before You Create",
+      "hook": "Garbage in, garbage column — fix it before you build anything on top.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "cleaning",
+        "feature-engineering",
+        "pandas",
+        "missing-values"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Clean first, then create",
+          "body": "Real data arrives messy: numbers stored as text, rows with holes in them, and rows that are exact copies of each other. Before any calculation means something, you deal with that mess in order. Convert a column to the right type, coercing anything unparseable into a missing value instead of crashing. Drop the rows you can't fix. Remove exact duplicates so one record never gets counted twice. Only then do you build a new column from what is left — a total, a ratio, a difference. Skip a step and the new column inherits every problem the old ones had, just harder to spot."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import pandas as pd\n\ns = pd.Series([\"3\", \"7\", \"bad\"])\ns = pd.to_numeric(s, errors=\"coerce\")\ns = s.dropna()\nprint(list(s))",
+          "runnable": true,
+          "expectedStdout": "[3.0, 7.0]\n",
+          "caption": "Bad text becomes a missing value, then it's gone."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import pandas as pd\n\ndata = {\"id\": [1, 2, 2, 3],\n        \"price\": [\"10\", \"20\", \"20\", \"oops\"],\n        \"qty\": [2, 3, 3, 4]}\ndf = pd.DataFrame(data)\n\ndf[\"price\"] = pd.to_numeric(df[\"price\"], errors=\"coerce\")\ndf = df.dropna(subset=[\"price\"])\ndf = df.drop_duplicates(subset=[\"id\"])\ndf[\"total\"] = df[\"price\"] * df[\"qty\"]\n\nprint(list(df[\"total\"]))",
+          "steps": [
+            {
+              "line": 8,
+              "say": "Coercing to numeric turns unparseable text into a missing value instead of crashing the column."
+            },
+            {
+              "line": 9,
+              "say": "Dropping missing prices first stops a bad row from also breaking the new column's math."
+            },
+            {
+              "line": 10,
+              "say": "Removing the repeated id keeps one record from being counted twice in the total."
+            },
+            {
+              "line": 11,
+              "say": "Only clean, deduplicated rows reach the new feature, so the math actually means something."
+            }
+          ],
+          "caption": "Fix the type, drop what you can't use, dedupe, then engineer."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "This cleans a Series before counting what's left. What does the last line print?",
+          "language": "python",
+          "code": "import pandas as pd\n\nvals = pd.Series([\"5\", \"x\", \"5\", \"9\"])\nvals = pd.to_numeric(vals, errors=\"coerce\")\nvals = vals.dropna()\nprint(len(vals))",
+          "expected": "3\n",
+          "normalize": "exact",
+          "hint": "Work out which entries survive to_numeric with errors=\"coerce\" and dropna before you count them.",
+          "explain": "\"x\" cannot convert to a number, so it becomes a missing value and dropna removes it, leaving three valid entries, so the length is 3."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "A table holds six sensor readings. One reading is the text \"n/a\", and two of the other five rows are exact copies of each other. You convert with errors=\"coerce\", drop missing values, then drop duplicates. How many rows survive?",
+          "options": [
+            "Six rows, because converting text never removes anything.",
+            "Five rows, once the unreadable value is gone.",
+            "Four rows, once the unreadable value and one copy are gone.",
+            "Three rows, once the unreadable value and both copies are gone."
+          ],
+          "correctIndex": 2,
+          "why": [
+            "Converting removes nothing on its own, but the two steps after it each take a row out.",
+            "Dropping the missing value is only the first cut; the identical pair still has to collapse.",
+            "Correct: six, minus the reading that coerced to missing, minus the second of the identical rows.",
+            "Dropping duplicates keeps the first of a repeated pair, so only the second copy leaves."
+          ],
+          "hint": "Take the three steps in order and count what each one actually removes.",
+          "explain": "\"n/a\" coerces to a missing value and gets dropped, leaving five. Dropping duplicates then removes the second of the two identical rows and keeps the first, so four rows survive."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write `clean_totals(records)`. Each record is a dict with `id`, `price` (a string that might not be a number) and `qty`. Return a list of `price * qty` after converting price to a number (dropping rows that fail) and dropping duplicate ids, keeping the first.",
+          "language": "python",
+          "starterCode": "import pandas as pd\n\ndef clean_totals(records):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[{\"id\": 1, \"price\": \"10\", \"qty\": 2}, {\"id\": 2, \"price\": \"bad\", \"qty\": 5}, {\"id\": 3, \"price\": \"4\", \"qty\": 3}]]",
+              "expected": "[20.0, 12.0]",
+              "hidden": false,
+              "name": "one bad price dropped"
+            },
+            {
+              "id": "t2",
+              "input": "[[{\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 2, \"price\": \"3\", \"qty\": 2}]]",
+              "expected": "[20.0, 6.0]",
+              "hidden": false,
+              "name": "duplicate id kept once"
+            },
+            {
+              "id": "t3",
+              "input": "[[{\"id\": 1, \"price\": \"nope\", \"qty\": 2}]]",
+              "expected": "[]",
+              "hidden": false,
+              "name": "everything drops out"
+            }
+          ],
+          "referenceSolution": "import pandas as pd\n\ndef clean_totals(records):\n    df = pd.DataFrame(records)\n    df[\"price\"] = pd.to_numeric(df[\"price\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"price\"])\n    df = df.drop_duplicates(subset=[\"id\"])\n    df[\"total\"] = df[\"price\"] * df[\"qty\"]\n    return list(df[\"total\"])",
+          "hint": "Convert price with pd.to_numeric(errors=\"coerce\"), drop the missing ones, then drop duplicate ids before multiplying.",
+          "explain": "Coercing price to numeric turns bad text into missing values, dropping those rows keeps only real prices, and dropping duplicate ids removes repeats before qty multiplies price into total."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Fix wrong types before you trust any calculation on that column.",
+            "Drop rows you can't clean, then drop duplicates before building features.",
+            "A new column is only as clean as the columns it's built from."
+          ],
+          "remember": "Clean the columns first — a feature built on dirty data is dirty too."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now go clean a messier one yourself — real data won't ask nicely."
+        }
+      ],
+      "exitLine": "Go clean a real column, then build something new on top of it."
+    },
+    {
+      "id": "DSAI2201-4",
+      "cloId": "DSAI2201-4",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Four Ways to Learn",
+      "hook": "Four flavors of learning, one dead giveaway each - spot it and you're basically done.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": [
+        "ml-fundamentals",
+        "learning-types"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Four ways a machine can learn",
+          "body": "Every setup comes down to what the machine gets to work with. Hand it examples that already carry the right answer, and it learns by matching new cases to those answers - that's supervised learning. Give it raw data with no answers attached, and it hunts for structure on its own - unsupervised learning. Label a few examples and leave the rest blank, and you land in between - semi-supervised learning. Skip labels entirely and instead reward good moves while punishing bad ones over many tries, and it learns through trial and error - reinforcement learning. The giveaway is always what's on offer: answers, structure, or a reward."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"\n\nprint(learning_type(has_labels=False, has_reward=False, some_labels=False))",
+          "steps": [
+            {
+              "line": 2,
+              "say": "Reward gets checked first - a reward signal means reinforcement no matter what labels exist."
+            },
+            {
+              "line": 4,
+              "say": "Every example carries a correct answer and none are missing - that's the supervised case."
+            },
+            {
+              "line": 6,
+              "say": "Some answers exist but most don't - a partial label set signals semi-supervised."
+            },
+            {
+              "line": 7,
+              "say": "No labels and no reward left - only raw structure remains, so it's unsupervised."
+            },
+            {
+              "line": 9,
+              "say": "All three flags false traces straight past every check to the last line."
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same function, a different set of flags. What does this print?",
+          "language": "python",
+          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"\n\nprint(learning_type(has_labels=True, has_reward=True, some_labels=False))",
+          "expected": "reinforcement",
+          "normalize": "lines",
+          "hint": "Read the checks in the order the function makes them. Which one does it reach first?",
+          "explain": "has_reward is true, so the very first check returns before either label flag is ever read - a reward signal settles it no matter what the labels say."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "A shopping site hand-tags a few hundred products, then has millions more that were never tagged, and needs to sort the rest. Which kind of learning fits?",
+          "options": [
+            "Supervised learning",
+            "Unsupervised learning",
+            "Semi-supervised learning",
+            "Reinforcement learning"
+          ],
+          "correctIndex": 2,
+          "why": [
+            "Supervised needs a correct answer on every example, not just a few hundred of them.",
+            "Unsupervised assumes no labels exist anywhere, but a few hundred tagged ones already do.",
+            "Right - a handful of labels plus a mountain of unlabeled ones is the semi-supervised setup.",
+            "Reinforcement needs a reward signal tied to actions, and there isn't one described here."
+          ],
+          "hint": "Count how many products actually carry a tag, and how many don't.",
+          "explain": "Only a small slice of products is labeled and the rest have no ground truth at all - that split, part labeled and mostly not, defines semi-supervised learning."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A reward signal points straight to reinforcement, labels or not.",
+            "Full labels mean supervised; partial labels mean semi-supervised.",
+            "No labels and no reward means finding structure alone - unsupervised."
+          ],
+          "remember": "Ask what's actually on offer - answers, a reward, or nothing - and the type follows."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now size up a real scenario and name the learning type it needs, no hints attached."
+        }
+      ],
+      "exitLine": "Next up: a real scenario, no worked example to lean on."
+    },
+    {
+      "id": "DSAI2201-5",
+      "cloId": "DSAI2201-5",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Split first, then pick the right score",
+      "hook": "A model that only sees its own training data is grading its own homework.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "scikit-learn",
+        "train-test-split",
+        "evaluation"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Split first, then pick the right score",
+          "body": "You have a model that fits the data. The real test is how it handles rows it has never seen. Before you fit anything, split your rows into a training set and a test set with train_test_split, then fit only on the training rows. Predict on the test rows and check those predictions against their true values, never the ones you trained on. Which score to read depends on what the model predicts. A model predicting categories gets scored on accuracy: the fraction of test rows it labeled correctly. A model predicting a number gets scored on r2_score instead, since counting exact matches makes no sense for a continuous number."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "from sklearn.model_selection import train_test_split\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score\n\nX = [[1], [2], [3], [4], [5], [6], [7], [8]]\ny = [0, 0, 0, 0, 1, 1, 1, 1]\nX_train, X_test, y_train, y_test = train_test_split(\n    X, y, test_size=0.25, random_state=0)\nmodel = LogisticRegression().fit(X_train, y_train)\npreds = model.predict(X_test)\nprint(accuracy_score(y_test, preds))",
+          "runnable": true,
+          "expectedStdout": "1.0\n",
+          "caption": "The fit call never touches X_test, so the score means something."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "from sklearn.model_selection import train_test_split\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score\n\nhours = [[1], [2], [3], [4], [5], [6], [7], [8], [9], [10]]\npassed = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]\n\nX_train, X_test, y_train, y_test = train_test_split(\n    hours, passed, test_size=0.3, random_state=1)\n\nmodel = LogisticRegression().fit(X_train, y_train)\npreds = model.predict(X_test)\n\nprint(round(accuracy_score(y_test, preds), 2))",
+          "steps": [
+            {
+              "line": [
+                8,
+                9
+              ],
+              "say": "Splitting before fitting sets aside rows the model will never see while training."
+            },
+            {
+              "line": 11,
+              "say": "Fitting only on X_train means the model can't just memorize the held-out answers."
+            },
+            {
+              "line": 12,
+              "say": "Predicting on X_test asks the model to label hours it never trained on."
+            },
+            {
+              "line": 14,
+              "say": "accuracy_score matches the target here: passed is a category, not a number."
+            }
+          ],
+          "caption": "Ten rows in, three held back, and the score only reflects the held-back three."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "You have X_train, X_test, y_train, y_test and a model, already fitted, that predicts a house price. Which line reports a score you can trust?",
+          "options": [
+            "accuracy_score(y_test, model.predict(X_test))",
+            "r2_score(y_train, model.predict(X_train))",
+            "r2_score(y_test, model.predict(X_test))",
+            "r2_score(y_test, model.predict(X_train))"
+          ],
+          "correctIndex": 2,
+          "why": [
+            "Accuracy counts exact matches, and a predicted price almost never lands on the real one exactly.",
+            "The metric fits, but these are the rows the model was fitted on, so the number flatters it.",
+            "Correct: the metric matches a numeric target, and the rows are ones the fit never saw.",
+            "Predictions from the training rows compared against test answers line up the wrong rows entirely."
+          ],
+          "hint": "Two things have to be right at once: the metric for this target, and which rows the score reads.",
+          "explain": "A price is a continuous number, so accuracy has nothing to count, and a score only means something on rows held out of the fit. Only the line that pairs test predictions with test answers gets both right."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "predict-output",
+          "prompt": "This splits 8 rows before fitting anything. Without running it, what does the last line print?",
+          "language": "python",
+          "code": "from sklearn.model_selection import train_test_split\n\nrows = [[1], [2], [3], [4], [5], [6], [7], [8]]\nlabels = [0, 1, 0, 1, 0, 1, 0, 1]\n\nX_train, X_test, y_train, y_test = train_test_split(\n    rows, labels, test_size=0.25, random_state=3)\n\nprint(len(X_train), len(X_test))",
+          "expected": "6 2\n",
+          "normalize": "exact",
+          "hint": "test_size is a fraction of all 8 rows. Work out how many go to test, then how many are left for train.",
+          "explain": "0.25 of 8 rows is 2, so the test set gets 2 rows and the remaining 6 go to train; random_state only changes which specific rows land in each set, not how many."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write `evaluate_predictions(kind, y_true, y_pred)`. When `kind` is `\"classification\"`, return `accuracy_score(y_true, y_pred)` rounded to 2 places. Otherwise, return `r2_score(y_true, y_pred)` rounded to 2 places.",
+          "language": "python",
+          "starterCode": "from sklearn.metrics import accuracy_score, r2_score\n\ndef evaluate_predictions(kind, y_true, y_pred):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[\"classification\", [0, 1, 1, 0], [0, 1, 1, 0]]",
+              "expected": "1.0",
+              "hidden": false,
+              "name": "labels all match"
+            },
+            {
+              "id": "t2",
+              "input": "[\"classification\", [0, 1, 1, 0], [0, 1, 0, 0]]",
+              "expected": "0.75",
+              "hidden": false,
+              "name": "one label wrong"
+            },
+            {
+              "id": "t3",
+              "input": "[\"regression\", [3.0, 5.0, 7.0], [2.0, 5.0, 8.0]]",
+              "expected": "0.75",
+              "hidden": false,
+              "name": "numeric target, not classification"
+            }
+          ],
+          "referenceSolution": "from sklearn.metrics import accuracy_score, r2_score\n\ndef evaluate_predictions(kind, y_true, y_pred):\n    if kind == \"classification\":\n        return round(accuracy_score(y_true, y_pred), 2)\n    return round(r2_score(y_true, y_pred), 2)\n",
+          "hint": "Branch on kind: accuracy_score for \"classification\", r2_score for anything else, both rounded to 2 places.",
+          "explain": "The branch on kind picks the score that matches the target type: accuracy_score counts exact label matches for classification, and r2_score measures how well the numeric predictions track the real values otherwise."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Split before fitting, and only fit on the training rows.",
+            "Score only on the test rows the model never trained on.",
+            "Match the metric to the target: accuracy for labels, r2_score for numbers."
+          ],
+          "remember": "Score on held-out rows only, with the metric that matches what you're predicting."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you split, fit and score a model yourself, on data nobody set up for you."
+        }
+      ],
+      "exitLine": "That's the split-then-score protocol. Go fit something on rows you haven't peeked at."
+    }
+  ]
+}

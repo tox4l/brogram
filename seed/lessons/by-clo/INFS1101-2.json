@@ -1,0 +1,89 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1101-2",
+      "cloId": "INFS1101-2",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "Plan it, then type it",
+      "hook": "A flowchart is just the steps you haven't typed yet.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["flowcharts", "variables", "selection"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "The plan is the code, before it has syntax",
+          "body": "Before you touch the keyboard, write your solution as short, numbered steps in plain English, or the same steps as boxes and arrows in a flowchart. Either one is a design, and faithful means every step in that design shows up in the code, in the same order, with nothing skipped and nothing extra bolted on. If step two says check a condition before changing a value, the code checks it before changing the value too. Picking numbers, names or a story does not change the plan underneath, so a good plan should survive all of that untouched."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "tickets = 3\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
+          "runnable": true,
+          "expectedStdout": "30\n",
+          "caption": "Three steps, three chunks of code. Change tickets to 6 and rerun it."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "# 1. start price per ticket at 10\n# 2. if buying 5 or more, cut the price by 2\n# 3. total is tickets times price\ntickets = 6\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
+          "steps": [
+            { "line": [1, 3], "say": "Writing the steps first means you settle the logic before wrestling with syntax, so mistakes get caught early." },
+            { "line": [4, 5], "say": "Every value the plan needs gets set before any check runs, matching step one exactly." },
+            { "line": [7, 8], "say": "This mirrors step two exactly: the condition and the change happen together, in the order the plan wrote them." },
+            { "line": [10, 11], "say": "Step three becomes this line word for word, nothing combined or reordered from the plan." }
+          ],
+          "caption": "Six tickets clears the condition, so the cut price is the one that gets used."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same plan, a smaller order. What does this print?",
+          "language": "python",
+          "code": "tickets = 4\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
+          "expected": "40",
+          "normalize": "lines",
+          "hint": "Check whether four tickets actually clears the condition before you multiply anything.",
+          "explain": "Four is less than five, so the condition never fires and price stays at ten; four tickets times ten is forty."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A garage charges $6 an hour. Park 4 hours or more and the total gets a flat $5 off. Write `parking_cost(hours)` that returns the total: start at hours times 6, then apply the discount once hours reaches 4.",
+          "language": "python",
+          "starterCode": "def parking_cost(hours):\n    pass",
+          "tests": [
+            { "id": "t1", "input": "[3]", "expected": "18" },
+            { "id": "t2", "input": "[4]", "expected": "19" }
+          ],
+          "referenceSolution": "def parking_cost(hours):\n    total = hours * 6\n    if hours >= 4:\n        total = total - 5\n    return total",
+          "hint": "Multiply first, exactly like the plan lists it, then check the condition before you return.",
+          "explain": "Total starts at hours times six, matching step one, then the condition only fires once hours reaches four, subtracting five before the value comes back."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Plan first: write short numbered steps in plain English.",
+            "Turn each step into one line, in the same order.",
+            "Never skip a step or add logic that was not planned."
+          ],
+          "remember": "Design decides the logic; the code just carries it out faithfully."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you plan a whole spec from scratch, then type it out yourself."
+        }
+      ],
+      "exitLine": "Same move every time: plan it, then type it, faithfully."
+    }
+  ]
+}

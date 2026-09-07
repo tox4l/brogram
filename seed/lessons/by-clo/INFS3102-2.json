@@ -1,0 +1,99 @@
+{
+  "lessons": [
+    {
+      "id": "INFS3102-2",
+      "cloId": "INFS3102-2",
+      "course": "INFS3102",
+      "language": "java",
+      "version": 1,
+      "title": "Sketch it before you code it",
+      "hook": "Get the boxes right on paper, and the class file basically writes itself.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["uml", "association", "inheritance"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Sketch the classes before you code",
+          "body": "Before you open an editor, sketch the classes on paper first: one box per class, its fields listed inside, lines connecting boxes that need each other. A line between two boxes means one class holds a reference to the other — a has-a relationship, called an association. An open arrow from a smaller box up to a bigger one means the smaller class inherits everything the bigger one has — an is-a relationship. Decide which kind each connection is before writing a single class. Then coding becomes translation, not invention: each box becomes a class, each listed field becomes a class field, and each line becomes either a stored reference or an extends clause."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "java",
+          "code": "class Shape {\n    String color;\n}\nclass Square extends Shape {\n    double side;\n}\nclass Drawing {\n    Shape shape;\n}",
+          "runnable": false,
+          "expectedStdout": "",
+          "caption": "Square is-a Shape (extends). Drawing has-a Shape (a stored field). Same two relationships, side by side."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "java",
+          "code": "class Vehicle {\n    String plate;\n    double dailyRate;\n    double costFor(int days) { return dailyRate * days; }\n}\nclass Car extends Vehicle {\n    int seats;\n}\nclass Rental {\n    Vehicle vehicle;\n    String renterName;\n    Rental(Vehicle vehicle, String renterName) {\n        this.vehicle = vehicle;\n        this.renterName = renterName;\n    }\n    double total(int days) { return vehicle.costFor(days); }\n}",
+          "steps": [
+            { "line": [1, 4], "say": "Fields here are exactly the attributes the sketch listed — nothing invented while coding." },
+            { "line": [6, 8], "say": "This extends mirrors the inheritance arrow directly — every field and method Vehicle has, Car now gets." },
+            { "line": [9, 11], "say": "One class holding a reference to another class is what an association line meant on paper." },
+            { "line": [12, 15], "say": "The constructor sets up that association once, so every method afterward can rely on it existing." },
+            { "line": 16, "say": "Calling vehicle.costFor(days) proves the association works — Rental leans on Vehicle instead of repeating its math." }
+          ],
+          "caption": "Every box from the sketch becomes a class; every connecting line becomes a field or an extends clause."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A Team class keeps a list of Player objects it manages. A Goalkeeper class extends Player and adds nothing else. Which pair of words correctly labels the two relationships?",
+          "options": [
+            "Team has-a Player; Goalkeeper is-a Player",
+            "Team is-a Player; Goalkeeper has-a Player",
+            "Team has-a Player; Goalkeeper has-a Player",
+            "Team is-a Player; Goalkeeper is-a Player"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right — a stored list is a reference, so that is has-a, and extends is inheritance, so that is is-a.",
+            "Backwards — a stored list is an association, not inheritance, and extends is inheritance, not an association.",
+            "Team is right, but extends always means is-a, never has-a, no matter what the subclass adds.",
+            "A stored list is never inheritance — Team only holds Player objects, it does not extend Player."
+          ],
+          "hint": "Look at what each relationship actually does: does one class extend the other, or just keep a reference to it?",
+          "explain": "Team stores a list of Player references, so that is has-a — an association. Goalkeeper extends Player, so that is is-a — inheritance. Same two relationship types as the sketch, applied to a new pair of classes."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Finish Dog so describe(\"dog\", name) returns a bark line and describe(\"cat\", name) still returns the plain Animal line — using a constructor and an override, not a new field.",
+          "language": "java",
+          "starterCode": "class Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    // add a constructor and override speak() here\n}\nclass Solution {\n    static String describe(String kind, String name) {\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        return a.speak();\n    }\n}",
+          "tests": [
+            { "id": "t1", "input": "[\"dog\",\"Rex\"]", "expected": "\"Rex barks\"", "name": "dog barks" },
+            { "id": "t2", "input": "[\"cat\",\"Milo\"]", "expected": "\"Milo makes a sound\"", "name": "non-dog unchanged" }
+          ],
+          "referenceSolution": "class Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    Dog(String name) { super(name); }\n    @Override\n    String speak() { return name + \" barks\"; }\n}\nclass Solution {\n    static String describe(String kind, String name) {\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        return a.speak();\n    }\n}",
+          "hint": "Give Dog a constructor that calls super(name), then override speak() to return something different from Animal's version.",
+          "explain": "Dog's constructor passes name up with super(name), and overriding speak() lets the same call, a.speak(), produce a different result depending on the actual object — exactly what an is-a relationship promises."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Boxes on paper become classes; fields on paper become fields.",
+            "A stored reference is has-a; extends is is-a.",
+            "Code should mirror the sketch exactly, not improve on it while typing."
+          ],
+          "remember": "Design the relationships first — has-a or is-a — then let the code follow."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you sketch a structure yourself, then build it in code without drifting from that sketch."
+        }
+      ],
+      "exitLine": "Go sketch the next one first — then make the code match it exactly."
+    }
+  ]
+}

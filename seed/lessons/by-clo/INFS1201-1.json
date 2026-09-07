@@ -1,0 +1,90 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1201-1",
+      "cloId": "INFS1201-1",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "Same List, Two Names",
+      "hook": "Two names, one list — this is where side effects sneak in.",
+      "estimatedMinutes": 6,
+      "draft": true,
+      "tags": ["lists", "aliasing", "functions"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "c1",
+          "heading": "One List, Two Names",
+          "body": "When you assign one list to a new name, you don't get a fresh list — you get a second name pointing at the same one. Change it through either name, and both show the change, because there's only one list underneath. Passing a list into a function works the same way: the function receives that same list, not a duplicate, so anything it appends or removes inside stays changed after the function returns. Want a real, independent copy instead? Ask for one explicitly, with list(original) or original[:]. Numbers and strings don't have this problem — reassigning them just makes a new value. Lists, dictionaries and sets do, because they can change in place."
+        },
+        {
+          "type": "snippet",
+          "id": "s1",
+          "language": "python",
+          "code": "original = [1, 2, 3]\nother = original\nother.append(4)\nprint(original)\nprint(other)",
+          "runnable": true,
+          "expectedStdout": "[1, 2, 3, 4]\n[1, 2, 3, 4]\n",
+          "caption": "One list, two names, one change shows through both."
+        },
+        {
+          "type": "worked",
+          "id": "w1",
+          "language": "python",
+          "code": "def add_bonus(scores):\n    scores.append(100)\n    return scores\n\nclass_scores = [70, 85, 90]\nupdated = add_bonus(class_scores)\nprint(class_scores)\n\nsafe_scores = [70, 85, 90]\nprotected = add_bonus(safe_scores[:])\nprint(safe_scores)",
+          "steps": [
+            { "line": 2, "say": "Appending inside the function changes the actual list the caller passed in, not a private copy." },
+            { "line": 6, "say": "class_scores and scores are two names for the same list, so the append shows up here too." },
+            { "line": 10, "say": "Slicing with [:] builds a brand new list, so the function can't touch the original." },
+            { "line": 11, "say": "safe_scores stays as it was, because add_bonus only saw the copy, never the real one." }
+          ],
+          "caption": "One function, two calls: one mutates the caller, one doesn't."
+        },
+        {
+          "type": "check",
+          "id": "chk1",
+          "kind": "predict-output",
+          "prompt": "What does this print?",
+          "language": "python",
+          "code": "def double_first(nums):\n    nums[0] = nums[0] * 2\n    return nums\n\nprices = [10, 20, 30]\ndouble_first(prices)\nprint(prices)",
+          "expected": "[20, 20, 30]\n",
+          "normalize": "exact",
+          "hint": "Look at what nums[0] actually is inside the function — is it a copy?",
+          "explain": "nums and prices name the same list, so mutating nums[0] inside the function changes prices too."
+        },
+        {
+          "type": "check",
+          "id": "chk2",
+          "kind": "micro-code",
+          "prompt": "Write remove_last(items) that returns a new list with every item except the last one. Do not change the list you were given — build the copy with slicing. Example: remove_last([1, 2, 3]) returns [1, 2].",
+          "language": "python",
+          "starterCode": "def remove_last(items):\n    pass\n",
+          "tests": [
+            { "id": "t1", "input": "[[1, 2, 3]]", "expected": "[1, 2]", "hidden": false, "name": "three items" },
+            { "id": "t2", "input": "[[5, 9]]", "expected": "[5]", "hidden": false, "name": "two items" },
+            { "id": "t3", "input": "[[7]]", "expected": "[]", "hidden": false, "name": "single item" }
+          ],
+          "referenceSolution": "def remove_last(items):\n    return items[:-1]\n",
+          "hint": "Slicing builds a brand new list — indexing or popping does not.",
+          "explain": "items[:-1] copies every item except the last into a new list, leaving items untouched."
+        },
+        {
+          "type": "recap",
+          "id": "r1",
+          "bullets": [
+            "Assigning a list to a new name shares the same list, not a copy.",
+            "A function parameter is another name for the list you passed in.",
+            "Slicing or list() makes a real, independent copy when you need one."
+          ],
+          "remember": "Two names, one list, until you deliberately copy it."
+        },
+        {
+          "type": "bridge",
+          "id": "b1",
+          "say": "Time for a real one — go work an angle where a copy has to survive the call."
+        }
+      ],
+      "exitLine": "Go put it to work on a real rep."
+    }
+  ]
+}

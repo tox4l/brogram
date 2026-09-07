@@ -1,0 +1,90 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1101-3",
+      "cloId": "INFS1101-3",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "Stop the loop the instant you know",
+      "hook": "A loop that already found its answer is just running for nothing.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["iteration", "loops"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Leave a loop the moment you have the answer",
+          "body": "A loop doesn't have to visit every item to answer a question. If you're hunting for the first value that matches, check it as you go and leave the moment you find it — you already have the answer, so there's nothing left to gain by continuing. In Python, `return` inside a function stops everything right there, and `break` stops only the loop it sits inside, letting code after the loop keep running. Compare that to always running every iteration and deciding afterward: same result, but more work, and the code reads less honestly about when the answer was actually found. Reach for an early exit the moment you know."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "scores = [55, 61, 40, 88, 72]\nbelow = None\nfor s in scores:\n    if s < 60:\n        below = s\n        break\n\nprint(below)",
+          "runnable": true,
+          "expectedStdout": "55\n",
+          "caption": "Move 55 further down the list and run it again. Watch it keep checking longer."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def first_below_zero(temps):\n    if not temps:\n        return -1\n    for i, t in enumerate(temps):\n        if t < 0:\n            return i\n    return -1\n\ntemps = [5, 3, -2, 8, -6]\nprint(first_below_zero(temps))",
+          "steps": [
+            { "line": [2, 3], "say": "Handle nothing before hunting for something — an empty list can't have a first index." },
+            { "line": 4, "say": "enumerate hands you both the position and the value, so you never lose track of where you are." },
+            { "line": [5, 6], "say": "The instant the condition is true, return leaves the function — no reason to check what's left." },
+            { "line": 7, "say": "If nothing ever matched, the loop finishes and this line runs instead — a clear failure value." }
+          ],
+          "caption": "One list, checked left to right, until one index fits."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same function, a new log. What does this print?",
+          "language": "python",
+          "code": "def first_below_zero(temps):\n    if not temps:\n        return -1\n    for i, t in enumerate(temps):\n        if t < 0:\n            return i\n    return -1\n\ntemps = [4, 9, 1, 0, -3, -1]\nprint(first_below_zero(temps))",
+          "expected": "4",
+          "normalize": "lines",
+          "hint": "Walk the list index by index. Where is the first value under zero?",
+          "explain": "Indexes 0 through 3 hold 4, 9, 1 and 0 — none below zero — so the loop keeps going until index 4, where -3 is the first value under zero and return sends back that index right away."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write a function that finds the first word longer than a given length, then stops looking. `first_long_word(words, limit)` should return the first word whose length is greater than `limit`, or `None` if no word qualifies.",
+          "language": "python",
+          "starterCode": "def first_long_word(words, limit):\n    pass\n",
+          "tests": [
+            { "id": "t1", "input": "[[\"cat\", \"dog\", \"elephant\"], 4]", "expected": "\"elephant\"", "name": "one qualifies" },
+            { "id": "t2", "input": "[[\"a\", \"bb\", \"ccc\"], 10]", "expected": "null", "name": "none qualify" },
+            { "id": "t3", "input": "[[], 3]", "expected": "null", "name": "empty list" }
+          ],
+          "referenceSolution": "def first_long_word(words, limit):\n    for word in words:\n        if len(word) > limit:\n            return word\n    return None\n",
+          "hint": "Loop over the words in order. The moment one is long enough, you already have your answer.",
+          "explain": "Checking each word's length inside the loop and returning it right away means you never look at the words after the one that already answered the question; if none qualify, the loop ends on its own and None reports that nothing matched."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "return leaves the function the instant the answer is known.",
+            "break stops only the loop, so code after it still runs.",
+            "Check for empty or missing input before you start looping."
+          ],
+          "remember": "Stop the moment you know the answer, not one step later."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Same idea, new numbers. Time to find where a loop should stop itself."
+        }
+      ],
+      "exitLine": "That's the exit. Go build one that knows when to stop."
+    }
+  ]
+}

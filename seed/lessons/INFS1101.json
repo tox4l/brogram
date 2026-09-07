@@ -3,93 +3,497 @@
   "course": "INFS1101",
   "lessons": [
     {
-      "id": "INFS1101-3",
-      "cloId": "INFS1101-3",
+      "id": "INFS1101-1",
+      "cloId": "INFS1101-1",
       "course": "INFS1101",
       "language": "python",
       "version": 1,
-      "title": "First true check wins",
-      "hook": "if, elif, else — three words that decide which one line actually runs.",
+      "title": "Plan Before You Type",
+      "hook": "The best programmers plan on paper before they touch a keyboard.",
       "estimatedMinutes": 5,
       "draft": false,
-      "tags": ["selection", "branch-order"],
+      "tags": [
+        "problem-solving",
+        "flowcharts",
+        "input-output"
+      ],
       "blocks": [
         {
           "type": "concept",
           "id": "concept-1",
-          "heading": "Only one branch runs, and order decides which",
-          "body": "A chain of if, elif and else is not several separate checks — it is one decision that stops at the first true answer. Each condition is checked top to bottom, and the moment one comes back true, its branch runs and every condition after it is skipped, even one that would also have been true. That is why the order you write the checks in is not a style choice: swap two conditions around and a different score, age or amount can land in the wrong branch. else is not \"one option among many\" — it only runs when every condition above it has already failed, so it becomes the catch-all for whatever the earlier checks missed."
-        },
-        {
-          "type": "snippet",
-          "id": "snippet-1",
-          "language": "python",
-          "code": "age = 15\n\nif age < 5:\n    price = 0\nelif age < 18:\n    price = 8\nelse:\n    price = 12\n\nprint(price)",
-          "runnable": true,
-          "expectedStdout": "8\n",
-          "caption": "Change the age and run it again. Watch which branch wins."
+          "heading": "Input, Processing, Output",
+          "body": "Before you write any code, split the problem into three parts: what comes in, what happens to it, and what goes out. That is the input-processing-output model. Say them out loud for your problem — inputs, then the steps that use them, then the result — before touching a keyboard. The steps in between are the algorithm: the ordered plan for turning input into output. Code is only one way to write that plan down. Skip the plan and you are guessing your way through syntax instead of solving the problem, so you find bugs by accident instead of by design."
         },
         {
           "type": "worked",
           "id": "worked-1",
           "language": "python",
-          "code": "score = 82\n\nif score >= 90:\n    grade = \"A\"\nelif score >= 80:\n    grade = \"B\"\nelif score >= 70:\n    grade = \"C\"\nelse:\n    grade = \"F\"\n\nprint(grade)",
+          "code": "scores = [78, 92, 85, 67]\n\ntotal = 0\nfor score in scores:\n    total = total + score\naverage = total / len(scores)\n\nprint(average)",
+          "caption": "Averaging a list, the plan first.",
           "steps": [
-            { "line": 1, "say": "Start with the one thing you are deciding about: the score." },
-            { "line": [3, 4], "say": "Check the top case first. Clear ninety, and you are done — straight to A." },
-            { "line": [5, 8], "say": "Each elif only runs if every check above it failed, so order decides everything." },
-            { "line": [9, 12], "say": "Whatever is left falls to else, then that single value gets used." }
-          ],
-          "caption": "One value, checked from the top down, until one branch fits."
+            {
+              "line": 1,
+              "say": "The input is named first, as its own line, so you can check it before any processing touches it."
+            },
+            {
+              "line": [
+                3,
+                5
+              ],
+              "say": "Processing builds the total one score at a time, so you can trace a wrong sum back to one step."
+            },
+            {
+              "line": 6,
+              "say": "Division happens only after every score is added, because the plan said sum then divide — order matters."
+            },
+            {
+              "line": 8,
+              "say": "Output is the last line on purpose: nothing runs after the answer is printed."
+            }
+          ]
         },
         {
           "type": "check",
           "id": "check-1",
           "kind": "predict-output",
-          "prompt": "Same shape, different score. What does this print?",
+          "prompt": "This program follows the same plan as the walkthrough, with different numbers. What does it print?",
           "language": "python",
-          "code": "score = 65\n\nif score >= 90:\n    grade = \"A\"\nelif score >= 80:\n    grade = \"B\"\nelif score >= 70:\n    grade = \"C\"\nelse:\n    grade = \"F\"\n\nprint(grade)",
-          "expected": "F",
+          "code": "minutes = [12, 8, 10]\ntotal = 0\nfor m in minutes:\n    total = total + m\naverage = total / len(minutes)\nprint(average)",
+          "expected": "10.0",
           "normalize": "lines",
-          "hint": "Walk the conditions top to bottom. Where does 65 first fit one?",
-          "explain": "65 is not ninety or more, not eighty or more, and not seventy or more, so every elif fails and the code falls through to else, which is what makes grade equal \"F\"."
+          "hint": "Add the minutes in order, then divide by how many there are — same three steps as before.",
+          "explain": "The steps match the walkthrough exactly: sum first, divide once, print the single result. 12 + 8 + 10 = 30, and 30 / 3 = 10.0."
         },
         {
           "type": "check",
           "id": "check-2",
           "kind": "choose",
-          "prompt": "The branches above are checked top to bottom. Why does that order matter here?",
+          "prompt": "A vending machine program is planned in this order: (1) work out the change owed, (2) read the coins inserted, (3) read the item price, (4) show the change. Which step is in the wrong place?",
           "options": [
-            "It does not — every branch is checked and the last match wins.",
-            "Because once one branch runs, the rest are skipped, so the first true condition wins.",
-            "It only changes how fast the code runs, not which value gets picked."
+            "Step 2 — coins should be read after the change has been worked out.",
+            "Step 1 — it uses two values that nothing has read yet.",
+            "Step 3 — a price is not an input, so it does not belong in the plan.",
+            "Nothing is out of place; the order of steps in a plan does not matter."
           ],
           "correctIndex": 1,
           "why": [
-            "Python stops at the first true branch and never looks at the rest, so a later match could never win anyway.",
-            "Right. The first true condition wins and everything after it is skipped, so the order the checks are written in is part of what the code decides.",
-            "It changes the result, not just the speed — swap the order and different scores land in the wrong bracket."
+            "Coins are an input, and an input has to be read before any step can use it.",
+            "Right — change depends on the coins and the price, so it cannot run before either is read.",
+            "The price is read from the machine and used by the calculation, which makes it an input too.",
+            "Order is the whole point: a step placed before its values exist has nothing to work with."
           ],
-          "hint": "Think about what happens if the top check came last instead of first.",
-          "explain": "if and elif run top to bottom and stop at the first true one, so the order the checks are written in is part of the logic, not just a style choice."
+          "hint": "Ask what each step needs to already know, then check whether that value has been read yet.",
+          "explain": "Working out the change needs both the coins and the price, so it belongs after both are read — put it first and it has nothing to work with."
         },
         {
           "type": "recap",
           "id": "recap-1",
           "bullets": [
-            "Write the steps in plain words before touching the keyboard.",
-            "if, elif and else run in order; the first true one wins.",
-            "Whatever survives every check becomes the value you actually use."
+            "Name inputs, steps, and output before writing any code.",
+            "The algorithm is the plan; code is one way to write it.",
+            "A wrong plan is cheaper to catch than a wrong program."
           ],
-          "remember": "The order of your checks is part of the logic, not just the style."
+          "remember": "Plan first: inputs, steps, output. Code comes after."
         },
         {
           "type": "bridge",
           "id": "bridge-1",
-          "say": "Same shape, harder numbers. Time to build one yourself."
+          "say": "Next you map a real problem's inputs and steps yourself, before any code exists."
         }
       ],
-      "exitLine": "That's the shape. Go take a real one."
+      "exitLine": "Time to map a problem of your own — inputs, steps, output, then code."
+    },
+    {
+      "id": "INFS1101-2",
+      "cloId": "INFS1101-2",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "Steps First, Syntax Second",
+      "hook": "A flowchart is just the steps you haven't typed yet.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "flowcharts",
+        "variables",
+        "selection"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "The plan is the code, before it has syntax",
+          "body": "Before you touch the keyboard, write your solution as short, numbered steps in plain English, or the same steps as boxes and arrows in a flowchart. Either one is a design, and faithful means every step in that design shows up in the code, in the same order, with nothing skipped and nothing extra bolted on. If step two says check a condition before changing a value, the code checks it before changing the value too. Picking numbers, names or a story does not change the plan underneath, so a good plan should survive all of that untouched."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "tickets = 3\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
+          "runnable": true,
+          "expectedStdout": "30\n",
+          "caption": "Three steps, three chunks of code. Change tickets to 6 and rerun it."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "# 1. start price per ticket at 10\n# 2. if buying 5 or more, cut the price by 2\n# 3. total is tickets times price\ntickets = 6\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
+          "steps": [
+            {
+              "line": [
+                1,
+                3
+              ],
+              "say": "Writing the steps first means you settle the logic before wrestling with syntax, so mistakes get caught early."
+            },
+            {
+              "line": [
+                4,
+                5
+              ],
+              "say": "Every value the plan needs gets set before any check runs, matching step one exactly."
+            },
+            {
+              "line": [
+                7,
+                8
+              ],
+              "say": "This mirrors step two exactly: the condition and the change happen together, in the order the plan wrote them."
+            },
+            {
+              "line": [
+                10,
+                11
+              ],
+              "say": "Step three becomes this line word for word, nothing combined or reordered from the plan."
+            }
+          ],
+          "caption": "Six tickets clears the condition, so the cut price is the one that gets used."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same plan, a smaller order. What does this print?",
+          "language": "python",
+          "code": "tickets = 4\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
+          "expected": "40",
+          "normalize": "lines",
+          "hint": "Check whether four tickets actually clears the condition before you multiply anything.",
+          "explain": "Four is less than five, so the condition never fires and price stays at ten; four tickets times ten is forty."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A garage charges $6 an hour. Park 4 hours or more and the total gets a flat $5 off. Write `parking_cost(hours)` that returns the total: start at hours times 6, then apply the discount once hours reaches 4.",
+          "language": "python",
+          "starterCode": "def parking_cost(hours):\n    pass",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[3]",
+              "expected": "18"
+            },
+            {
+              "id": "t2",
+              "input": "[4]",
+              "expected": "19"
+            }
+          ],
+          "referenceSolution": "def parking_cost(hours):\n    total = hours * 6\n    if hours >= 4:\n        total = total - 5\n    return total",
+          "hint": "Multiply first, exactly like the plan lists it, then check the condition before you return.",
+          "explain": "Total starts at hours times six, matching step one, then the condition only fires once hours reaches four, subtracting five before the value comes back."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Write the steps in plain English before any syntax.",
+            "Turn each step into one line, in the same order.",
+            "Never skip a step or add logic that was not planned."
+          ],
+          "remember": "Design decides the logic; the code just carries it out faithfully."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to turn a written spec into steps, then into code."
+        }
+      ],
+      "exitLine": "Same move every time: steps first, then code that matches."
+    },
+    {
+      "id": "INFS1101-3",
+      "cloId": "INFS1101-3",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "Stop the loop the instant you know",
+      "hook": "A loop that already found its answer is just running for nothing.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "iteration",
+        "loops"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Leave a loop the moment you have the answer",
+          "body": "A loop doesn't have to visit every item to answer a question. If you're hunting for the first value that matches, check it as you go and leave the moment you find it — you already have the answer, so there's nothing left to gain by continuing. In Python, `return` inside a function stops everything right there, and `break` stops only the loop it sits inside, letting code after the loop keep running. Compare that to always running every iteration and deciding afterward: same result, but more work, and the code reads less honestly about when the answer was actually found. Reach for an early exit the moment you know."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "waits = [55, 61, 40, 88, 72]\nquick = None\nfor w in waits:\n    if w < 60:\n        quick = w\n        break\n\nprint(quick)",
+          "runnable": true,
+          "expectedStdout": "55\n",
+          "caption": "Move 55 further down the list and run it again. Watch it keep checking longer."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def first_below_zero(temps):\n    if not temps:\n        return -1\n    for i, t in enumerate(temps):\n        if t < 0:\n            return i\n    return -1\n\ntemps = [5, 3, -2, 8, -6]\nprint(first_below_zero(temps))",
+          "steps": [
+            {
+              "line": [
+                2,
+                3
+              ],
+              "say": "Handle nothing before hunting for something — an empty list can't have a first index."
+            },
+            {
+              "line": 4,
+              "say": "enumerate hands you both the position and the value, so you never lose track of where you are."
+            },
+            {
+              "line": [
+                5,
+                6
+              ],
+              "say": "The instant the condition is true, return leaves the function — no reason to check what's left."
+            },
+            {
+              "line": 7,
+              "say": "If nothing ever matched, the loop finishes and this line runs instead — a clear failure value."
+            }
+          ],
+          "caption": "One list, checked left to right, until one index fits."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same function, a new log. What does this print?",
+          "language": "python",
+          "code": "def first_below_zero(temps):\n    if not temps:\n        return -1\n    for i, t in enumerate(temps):\n        if t < 0:\n            return i\n    return -1\n\ntemps = [4, 9, 1, 0, -3, -1]\nprint(first_below_zero(temps))",
+          "expected": "4",
+          "normalize": "lines",
+          "hint": "Walk the list index by index. Where is the first value under zero?",
+          "explain": "Indexes 0 through 3 hold 4, 9, 1 and 0 — none below zero — so the loop keeps going until index 4, where -3 is the first value under zero and return sends back that index right away."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A sensor logs weights in the order they arrive. Write `first_over_limit(weights, limit)`: return the first weight greater than `limit` and stop looking, or `None` if none of them is over.",
+          "language": "python",
+          "starterCode": "def first_over_limit(weights, limit):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[4, 9, 21, 7], 10]",
+              "expected": "21",
+              "name": "one goes over"
+            },
+            {
+              "id": "t2",
+              "input": "[[1, 2, 3], 10]",
+              "expected": "null",
+              "name": "none go over"
+            },
+            {
+              "id": "t3",
+              "input": "[[], 5]",
+              "expected": "null",
+              "name": "empty list"
+            }
+          ],
+          "referenceSolution": "def first_over_limit(weights, limit):\n    for w in weights:\n        if w > limit:\n            return w\n    return None\n",
+          "hint": "Walk the weights in order. The moment one is over the limit, you already have your answer.",
+          "explain": "Comparing each weight inside the loop and returning it right away means you never look at the ones after the answer; if none is over, the loop ends on its own and None reports that nothing matched."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "return leaves the function the instant the answer is known.",
+            "break stops only the loop, so code after it still runs.",
+            "Check for empty or missing input before you start looping."
+          ],
+          "remember": "Stop the moment you know the answer, not one step later."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Same idea, new numbers. Time to find where a loop should stop itself."
+        }
+      ],
+      "exitLine": "That's the exit. Go build one that knows when to stop."
+    },
+    {
+      "id": "INFS1101-4",
+      "cloId": "INFS1101-4",
+      "course": "INFS1101",
+      "language": "python",
+      "version": 1,
+      "title": "One function, one honest error",
+      "hook": "One loop, one return, one error that names its own line.",
+      "estimatedMinutes": 7,
+      "draft": false,
+      "tags": [
+        "strings",
+        "lists",
+        "functions",
+        "errors"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "A function returns one answer; a bad index names itself",
+          "body": "A function lets you wrap logic that walks a list once and hands back a single answer, instead of repeating the same loop everywhere you need it. Give it a list of strings, check each one with a string method like len(), and return the value you actually want, not print it. The moment you assume a list is longer than it really is, Python raises an error and names the exact line where the index went past the end. Read that message before you guess: it tells you which line asked for a position, and that position did not exist."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "def shout_all(words):\n    result = []\n    for w in words:\n        result.append(w.upper())\n    return result\n\nprint(shout_all([\"go\", \"team\"]))",
+          "runnable": true,
+          "expectedStdout": "['GO', 'TEAM']\n",
+          "caption": "Change the list and run it again. The function returns; it never prints for you."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "def longest_word(words):\n    best = \"\"\n    for word in words:\n        if len(word) > len(best):\n            best = word\n    return best\n\nprint(longest_word([\"cat\", \"elephant\", \"dog\"]))",
+          "steps": [
+            {
+              "line": 2,
+              "say": "Start best as an empty string so any real word in the list beats it right away."
+            },
+            {
+              "line": 3,
+              "say": "Loop once through the list — the whole job happens inside this single pass."
+            },
+            {
+              "line": [
+                4,
+                5
+              ],
+              "say": "Compare lengths with len(), not the words themselves, so it stays a plain number check."
+            },
+            {
+              "line": 6,
+              "say": "Return the answer instead of printing it, so the caller decides what happens next."
+            },
+            {
+              "line": 8,
+              "say": "Calling the function with real strings is what actually runs the logic above."
+            }
+          ],
+          "caption": "One pass over the list, one value kept, one answer returned."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Same shape, flipped: this one keeps the shortest word instead of the longest. What prints?",
+          "language": "python",
+          "code": "def shortest_word(words):\n    best = words[0]\n    for word in words:\n        if len(word) < len(best):\n            best = word\n    return best\n\nprint(shortest_word([\"kiwi\", \"fig\", \"watermelon\"]))",
+          "expected": "fig\n",
+          "normalize": "exact",
+          "hint": "Walk each word by hand. Is best updated for a longer word here, or a shorter one?",
+          "explain": "best starts as kiwi, then only updates when a shorter word shows up: fig beats kiwi, watermelon never does."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "This function looks up a name and returns the one after it:\n\n```python\ndef next_name(names, target):\n    i = names.index(target)\n    return names[i + 1]\n\nprint(next_name([\"Ann\", \"Bo\", \"Cy\"], \"Cy\"))\n```\n\nIt crashes with an index error. What is actually wrong?",
+          "options": [
+            "index() only works on strings, not on names",
+            "Cy is the last item, so i + 1 points one past the end of the list",
+            "The list needs more than three names to work at all",
+            "index() itself raises the error, before the return line runs"
+          ],
+          "correctIndex": 1,
+          "why": [
+            "index() works on any list regardless of what it holds — that is not the problem here.",
+            "Right. The last valid position is 2, and i + 1 becomes 3, which does not exist.",
+            "Length is not the issue — any list crashes the same way once the target is last.",
+            "index() succeeds and returns 2 first; the crash only happens one line later."
+          ],
+          "hint": "Work out i for \"Cy\" by hand, then check whether i + 1 is still a real position.",
+          "explain": "index() returns 2 for the last name, so names[i + 1] asks for position 3 — one past the last valid index."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write count_short(words, max_len): return how many words have length max_len or less.",
+          "language": "python",
+          "starterCode": "def count_short(words, max_len):\n    pass\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "[[\"cat\", \"dog\", \"elephant\"], 3]",
+              "expected": "2",
+              "hidden": false,
+              "name": "two words fit"
+            },
+            {
+              "id": "t2",
+              "input": "[[], 5]",
+              "expected": "0",
+              "hidden": false,
+              "name": "empty list"
+            },
+            {
+              "id": "t3",
+              "input": "[[\"a\", \"bb\", \"ccc\"], 3]",
+              "expected": "3",
+              "hidden": false,
+              "name": "length equal to max_len still counts"
+            }
+          ],
+          "referenceSolution": "def count_short(words, max_len):\n    count = 0\n    for w in words:\n        if len(w) <= max_len:\n            count += 1\n    return count",
+          "hint": "Loop through words, check len(w) against max_len, and keep a running count.",
+          "explain": "Each word only adds to count when its len() is at or under max_len, including the empty list, which never adds anything."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A function loops once and returns one answer; it never prints for you.",
+            "Work out an index by hand before trusting names[i + 1].",
+            "A crash names the exact line and position that went too far."
+          ],
+          "remember": "Return the answer, don't print it, and read the line the error names."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Idea's in. Time for a real rep that mixes a list, a function, and one honest error."
+        }
+      ],
+      "exitLine": "Go use it. A rep needs all four at once."
     }
   ]
 }

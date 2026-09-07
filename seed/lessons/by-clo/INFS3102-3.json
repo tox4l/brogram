@@ -1,0 +1,95 @@
+{
+  "lessons": [
+    {
+      "id": "INFS3102-3",
+      "cloId": "INFS3102-3",
+      "course": "INFS3102",
+      "language": "java",
+      "version": 1,
+      "title": "One Call, Different Bodies",
+      "hook": "One line of code, and the object underneath decides what actually happens.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["polymorphism", "overriding", "dynamic-dispatch"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "One Call, The Object Decides",
+          "body": "When a subclass overrides a method — same name, same parameters, same return type — you can call it through a variable declared as the superclass. Java still runs the subclass's version, not the superclass's. The declared type only limits which methods you are allowed to call; the actual object decides which body executes. That means one line of code, written once against the superclass, behaves differently depending on what object you hand it. Mark the subclass method @Override so the compiler checks it truly replaces a matching superclass method, instead of quietly creating an unrelated one because a parameter or the name did not match exactly."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "java",
+          "code": "class Instrument {\n    String play() { return \"...\"; }\n}\nclass Guitar extends Instrument {\n    @Override\n    String play() { return \"Strum\"; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Instrument i = new Guitar();\n        System.out.println(i.play());\n    }\n}",
+          "runnable": false,
+          "expectedStdout": "Strum\n",
+          "caption": "i is typed Instrument, but the object underneath is a Guitar."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "java",
+          "code": "import java.util.*;\n\nclass Employee {\n    String name;\n    Employee(String name) { this.name = name; }\n    int bonus() { return 200; }\n}\nclass Manager extends Employee {\n    Manager(String name) { super(name); }\n    @Override int bonus() { return 500; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        List<Employee> staff = new ArrayList<>();\n        staff.add(new Employee(\"Sam\"));\n        staff.add(new Manager(\"Rae\"));\n        for (Employee e : staff) System.out.println(e.name + \" \" + e.bonus());\n    }\n}",
+          "steps": [
+            { "line": 6, "say": "A default bonus here means every Employee responds to the same call, even before overriding exists." },
+            { "line": 10, "say": "Same name and return type let this replace Employee's version instead of hiding beside it." },
+            { "line": 14, "say": "Typing the list as Employee lets Sam and Rae share one collection despite being different classes." },
+            { "line": 17, "say": "e is typed Employee, but Java still runs whichever bonus() the real object defines." }
+          ],
+          "caption": "Two classes, one loop — the object each slot holds decides which bonus prints."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "notify(n) only ever sees n as a Notification. What does this print?",
+          "language": "java",
+          "code": "class Notification {\n    String send() { return \"ping\"; }\n}\nclass UrgentNotification extends Notification {\n    @Override\n    String send() { return \"ALERT\"; }\n}\npublic class Main {\n    static void notify(Notification n) {\n        System.out.println(n.send());\n    }\n    public static void main(String[] args) {\n        Notification[] queue = { new Notification(), new UrgentNotification() };\n        for (Notification n : queue) notify(n);\n    }\n}",
+          "expected": "ping\nALERT",
+          "normalize": "lines",
+          "hint": "notify's parameter type never changes. Ask what each array slot actually holds instead.",
+          "explain": "notify always receives something typed Notification, but the first slot really is a plain Notification and the second really is an UrgentNotification, so send() resolves separately for each one: ping, then ALERT."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "computeTotal(Discount d, double amount) returns amount * (1 - d.rate()). Discount.rate() returns 0.05; VipDiscount overrides rate() to return 0.2. discounts is a Discount[] where index 0 holds a plain Discount and index 1 holds a VipDiscount. What does computeTotal(discounts[1], 250) return?",
+          "options": [
+            "200.0, because the object at index 1 is really a VipDiscount, whatever type the array or parameter is declared as",
+            "237.5, because the array and the parameter are both typed Discount, so rate() always resolves to Discount's own version",
+            "A compile error, because a VipDiscount cannot be stored in a Discount[]",
+            "It depends on the order the discounts were added to the array"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right. The object at index 1 really is a VipDiscount, so its own rate() runs: 250 * (1 - 0.2) = 200.0, no matter how the parameter is declared.",
+            "That would only be true if overriding did not exist. The declared type never decides which body runs — the actual object always does.",
+            "A VipDiscount is a Discount, so storing it in a Discount[] compiles and runs fine; that is the entire reason to type the array as the supertype.",
+            "Insertion order never changes which method a given object runs. Only the object's own type decides that."
+          ],
+          "hint": "Look at what discounts[1] actually is, not what the array or the parameter is typed as.",
+          "explain": "computeTotal takes a Discount, but discounts[1] is really a VipDiscount, so d.rate() runs VipDiscount's overridden version: 250 * (1 - 0.2) = 200.0. The declared type Discount only controls which methods are callable, never which body executes."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Overriding keeps the method name, replacing the superclass's version entirely.",
+            "The declared type limits calls; the real object picks the method.",
+            "One call site, many bodies, decided only by the object you pass."
+          ],
+          "remember": "The object decides which body runs, never the variable's label."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you write the override yourself, on a class you have not seen yet."
+        }
+      ],
+      "exitLine": "Same call, different body, decided entirely by the object underneath."
+    }
+  ]
+}

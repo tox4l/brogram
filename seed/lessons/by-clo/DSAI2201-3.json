@@ -1,0 +1,111 @@
+{
+  "lessons": [
+    {
+      "id": "DSAI2201-3",
+      "cloId": "DSAI2201-3",
+      "course": "DSAI2201",
+      "language": "python",
+      "version": 1,
+      "title": "Clean Before You Create",
+      "hook": "Garbage in, garbage column — fix it before you build anything on top.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["cleaning", "feature-engineering", "pandas", "missing-values"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Clean first, then create",
+          "body": "Real data arrives messy: numbers stored as text, rows with holes in them, and rows that are exact copies of each other. Before any calculation means something, you deal with that mess in order. Convert a column to the right type, coercing anything unparseable into a missing value instead of crashing. Drop the rows you can't fix. Remove exact duplicates so one record never gets counted twice. Only then do you build a new column from what is left — a total, a ratio, a difference. Skip a step and the new column inherits every problem the old ones had, just harder to spot."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import pandas as pd\n\ns = pd.Series([\"3\", \"7\", \"bad\"])\ns = pd.to_numeric(s, errors=\"coerce\")\ns = s.dropna()\nprint(list(s))",
+          "runnable": true,
+          "expectedStdout": "[3.0, 7.0]\n",
+          "caption": "Bad text becomes a missing value, then it's gone."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import pandas as pd\n\ndata = {\"id\": [1, 2, 2, 3],\n        \"price\": [\"10\", \"20\", \"20\", \"oops\"],\n        \"qty\": [2, 3, 3, 4]}\ndf = pd.DataFrame(data)\n\ndf[\"price\"] = pd.to_numeric(df[\"price\"], errors=\"coerce\")\ndf = df.dropna(subset=[\"price\"])\ndf = df.drop_duplicates(subset=[\"id\"])\ndf[\"total\"] = df[\"price\"] * df[\"qty\"]\n\nprint(list(df[\"total\"]))",
+          "steps": [
+            { "line": 8, "say": "Coercing to numeric turns unparseable text into a missing value instead of crashing the column." },
+            { "line": 9, "say": "Dropping missing prices first stops a bad row from also breaking the new column's math." },
+            { "line": 10, "say": "Removing the repeated id keeps one record from being counted twice in the total." },
+            { "line": 11, "say": "Only clean, deduplicated rows reach the new feature, so the math actually means something." }
+          ],
+          "caption": "Fix the type, drop what you can't use, dedupe, then engineer."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "This cleans a Series before counting what's left. What does the last line print?",
+          "language": "python",
+          "code": "import pandas as pd\n\nvals = pd.Series([\"5\", \"x\", \"5\", \"9\"])\nvals = pd.to_numeric(vals, errors=\"coerce\")\nvals = vals.dropna()\nprint(len(vals))",
+          "expected": "3\n",
+          "normalize": "exact",
+          "hint": "Work out which entries survive to_numeric with errors=\"coerce\" and dropna before you count them.",
+          "explain": "\"x\" cannot convert to a number, so it becomes a missing value and dropna removes it, leaving three valid entries, so the length is 3."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "choose",
+          "prompt": "You need a new column total = price * qty, but price is stored as text and a few values aren't real numbers. What should happen first?",
+          "options": [
+            "Multiply price by qty directly, then fix whatever looks wrong afterward.",
+            "Convert price to numeric, turning bad text into missing values, then drop those rows.",
+            "Delete the qty column so there is nothing left to multiply by.",
+            "Build total first, then check afterward which rows came out as missing."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Multiplying while price is still text either raises an error or silently produces junk.",
+            "Cleaning the type first means every row that reaches total is a real number.",
+            "Qty is already fine — removing it throws away data the feature still needs.",
+            "This still multiplies dirty values before you know which rows are actually broken."
+          ],
+          "hint": "Think about what a string times a number actually does before you fix anything.",
+          "explain": "Converting price to numeric first turns unparseable text into missing values you can drop, so total only ever gets built from real numbers."
+        },
+        {
+          "type": "check",
+          "id": "check-3",
+          "kind": "micro-code",
+          "prompt": "Write `clean_totals(records)`. Each record is a dict with `id`, `price` (a string that might not be a number) and `qty`. Return a list of `price * qty` after converting price to a number (dropping rows that fail) and dropping duplicate ids, keeping the first.",
+          "language": "python",
+          "starterCode": "import pandas as pd\n\ndef clean_totals(records):\n    pass\n",
+          "tests": [
+            { "id": "t1", "input": "[[{\"id\": 1, \"price\": \"10\", \"qty\": 2}, {\"id\": 2, \"price\": \"bad\", \"qty\": 5}, {\"id\": 3, \"price\": \"4\", \"qty\": 3}]]", "expected": "[20.0, 12.0]", "hidden": false, "name": "one bad price dropped" },
+            { "id": "t2", "input": "[[{\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 2, \"price\": \"3\", \"qty\": 2}]]", "expected": "[20.0, 6.0]", "hidden": false, "name": "duplicate id kept once" },
+            { "id": "t3", "input": "[[{\"id\": 1, \"price\": \"nope\", \"qty\": 2}]]", "expected": "[]", "hidden": false, "name": "everything drops out" }
+          ],
+          "referenceSolution": "import pandas as pd\n\ndef clean_totals(records):\n    df = pd.DataFrame(records)\n    df[\"price\"] = pd.to_numeric(df[\"price\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"price\"])\n    df = df.drop_duplicates(subset=[\"id\"])\n    df[\"total\"] = df[\"price\"] * df[\"qty\"]\n    return list(df[\"total\"])",
+          "hint": "Convert price with pd.to_numeric(errors=\"coerce\"), drop the missing ones, then drop duplicate ids before multiplying.",
+          "explain": "Coercing price to numeric turns bad text into missing values, dropping those rows keeps only real prices, and dropping duplicate ids removes repeats before qty multiplies price into total."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Fix wrong types before you trust any calculation on that column.",
+            "Drop rows you can't clean, then drop duplicates before building features.",
+            "A new column is only as clean as the columns it's built from."
+          ],
+          "remember": "Clean the columns first — a feature built on dirty data is dirty too."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now go clean a messier one yourself — real data won't ask nicely."
+        }
+      ],
+      "exitLine": "Go clean a real column, then build something new on top of it."
+    }
+  ]
+}

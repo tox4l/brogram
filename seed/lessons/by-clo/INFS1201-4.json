@@ -1,0 +1,90 @@
+{
+  "lessons": [
+    {
+      "id": "INFS1201-4",
+      "cloId": "INFS1201-4",
+      "course": "INFS1201",
+      "language": "python",
+      "version": 1,
+      "title": "Reading a csv without crashing",
+      "hook": "One blank cell in a file, and a careless script dies right there.",
+      "estimatedMinutes": 7,
+      "draft": true,
+      "tags": ["csv", "files", "data-cleaning"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Rows become dictionaries",
+          "body": "A csv file is rows of text with commas between values, and the first row usually names each column. Python's csv module can hand you each row as a plain list, but csv.DictReader upgrades that: it reads the header once and turns every later row into a dictionary, so you pull a value by column name instead of counting commas. Real files are messy — a shopper skips a field, a price cell is left blank. If you assume every field holds a number and convert it, that one blank cell crashes the whole read. Check what actually came back before you trust it, and skip or replace an empty field instead of letting it blow up your program."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "python",
+          "code": "import csv, io\n\ntext = \"name,price\\nApple,1.50\\nBanana,0.75\\n\"\nreader = csv.DictReader(io.StringIO(text))\nfor row in reader:\n    print(row[\"name\"], row[\"price\"])",
+          "runnable": true,
+          "expectedStdout": "Apple 1.50\nBanana 0.75\n",
+          "caption": "Each row comes back keyed by header name, not by position."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "python",
+          "code": "import csv, io\n\ntext = \"item,price\\nMask,2.50\\nGloves,\\nWipes,1.20\\n\"\nreader = csv.DictReader(io.StringIO(text))\ntotal = 0.0\nskipped = 0\nfor row in reader:\n    price = row[\"price\"].strip()\n    if price == \"\":\n        skipped += 1\n        continue\n    total += float(price)\nprint(round(total, 2))\nprint(skipped)",
+          "steps": [
+            { "line": 4, "say": "DictReader turns the header row into keys, so you look values up by name, not position." },
+            { "line": 8, "say": "Stripping the field catches a blank cell that reads as empty text, not a missing key." },
+            { "line": [9, 11], "say": "Checking for empty text before converting stops a blank row from crashing the whole read." },
+            { "line": 12, "say": "Only a value that passed the check gets turned into a number, so bad data cannot break the loop." }
+          ],
+          "caption": "Guard the field, then convert it — never the other way round."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "predict-output",
+          "prompt": "Read this script mentally, then say exactly what it prints, line by line.",
+          "language": "python",
+          "code": "import csv, io\n\ntext = \"day,temp\\nMon,72\\nTue,\\nWed,68\\n\"\nreader = csv.DictReader(io.StringIO(text))\ntotal = 0\nskipped = 0\nfor row in reader:\n    temp = row[\"temp\"].strip()\n    if temp == \"\":\n        skipped += 1\n        continue\n    total += int(temp)\nprint(total)\nprint(skipped)",
+          "expected": "140\n1",
+          "normalize": "lines",
+          "hint": "Trace each row: does the guard let a blank field reach the conversion?",
+          "explain": "Tuesday's blank field never reaches int(), so only 72 and 68 get added — one row skipped."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Write total_price(text): it takes csv text with header item,price and returns the sum of the valid prices as a float, skipping any row whose price is blank.",
+          "language": "python",
+          "starterCode": "import csv, io\n\ndef total_price(text):\n    pass",
+          "tests": [
+            { "id": "t1", "input": "[\"item,price\\nMask,2.5\\nGloves,\\nWipes,1.2\\n\"]", "expected": "3.7", "name": "mixed rows" },
+            { "id": "t2", "input": "[\"item,price\\nA,\\nB,\\n\"]", "expected": "0.0", "name": "all blank" },
+            { "id": "t3", "input": "[\"item,price\\nX,10\\nY,5\\n\"]", "expected": "15.0", "name": "all valid" }
+          ],
+          "referenceSolution": "import csv, io\n\ndef total_price(text):\n    reader = csv.DictReader(io.StringIO(text))\n    total = 0.0\n    for row in reader:\n        price = row[\"price\"].strip()\n        if price == \"\":\n            continue\n        total += float(price)\n    return round(total, 2)",
+          "hint": "Read the text with csv.DictReader, then guard the price field the same way the worked example did.",
+          "explain": "Skipping a blank field before converting is what keeps one row from crashing the whole read."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "DictReader keys each row by the header, not by position.",
+            "Check a field before converting it, so blanks cannot crash the read.",
+            "A guard skips one bad row instead of stopping the whole file."
+          ],
+          "remember": "A file only crashes you if you never look at what actually came back."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Next you'll clean a full file that's built to break naive code."
+        }
+      ],
+      "exitLine": "Go turn a messy file into numbers that hold up."
+    }
+  ]
+}

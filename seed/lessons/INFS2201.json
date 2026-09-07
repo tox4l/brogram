@@ -1,0 +1,576 @@
+{
+  "$note": "BroGram lessons. One lesson per CLO. No institution names, no pattern ids, no emoji.",
+  "course": "INFS2201",
+  "lessons": [
+    {
+      "id": "INFS2201-1",
+      "cloId": "INFS2201-1",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "One Table Won't Hold It",
+      "hook": "Flat files fall apart the moment two facts need to change together.",
+      "estimatedMinutes": 5,
+      "draft": false,
+      "tags": [
+        "relational-model",
+        "primary-key",
+        "foreign-key"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Why one giant spreadsheet breaks",
+          "body": "Picture one giant spreadsheet holding every book and its author's name in every row. Rename an author and you have to fix every row they touch, or the data disagrees with itself. A database management system stores related facts in separate tables instead, then joins them back together for you. The relational model is this idea: split data into tables, one fact per row. Give each row a primary key, a value that identifies it and never repeats in that table. A foreign key sits in one table and points at another table's primary key, so the connection is stored once and checked, not copied everywhere."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "sql",
+          "code": "CREATE TABLE authors (\n  author_id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE books (\n  book_id INTEGER PRIMARY KEY,\n  title TEXT,\n  author_id INTEGER REFERENCES authors(author_id)\n);\n\nINSERT INTO authors VALUES (1, 'Octavia Butler');\nINSERT INTO books VALUES (101, 'Kindred', 1);\n\nSELECT title, name\nFROM books\nJOIN authors ON books.author_id = authors.author_id;",
+          "steps": [
+            {
+              "line": 2,
+              "say": "author_id is unique per row here, so no two authors can share one identity."
+            },
+            {
+              "line": 9,
+              "say": "This foreign key points at authors, so every book must belong to a real one."
+            },
+            {
+              "line": [
+                12,
+                13
+              ],
+              "say": "The author is stored once; books just reference it instead of repeating the name."
+            },
+            {
+              "line": [
+                15,
+                17
+              ],
+              "say": "The join follows the foreign key back to authors to pull in the name."
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A dental clinic's appointment sheet repeats every dentist's phone number on every appointment row. One dentist changes numbers. What breaks in a flat file that a foreign key would prevent?",
+          "options": [
+            "Every appointment row with that dentist now shows the old number until each row is manually fixed.",
+            "The clinic loses all its appointment history because flat files cannot store phone numbers.",
+            "Nothing breaks, because flat files update every copy of a value automatically.",
+            "The appointment rows delete themselves because they no longer match the dentist."
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right - the number lives in every row, so nothing points back to one shared value.",
+            "Flat files store phone numbers fine; the failure is duplication, not the data type.",
+            "A flat file never updates its copies together; each row holds its own separate value.",
+            "Rows do not vanish on their own; they just quietly disagree with each other."
+          ],
+          "hint": "Think about how many places that phone number actually lives in a flat file.",
+          "explain": "A foreign key stores the dentist once and every appointment row points at it, so a change happens in exactly one place instead of hundreds."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "spot-the-bug",
+          "prompt": "This shifts table already has a foreign key back to staff. One line still repeats data live in place, so an update can drift out of sync. Find it.",
+          "language": "sql",
+          "code": "CREATE TABLE staff (\n  staff_id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE shifts (\n  shift_id INTEGER PRIMARY KEY,\n  staff_id INTEGER REFERENCES staff(staff_id),\n  staff_name TEXT,\n  site_code TEXT\n);",
+          "bugLines": [
+            9
+          ],
+          "hint": "Look for a column that copies a fact the foreign key can already reach.",
+          "explain": "staff_name repeats data already reachable through the staff_id foreign key, so a name change here won't match staff and the two disagree."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A relational database splits facts into tables instead of one repeated sheet.",
+            "A primary key names a row; a foreign key points back to one.",
+            "Keeping a fact in one place stops updates from drifting out of sync."
+          ],
+          "remember": "One fact, one place - the foreign key is the only copy you need."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Now go tell the difference yourself, one messy sheet and one clean schema at a time."
+        }
+      ],
+      "exitLine": "Time to spot the real shape in a real schema."
+    },
+    {
+      "id": "INFS2201-2",
+      "cloId": "INFS2201-2",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "The Foreign Key's Address",
+      "hook": "One line on the diagram decides which table needs the extra column.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "foreign-keys",
+        "one-to-many",
+        "cardinality"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-fk-placement",
+          "heading": "Where the foreign key lives",
+          "body": "Look at an entity-relationship diagram and find the arrow between two boxes. One side is 'one', the other is 'many' — a warehouse holds many pallets, but each pallet sits in exactly one warehouse. That direction tells you exactly where the foreign key belongs: on the many side, pointing at the one side's primary key. The pallet row carries the warehouse's key; the warehouse never stores a list of pallet ids. Relational columns hold one value each, so the side that would otherwise need a list is the side that gets the pointer instead. Every one-to-many relationship in a diagram follows this same rule: many holds the key, one gets pointed at."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-venues-concerts",
+          "language": "sql",
+          "code": "CREATE TABLE venues (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE concerts (\n  id INTEGER PRIMARY KEY,\n  venue_id INTEGER REFERENCES venues(id)\n);",
+          "runnable": true,
+          "expectedStdout": "",
+          "caption": "concerts holds venue_id; venues holds nothing extra."
+        },
+        {
+          "type": "worked",
+          "id": "worked-directors-films",
+          "language": "sql",
+          "code": "CREATE TABLE directors (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE films (\n  id INTEGER PRIMARY KEY,\n  title TEXT,\n  director_id INTEGER REFERENCES directors(id)\n);\n\nINSERT INTO directors VALUES (1, 'Okafor');\nINSERT INTO films VALUES\n  (1, 'Reef', 1),\n  (2, 'Drift', 1);",
+          "steps": [
+            {
+              "line": 2,
+              "say": "directors gets a plain primary key because it's the 'one' side — nothing here needs to point anywhere."
+            },
+            {
+              "line": 9,
+              "say": "films gets director_id because each film has exactly one director, but directors can have many films."
+            },
+            {
+              "line": [
+                13,
+                15
+              ],
+              "say": "Two films reuse the same director_id, proving one director can back many rows without duplicating name data."
+            }
+          ],
+          "caption": "One director, many films — the foreign key sits on films."
+        },
+        {
+          "type": "check",
+          "id": "check-department-fk",
+          "kind": "choose",
+          "prompt": "An employee works in exactly one department. A department has many employees. Which table should hold the foreign key?",
+          "options": [
+            "employees, with a department_id column",
+            "departments, with an employee_id column",
+            "both tables need a foreign key pointing at each other",
+            "neither table needs a foreign key"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right — employees is the many side, so it points at departments with department_id.",
+            "Departments is the one side; giving it employee_id would mean storing a list, which a column can't hold.",
+            "Only the many side needs a pointer; a two-way pointer just duplicates the same relationship twice.",
+            "Without a foreign key, nothing links an employee row back to its department at all."
+          ],
+          "hint": "Find the side that would need to store more than one value if you got this backwards.",
+          "explain": "employees is many, departments is one; department_id on employees points each row at exactly one parent without any list."
+        },
+        {
+          "type": "check",
+          "id": "check-teams-coach",
+          "kind": "micro-code",
+          "prompt": "Finish the teams table so each team has exactly one coach, but a coach can run many teams.",
+          "language": "sql",
+          "starterCode": "CREATE TABLE coaches (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\nINSERT INTO coaches VALUES (1, 'Reed'), (2, 'Diaz');\n\n-- Add the teams table here: id, name, and a link to one coach.\n\nINSERT INTO teams VALUES (1, 'Falcons', 1), (2, 'Wolves', 1), (3, 'Lions', 2);",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "SELECT teams.name AS team, coaches.name AS coach FROM teams JOIN coaches ON teams.coach_id = coaches.id ORDER BY teams.id;",
+              "expected": "{\"columns\":[\"team\",\"coach\"],\"values\":[[\"Falcons\",\"Reed\"],[\"Wolves\",\"Reed\"],[\"Lions\",\"Diaz\"]]}"
+            },
+            {
+              "id": "t2",
+              "input": "SELECT COUNT(*) AS n FROM teams WHERE coach_id = 1;",
+              "expected": "{\"columns\":[\"n\"],\"values\":[[2]]}"
+            }
+          ],
+          "referenceSolution": "CREATE TABLE coaches (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\nINSERT INTO coaches VALUES (1, 'Reed'), (2, 'Diaz');\nCREATE TABLE teams (\n  id INTEGER PRIMARY KEY,\n  name TEXT,\n  coach_id INTEGER REFERENCES coaches(id)\n);\nINSERT INTO teams VALUES (1, 'Falcons', 1), (2, 'Wolves', 1), (3, 'Lions', 2);\nSELECT teams.name AS team, coaches.name AS coach\nFROM teams JOIN coaches ON teams.coach_id = coaches.id\nORDER BY teams.id;",
+          "hint": "The many side needs a column pointing at the one side's primary key — call it coach_id.",
+          "explain": "coach_id on teams points at coaches.id; two teams can share a coach because a foreign key value is free to repeat on the many side."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "The many side holds the foreign key, not the one side.",
+            "One-to-many never needs a list column, just one pointer per row.",
+            "A repeated foreign key value is normal — that's the 'many' showing up."
+          ],
+          "remember": "Many holds the key, one gets pointed at."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to draw one yourself and turn it into tables that actually hold together."
+        }
+      ],
+      "exitLine": "Draw the next diagram, then let the arrows tell you where every key goes."
+    },
+    {
+      "id": "INFS2201-3",
+      "cloId": "INFS2201-3",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "Move it to where it belongs",
+      "hook": "One column parked in the wrong table, and every edit means chasing down every copy.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "normalization",
+        "dependency",
+        "keys"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Ask what a column actually depends on",
+          "body": "Every table should describe one kind of thing, keyed by one thing. If a column's value depends on only part of a multi-column key, or on some other ordinary column instead of the key, that fact gets copied onto every row sharing that value - and one edit can leave two rows disagreeing. First normal form breaks up a cell holding more than one value. Second normal form moves a column that depends on only part of the key into its own table, keyed by that part. Third normal form moves a column that depends on another ordinary column into a table of its own. Each step removes one way rows could drift apart."
+        },
+        {
+          "type": "snippet",
+          "id": "snippet-1",
+          "language": "sql",
+          "code": "create table order_items(\n  order_id integer, product_id integer,\n  product_name text, quantity integer\n);\ninsert into order_items values\n  (1,7,'Drill',2),(2,7,'Drill',1),(3,9,'Saw',3);\n\nselect product_id, product_name\nfrom order_items;",
+          "runnable": true,
+          "expectedStdout": "7, Drill\n7, Drill\n9, Saw\n",
+          "caption": "Drill's name is typed twice. Rename it and you'd have to catch both rows."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "sql",
+          "code": "-- before: one table, key is (order_id, product_id)\ncreate table order_items(\n  order_id integer, product_id integer,\n  product_name text, product_price numeric,\n  quantity integer,\n  primary key (order_id, product_id)\n);\n\n-- after: product facts move to their own table\ncreate table products(\n  product_id integer primary key,\n  product_name text, product_price numeric\n);\ncreate table order_lines(\n  order_id integer, product_id integer, quantity integer,\n  primary key (order_id, product_id)\n);",
+          "steps": [
+            {
+              "line": 6,
+              "say": "Every column above is supposed to depend on both parts of this key together."
+            },
+            {
+              "line": 4,
+              "say": "Name and price only need product_id, so copying them per order risks two rows disagreeing."
+            },
+            {
+              "line": [
+                10,
+                13
+              ],
+              "say": "Giving products its own key means a price fix lands in exactly one row."
+            },
+            {
+              "line": [
+                14,
+                16
+              ],
+              "say": "order_lines keeps only facts about the order, linked back through product_id."
+            }
+          ],
+          "caption": "One split, and the update problem disappears."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A table enrollments(student_id, course_id, student_email, grade) is keyed on (student_id, course_id). student_email only depends on student_id. Which fix removes the risk of two rows disagreeing about the same student's email?",
+          "options": [
+            "Add a unique constraint on student_email.",
+            "Move student_email into a students table keyed on student_id alone.",
+            "Add student_email to the primary key alongside student_id and course_id."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Uniqueness stops duplicate emails, but the same email would still be retyped on every enrollment row.",
+            "Right. student_id alone identifies the student, so email belongs in its own table keyed on just that.",
+            "That makes the key even wider without fixing why the same email keeps getting copied per course."
+          ],
+          "hint": "Ask what student_email is really about - a fact about the student, or about the enrollment?",
+          "explain": "student_email depends only on student_id, not on course_id, so it is a partial dependency on part of the key. Moving it into a table keyed on student_id alone stores each student's email exactly once."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A table bookings(booking_id, room_id, room_type, nightly_rate, guest_name) is keyed on booking_id alone, but room_type and nightly_rate only depend on room_id. Write one query that returns the rows a separate rooms table should hold: one row per room_id, with columns room_id, room_type, nightly_rate, ordered by room_id ascending.",
+          "language": "sql",
+          "starterCode": "-- expected columns: room_id, room_type, nightly_rate\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "select count(distinct room_id) as n from bookings;",
+              "expected": "{\"columns\":[\"n\"],\"values\":[[2]]}",
+              "hidden": false,
+              "name": "rooms in the table"
+            },
+            {
+              "id": "t2",
+              "input": "__STUDENT__",
+              "expected": "{\"columns\":[\"room_id\",\"room_type\",\"nightly_rate\"],\"values\":[[101,\"Standard\",120],[102,\"Suite\",250]]}",
+              "hidden": false,
+              "name": "what you wrote"
+            }
+          ],
+          "referenceSolution": "create table bookings(\n  booking_id integer primary key,\n  room_id integer,\n  room_type text,\n  nightly_rate numeric,\n  guest_name text\n);\ninsert into bookings values\n  (1,101,'Standard',120,'Mina'),\n  (2,102,'Suite',250,'Tobias'),\n  (3,101,'Standard',120,'Priya');\n\nselect distinct room_id, room_type, nightly_rate\nfrom bookings\norder by room_id;",
+          "hint": "Which two columns are duplicated across bookings that share the same room_id?",
+          "explain": "room_type and nightly_rate depend only on room_id, not on booking_id, so distinct room_id, room_type, nightly_rate pulls out exactly the rows a rooms table should hold - one per room."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "Ask what each column actually depends on, not just its table.",
+            "Move a column to the table its value truly belongs to.",
+            "Each split removes one way rows could disagree after an edit."
+          ],
+          "remember": "The key, the whole key, and nothing but the key."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "New tables, new dependencies to hunt down - time to split one yourself."
+        }
+      ],
+      "exitLine": "That's the split. Go find the next one."
+    },
+    {
+      "id": "INFS2201-4",
+      "cloId": "INFS2201-4",
+      "course": "INFS2201",
+      "language": "sql",
+      "version": 1,
+      "title": "Join Tables, Then Group Them",
+      "hook": "JOIN plus GROUP BY is how two boring tables become one real answer.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "joins",
+        "grouping",
+        "aggregates"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "Join first, then group, then sort",
+          "body": "A JOIN lines up rows from two tables using a shared key, so one row ends up carrying columns from both at once. Once matching rows sit side by side, GROUP BY can fold every row that shares one value into a single row, and an aggregate function like SUM or COUNT works out one number for each group. ORDER BY runs last, sorting those finished totals instead of the raw rows underneath them. That order is fixed: match rows first, fold them into groups second, sort the results third — never the other way around."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "sql",
+          "code": "CREATE TABLE members (id INTEGER, name TEXT);\nCREATE TABLE workouts (id INTEGER, member_id INTEGER, minutes INTEGER);\nINSERT INTO members VALUES (1,'Sam'),(2,'Ravi');\nINSERT INTO workouts VALUES\n  (1,1,30),(2,1,45),(3,2,20);\nSELECT members.name, SUM(workouts.minutes) AS total_minutes\nFROM members\nJOIN workouts ON workouts.member_id = members.id\nGROUP BY members.name\nORDER BY total_minutes DESC;",
+          "steps": [
+            {
+              "line": [
+                6,
+                8
+              ],
+              "say": "JOIN lines up minutes with names first, so SUM only ever adds numbers that belong to the same member."
+            },
+            {
+              "line": 9,
+              "say": "GROUP BY decides where one bucket ends and the next starts — one row in, one row out, per name."
+            },
+            {
+              "line": 10,
+              "say": "ORDER BY sorts the finished totals, not the raw workout rows, so the biggest total lands on top."
+            }
+          ],
+          "caption": "One join, one grouped sum, sorted so the biggest total lands first."
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "Same query shape, new numbers: Sam logs 10 and 15 minutes, Ravi logs 40. Sorted by total minutes descending, which name comes first?",
+          "options": [
+            "Sam, because names sort alphabetically first.",
+            "Ravi, because 40 minutes beats Sam's combined 25.",
+            "Both tie, since only two rows are grouped."
+          ],
+          "correctIndex": 1,
+          "why": [
+            "Alphabetical order plays no part here; ORDER BY is sorting the summed total_minutes, not the name.",
+            "Right. GROUP BY adds Sam's rows to 25 total, and 40 beats that, so Ravi's row sorts first under DESC.",
+            "The totals differ, 25 versus 40, so nothing ties and one clearly outranks the other."
+          ],
+          "hint": "Add up Sam's two rows before comparing them to Ravi's single row.",
+          "explain": "GROUP BY first collapses Sam's two rows into one total of 25 and leaves Ravi's single row at 40; ORDER BY total_minutes DESC then puts the larger number, Ravi's 40, on top."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "Two tables sit in front of you: games(id, title) and sales(id, game_id, copies). Write one query that joins them and returns each title with total_copies sold, highest total first.",
+          "language": "sql",
+          "starterCode": "-- games(id, title), sales(id, game_id, copies)\n-- return columns: title, total_copies (highest first)",
+          "tests": [
+            {
+              "id": "t1",
+              "name": "final-totals",
+              "input": "__STUDENT__",
+              "expected": "{\"columns\":[\"title\",\"total_copies\"],\"values\":[[\"Rift\",70],[\"Tidepool\",10]]}",
+              "hidden": false
+            },
+            {
+              "id": "t2",
+              "name": "joined-rows",
+              "input": "SELECT COUNT(*) AS n FROM games JOIN sales ON sales.game_id = games.id;",
+              "expected": "{\"columns\":[\"n\"],\"values\":[[3]]}",
+              "hidden": false
+            }
+          ],
+          "referenceSolution": "CREATE TABLE games (id INTEGER, title TEXT);\nCREATE TABLE sales (id INTEGER, game_id INTEGER, copies INTEGER);\nINSERT INTO games VALUES (1,'Rift'),(2,'Tidepool');\nINSERT INTO sales VALUES (1,1,50),(2,1,20),(3,2,10);\nSELECT games.title, SUM(sales.copies) AS total_copies\nFROM games\nJOIN sales ON sales.game_id = games.id\nGROUP BY games.title\nORDER BY total_copies DESC;",
+          "hint": "Join on game_id, group by title, then order the summed column, not the title, in descending order.",
+          "explain": "JOIN pairs each sale with its game by game_id, GROUP BY title folds every matching sale into one row per game, SUM adds copies inside each group, and ORDER BY total_copies DESC puts the best seller on top."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "JOIN matches rows across tables before anything else runs.",
+            "GROUP BY folds matching rows into one row per key.",
+            "ORDER BY sorts the finished totals, not the raw rows."
+          ],
+          "remember": "Join first, then group, then sort — in that order, every time."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to write that join yourself, on data you haven't seen yet."
+        }
+      ],
+      "exitLine": "That's the shape. Now go run it on a table you didn't build."
+    },
+    {
+      "id": "INFS2201-5",
+      "cloId": "INFS2201-5",
+      "course": "INFS2201",
+      "language": "mongo",
+      "version": 1,
+      "title": "No Join, Just a Filter",
+      "hook": "Forget joins - one document already has everything a match needs.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": [
+        "mongodb",
+        "documents",
+        "filters"
+      ],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "concept-1",
+          "heading": "A filter object plays the WHERE clause's role",
+          "body": "You already know how a WHERE clause narrows down rows. MongoDB keeps records as documents inside a collection instead of rows inside a table, and a find() call plays the same role a WHERE clause did. You hand find() a filter: an object where each key is a field name and each value is what that field must match. Plain values mean equals; operators like $gt, $gte, $lt and $ne compare instead. MongoDB checks every document in the collection against the filter and hands back every one that matches, in the shape it was already stored - no rows to reassemble, because nothing was split apart in the first place."
+        },
+        {
+          "type": "worked",
+          "id": "worked-1",
+          "language": "mongo",
+          "code": "db.orders.insertMany([\n  { customer: \"Yara\", total: 42, delivered: true },\n  { customer: \"Omar\", total: 15, delivered: false },\n  { customer: \"Huda\", total: 30, delivered: true }\n])\n\ndb.orders.find({ delivered: true, total: { $gt: 20 } })",
+          "steps": [
+            {
+              "line": [
+                2,
+                4
+              ],
+              "say": "Each document already holds every fact about one order, so there is nothing left to join."
+            },
+            {
+              "line": 7,
+              "say": "delivered: true keeps only documents where that field equals true, nothing else."
+            },
+            {
+              "line": 7,
+              "say": "total: { $gt: 20 } compares instead of matching, so only bigger orders survive."
+            },
+            {
+              "line": 7,
+              "say": "Both conditions sit in the same object, so a document must satisfy both to match."
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "check-1",
+          "kind": "choose",
+          "prompt": "A sensors collection stores { label, online, readings } per sensor. Which filter returns only sensors that are online and have logged more than 10 readings?",
+          "options": [
+            "{ online: true, readings: { $gt: 10 } }",
+            "{ online: true, readings: { $lt: 10 } }",
+            "{ online: \"true\", readings: { $gt: 10 } }",
+            "{ readings: { $gt: 10 } }"
+          ],
+          "correctIndex": 0,
+          "why": [
+            "Right - online must equal true and readings must beat ten, both checked together.",
+            "$lt keeps readings under ten, the opposite of what the question asks for.",
+            "\"true\" as a string never matches the boolean true stored on online.",
+            "This only checks readings, so an offline sensor with enough readings would still match."
+          ],
+          "hint": "Look at what each key checks and whether both conditions actually appear in the filter.",
+          "explain": "A filter object matches on every key inside it, so online: true and readings: { $gt: 10 } must both hold before a document counts."
+        },
+        {
+          "type": "check",
+          "id": "check-2",
+          "kind": "micro-code",
+          "prompt": "A tickets collection stores { event, price, vip } per ticket. Write a query that returns every non-VIP ticket priced under 50.",
+          "language": "mongo",
+          "starterCode": "// collection: tickets\n",
+          "tests": [
+            {
+              "id": "t1",
+              "input": "{\"op\":\"find\"}",
+              "expected": "[{\"event\":\"Finals\",\"price\":40,\"vip\":false},{\"event\":\"Opener\",\"price\":25,\"vip\":false}]",
+              "name": "what you wrote"
+            },
+            {
+              "id": "t2",
+              "input": "{\"op\":\"find\",\"args\":[{\"vip\":true}]}",
+              "expected": "[{\"event\":\"Finals\",\"price\":30,\"vip\":true}]",
+              "name": "the vip row a correct filter skips"
+            }
+          ],
+          "referenceSolution": "{\n  \"fixture\": [\n    {\"event\": \"Finals\", \"price\": 40, \"vip\": false},\n    {\"event\": \"Finals\", \"price\": 30, \"vip\": true},\n    {\"event\": \"Opener\", \"price\": 25, \"vip\": false},\n    {\"event\": \"Opener\", \"price\": 60, \"vip\": false}\n  ],\n  \"args\": [\n    {\"vip\": false, \"price\": {\"$lt\": 50}}\n  ]\n}",
+          "hint": "Match vip to false directly, then compare price with an operator instead of an exact value.",
+          "explain": "vip: false keeps only non-VIP tickets, and price: { $lt: 50 } narrows further to ones under fifty; both must hold together."
+        },
+        {
+          "type": "recap",
+          "id": "recap-1",
+          "bullets": [
+            "A document holds every fact about one record already assembled.",
+            "find() takes a filter object matching field names to conditions.",
+            "Operators like $gt and $lt compare instead of an exact match."
+          ],
+          "remember": "One filter object, checked against every document - no join required."
+        },
+        {
+          "type": "bridge",
+          "id": "bridge-1",
+          "say": "Time to write your own filters against a fresh collection, no examples to copy this time."
+        }
+      ],
+      "exitLine": "Go run a real filter against a real collection."
+    }
+  ]
+}

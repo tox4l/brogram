@@ -1,0 +1,80 @@
+{
+  "lessons": [
+    {
+      "id": "INFS2101-1",
+      "cloId": "INFS2101-1",
+      "course": "INFS2101",
+      "language": "web",
+      "version": 1,
+      "title": "Tags Carry Meaning",
+      "hook": "A missing alt attribute turns a real photo into silence for a screen reader.",
+      "estimatedMinutes": 6,
+      "draft": false,
+      "tags": ["html", "accessibility", "semantics"],
+      "blocks": [
+        {
+          "type": "concept",
+          "id": "c1",
+          "heading": "The Tree Under the Page",
+          "body": "Every tag becomes a node in two trees: the one the browser paints, and the accessibility tree that screen readers read instead of pixels. A plain `div` says nothing about what it holds; a `button` or `nav` announces its own job by name. Images carry no words at all unless you give them one: the `alt` attribute is the sentence a screen reader speaks in place of the picture. Skip it on a photo that matters and it becomes empty space. A purely decorative image gets `alt=\"\"` so it is skipped on purpose, not by accident. Reading a tag's own attributes back in script is a quick way to check what actually shipped, not what you meant to write."
+        },
+        {
+          "type": "worked",
+          "id": "w1",
+          "language": "web",
+          "code": "<img id=\"hero\" src=\"team.jpg\" alt=\"\">\n<img id=\"chart\" src=\"sales.png\"\n     alt=\"Bar chart: Q3 sales up 40% over Q2\">\n<script>\n  const hero = document.getElementById('hero')\n  const chart = document.getElementById('chart')\n  console.log(hero.alt.length, chart.alt.length)\n</script>\n",
+          "steps": [
+            { "line": 1, "say": "Empty alt is a deliberate signal: skip this image, it carries no extra meaning." },
+            { "line": [2, 3], "say": "A real alt survives even if the image never loads, so the data is not lost." },
+            { "line": [5, 6], "say": "Grabbing both elements first keeps the comparison honest instead of guessing." },
+            { "line": 7, "say": "Printing `.alt.length` proves what actually reached the accessibility tree." }
+          ],
+          "caption": "Two images, two different reasons for their alt text."
+        },
+        {
+          "type": "check",
+          "id": "chk1",
+          "kind": "predict-output",
+          "prompt": "The thumbnail has a written description; the star icon next to it is purely decorative. What does this print?",
+          "language": "web",
+          "code": "document.body.insertAdjacentHTML('beforeend', `\n  <img id=\"thumb\" src=\"shoe.jpg\" alt=\"Red running shoe, side view\">\n  <img id=\"star\" src=\"star.png\" alt=\"\">\n`)\nconst thumb = document.getElementById('thumb')\nconst star = document.getElementById('star')\nconsole.log(thumb.alt.length > 0, star.alt.length > 0)\n",
+          "expected": "true false",
+          "normalize": "lines",
+          "hint": "Check each image's alt attribute before you decide true or false.",
+          "explain": "thumb.alt holds real words, so its length is over zero: true. star.alt is empty on purpose, so its length is zero: false."
+        },
+        {
+          "type": "check",
+          "id": "chk2",
+          "kind": "micro-code",
+          "prompt": "This page has one image, `#hero`, whose `alt` is still empty even though the photo is not decorative -- it is the page's main team photo.\n\nWrite a script that sets `#hero`'s `alt` to a real description of the photo, a few actual words, not the filename.\n\nExample: alt could read something like \"Three teammates high-fiving at a launch party\".",
+          "language": "web",
+          "starterCode": "<img id=\"hero\" src=\"team.jpg\" alt=\"\">\n<script>\n  // your code here\n</script>\n",
+          "tests": [
+            { "id": "t1", "input": "const alt = document.getElementById('hero').alt; return (alt && alt.trim().length > 5) ? 'ok' : 'alt is still empty or too short'", "expected": "ok", "hidden": false, "name": "alt is filled in" },
+            { "id": "t2", "input": "const alt = document.getElementById('hero').alt.toLowerCase(); return alt.includes('team.jpg') ? 'alt still looks like a filename' : 'ok'", "expected": "ok", "hidden": false, "name": "not just the filename" }
+          ],
+          "referenceSolution": "<img id=\"hero\" src=\"team.jpg\" alt=\"\">\n<script>\n  document.getElementById('hero').alt = 'Three teammates high-fiving at a launch party'\n</script>\n",
+          "hint": "Set the element's alt property to a plain-language description, not the filename.",
+          "explain": "Assigning alt describes the photo for anyone who cannot see it; an empty string said \"nothing here,\" which was false since this image matters."
+        },
+        {
+          "type": "recap",
+          "id": "r1",
+          "bullets": [
+            "Tag names build the tree screen readers actually read.",
+            "Empty alt means decorative on purpose, not by accident.",
+            "A missing or filename-only alt turns real content into silence."
+          ],
+          "remember": "If a screen reader cannot say it, the page has not really said it either."
+        },
+        {
+          "type": "bridge",
+          "id": "b1",
+          "say": "Time to hunt real markup where alt text is missing, wrong, or just a filename."
+        }
+      ],
+      "exitLine": "Time to hunt real markup where alt text is missing, wrong, or just a filename."
+    }
+  ]
+}
