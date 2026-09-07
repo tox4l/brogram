@@ -1,24 +1,31 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { gsap } from 'gsap'
 import { EASE } from './tokens'
-import { registerEases } from './eases'
+import { loadGsap, registerEases } from './eases'
 
 // Spec: docs/superpowers/specs/2026-09-07-brogram-wave4-premium.md §5.1
 // "GSAP cannot read a CSS cubic-bezier() string" -- registerEases() creates
 // one CustomEase per EASE token so a GSAP tween and a CSS transition on the
 // same named motion read the identical curve.
+//
+// W4FIX-B: `registerEases`/`loadGsap` now dynamic-import gsap instead of
+// importing it at this test file's top level too -- these tests import
+// `gsap` themselves (fine: a test file is never bundled into the app) only
+// to read back what the lazy loader registered, via the resolved `gsap`
+// instance `loadGsap()` itself hands back (Node's module cache means a
+// dynamic `import('gsap')` and this file's own `await import('gsap')`
+// resolve to the identical singleton, so registration is visible either way).
 
-describe('registerEases', () => {
-  it("registers 'enter' so gsap.parseEase matches the CSS cubic-bezier(0.22, 1, 0.36, 1) curve at t=0.25 within 0.001", () => {
-    registerEases()
+describe('registerEases / loadGsap', () => {
+  it("registers 'enter' so gsap.parseEase matches the CSS cubic-bezier(0.22, 1, 0.36, 1) curve at t=0.25 within 0.001", async () => {
+    const { gsap } = await registerEases()
     const fn = gsap.parseEase('enter')
     expect(Math.abs(fn(0.25) - 0.765)).toBeLessThan(0.001)
   })
 
-  it('registers all four EASE tokens as callable GSAP eases', () => {
-    registerEases()
+  it('registers all four EASE tokens as callable GSAP eases', async () => {
+    const { gsap } = await loadGsap()
     for (const name of Object.keys(EASE)) {
       const fn = gsap.parseEase(name)
       expect(typeof fn).toBe('function')
@@ -29,11 +36,14 @@ describe('registerEases', () => {
     }
   })
 
-  it('is idempotent -- calling it twice does not throw', () => {
-    expect(() => {
-      registerEases()
-      registerEases()
-    }).not.toThrow()
+  it('is idempotent -- calling it twice does not throw, and returns the same gsap instance', async () => {
+    const first = await loadGsap()
+    const second = await loadGsap()
+    expect(first.gsap).toBe(second.gsap)
+  })
+
+  it('caches the load -- concurrent callers share one promise', () => {
+    expect(loadGsap()).toBe(loadGsap())
   })
 })
 

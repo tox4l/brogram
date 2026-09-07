@@ -5,17 +5,8 @@ import { ThemeProvider } from 'next-themes'
 import { QueryProvider } from '@/components/shell/QueryProvider'
 import { THEME_STORAGE_KEY, THEMES } from '@/lib/theme/themes'
 import { initSoundOnFirstGesture } from '@/lib/sound/manager'
-import { registerEases } from '@/lib/motion/eases'
 import { MotionAttribute } from '@/components/motion/MotionAttribute'
 import { VitalsCollector } from '@/lib/perf/VitalsCollector'
-
-// W4 §5.6: "gsap.registerPlugin(...) once, in a client module imported by
-// the shell." This module is that shell entry point -- called once at
-// module scope (never inside the component body, which would violate the
-// React Compiler's `purity` lint rule), registering both the GSAP plugins
-// (via importing `eases.ts`, itself the client module that runs
-// `gsap.registerPlugin`) and the four named `CustomEase` curves.
-registerEases()
 
 /**
  * Root client boundary (§8.2), outermost first: `ThemeProvider` ->
@@ -23,6 +14,19 @@ registerEases()
  * (T0.5), never context, so this only ever arms the sound manager's
  * first-gesture listener in a mount effect -- it does not read or provide
  * anything sound-related itself.
+ *
+ * W4FIX-B: this module imports nothing that imports gsap. It used to call
+ * `registerEases()` here at module scope, which pulled gsap + `@gsap/react`
+ * + `CustomEase`/`SplitText`/`Flip` into this file's own module graph --
+ * and since `Providers` is the root client boundary every single route
+ * mounts, that put gsap in the entry chunk of every route, animated or not
+ * (confirmed: `0cn5acooblm1q.js`, 70.9 KB of gsap + plugins, sat in the
+ * root layout's own `entryJSFiles` and in literally every route's built
+ * manifest, `/` and `/login` included). `src/lib/motion/eases.ts` now
+ * exports a lazy `loadGsap()` instead of registering anything at import
+ * time; the components that actually animate (`Reveal`,
+ * `useFlipIndicator`) call it from inside their own effects, on first use,
+ * and skip it entirely under reduced motion.
  *
  * Correction W2: `:root[data-motion]` is the reduced-motion kill switch
  * `<ViewTransition>` needs, because React does not read the in-app

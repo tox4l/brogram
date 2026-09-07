@@ -1,10 +1,8 @@
 'use client'
 
-import { useRef } from 'react'
-import { useGSAP } from '@gsap/react'
-import { gsap } from 'gsap'
-import { SplitText } from 'gsap/SplitText'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { DUR, STAGGER } from '@/lib/motion/tokens'
+import { loadGsap, type LoadedGsap } from '@/lib/motion/eases'
 
 export type RevealMode = 'lines' | 'words' | 'chars' | 'fade'
 export type RevealSurface = 'onboarding-hook' | 'level-up'
@@ -28,6 +26,11 @@ const CHARS_LICENSED_SURFACES: readonly RevealSurface[] = ['onboarding-hook', 'l
 
 type SplitParts = { lines: Element[]; words: Element[]; chars: Element[] }
 
+// `useLayoutEffect` warns when it runs during SSR; Next still evaluates
+// this "use client" module's top level on the server. Same guard
+// `@gsap/react`'s own `useIsomorphicLayoutEffect` uses.
+const useIsomorphicLayoutEffect = typeof document !== 'undefined' ? useLayoutEffect : useEffect
+
 /**
  * The one rationed text reveal (W4 §5.2, ruling W4.14). Over
  * `SplitText.create({ mask: 'lines', aria: 'auto', autoSplit: true, onSplit })`:
@@ -48,12 +51,22 @@ type SplitParts = { lines: Element[]; words: Element[]; chars: Element[] }
  * copy/paste -- for zero gain) and `mode="fade"` never tweens either.
  * Children render at final opacity, unsplit, on first paint either way.
  *
+ * W4FIX-B: gsap (and `SplitText`) are no longer imported at module scope --
+ * `loadGsap()` (`src/lib/motion/eases.ts`) is called from inside the effect
+ * below, on first mount of a non-reduced-motion `<Reveal>`, and never at
+ * all under reduced motion (ruling W4FIX-B.1c: a reduced-motion learner
+ * never requests the gsap chunk). This replaces the old `useGSAP` call --
+ * `@gsap/react`'s own source imports `gsap` at ITS module top level (there
+ * is no way to `useGSAP()` without gsap already being resolved), so keeping
+ * that hook would have kept gsap in this component's synchronous import
+ * graph regardless of what `eases.ts` did. The effect below hand-rolls the
+ * same guarantees `useGSAP` gave for this one narrow case (mount-scoped
+ * split + tween, reverted on unmount or when `mode`/`children` changes) via
+ * a `cancelled` flag plus `split.revert()`.
+ *
  * `autoSplit: true` with `onSplit` re-splits on font load and resize --
  * mandatory, because a serif line measured before its webfont lands is the
- * wrong line. `revertOnUpdate: true` on the underlying `useGSAP` call
- * matters here specifically: without it, a `mode`/`children` change would
- * call `SplitText.create` again on an element GSAP never reverted the
- * previous split from.
+ * wrong line.
  *
  * `mask: 'lines'` only ever masks `mode="lines"` -- `SplitText` builds mask
  * wrappers from `this.lines`, which stays empty for `mode="words"` and
@@ -62,25 +75,16 @@ type SplitParts = { lines: Element[]; words: Element[]; chars: Element[] }
  * `{ type, mask: 'lines', ... }` for every mode is spec-faithful (W4 §5.2);
  * it is a documented no-op for the two unmasked modes, not a bug.
  *
- * Flash-then-animate guard: a re-split fires later, from `SplitText`'s own
- * resize/`fonts.ready` handlers, outside the window `useGSAP` holds its
- * ambient context open -- `onSplit` is wrapped in `contextSafe` so those
- * tweens are still registered on the context and get killed by
- * `context.revert()` on unmount instead of continuing to run.
- *
  * This is also a `'use client'` component that Next server-renders, so the
  * final text paints once before hydration runs the split/tween at all. The
  * span renders `data-reveal="pending"` plus `visibility: hidden` inline
  * (never `mode="chars"`/`"words"`/`"lines"` at final position on first
- * paint) and the `useGSAP` callback clears both, unconditionally, as its
- * first act -- *above* the `reduced` early return, so a reduced-motion
- * learner whose `reduced` prop resolves differently between the server
- * snapshot and the client is unhidden too and never left blank. (Ruling
- * W4.15 -- "text is at final opacity on first paint" -- is met for every
- * learner whose `reduced` prop is already correct at first render; the one
- * remaining gap, a server render that guesses "full motion" for a learner
- * who actually has `reduced` set, needs a blocking inline script in
- * `layout.tsx`, T4.0's file and a cross-task decision, to close entirely.)
+ * paint) and the effect below clears both, unconditionally, as its first
+ * synchronous act -- *above* the `reduced` early return and *before* the
+ * (now async) gsap load, so a reduced-motion learner whose `reduced` prop
+ * resolves differently between the server snapshot and the client is
+ * unhidden too and never left blank, and nobody sits behind a network
+ * fetch waiting to become visible (Ruling W4.15).
  */
 export function Reveal({ mode, reduced, children, surface, className }: RevealProps) {
   if (mode === 'chars' && process.env.NODE_ENV !== 'production' && !(surface && CHARS_LICENSED_SURFACES.includes(surface))) {
@@ -89,22 +93,25 @@ export function Reveal({ mode, reduced, children, surface, className }: RevealPr
 
   const ref = useRef<HTMLSpanElement>(null)
 
-  useGSAP(
-    (_context, contextSafe) => {
-      const el = ref.current
-      // Unhide unconditionally, before the `reduced` check: a reduced-motion
-      // learner must never be left showing the SSR `visibility: hidden`
-      // state just because this branch returns early.
-      if (el) {
-        el.removeAttribute('data-reveal')
-        el.style.visibility = ''
-      }
-      if (!el || reduced) return
+  useIsomorphicLayoutEffect(() => {
+    const el = ref.current
+    // Unhide unconditionally, before the `reduced` check and before gsap
+    // has even started loading: a reduced-motion learner (or one still
+    // waiting on the gsap chunk) must never be left showing the SSR
+    // `visibility: hidden` state.
+    if (el) {
+      el.removeAttribute('data-reveal')
+      el.style.visibility = ''
+    }
+    if (!el || reduced) return
 
-      // `contextSafe` is typed optional (it is also exposed on the hook's
-      // return value); `useGSAP` always supplies it to the callback in
-      // practice, but the fallback keeps this branch honest under the type.
-      const safe = contextSafe ?? (<T extends (...args: never[]) => unknown>(fn: T) => fn)
+    let cancelled = false
+    let split: { revert: () => void } | undefined
+    let loadedGsap: LoadedGsap['gsap'] | undefined
+
+    loadGsap().then(({ gsap, SplitText }: LoadedGsap) => {
+      if (cancelled || !el) return
+      loadedGsap = gsap
 
       if (mode === 'fade') {
         gsap.killTweensOf(el)
@@ -112,25 +119,29 @@ export function Reveal({ mode, reduced, children, surface, className }: RevealPr
         return
       }
 
-      const split = SplitText.create(el, {
+      split = SplitText.create(el, {
         type: mode,
         mask: 'lines',
         aria: 'auto',
         autoSplit: true,
-        onSplit: safe((self: SplitParts) => {
+        onSplit: (self: SplitParts) => {
+          if (cancelled) return
           const targets = mode === 'lines' ? self.lines : mode === 'words' ? self.words : self.chars
           const n = Math.max(targets.length, 1)
           const stagger = Math.min(STAGGER.step / 1000, STAGGER.max / 1000 / n)
           return mode === 'lines'
             ? gsap.from(targets, { yPercent: 110, duration: DUR.slow / 1000, ease: 'enter', stagger })
             : gsap.from(targets, { yPercent: 40, opacity: 0, duration: DUR.base / 1000, ease: 'enter', stagger })
-        }),
+        },
       })
+    })
 
-      return () => split.revert()
-    },
-    { scope: ref, dependencies: [mode, reduced, children], revertOnUpdate: true },
-  )
+    return () => {
+      cancelled = true
+      split?.revert()
+      if (mode === 'fade' && el) loadedGsap?.killTweensOf(el)
+    }
+  }, [mode, reduced, children])
 
   return (
     <span ref={ref} className={className} data-reveal={reduced ? undefined : 'pending'} style={reduced ? undefined : { visibility: 'hidden' }}>

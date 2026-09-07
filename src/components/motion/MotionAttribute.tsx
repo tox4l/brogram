@@ -2,13 +2,27 @@
 
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
 import { qk } from '@/lib/query/keys'
 import type { WellnessRow } from '@/lib/learner/compile'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 
+// W4FIX-B: `@/lib/supabase/client` (a thin wrapper over
+// `createBrowserClient` from `@supabase/ssr`) used to be a top-level import
+// here. `MotionAttribute` mounts inside `Providers`, the root client
+// boundary every single route renders -- so that pulled the ~230 KB
+// `@supabase/supabase-js` + `@supabase/ssr` pair into the entry chunk of
+// `/`, `/admin` and `/preview` too, none of which otherwise touch Supabase
+// on the client at all (confirmed: rebuilding with the import restored
+// puts the exact same 231,786-byte chunk, `supabase-js`/`gotrue`/`@supabase/ssr`
+// strings and all, back in `/`'s `entryJSFiles`). A dynamic `import()`
+// inside the effect below defers that chunk to routes that actually need
+// it (every route already loads it synchronously elsewhere once a learner
+// is signed in -- `SessionProvider`, `/login`'s own sign-in flow -- so this
+// changes nothing for those; it only stops `/`, `/admin` and `/preview`
+// from paying for it before a single Supabase call has ever been made).
 async function fetchWellnessRow(userId: string): Promise<WellnessRow> {
+  const { createClient } = await import('@/lib/supabase/client')
   const client = createClient()
   const { data, error } = await client
     .from('wellness')
@@ -43,22 +57,28 @@ function useAuthUserId(): string | null {
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const supabase = createClient()
     let cancelled = false
+    let unsubscribe: (() => void) | undefined
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!cancelled) setUserId(data.user?.id ?? null)
-    })
+    import('@/lib/supabase/client').then(({ createClient }) => {
+      if (cancelled) return
+      const supabase = createClient()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null)
+      supabase.auth.getUser().then(({ data }) => {
+        if (!cancelled) setUserId(data.user?.id ?? null)
+      })
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUserId(session?.user?.id ?? null)
+      })
+      unsubscribe = () => subscription.unsubscribe()
     })
 
     return () => {
       cancelled = true
-      subscription.unsubscribe()
+      unsubscribe?.()
     }
   }, [])
 
