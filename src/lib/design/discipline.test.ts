@@ -33,7 +33,7 @@ import {
   ruleFontWeightRatio,
   ruleWillChangeBudget,
 } from '../../../scripts/check-design-tokens.mjs'
-import { ALLOWLIST, FONT_WEIGHT_RATIO_ALLOWANCE, type AllowlistEntry } from './allowlist'
+import { ALLOWLIST, FONT_WEIGHT_RATIO_ALLOWANCE, WILL_CHANGE_TRANSFORM_ALLOWANCE, type AllowlistEntry } from './allowlist'
 
 type Entry = { file: string; content: string }
 
@@ -94,6 +94,26 @@ describe('matchSpacingScale', () => {
   it('does not touch width/height/size utilities (a different scale on purpose)', () => {
     expect(matchSpacingScale(fx('className="w-1/2 h-full size-10 w-[22rem]"'))).toHaveLength(0)
   })
+
+  // Fix round (review M3): the plan's literal prefix list was margin/
+  // padding/gap/space only, omitting Tailwind's logical properties and the
+  // inset family, which read the same spacing scale.
+  it('flags the logical and inset-family prefixes on the same rhythm', () => {
+    const hits = matchSpacingScale(fx('className="ps-5 me-7 inset-5 inset-x-5 top-5"'))
+    expect(hits.map((h: { match: string }) => h.match)).toEqual(['ps-5', 'me-7', 'inset-5', 'inset-x-5', 'top-5'])
+  })
+
+  it('allows the rhythm on the logical and inset-family prefixes too', () => {
+    expect(matchSpacingScale(fx('className="ps-4 me-4 inset-4 inset-x-4 top-4"'))).toHaveLength(0)
+  })
+
+  // The `-px` step (Tailwind's literal 1px) was previously invisible, not
+  // merely misclassified -- the value group required a digit, so `p-px`
+  // never matched at all.
+  it('flags the -px step, which is not part of the eight-step rhythm', () => {
+    const hits = matchSpacingScale(fx('className="p-px m-px"'))
+    expect(hits.map((h: { match: string }) => h.match)).toEqual(['p-px', 'm-px'])
+  })
 })
 
 describe('matchRadii', () => {
@@ -110,6 +130,21 @@ describe('matchRadii', () => {
   it('does not confuse rounded-3xl with the allowed rounded-2xl/xl', () => {
     const hits = matchRadii(fx('className="rounded-3xl"'))
     expect(hits).toHaveLength(1)
+  })
+
+  // Fix round (review I1): the suffix used to be matched against a closed
+  // eight-name enumeration, and the trailing negative lookahead rejected
+  // the *whole* match whenever the suffix was anything else -- so an
+  // unrecognised radius produced no match at all instead of a violation.
+  it('flags rounded-4xl, an arbitrary value, and an arbitrary value on a side (all previously invisible)', () => {
+    const hits = matchRadii(fx('className="rounded-4xl rounded-[6px] rounded-t-[6px] rounded-[inherit]"'))
+    expect(hits.map((h: { match: string }) => h.match)).toEqual(['rounded-4xl', 'rounded-[6px]', 'rounded-t-[6px]', 'rounded-[inherit]'])
+  })
+
+  it('flags an arbitrary radius wrapping a CSS function, unbroken by the parens inside it', () => {
+    const hits = matchRadii(fx('className="rounded-[min(var(--radius-md),10px)]"'))
+    expect(hits).toHaveLength(1)
+    expect(hits[0].match).toBe('rounded-[min(var(--radius-md),10px)]')
   })
 })
 
@@ -133,6 +168,38 @@ describe('matchIconSize', () => {
 
   it('resolves an aliased import to its local name', () => {
     const src = `import { Check as CheckIcon } from 'lucide-react'\nfunction C() { return <CheckIcon size={10} /> }`
+    expect(matchIconSize(fx(src))).toHaveLength(1)
+  })
+
+  // Fix round (review M1): a parent wrapper utility sizes every lucide
+  // glyph inside it without the sizing ever appearing on the icon's own
+  // tag -- the element loop above cannot see it. No lucide import is
+  // needed for this sub-pattern to fire; it reads the parent's own class.
+  it('flags a size-3-or-smaller parent selector even with no lucide import in the file', () => {
+    const hits = matchIconSize(fx('className="[&>svg]:size-3!"'))
+    expect(hits).toHaveLength(1)
+    expect(hits[0].detail).toBe('parent selector size-3')
+  })
+
+  it('finds two genuine parent selectors on one line independently, and never crosses a newline into a later one', () => {
+    const twoOnOneLine = matchIconSize(fx('className="[&>svg]:size-3 [&>svg]:size-2"'))
+    expect(twoOnOneLine.map((h: { detail?: string }) => h.detail)).toEqual(['parent selector size-3', 'parent selector size-2'])
+
+    const acrossLines = matchIconSize(fx('const a = "[&_svg]:opacity-50"\nconst b = "[&_svg]:size-3"'))
+    expect(acrossLines).toHaveLength(1)
+    expect(acrossLines[0].match).toBe('[&_svg]:size-3')
+  })
+
+  it('does not flag a parent selector at size-4 or larger', () => {
+    expect(matchIconSize(fx('className="[&_svg]:size-4"'))).toHaveLength(0)
+  })
+
+  // Fix round (review I2, mirror bug): the same non-greedy-to-first-`>`
+  // shape on the lucide tag regex missed a `className` written after an
+  // arrow-function `onClick` -- so this genuine size-3 hazard reported
+  // clean.
+  it('still finds a size-3 className that follows an arrow-function onClick handler', () => {
+    const src = `import { Check } from 'lucide-react'\nfunction C() { return <Check onClick={() => go()} className="size-3" /> }`
     expect(matchIconSize(fx(src))).toHaveLength(1)
   })
 })
@@ -201,6 +268,25 @@ describe('matchFilledButtonsPerRoute', () => {
     const src = '<Button>Only one</Button><Button variant="outline">B</Button><Button variant="ghost">C</Button>'
     expect(matchFilledButtonsPerRoute(fx(src, 'page.tsx'))).toHaveLength(0)
   })
+
+  // Fix round (review I2): `[\s\S]*?` used to be non-greedy to the *first*
+  // `>`, and an `onClick={() => ...}` handler contains one -- so a `variant`
+  // prop written after the handler was invisible and the button counted as
+  // filled by luck. Two outline buttons, one with the handler first, must
+  // both read as non-filled -- if either regresses this reports 2 filled.
+  it('still reads a variant prop that follows an arrow-function handler', () => {
+    const src =
+      '<Button onClick={() => void loop.retry()} variant="outline">A</Button>' +
+      '<Button onClick={() => void loop.next()} variant="ghost">B</Button>'
+    expect(matchFilledButtonsPerRoute(fx(src, 'page.tsx'))).toHaveLength(0)
+  })
+
+  it('reorders to variant-before-handler and gets the same (correct) answer either way', () => {
+    const reordered =
+      '<Button variant="outline" onClick={() => void loop.retry()}>A</Button>' +
+      '<Button variant="ghost" onClick={() => void loop.next()}>B</Button>'
+    expect(matchFilledButtonsPerRoute(fx(reordered, 'page.tsx'))).toHaveLength(0)
+  })
 })
 
 describe('matchFontWeightCounts', () => {
@@ -212,6 +298,18 @@ describe('matchFontWeightCounts', () => {
 describe('matchWillChangeTransform', () => {
   it('flags both the CSS form and the camelCase JS style-object form', () => {
     const hits = matchWillChangeTransform(fx('const s = "will-change: transform"\nconst style = { willChange: "transform" }'))
+    expect(hits).toHaveLength(2)
+  })
+
+  // Fix round (review C1): both original alternatives required a literal
+  // `:`, so the idiomatic Tailwind utility (`will-change-transform`, a
+  // hyphen) -- five real occurrences in this tree -- was invisible.
+  it('flags the Tailwind utility form (a hyphen, never a colon)', () => {
+    expect(matchWillChangeTransform(fx('className="absolute will-change-transform"'))).toHaveLength(1)
+  })
+
+  it('does not double-count a utility-form and CSS-form hit that both appear in one file', () => {
+    const hits = matchWillChangeTransform(fx('className="will-change-transform"\nconst s = "will-change: transform"'))
     expect(hits).toHaveLength(2)
   })
 })
@@ -244,6 +342,12 @@ const KNOWN_OWNERSHIP_PREFIXES: Record<string, string> = {
   'src/app/(auth)': 'T4.9',
   'src/app/(app)/onboarding': 'T4.9',
   'src/app/page.tsx': 'T4.9',
+  // Fix round (review I3): carried debt with no Wave 4 owner, tracked under
+  // the wave-review task rather than left unscoped and unallowlisted.
+  'src/app/(admin)': 'T4.11',
+  'src/components/admin': 'T4.11',
+  'src/app/layout.tsx': 'T4.11',
+  'src/app/error.tsx': 'T4.11',
 }
 
 function fileMatchesPrefix(file: string, pathPrefix: string): boolean {
@@ -281,20 +385,31 @@ describe('the real-tree gate: zero violations outside the allowlist', () => {
 })
 
 describe('the real-tree gate: single-number budgets', () => {
-  it('will-change: transform stays at or under 3 selectors (no allowlist -- a hard cap)', () => {
+  // Fix round (review C1): the will-change regex fix turns this honestly
+  // red (5 against a cap of 3). The cap itself does not move -- `budget.ok`
+  // stays a true hard-cap check, still printed as VIOLATION by the CLI --
+  // but the *test* now tracks WILL_CHANGE_TRANSFORM_ALLOWANCE's recorded
+  // ceiling instead of asserting the cap is already met. The final
+  // assertion is a canary, not a tautology (review M2's fix applied here
+  // too): it pins today's known-bad state (`ok` is false) and breaks the
+  // day T4.5/T4.8 clear it, forcing the allowance and this branch to be
+  // deleted rather than silently going stale.
+  it('will-change: transform has not regressed past the recorded baseline (T4.5/T4.8 own clearing it to the cap of 3)', () => {
     const budget = ruleWillChangeBudget()
-    expect(budget.ok).toBe(true)
+    const regressed = budget.count > WILL_CHANGE_TRANSFORM_ALLOWANCE.baselineCount
+    expect(regressed).toBe(false)
+    expect(budget.ok, 'will-change-transform cleared the cap of 3; delete WILL_CHANGE_TRANSFORM_ALLOWANCE and this branch').toBe(false)
   })
 
+  // Fix round (review M2): the old assertion here (`owners.length` against a
+  // hard-coded array literal) could never fail while its comment claimed it
+  // "starts failing loudly the day the allowance should be deleted." Made
+  // real: it now pins the ratio's actual known-bad state and breaks the day
+  // that state changes.
   it('font-normal : font-medium is at least 1:3, or has not regressed below the recorded floor', () => {
     const ratio = ruleFontWeightRatio()
     const regressed = ratio.ratio !== null && ratio.ratio < FONT_WEIGHT_RATIO_ALLOWANCE.baselineRatio - 1e-9
     expect(regressed).toBe(false)
-    if (!ratio.ok) {
-      // Documents (does not silently hide) that the target is still open --
-      // this line starts failing loudly the day the allowance should be
-      // deleted, per FONT_WEIGHT_RATIO_ALLOWANCE.note.
-      expect(FONT_WEIGHT_RATIO_ALLOWANCE.owners.length).toBeGreaterThan(0)
-    }
+    expect(ratio.ok, 'ratio cleared 1:3; delete FONT_WEIGHT_RATIO_ALLOWANCE and this branch').toBe(false)
   })
 })

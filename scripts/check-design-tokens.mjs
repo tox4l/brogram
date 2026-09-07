@@ -140,22 +140,28 @@ function readEntries(files) {
   return files.map((file) => ({ file: toRelPath(file), content: stripComments(fs.readFileSync(file, 'utf8')) }))
 }
 
-// `(admin)` is not on any Wave 4 task's ownership row (plan section 4) and
-// is not this wave's "five palettes, one structure" learner-facing surface
-// -- nobody sweeps it this wave, so (unlike every owned screen) an
-// allowlist entry against it could never name a task that clears it. Ruling
-// (T4.1, no plan citation -- flagged in the T4.1 report for the owner):
-// excluded from every rule's scope the same way preview is, by name.
+// Fix round (review I3): `(admin)`, `components/admin`, `layout.tsx` and
+// `error.tsx` used to be carved out of every rule's scope entirely, by
+// name, the same way `src/app/preview/**` is licensed to be (constraint
+// 13). But nothing licenses THIS exclusion -- plan Step 1 names exactly two
+// carve-outs (the type rule's own `src/components/ui/**`, and preview) --
+// and silencing the scanner over these paths hid 36 real violations with no
+// allowlist entry, no owner and no durable record that the debt exists.
+// `design:check` is expected to exit 1 today regardless (the ratio gate
+// alone guarantees that), so visibility here costs nothing.
 //
-// `src/app/layout.tsx` and `src/app/error.tsx` carry the same problem in
-// miniature: `layout.tsx` is T4.0's file and T4.0 (tokens only) already
-// landed without a footer sweep in its step list, and `error.tsx` is not on
-// any row at all. Two lines of pre-existing debt (the footer credit's
-// `text-sm`/`rounded-sm`, the error boundary's `text-3xl`) with no task
-// positioned to clear them this wave -- same ruling, same reason, flagged
-// the same way in the T4.1 report rather than silently allowlisted forever.
-const OUT_OF_WAVE_REL_PREFIXES = ['src/app/preview', 'src/app/(admin)', 'src/components/admin']
-const OUT_OF_WAVE_EXACT_FILES = new Set(['src/app/layout.tsx', 'src/app/error.tsx'])
+// These paths are now scanned like any other, and their debt is tracked in
+// `src/lib/design/allowlist.ts` under **T4.11** -- the wave-review task --
+// because no row in the plan's section 4 ownership map sweeps `(admin)` or
+// `components/admin` this wave, `layout.tsx`'s owner (T4.0) has no footer-
+// sweep step, and `error.tsx` has no owner at all. T4.11 either records
+// this in `docs/build-log.md` as carried debt or assigns the paths a real
+// row; either way the ruling now lives in a durable artefact instead of a
+// source comment. `src/app/preview/**` keeps its own licensed exclusion
+// below -- that one has constraint 13 behind it and its debt is already
+// logged as a follow-up there.
+const OUT_OF_WAVE_REL_PREFIXES = ['src/app/preview']
+const OUT_OF_WAVE_EXACT_FILES = new Set()
 
 // Rules 2-6 plus the ratio/count gates: every `src/app/**` and
 // `src/components/**` file, out-of-wave surfaces always excluded.
@@ -250,9 +256,24 @@ export function rulePaletteClasses() {
 // padding, gap, space-between) -- width/height/size use a different scale
 // (fractions, full, screen) and are out of this rule's scope by design.
 const ALLOWED_SPACING_STEPS = new Set([0, 1, 2, 3, 4, 6, 8, 12, 16])
-const SPACING_PREFIXES = ['gap-x', 'gap-y', 'gap', 'space-x', 'space-y', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'm', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'p']
+// Fix round (review M3): the plan's literal prefix list was margin/padding/
+// gap/space only. Tailwind's logical properties (`ps`/`pe`/`ms`/`me`) and
+// the inset family (`inset`/`inset-x`/`inset-y`/`top`/`right`/`bottom`/
+// `left`) read the exact same spacing scale and were unmatched -- future-
+// proofing (no live instance exists in src/ today), added so a later
+// `pe-5` or `top-5` does not ship unflagged.
+const SPACING_PREFIXES = [
+  'gap-x', 'gap-y', 'gap', 'space-x', 'space-y',
+  'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'ms', 'me', 'm',
+  'px', 'py', 'pt', 'pr', 'pb', 'pl', 'ps', 'pe', 'p',
+  'inset-x', 'inset-y', 'inset', 'top', 'right', 'bottom', 'left',
+]
+// The value alternation also gains the `px` literal (Tailwind's 1px step,
+// e.g. `p-px`) -- previously invisible because the value group required a
+// digit, so `p-px` was not merely misclassified, it was never matched at
+// all.
 const SPACING_RE = new RegExp(
-  `(?<![\\w-])(-)?(${SPACING_PREFIXES.join('|')})-(\\[[^\\]]*\\]|\\d+(?:\\.\\d+)?)(?![\\w-])`,
+  `(?<![\\w-])(-)?(${SPACING_PREFIXES.join('|')})-(\\[[^\\]]*\\]|px|\\d+(?:\\.\\d+)?)(?![\\w-])`,
   'g',
 )
 
@@ -264,9 +285,9 @@ export function matchSpacingScale(entries) {
     let m
     while ((m = SPACING_RE.exec(content))) {
       const value = m[3]
-      const isArbitrary = value.startsWith('[')
-      const numeric = isArbitrary ? null : Number.parseFloat(value)
-      const outsideRhythm = isArbitrary || !ALLOWED_SPACING_STEPS.has(numeric)
+      const isSpecialValue = value.startsWith('[') || value === 'px'
+      const numeric = isSpecialValue ? null : Number.parseFloat(value)
+      const outsideRhythm = isSpecialValue || !ALLOWED_SPACING_STEPS.has(numeric)
       if (outsideRhythm) violations.push({ file, line: lineOf(m.index), match: m[0] })
     }
   }
@@ -278,16 +299,20 @@ export function ruleSpacingScale() {
 }
 
 // --- Rule 4: radii outside rounded-(lg|xl|2xl|full) ---------------------
-// A bare `rounded` (the Tailwind DEFAULT radius) and every named size
-// outside the four licensed ones -- none, sm, md, 3xl -- are violations,
-// on any side/corner variant (`rounded-t-*`, `rounded-tl-*`, ...).
+// A bare `rounded` (the Tailwind DEFAULT radius) and every named size or
+// arbitrary value outside the four licensed ones -- lg, xl, 2xl, full --
+// are violations, on any side/corner variant (`rounded-t-*`, `rounded-tl-*`,
+// ...). Fix round (review I1): the suffix used to be matched against a
+// closed enumeration of Tailwind's own eight names, and the trailing
+// `(?![\w-])` then rejected the *whole* match whenever the suffix was
+// anything else -- so `rounded-4xl` and any `rounded-[...]` arbitrary value
+// produced no match at all (silently clean) instead of a violation. The
+// suffix is now captured openly (a bracketed arbitrary value or any
+// word/dot run) and classified afterwards, so an unrecognised name and an
+// arbitrary value are both counted.
 const RADIUS_SIDES = ['tl', 'tr', 'br', 'bl', 'ss', 'se', 'es', 'ee', 't', 'r', 'b', 'l', 's', 'e']
-const RADIUS_SIZES = ['none', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', 'full']
 const ALLOWED_RADIUS_SIZES = new Set(['lg', 'xl', '2xl', 'full'])
-const RADIUS_RE = new RegExp(
-  `(?<![\\w-])rounded(?:-(${RADIUS_SIDES.join('|')}))?(?:-(${RADIUS_SIZES.join('|')}))?(?![\\w-])`,
-  'g',
-)
+const RADIUS_RE = new RegExp(`(?<![\\w-])rounded(?:-(${RADIUS_SIDES.join('|')}))?(?:-(\\[[^\\]]*\\]|[\\w.]+))?(?![\\w-])`, 'g')
 
 export function matchRadii(entries) {
   const violations = []
@@ -296,8 +321,9 @@ export function matchRadii(entries) {
     RADIUS_RE.lastIndex = 0
     let m
     while ((m = RADIUS_RE.exec(content))) {
-      const size = m[2]
-      if (!size || !ALLOWED_RADIUS_SIZES.has(size)) {
+      const suffix = m[2]
+      const isArbitrary = Boolean(suffix) && suffix.startsWith('[')
+      if (!suffix || isArbitrary || !ALLOWED_RADIUS_SIZES.has(suffix)) {
         violations.push({ file, line: lineOf(m.index), match: m[0] })
       }
     }
@@ -334,22 +360,42 @@ function getLucideIconNames(content) {
   return names
 }
 
+// A wrapper utility (`[&_svg:not([class*='size-'])]:size-3`,
+// `[&>svg]:size-3!`) applied to some other element sizes every lucide glyph
+// inside it without ever appearing on the icon's own tag -- the loop above
+// cannot see it (M1). Matched separately, on any element, and reported
+// under the same rule id. The bracket content is matched lazily up to the
+// `]:size-` that actually follows it (not `[^\]]*`, which stops dead at the
+// first `]` and never reaches past a nested arbitrary-variant bracket like
+// `:not([class*='size-'])` -- exactly button.tsx's real shape) but bounded
+// to a single line (`[^\n]`, not `[\s\S]`) -- an unbounded lazy scan reads
+// straight past an unrelated `]:size-4` earlier in the same multi-line
+// class-string object and misattributes the violation dozens of lines away
+// from where it actually lives.
+const ICON_SIZE_PARENT_SELECTOR_RE = /\[&[^\n]*?\]:size-(0|0\.5|1|1\.5|2|2\.5|3|3\.5)\b/g
+
 export function matchIconSize(entries) {
   const violations = []
   for (const { file, content } of entries) {
-    const icons = getLucideIconNames(content)
-    if (icons.size === 0) continue
     const lineOf = buildLineIndex(content)
-    const tagRe = new RegExp(`<(${[...icons].join('|')})\\b([\\s\\S]*?)(/>|>)`, 'g')
-    let m
-    while ((m = tagRe.exec(content))) {
-      const attrs = m[2]
-      const sizeProp = attrs.match(ICON_SIZE_PROP_RE)
-      const sizeClass = attrs.match(ICON_SIZE_CLASS_RE)
-      let detail = null
-      if (sizeProp && Number.parseFloat(sizeProp[1]) < MIN_ICON_PX) detail = `size={${sizeProp[1]}}`
-      else if (sizeClass) detail = sizeClass[0]
-      if (detail) violations.push({ file, line: lineOf(m.index), match: `<${m[1]}>`, detail })
+    const icons = getLucideIconNames(content)
+    if (icons.size > 0) {
+      const tagRe = new RegExp(`<(${[...icons].join('|')})\\b([\\s\\S]*?)((?<!=)\\/>|(?<![=>])>)`, 'g')
+      let m
+      while ((m = tagRe.exec(content))) {
+        const attrs = m[2]
+        const sizeProp = attrs.match(ICON_SIZE_PROP_RE)
+        const sizeClass = attrs.match(ICON_SIZE_CLASS_RE)
+        let detail = null
+        if (sizeProp && Number.parseFloat(sizeProp[1]) < MIN_ICON_PX) detail = `size={${sizeProp[1]}}`
+        else if (sizeClass) detail = sizeClass[0]
+        if (detail) violations.push({ file, line: lineOf(m.index), match: `<${m[1]}>`, detail })
+      }
+    }
+    ICON_SIZE_PARENT_SELECTOR_RE.lastIndex = 0
+    let pm
+    while ((pm = ICON_SIZE_PARENT_SELECTOR_RE.exec(content))) {
+      violations.push({ file, line: lineOf(pm.index), match: pm[0], detail: `parent selector size-${pm[1]}` })
     }
   }
   return violations
@@ -427,7 +473,14 @@ export function ruleFontWeightRatio() {
 // report for why a source scanner cannot see the runtime multiplication,
 // and why that does not excuse the rule (T4.8 still owns fixing the markup
 // itself, not the count).
-const BUTTON_TAG_RE = /<Button\b([\s\S]*?)(\/>|>)/g
+// Fix round (review I2): `[\s\S]*?` is non-greedy to the *first* `>`, and an
+// `onClick={() => ...}` handler contains one -- so a `variant` prop written
+// after an arrow-function handler was invisible, and the button was counted
+// as filled by luck rather than by markup. The lookbehind stops an `=>`'s
+// `>` (preceded by `=`) from closing the tag early; a real closing `>` or
+// `/>` is never preceded by `=` or `>` in practice, so this covers every
+// occurrence in this tree without a full brace-depth scan.
+const BUTTON_TAG_RE = /<Button\b([\s\S]*?)((?<!=)\/>|(?<![=>])>)/g
 const VARIANT_ANY_PROP_RE = /\bvariant\s*=/
 const VARIANT_DEFAULT_PROP_RE = /variant\s*=\s*\{?\s*["'`]default["'`]\s*\}?/
 const BUTTON_VARIANTS_DEFAULT_RE = /buttonVariants\(\s*\{[^}]*variant\s*:\s*['"]default['"][^}]*\}\s*\)/g
@@ -464,7 +517,11 @@ export function ruleFilledButtonsPerRoute() {
 }
 
 // --- Step 2, count rule: will-change: transform in at most 3 selectors -
-const WILL_CHANGE_TRANSFORM_RE = /will-change\s*:\s*transform\b|willChange\s*:\s*['"]transform['"]/g
+// Fix round (review C1): the Tailwind utility form (`will-change-transform`,
+// a hyphen, never a colon) is the idiomatic spelling in this codebase and
+// the original two alternatives -- both requiring `:` -- never matched it,
+// so five real occurrences reported as zero. All three forms now count.
+const WILL_CHANGE_TRANSFORM_RE = /\bwill-change-transform\b|will-change\s*:\s*transform\b|willChange\s*:\s*['"]transform['"]/g
 
 export function matchWillChangeTransform(entries) {
   return matchEveryHit(entries, WILL_CHANGE_TRANSFORM_RE)
