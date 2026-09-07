@@ -55,7 +55,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T2.9a De-rot Arcade: the hub, the run model, score normalisation (71f8230, 3a6c344, c613543)
 - [x] T2.9b De-rot Playground: six non-coding games (5a5b509, 0d83e17, 1b7f312, 6f1197a, eddaeec)
 - [x] T2.10 Agent identity rewrites (copy only, no schema touched) (7cbe723, 37c4f16, ef54318)
-- [ ] T2.11 Buddy drawer polish
+- [x] T2.11 Buddy drawer polish (abd0c62, 098db02)
 - [ ] T3.1 The bundle budget, generated from a measurement
 - [ ] T3.2 Timings, vitals, and the local diagnostics buffer
 - [ ] T3.3 e2e updates
