@@ -1,13 +1,17 @@
 /**
- * Prayer times for the wellness rail.
+ * Prayer times for the wellness dock.
  *
  * Aladhan `timings` (method 10 = Qatar) is the primary source, cached per day in
  * localStorage. When the network call fails the `adhan` npm package computes the
- * same five prayers locally with `CalculationMethod.Qatar()` so the rail is never
+ * same five prayers locally with `CalculationMethod.Qatar()` so the dock is never
  * empty. See docs/research/runtime-facts.md ("Prayer times").
+ *
+ * `adhan` is a dynamic import, loaded only inside `computeFallback` -- the path
+ * that runs when the network call fails. The Aladhan API answers on every
+ * route that has a network connection, so `adhan`'s ~457 KB never has to sit
+ * in the shared client chunk that every route (dashboard included) pays for
+ * on load; only a learner who is actually offline pays that cost, once.
  */
-
-import { Coordinates, CalculationMethod, PrayerTimes as AdhanPrayerTimes } from 'adhan'
 
 export type PrayerName = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha'
 export const PRAYER_ORDER: PrayerName[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']
@@ -110,7 +114,8 @@ export function resolveFallbackTimeZone(coords: GeoCoordinates): string {
   }
 }
 
-function computeFallback(date: Date, coords: GeoCoordinates): PrayerTimesResult {
+async function computeFallback(date: Date, coords: GeoCoordinates): Promise<PrayerTimesResult> {
+  const { Coordinates, CalculationMethod, PrayerTimes: AdhanPrayerTimes } = await import('adhan')
   const coordinates = new Coordinates(coords.latitude, coords.longitude)
   const params = CalculationMethod.Qatar()
   const prayerTimes = new AdhanPrayerTimes(coordinates, date, params)
@@ -160,6 +165,6 @@ export async function fetchPrayerTimes(date: Date, coords: GeoCoordinates = DOHA
     writeCache(key, result)
     return result
   } catch {
-    return computeFallback(date, coords)
+    return await computeFallback(date, coords)
   }
 }

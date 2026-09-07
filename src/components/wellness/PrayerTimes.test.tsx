@@ -87,4 +87,18 @@ describe('PrayerTimes', () => {
     screen.getByRole('switch', { name: /dhuhr reminder/i }).click()
     expect(onTogglePrayer).toHaveBeenCalledWith('dhuhr')
   })
+
+  it('R6.4: reports pending instead of toasting while an attempt is active, then clears once it flushes', () => {
+    const onPendingChange = vi.fn()
+    const { rerender } = render(
+      <PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={dhuhrAtMs} attemptActive onPendingChange={onPendingChange} />,
+    )
+    expect(onPendingChange).toHaveBeenCalledWith(true)
+    expect(toast).not.toHaveBeenCalled()
+
+    onPendingChange.mockClear()
+    rerender(<PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={dhuhrAtMs} attemptActive={false} onPendingChange={onPendingChange} />)
+    expect(onPendingChange).toHaveBeenCalledWith(false)
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('Dhuhr time has arrived'))
+  })
 })

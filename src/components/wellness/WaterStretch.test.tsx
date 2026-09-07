@@ -54,4 +54,20 @@ describe('WaterStretch', () => {
     render(<WaterStretch prefs={DEFAULT_WELLNESS} now={0} log={[]} onLog={vi.fn()} />)
     expect(screen.getByText(/start a streak/i)).toBeTruthy()
   })
+
+  it('R6.4: reports pending instead of toasting while an attempt is active, then clears once it flushes', () => {
+    const onPendingChange = vi.fn()
+    const intervalMs = DEFAULT_WELLNESS.waterIntervalMin * 60_000
+    const { rerender } = render(
+      <WaterStretch prefs={DEFAULT_WELLNESS} now={0} log={[]} onLog={vi.fn()} attemptActive onPendingChange={onPendingChange} />,
+    )
+    rerender(<WaterStretch prefs={DEFAULT_WELLNESS} now={intervalMs} log={[]} onLog={vi.fn()} attemptActive onPendingChange={onPendingChange} />)
+    expect(onPendingChange).toHaveBeenCalledWith(true)
+    expect(toast).not.toHaveBeenCalled()
+
+    onPendingChange.mockClear()
+    rerender(<WaterStretch prefs={DEFAULT_WELLNESS} now={intervalMs} log={[]} onLog={vi.fn()} attemptActive={false} onPendingChange={onPendingChange} />)
+    expect(onPendingChange).toHaveBeenCalledWith(false)
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/water/i))
+  })
 })

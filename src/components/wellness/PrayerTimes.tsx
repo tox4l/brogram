@@ -16,12 +16,16 @@ function reminderMessage(event: PrayerReminderEvent, leadMinutes: number): strin
   return event.kind === 'lead' ? `${label} in ${leadMinutes} minutes.` : `${label} time has arrived.`
 }
 
-export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive, compact = false }: {
+export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive, onPendingChange, compact = false }: {
   prefs: WellnessPrefs
   onTogglePrayer: (prayer: PrayerName) => void
   result: PrayerTimesResult | null
   now: number
   attemptActive: boolean
+  /** R6.4: called with `true` the instant a reminder queues instead of toasting (an
+   *  attempt is active) and with `false` once the queue is flushed, so the dock can
+   *  show a badge instead of interrupting the editor. */
+  onPendingChange?: (pending: boolean) => void
   compact?: boolean
 }) {
   const firedRef = useRef<Set<string>>(new Set())
@@ -46,8 +50,12 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
     const due = dueReminders(events, now, firedRef.current)
     for (const event of due) {
       firedRef.current.add(event.firedKey)
-      if (attemptActive) queuedRef.current.push(event)
-      else toast(reminderMessage(event, prefs.prayerLeadMinutes))
+      if (attemptActive) {
+        queuedRef.current.push(event)
+        onPendingChange?.(true)
+      } else {
+        toast(reminderMessage(event, prefs.prayerLeadMinutes))
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, result?.date])
@@ -56,6 +64,7 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
     if (wasActiveRef.current && !attemptActive && queuedRef.current.length) {
       const queued = queuedRef.current
       queuedRef.current = []
+      onPendingChange?.(false)
       queued.forEach((event) => toast(reminderMessage(event, prefs.prayerLeadMinutes)))
     }
     wasActiveRef.current = attemptActive

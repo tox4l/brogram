@@ -130,4 +130,21 @@ describe('Pomodoro', () => {
     expect(toast).not.toHaveBeenCalled()
     expect(onSessionComplete).not.toHaveBeenCalled()
   })
+
+  it('R6.4: reports pending instead of toasting while an attempt is active, then clears once it flushes', () => {
+    const onPendingChange = vi.fn()
+    const { rerender } = render(
+      <Pomodoro prefs={DEFAULT_WELLNESS} now={0} attemptActive onSessionComplete={vi.fn()} onPendingChange={onPendingChange} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /start pomodoro/i }))
+    vi.setSystemTime(workMs)
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={workMs} attemptActive onSessionComplete={vi.fn()} onPendingChange={onPendingChange} />)
+    expect(onPendingChange).toHaveBeenCalledWith(true)
+    expect(toast).not.toHaveBeenCalled()
+
+    onPendingChange.mockClear()
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={workMs} attemptActive={false} onSessionComplete={vi.fn()} onPendingChange={onPendingChange} />)
+    expect(onPendingChange).toHaveBeenCalledWith(false)
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/work block complete/i))
+  })
 })

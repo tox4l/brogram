@@ -15,10 +15,10 @@ export interface WellnessLogEntry {
 
 /**
  * Tracks a recurring reminder's next-due timestamp in a ref rather than state: nothing in
- * the UI needs to re-render off it (only a toast fires), so advancing it is a plain side
- * effect instead of a setState call inside an effect.
+ * the UI needs to re-render off it (only a toast fires, or a queue push -- R6.4), so
+ * advancing it is a plain side effect instead of a setState call inside an effect.
  */
-function useRecurringTimer(now: number, intervalMin: number, message: string) {
+function useRecurringTimer(now: number, intervalMin: number, message: string, onDue: (message: string) => void) {
   const timerRef = useRef<RecurringTimerState>(startRecurringTimer(now, intervalMin))
   const intervalRef = useRef(intervalMin)
 
@@ -31,21 +31,43 @@ function useRecurringTimer(now: number, intervalMin: number, message: string) {
 
   useEffect(() => {
     if (!dueRecurringTimer(timerRef.current, now)) return
-    toast(message)
+    onDue(message)
     timerRef.current = advanceRecurringTimer(timerRef.current, now, intervalMin)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now])
 }
 
-export function WaterStretch({ prefs, now, log, onLog, compact = false }: {
+export function WaterStretch({ prefs, now, log, onLog, attemptActive = false, onPendingChange, compact = false }: {
   prefs: WellnessPrefs
   now: number
   log: WellnessLogEntry[]
   onLog: (entry: WellnessLogEntry) => void
+  attemptActive?: boolean
+  /** R6.4: `true` the instant a reminder queues instead of toasting (an attempt is
+   *  active), `false` once the queue flushes -- lets the dock show a badge instead. */
+  onPendingChange?: (pending: boolean) => void
   compact?: boolean
 }) {
-  useRecurringTimer(now, prefs.waterIntervalMin, 'Take a sip of water.')
-  useRecurringTimer(now, prefs.stretchIntervalMin, 'Stand up and stretch for a moment.')
+  const queuedRef = useRef<string[]>([])
+  const wasActiveRef = useRef(attemptActive)
+
+  const handleDue = (message: string) => {
+    if (attemptActive) { queuedRef.current.push(message); onPendingChange?.(true) } else toast(message)
+  }
+
+  useEffect(() => {
+    if (wasActiveRef.current && !attemptActive && queuedRef.current.length) {
+      const queued = queuedRef.current
+      queuedRef.current = []
+      onPendingChange?.(false)
+      queued.forEach((message) => toast(message))
+    }
+    wasActiveRef.current = attemptActive
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptActive])
+
+  useRecurringTimer(now, prefs.waterIntervalMin, 'Take a sip of water.', handleDue)
+  useRecurringTimer(now, prefs.stretchIntervalMin, 'Stand up and stretch for a moment.', handleDue)
 
   const today = dateKeyOf(new Date(now))
   const streak = computeLogStreak(log.map((entry) => entry.at.slice(0, 10)), today)

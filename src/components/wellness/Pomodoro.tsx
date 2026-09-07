@@ -26,12 +26,15 @@ function formatClock(ms: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact = false }: {
+export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, onPendingChange, compact = false }: {
   prefs: WellnessPrefs
   now: number
   attemptActive: boolean
-  /** Always an array — a caught-up backlog reports every completed work phase in one call, so Rail persists it in a single write. */
+  /** Always an array — a caught-up backlog reports every completed work phase in one call, so Dock persists it in a single write. */
   onSessionComplete: (sessions: PomodoroSession[]) => void
+  /** R6.4: `true` the instant a completion queues instead of toasting (an attempt is
+   *  active), `false` once the queue flushes -- lets the dock show a badge instead. */
+  onPendingChange?: (pending: boolean) => void
   compact?: boolean
 }) {
   // `state` only changes from user actions (start/pause/reset), and once from the effect
@@ -71,14 +74,12 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact
       // this render), not per-render UI derivation — the one legitimate case for setState here.
       setState({ phase: derived.state.phase, running: false, targetAt: null, remainingMs: pausedDurationMs })
       const message = 'Timer paused while you were away.'
-      if (attemptActive) queuedRef.current.push(message)
-      else toast(message)
+      if (attemptActive) { queuedRef.current.push(message); onPendingChange?.(true) } else toast(message)
     } else {
       for (const completion of newlyCompleted) {
         if (completion.phase === 'work') onSessionComplete([{ workMinutes: prefs.pomodoroWorkMin, completedAt: new Date(completion.at).toISOString() }])
         const message = completion.phase === 'work' ? 'Work block complete. Time for a short break.' : 'Break complete. Ready for another focused block.'
-        if (attemptActive) queuedRef.current.push(message)
-        else toast(message)
+        if (attemptActive) { queuedRef.current.push(message); onPendingChange?.(true) } else toast(message)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,9 +89,11 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, compact
     if (wasActiveRef.current && !attemptActive && queuedRef.current.length) {
       const queued = queuedRef.current
       queuedRef.current = []
+      onPendingChange?.(false)
       queued.forEach((message) => toast(message))
     }
     wasActiveRef.current = attemptActive
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptActive])
 
   const remaining = remainingPomodoroMs(derived.state, now)

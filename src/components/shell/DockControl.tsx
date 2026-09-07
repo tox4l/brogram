@@ -9,6 +9,7 @@ import { useSession } from '@/store/session'
 import { useWellness } from '@/lib/query/hooks'
 import { useOptimistic } from '@/lib/query/optimistic'
 import { qk } from '@/lib/query/keys'
+import { recallDockPlacement } from '@/lib/wellness/dock'
 import type { DockPlacement } from '@/lib/contracts'
 import type { WellnessRow } from '@/lib/learner/compile'
 
@@ -30,14 +31,13 @@ async function persistDockPlacement(userId: string, placement: DockPlacement): P
 }
 
 /**
- * The header's re-open glyph for the wellness dock (T0.7 seam). Renders
- * nothing while the dock has a placement; the moment `dock.placement` is
- * `'hidden'`, this becomes the only way back -- hidden is never a dead end.
- *
- * `ShellLayout`/`WellnessSlot` do not read `dock.placement` yet (T2.4 wires
- * that up), so this control has no visible effect on layout until then --
- * but it already writes through the same optimistic cache path `SoundToggle`
- * uses, so nothing here needs to change once T2.4 lands.
+ * The header's re-open glyph for the wellness dock (T0.7 seam, wired up by
+ * T2.4). Renders nothing while the dock has a placement; the moment
+ * `dock.placement` is `'hidden'`, this becomes the only way back -- hidden
+ * is never a dead end. Restores whichever placement the learner actually had
+ * before hiding it (`recallDockPlacement`, `src/lib/wellness/dock.ts`), not
+ * a hardcoded default -- `right` only when nothing was ever remembered this
+ * session (e.g. the row already had `dock.placement: 'hidden'` on load).
  */
 export function DockControl() {
   const { user } = useSession()
@@ -61,7 +61,7 @@ export function DockControl() {
   if (prefs.dock.placement !== 'hidden') return null
 
   return (
-    <Button type="button" variant="ghost" size="icon" aria-label="Show wellness dock" onClick={() => mutation.mutate('right')}>
+    <Button type="button" variant="ghost" size="icon" aria-label="Show wellness dock" onClick={() => mutation.mutate(recallDockPlacement())}>
       <PanelRightOpen aria-hidden="true" />
     </Button>
   )
