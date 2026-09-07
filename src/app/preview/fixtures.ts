@@ -1,8 +1,26 @@
 /**
  * Fixture data for the /preview gallery. Nothing here touches Supabase or an
- * agent; every value is hand-written or read from the committed seed files so
- * every screen has something rich to show even though the dev server's
- * NEXT_PUBLIC_SUPABASE_URL is a placeholder and every real fetch fails.
+ * agent; every value is hand-written or read from committed seed files (clos
+ * and drills only) so every screen has something rich to show even though
+ * the dev server's NEXT_PUBLIC_SUPABASE_URL is a placeholder and every real
+ * fetch fails.
+ *
+ * V1 (Critical, Wave 2 review §5): this module never imports a seed
+ * *exercise* file (seed/exercises/*.json). This page is a 'use client'
+ * component, so any module it imports ships in the browser bundle whole --
+ * reading only a couple of fields back out of an imported JSON object does
+ * not stop the rest of that object's content from being emitted too. Every
+ * seed exercise carries the model answer and every hidden test's real
+ * answer alongside the fields a gallery actually needs, so importing one at
+ * all -- even to read just `.title` -- shipped 43 model answers and 180
+ * hidden-test answers into an unauthenticated production chunk. The
+ * exercise fixtures below are hand-copied instead: real prompt/starter/
+ * visible-test text (a learner already sees all of that in the product),
+ * with every hidden test's own fields redacted to a placeholder, and no
+ * model-answer field at all -- provably secret-free by construction, not by
+ * a runtime pick. See fixtures.test.ts and
+ * scripts/check-bundle-budget.mjs's scanForSecrets() for the two halves of
+ * the guard against a regression.
  */
 import type { User } from '@supabase/supabase-js'
 import type {
@@ -11,9 +29,6 @@ import type {
 } from '@/lib/contracts'
 import type { SessionData, SessionProfile } from '@/store/session'
 import type { AgentUsageRow, BankStatRow, CloRef, InviteRow, UserRow } from '@/components/admin/types'
-import smokeSeed from '../../../seed/exercises/smoke.json'
-import infs1101Seed from '../../../seed/exercises/INFS1101.json'
-import infs2201Seed from '../../../seed/exercises/INFS2201.json'
 import closSeed from '../../../seed/clos.json'
 import predictOutputDrills from '../../../seed/drills/predict-output.json'
 import spotTheBugDrills from '../../../seed/drills/spot-the-bug.json'
@@ -112,20 +127,33 @@ export const fixtureNextExercises: FixtureExerciseSummary[] = [
 // Exercise screen fixtures
 // ---------------------------------------------------------------------------
 
-const smokeCodeExercise = smokeSeed.exercises[0]
+// Hand-copied from seed/exercises/smoke.json's "First late train" (id
+// smoke-first-late-train): prompt, starter code and the two visible tests
+// are real (a learner sees exactly this much of the real exercise already).
+// The four hidden tests carry no real input or answer -- see the module
+// header -- and PromptPanel/ResultsPanel never read a hidden test's own
+// fields (fixtures.test.ts pins that), so a placeholder is all a hidden row
+// needs to be for this gallery.
 export const fixtureCodeExercise: ExercisePublic = {
   id: 'smoke-first-late-train',
-  cloId: smokeCodeExercise.cloId,
-  language: smokeCodeExercise.language as ExercisePublic['language'],
+  cloId: 'INFS1101-3',
+  language: 'python',
   kind: 'code',
-  difficulty: smokeCodeExercise.difficulty as ExercisePublic['difficulty'],
-  pattern: smokeCodeExercise.pattern,
-  title: smokeCodeExercise.title,
-  prompt: smokeCodeExercise.prompt,
-  starterCode: smokeCodeExercise.starterCode,
-  tests: smokeCodeExercise.tests as ExercisePublic['tests'],
+  difficulty: 2,
+  pattern: 'early-return',
+  title: 'First late train',
+  prompt: 'A station logs the minutes past the hour at which trains arrived. A train is late if it arrived after the limit.\n\nWrite `first_late(times, limit)` that returns the first arrival time that is greater than `limit`. If no train is late, return `-1`.\n\nExample: `first_late([3, 5, 9], 6)` returns `9`. `first_late([1, 2], 10)` returns `-1`.',
+  starterCode: 'def first_late(times, limit):\n    pass\n',
+  tests: [
+    { id: 't1', input: '[[3,5,9],6]', expected: '9', hidden: false, name: 'example' },
+    { id: 't2', input: '[[1,2],10]', expected: '-1', hidden: false, name: 'none late' },
+    { id: 't3', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't4', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't5', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't6', input: '(redacted)', expected: '(redacted)', hidden: true },
+  ],
   origin: 'seed',
-  tags: smokeCodeExercise.tags,
+  tags: ['loops', 'lists'],
 }
 
 export const fixtureClo: Clo = {
@@ -175,46 +203,61 @@ export const fixtureHints: CoachReply[] = [
 export const fixtureHintCooldown = { available: false, waitSeconds: 42, count: 1 }
 export const fixtureHintReady = { available: true, waitSeconds: 0, count: 1 }
 
-const infs1101PredictOutput = infs1101Seed.exercises.find((exercise) => exercise.kind === 'predict-output')!
+// Hand-copied from seed/exercises/INFS1101.json's "Arcade Token Total"
+// (kind predict-output). Same redaction rule as fixtureCodeExercise above.
 export const fixturePredictExercise: ExercisePublic = {
   id: 'infs1101-predict-output-1',
-  cloId: infs1101PredictOutput.cloId,
-  language: infs1101PredictOutput.language as ExercisePublic['language'],
+  cloId: 'INFS1101-1',
+  language: 'python',
   kind: 'predict-output',
-  difficulty: infs1101PredictOutput.difficulty as ExercisePublic['difficulty'],
-  pattern: infs1101PredictOutput.pattern,
-  title: infs1101PredictOutput.title,
-  prompt: infs1101PredictOutput.prompt,
-  starterCode: infs1101PredictOutput.starterCode,
-  tests: infs1101PredictOutput.tests as ExercisePublic['tests'],
+  difficulty: 2,
+  pattern: 'predict-output',
+  title: 'Arcade Token Total',
+  prompt: 'At Fun Zone Arcade, a token machine adds up the value of every token a player feeds in before it prints the total credit to the screen. Example: feeding in tokens worth 10 and 5 would print 15.\n\nRead the program below by hand and work out exactly what value it prints for the tokens actually listed; do not guess.\n\n```python\ntokens = [25, 10, 10, 5]\ntotal = 0\nfor value in tokens:\n    total += value\nprint(total)\n```\n\nType the number this program prints. Give only the digits, no extra words.',
+  starterCode: '# Read-only: figure out what this prints, then answer.\ntokens = [25, 10, 10, 5]\ntotal = 0\nfor value in tokens:\n    total += value\nprint(total)\n',
+  tests: [
+    { id: 't1', input: '', expected: '50', hidden: false, name: 'example' },
+    { id: 't2', input: '', expected: '50', hidden: false, name: 'check' },
+    { id: 't3', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't4', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't5', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't6', input: '(redacted)', expected: '(redacted)', hidden: true },
+  ],
   origin: 'seed',
-  tags: infs1101PredictOutput.tags,
+  tags: ['loops', 'accumulation', 'reading'],
 }
 
-const infs1101SpotTheBug = infs1101Seed.exercises.find((exercise) => exercise.kind === 'spot-the-bug')!
+// Hand-copied from seed/exercises/INFS1101.json's "Kiosk Pricing Mistake"
+// (kind spot-the-bug). Same redaction rule as fixtureCodeExercise above.
 export const fixtureSpotBugExercise: ExercisePublic = {
   id: 'infs1101-spot-the-bug-1',
-  cloId: infs1101SpotTheBug.cloId,
-  language: infs1101SpotTheBug.language as ExercisePublic['language'],
+  cloId: 'INFS1101-1',
+  language: 'python',
   kind: 'spot-the-bug',
-  difficulty: infs1101SpotTheBug.difficulty as ExercisePublic['difficulty'],
-  pattern: infs1101SpotTheBug.pattern,
-  title: infs1101SpotTheBug.title,
-  prompt: infs1101SpotTheBug.prompt,
-  starterCode: infs1101SpotTheBug.starterCode,
-  tests: infs1101SpotTheBug.tests as ExercisePublic['tests'],
+  difficulty: 4,
+  pattern: 'spec-to-steps',
+  title: 'Kiosk Pricing Mistake',
+  prompt: "A print shop's photo kiosk should total each order the same way: multiply the quantity by $0.20 per print; if that order is for 50 prints or more, take 10% off the print cost; then add a flat $1.00 processing fee; finally round the result to the nearest cent. Example: an order of 12 prints costs 12 times $0.20, which is $2.40; since 12 is under 50 prints no discount applies, so the fee makes the final total $3.40.\n\nSomeone turned that rule into the four numbered steps below and ran them over today's orders, but one step does not match the rule.\n\n```python\norders = [12, 50, 80, 3]\ntotals = []\nfor quantity in orders:\n    # step 1\n    cost = quantity * 0.20\n    # step 2\n    if quantity > 50:\n        cost = cost * 0.90\n    # step 3\n    cost = cost + 1.00\n    # step 4\n    totals.append(round(cost, 2))\n```\n\nWhich step number contradicts the rule? Answer with just that one digit.",
+  starterCode: '# Read-only: find the step that breaks the rule, then answer.\norders = [12, 50, 80, 3]\ntotals = []\nfor quantity in orders:\n    # step 1\n    cost = quantity * 0.20\n    # step 2\n    if quantity > 50:\n        cost = cost * 0.90\n    # step 3\n    cost = cost + 1.00\n    # step 4\n    totals.append(round(cost, 2))\n',
+  tests: [
+    { id: 't1', input: '', expected: '2', hidden: false, name: 'example' },
+    { id: 't2', input: '', expected: '2', hidden: false, name: 'check' },
+    { id: 't3', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't4', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't5', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't6', input: '(redacted)', expected: '(redacted)', hidden: true },
+  ],
   origin: 'seed',
-  tags: infs1101SpotTheBug.tags,
+  tags: ['conditionals', 'off-by-one', 'pricing'],
 }
 
 // The shipped bank holds no trace exercise any more (the three single-value ones became
 // predict-output), so the gallery carries its own: a real variables map, as the validator now
-// requires for the kind, borrowing the CLO and language from the first INFS1101 exercise.
-const infs1101First = infs1101Seed.exercises[0]!
+// requires for the kind. cloId/language match seed/exercises/INFS1101.json's exercises[0].
 export const fixtureTraceExercise: ExercisePublic = {
   id: 'infs1101-trace-1',
-  cloId: infs1101First.cloId,
-  language: infs1101First.language as ExercisePublic['language'],
+  cloId: 'INFS1101-1',
+  language: 'python',
   kind: 'trace',
   difficulty: 2,
   pattern: 'trace',
@@ -227,20 +270,28 @@ export const fixtureTraceExercise: ExercisePublic = {
 }
 export const fixtureTraceVariables = ['battery', 'checkpoint']
 
-const infs2201Schema = infs2201Seed.exercises.find((exercise) => exercise.kind === 'schema')!
+// Hand-copied from seed/exercises/INFS2201.json's "Podcast shows and
+// episodes" (kind schema). Same redaction rule as fixtureCodeExercise above.
 export const fixtureSchemaExercise: ExercisePublic = {
   id: 'infs2201-schema-1',
-  cloId: infs2201Schema.cloId,
-  language: infs2201Schema.language as ExercisePublic['language'],
+  cloId: 'INFS2201-2',
+  language: 'sql',
   kind: 'schema',
-  difficulty: infs2201Schema.difficulty as ExercisePublic['difficulty'],
-  pattern: infs2201Schema.pattern,
-  title: infs2201Schema.title,
-  prompt: infs2201Schema.prompt,
-  starterCode: infs2201Schema.starterCode,
-  tests: infs2201Schema.tests as ExercisePublic['tests'],
+  difficulty: 2,
+  pattern: 'schema-design',
+  title: 'Podcast shows and episodes',
+  prompt: "A podcast network tracks shows and the episodes that belong to them. Each show can have many episodes, but every episode belongs to exactly one show.\n\nWrite the `CREATE TABLE` statements for `shows` and `episodes` so the relationship is modeled correctly.\n\nRequirements:\n- `shows`: `id` (integer, primary key), `title` (text, required).\n- `episodes`: `id` (integer, primary key), `show_id` (integer, required, references `shows.id`), `title` (text, required), `episode_number` (integer, required).\n- Every episode must point at a real show, and a show may have any number of episodes, including none.\n\nExample: after creating the tables, inserting show `(1, 'Night Shift')` and episode `(1, 1, 'Pilot', 1)`, selecting `show_id, title, episode_number` from `episodes` returns one row: `1, 'Pilot', 1`.",
+  starterCode: '-- create the `shows` and `episodes` tables below\n-- shows: id, title\n-- episodes: id, show_id, title, episode_number\n',
+  tests: [
+    { id: 't1', input: "insert into shows values (1,'Night Shift');\ninsert into episodes values (1,1,'Pilot',1);\nselect show_id, title, episode_number from episodes;", expected: '{"columns":["show_id","title","episode_number"],"values":[[1,"Pilot",1]]}', hidden: false, name: 'example' },
+    { id: 't2', input: "insert into shows values (1,'Night Shift'),(2,'Quiet Room');\ninsert into episodes values (1,1,'Pilot',1),(2,2,'Intro',1);\nselect s.title as show_title, e.title as episode_title from shows s join episodes e on e.show_id = s.id order by s.id;", expected: '{"columns":["show_title","episode_title"],"values":[["Night Shift","Pilot"],["Quiet Room","Intro"]]}', hidden: false, name: 'join across shows' },
+    { id: 't3', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't4', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't5', input: '(redacted)', expected: '(redacted)', hidden: true },
+    { id: 't6', input: '(redacted)', expected: '(redacted)', hidden: true },
+  ],
   origin: 'seed',
-  tags: infs2201Schema.tags,
+  tags: ['foreign-key', 'one-to-many', 'keys'],
 }
 
 // ---------------------------------------------------------------------------

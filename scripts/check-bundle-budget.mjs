@@ -27,12 +27,13 @@
 import { readFileSync, statSync, readdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const NEXT_DIR = join(ROOT, '.next')
 const BUDGET_FILE = join(ROOT, 'perf-budget.json')
+export const CHUNKS_DIR = join(NEXT_DIR, 'static', 'chunks')
 
 function fail(message) {
   console.error(`perf:bundle: ${message}`)
@@ -120,6 +121,65 @@ function measurePublicTrackedBytes() {
   }, 0)
 }
 
+// V1 (Critical, Wave 2 review §5): a production build's /preview 404 page
+// shipped 43 model answers and 180 hidden-test answers because a client
+// module imported a whole raw seed exercise file. src/app/preview/fixtures.ts
+// no longer does that (see fixtures.test.ts, the source-level half of this
+// guard), but the only way to *prove* nothing secret reaches a shipped chunk
+// is to scan what actually gets emitted. These two field names only ever
+// carry a real secret when they are an object-literal key bound to a string
+// value (`referenceSolution:"def f(): ..."`, `expectedStdout:"2\n1"`) — the
+// exact shape the review found in the wild.
+export const SECRET_MARKERS = ['reference' + 'Solution', 'expected' + 'Stdout']
+
+/**
+ * A bare substring scan over compiled application code (as opposed to the
+ * plain-JSON files src/lib/curriculum/secrets.test.ts scans) over-fires: a
+ * real, reviewed build of this tree also legitimately contains the
+ * identifier `referenceSolution` with no secret attached, in two shapes --
+ * a destructuring strip (`const { referenceSolution, ...rest } = exercise`,
+ * the Author agent's generated-exercise path discarding the field before it
+ * ever reaches state) and a bare property access (the dev-only
+ * `/preview/java-verify` harness, which reads `.referenceSolution` off an
+ * object injected at runtime by an e2e spec, never off bundled data).
+ * Neither shape is followed by `:` and a quote. A leaked secret always is.
+ */
+function markerPattern(marker) {
+  return new RegExp(`["']?${marker}["']?\\s*:\\s*["'\`]`)
+}
+
+/** Every `.js` file under `dir`, recursively — every emitted client chunk,
+ *  not only the ones a route's `entryJSFiles` names (a chunk reachable only
+ *  through `next/dynamic({ ssr: false })`, e.g. the exercise editor, must
+ *  never leak a secret either, even though it is out of scope for the byte
+ *  budget above). */
+export function findChunkFiles(dir) {
+  const out = []
+  if (!existsSync(dir)) return out
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...findChunkFiles(path))
+    else if (entry.name.endsWith('.js')) out.push(path)
+  }
+  return out
+}
+
+/**
+ * Pure scan of chunk source text for SECRET_MARKERS. Takes an explicit
+ * `readFile` so a unit test can run it against fixture strings without
+ * touching the filesystem or requiring a real `npm run build`.
+ */
+export function scanForSecrets(files, readFile = (file) => readFileSync(file, 'utf8')) {
+  const hits = []
+  for (const file of files) {
+    const content = readFile(file)
+    for (const marker of SECRET_MARKERS) {
+      if (markerPattern(marker).test(content)) hits.push({ file, marker })
+    }
+  }
+  return hits
+}
+
 /** Rule (b) is unenforceable if `ledger[].route` stays free text — nothing
  *  can join "every route above" to a route key. Every ledger entry also
  *  carries `routes: string[]`; this collects the union so both checks below
@@ -171,7 +231,20 @@ function fmtKB(bytes) {
   return `${(bytes / 1024).toFixed(1)} KB`
 }
 
+function checkNoSecretsInChunks() {
+  const files = findChunkFiles(CHUNKS_DIR)
+  if (!files.length) fail(`${CHUNKS_DIR} is missing or empty — run "npm run build" first`)
+  const hits = scanForSecrets(files)
+  if (hits.length) {
+    const lines = hits.map((hit) => `  - ${hit.file}: contains "${hit.marker}"`).join('\n')
+    fail(`secret scan: found a secret marker in ${hits.length} chunk(s) under ${CHUNKS_DIR}:\n${lines}\nA client chunk must never carry a model answer or a lesson's hidden stdout — see src/app/preview/fixtures.test.ts and src/lib/curriculum/secrets.test.ts for the two sibling guards.`)
+  }
+  console.log(`Secret scan — ${files.length} chunk(s) under ${CHUNKS_DIR.replace(ROOT, '.').split('\\').join('/')}: OK, no "${SECRET_MARKERS.join('" or "')}" found.\n`)
+}
+
 function main() {
+  checkNoSecretsInChunks()
+
   const budget = loadBudget()
   const measured = measureRoutes()
   let failed = false
@@ -229,4 +302,8 @@ function main() {
   console.log('perf:bundle: OK — every route and public/ is within budget.')
 }
 
-main()
+// Guarded so a test can `import` this module (to unit-test scanForSecrets
+// and findChunkFiles against fixtures) without triggering a real, full
+// build-artifact check that calls process.exit on a dev machine with no
+// `.next` yet.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main()

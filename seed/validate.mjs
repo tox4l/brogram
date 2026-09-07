@@ -3,6 +3,17 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// Repo-wide emoji guard, matching src/lib/voice/copy-lint.test.ts,
+// src/lib/voice/lines.test.ts, src/lib/voice/glossary.test.ts and
+// src/lib/contracts.v2.test.ts (V9, Wave 2 review §5): a hand-rolled Unicode
+// range set previously used here missed plain symbol emoji such as U+2139
+// (ℹ), U+2122 (™), U+00A9/U+00AE (©/®) and single-cell enclosed characters
+// (🅰, 🈚). `\p{Extended_Pictographic}` alone is not a drop-in replacement —
+// it would silently un-ban the arrow range (U+2190-21FF) this file has always
+// rejected, and it misses regional-indicator flag-sequence halves and a lone
+// variation selector (U+FE0F) — so the guard is a union, not a swap.
+export const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}|️|[\u{2190}-\u{21FF}]/u
+
 const here = dirname(fileURLToPath(import.meta.url))
 const load = (f) => JSON.parse(readFileSync(join(here, f), 'utf8'))
 
@@ -225,7 +236,6 @@ if (existsSync(lessonsDir)) {
     }
 
     const bannedTextPattern = new RegExp(invariants.bannedTextPattern ?? '\\b(CLO|learning outcome|syllabus)\\b', invariants.bannedTextFlags ?? 'i')
-    const emojiPattern = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/u
     const blockOrder = invariants.blockOrder ?? ['concept', 'worked', 'check', 'recap', 'bridge']
     const blockCounts = invariants.blockCounts ?? {}
     const maxBlocks = invariants.maxBlocks ?? 8
@@ -324,7 +334,7 @@ if (existsSync(lessonsDir)) {
         // exactly those ideas (INFS1201-2, INFS2201-4/-5).
         for (const text of proseStrings(lesson)) {
           if (bannedTextPattern.test(text)) errors.push(`${tag} prose contains a banned word: "${text}"`)
-          if (emojiPattern.test(text)) errors.push(`${tag} prose contains an emoji: "${text}"`)
+          if (EMOJI_PATTERN.test(text)) errors.push(`${tag} prose contains an emoji: "${text}"`)
           for (const pid of patternIds) {
             if (!pid.includes('-')) continue
             const idRe = new RegExp(`\\b${pid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
@@ -336,7 +346,7 @@ if (existsSync(lessonsDir)) {
         // separately from the banned-word and pattern-id sweeps, which must
         // stay prose-only or ordinary code (loops, variable names) would fail.
         for (const code of codeStrings(lesson)) {
-          if (emojiPattern.test(code)) errors.push(`${tag} code contains an emoji`)
+          if (EMOJI_PATTERN.test(code)) errors.push(`${tag} code contains an emoji`)
         }
       }
     }

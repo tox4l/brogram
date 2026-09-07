@@ -19,10 +19,16 @@
 // route.ts does not set either option today, so real (non-mocked) traffic is at risk of both
 // issues; that fix is out of this file's scope (not part of the reviewed/committed change here)
 // and is called out in the build log instead.
-// Skipped whenever DEEPSEEK_API_KEY is absent from the environment. Loads .env.local itself with
-// a tiny parser so a local `npx vitest run src/lib/agents/live.test.ts` can supply the key;
-// vitest.config.mts must never load .env.local so the normal `npm test` run keeps skipping this
-// file with no key present.
+// TI-1 (Wave 2 review, §4): this suite makes real, billed DeepSeek calls, and
+// `npx vitest run` is the command every task's acceptance and every wave gate
+// runs. Gating on DEEPSEEK_API_KEY alone silently spent tokens on any machine
+// with a key in .env.local. Both halves below are load-bearing together: the
+// suite requires an explicit opt-in, RUN_LIVE_AGENT_TESTS, and .env.local
+// itself is only loaded (with the tiny parser below) once that opt-in is
+// already set, so a plain `npx vitest run` / `npm test` cannot populate
+// DEEPSEEK_API_KEY from the file at all — never mind reading it. To run this
+// suite on purpose:
+//   RUN_LIVE_AGENT_TESTS=1 npx vitest run src/lib/agents/live.test.ts
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { deepseek } from '@ai-sdk/deepseek'
@@ -49,7 +55,7 @@ function loadDotEnvLocal() {
     if (key && process.env[key] === undefined) process.env[key] = value
   }
 }
-loadDotEnvLocal()
+if (process.env.RUN_LIVE_AGENT_TESTS) loadDotEnvLocal()
 
 const MODEL = deepseek('deepseek-v4-flash')
 // see the file header: thinking is on by default and its tokens eat the module's maxOutputTokens budget
@@ -65,7 +71,7 @@ const logUsage = (agent: string, usage: ProviderUsage) => {
   }))
 }
 
-describe.skipIf(!process.env.DEEPSEEK_API_KEY)('live DeepSeek JSON mode', () => {
+describe.skipIf(!process.env.RUN_LIVE_AGENT_TESTS || !process.env.DEEPSEEK_API_KEY)('live DeepSeek JSON mode', () => {
   it('profiler answers phase 1 with a schema-valid next question', async () => {
     const req: ProfilerRequest = {
       agent: 'profiler',
