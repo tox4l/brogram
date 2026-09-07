@@ -2,9 +2,12 @@ import { useRef } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { EditorView } from '@codemirror/view'
 import { undo } from '@codemirror/commands'
+import { EditorState } from '@codemirror/state'
+import { HighlightStyle, highlightingFor, syntaxHighlighting } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LINE_BANK } from '@/lib/voice/lines'
-import { Editor } from './Editor'
+import { CODE_HIGHLIGHT_SPECS, Editor } from './Editor'
 import { LockdownOverlay, type Focusable } from './LockdownOverlay'
 import { SchemaEditor } from './SchemaEditor'
 
@@ -112,5 +115,56 @@ describe('LockdownOverlay', () => {
     expect(screen.getByRole('status').className).not.toContain('bg-background/85')
     rerender(<LockdownOverlay reason={null} onResume={onResume} />)
     expect(container.textContent).toBe('')
+  })
+})
+
+// T4.7 / spec 2.6: "the nine `--code-*` tokens ship as one `HighlightStyle.define()` mapping
+// `@lezer/highlight` tags... one style, five palettes, no per-theme JavaScript." This exercises
+// the exported spec array through CodeMirror's own `highlightingFor` resolver -- the same call
+// the real editor's tree highlighter makes -- rather than only asserting on the plain JS array,
+// so a tag wired to the wrong token (or dropped entirely) fails here without needing a live
+// CodeMirror view or a real grammar.
+describe('code highlight style (spec 2.6 tag map)', () => {
+  const style = HighlightStyle.define(CODE_HIGHLIGHT_SPECS)
+  const state = EditorState.create({ extensions: [syntaxHighlighting(style)] })
+  const colorFor = (tag: import('@lezer/highlight').Tag) => {
+    const cls = highlightingFor(state, [tag])
+    const rules = style.module?.getRules() ?? ''
+    const rule = cls ? rules.split('\n').find((line) => line.startsWith(`.${cls} `) || line.startsWith(`.${cls}{`)) : undefined
+    return rule?.match(/color:\s*([^;]+);/)?.[1]
+  }
+
+  it.each([
+    [tags.keyword, '--code-keyword'],
+    [tags.controlKeyword, '--code-keyword'],
+    [tags.definitionKeyword, '--code-keyword'],
+    [tags.string, '--code-string'],
+    [tags.character, '--code-string'],
+    [tags.number, '--code-number'],
+    [tags.bool, '--code-number'],
+    [tags.atom, '--code-number'],
+    [tags.comment, '--code-comment'],
+    [tags.lineComment, '--code-comment'],
+    [tags.blockComment, '--code-comment'],
+    [tags.function(tags.variableName), '--code-function'],
+    [tags.function(tags.propertyName), '--code-function'],
+    [tags.typeName, '--code-type'],
+    [tags.className, '--code-type'],
+    [tags.variableName, '--code-variable'],
+    [tags.propertyName, '--code-variable'],
+    [tags.operator, '--code-operator'],
+    [tags.punctuation, '--code-punct'],
+    [tags.bracket, '--code-punct'],
+  ] as const)('%s resolves to var(%s)', (tag, token) => {
+    expect(colorFor(tag)).toBe(`var(${token})`)
+  })
+
+  it('maps invalid syntax to --destructive, not a --code-* token', () => {
+    expect(colorFor(tags.invalid)).toBe('var(--destructive)')
+  })
+
+  it('never flattens two distinct roles onto the same colour', () => {
+    const resolved = new Set(CODE_HIGHLIGHT_SPECS.map((spec) => spec.color))
+    expect(resolved.size).toBe(CODE_HIGHLIGHT_SPECS.length)
   })
 })

@@ -3,16 +3,20 @@ import type { Clo, ExercisePublic } from '@/lib/contracts'
 
 function inline(text: string) {
   return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, index) => part.startsWith('`')
-    ? <code key={index} className="rounded bg-muted px-1 font-mono text-[0.9em] text-foreground">{part.slice(1, -1)}</code>
+    ? <code key={index} className="rounded-lg bg-muted px-1 font-mono text-code text-foreground">{part.slice(1, -1)}</code>
     : part.startsWith('**') ? <strong key={index}>{part.slice(2, -2)}</strong> : <Fragment key={index}>{part}</Fragment>)
 }
 
 /** Render the bank's text as React nodes; never execute HTML supplied by an agent. */
 function PromptText({ text }: { text: string }) {
   return text.split(/(```[\s\S]*?```)/g).map((part, index) => {
-    if (part.startsWith('```')) return <pre key={index} className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed"><code>{part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</code></pre>
+    if (part.startsWith('```')) return <pre key={index} className="overflow-x-auto rounded-xl bg-lesson-code-surface p-3 font-mono text-code text-code-variable"><code>{part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</code></pre>
     return part.split(/\n\s*\n/).filter(Boolean).map((paragraph, paragraphIndex) => (
-      <p key={`${index}-${paragraphIndex}`} className="whitespace-pre-wrap break-words text-sm leading-7 text-muted-foreground">{inline(paragraph.replace(/^#{1,6}\s/gm, ''))}</p>
+      // T4.7 / spec section 9: "brief prose is Geist Sans at --text-body in every palette" --
+      // this is the primary task description, so it reads in `--foreground`, not the muted
+      // tier the brief used to be demoted to (the same over-demotion the wave's diagnosis
+      // calls out for lesson prose).
+      <p key={`${index}-${paragraphIndex}`} className="whitespace-pre-wrap break-words font-normal text-body text-foreground">{inline(paragraph.replace(/^#{1,6}\s/gm, ''))}</p>
     ))
   })
 }
@@ -20,17 +24,17 @@ function PromptText({ text }: { text: string }) {
 export function PromptPanel({ exercise, clo }: { exercise: ExercisePublic; clo?: Clo | null }) {
   const examples = exercise.kind === 'code' || exercise.kind === 'schema' ? exercise.tests.filter((test) => !test.hidden) : []
   return (
-    <section aria-label="Rep prompt" className="min-w-0 space-y-5">
-      <div className="space-y-3"><h2 className="text-sm font-medium">The task</h2><PromptText text={exercise.prompt} /></div>
-      {examples.length > 0 && <div className="space-y-3 border-t border-border pt-4">
-        <h3 className="text-xs font-medium text-muted-foreground">Examples</h3>
-        {examples.map((test, index) => <div key={test.id} className="space-y-2 rounded-md bg-muted/40 p-3 text-xs">
+    <section aria-label="Rep prompt" className="min-w-0 space-y-4">
+      <div className="space-y-3"><h2 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">The task</h2><PromptText text={exercise.prompt} /></div>
+      {examples.length > 0 && <div className="space-y-3 border-t border-rule pt-4">
+        <h3 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">Examples</h3>
+        {examples.map((test, index) => <div key={test.id} className="space-y-2 rounded-xl bg-muted/40 p-3 text-small">
           <p className="font-medium">{test.name ?? `Example ${index + 1}`}</p>
           <dl className="space-y-2"><div><dt className="text-muted-foreground">Input</dt><dd className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono">{test.input || '(none)'}</dd></div>
             <div><dt className="text-muted-foreground">Expected</dt><dd className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono">{test.expected}</dd></div></dl>
         </div>)}
       </div>}
-      {clo && <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">{clo.outcome}</p>}
+      {clo && <p className="border-t border-rule pt-4 text-small text-muted-foreground">{clo.outcome}</p>}
     </section>
   )
 }

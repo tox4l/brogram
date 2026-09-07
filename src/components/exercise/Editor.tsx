@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { basicSetup } from 'codemirror'
 import { Compartment, EditorState, Prec, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { loadLanguageExtension } from './grammars'
 import type { Focusable } from './LockdownOverlay'
 
@@ -26,18 +28,47 @@ export interface EditorProps {
   focusRef?: RefObject<Focusable | null>
 }
 
+// T4.7 / spec 2.6 & 3.4: the editor's own surface is `--lesson-code-surface` (the ground
+// `contrast.test.ts` actually checks the nine `--code-*` tokens against), not the app's
+// `--background` -- the token names predate this wave wiring the exercise editor to them, but
+// the surface is the same "wherever code renders" bundle Lesson blocks already sit on. Ruling
+// W4.12: `liga 0, calt 0` on `.cm-scroller` so `!=`/`=>` never render as a ligature glyph that
+// is not on the learner's own keyboard.
 const theme = EditorView.theme({
-  '&': { backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '14px' },
+  '&': { backgroundColor: 'var(--lesson-code-surface)', color: 'var(--code-variable)', fontSize: '14px' },
   '&.cm-focused': { outline: '2px solid var(--ring)', outlineOffset: '-2px' },
-  '.cm-scroller': { fontFamily: 'var(--font-mono)', minHeight: '360px', maxHeight: 'calc(100dvh - 18rem)', overflow: 'auto' },
-  '.cm-content': { padding: '16px 0', caretColor: 'var(--foreground)' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)', minHeight: '360px', maxHeight: 'calc(100dvh - 18rem)', overflow: 'auto', fontFeatureSettings: "'liga' 0, 'calt' 0" },
+  '.cm-content': { padding: '16px 0', caretColor: 'var(--code-variable)' },
   '.cm-line': { padding: '0 16px' },
-  '.cm-gutters': { backgroundColor: 'var(--background)', color: 'var(--muted-foreground)', borderRight: '1px solid var(--border)' },
+  '.cm-gutters': { backgroundColor: 'var(--lesson-code-surface)', color: 'var(--code-comment)', borderRight: '1px solid var(--border)' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--muted)' },
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--foreground)' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--code-variable)' },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'var(--accent)' },
   '.cm-tooltip': { backgroundColor: 'var(--popover)', color: 'var(--popover-foreground)', borderColor: 'var(--border)' },
 }, { dark: true })
+
+/**
+ * T4.7 / spec 2.6: the nine `--code-*` tokens ship as one `HighlightStyle.define()` mapping
+ * `@lezer/highlight` tags -- one style, five palettes (every value is a CSS custom property
+ * that resolves per `[data-theme]`), no per-theme JavaScript and no component branching on
+ * which theme is active. Exported (not just used inline) so a unit test can pin the tag -> token
+ * mapping without rendering a real CodeMirror view. `tags.invalid` maps to `--destructive`,
+ * the one entry that is not a `--code-*` token, per the spec's own table.
+ */
+export const CODE_HIGHLIGHT_SPECS = [
+  { tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword], color: 'var(--code-keyword)' },
+  { tag: [tags.string, tags.character], color: 'var(--code-string)' },
+  { tag: [tags.number, tags.bool, tags.atom], color: 'var(--code-number)' },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: 'var(--code-comment)' },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: 'var(--code-function)' },
+  { tag: [tags.typeName, tags.className], color: 'var(--code-type)' },
+  { tag: [tags.variableName, tags.propertyName], color: 'var(--code-variable)' },
+  { tag: tags.operator, color: 'var(--code-operator)' },
+  { tag: [tags.punctuation, tags.bracket], color: 'var(--code-punct)' },
+  { tag: tags.invalid, color: 'var(--destructive)' },
+]
+
+const codeHighlightStyle = HighlightStyle.define(CODE_HIGHLIGHT_SPECS)
 
 export function Editor({ value, onChange, language, logIntegrity, disabled = false, label = 'Code editor', focusRef }: EditorProps) {
   const host = useRef<HTMLDivElement>(null)
@@ -60,6 +91,7 @@ export function Editor({ value, onChange, language, logIntegrity, disabled = fal
       state: EditorState.create({ extensions: [
         basicSetup,
         theme,
+        syntaxHighlighting(codeHighlightStyle),
         compartments.language.of([]),
         compartments.editable.of([]),
         compartments.label.of([]),
@@ -139,5 +171,5 @@ export function Editor({ value, onChange, language, logIntegrity, disabled = fal
     return () => { focusRef.current = null }
   }, [focusRef])
 
-  return <div ref={host} className="min-w-0 overflow-hidden rounded-b-xl bg-background font-mono" />
+  return <div ref={host} className="min-w-0 overflow-hidden rounded-b-xl bg-lesson-code-surface font-mono" />
 }

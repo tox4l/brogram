@@ -46,9 +46,12 @@ const T4_5_SHELL = [
   'src/components/account',
 ]
 const T4_6_COURSE = ['src/app/(app)/dashboard', 'src/app/(app)/courses', 'src/app/(app)/course', 'src/components/course']
-const T4_7_EXERCISE = ['src/app/(app)/exercise', 'src/components/exercise']
+// T4_7_EXERCISE (src/app/(app)/exercise, src/components/exercise): every rule below cleared to
+// zero for T4.7's own paths, so no allowlist entry -- and therefore no prefix constant -- remains.
 const T4_8_DEROT = ['src/app/(app)/derot', 'src/components/derot', 'src/components/rewards', 'src/components/play']
-const T4_9_SCREENS = ['src/app/(app)/reports', 'src/components/report', 'src/app/(auth)', 'src/app/(app)/onboarding', 'src/app/page.tsx']
+// T4_9_SCREENS (src/app/(app)/reports, src/components/report, src/app/(auth), src/app/(app)/onboarding,
+// src/app/page.tsx): every rule below cleared to zero for T4.9's own paths, so no allowlist entry --
+// and therefore no prefix constant -- remains.
 // Fix round (review I3): these four paths used to be excluded from the
 // scanner's scope entirely, by name, with no allowlist entry and no owner
 // -- the review called that "hiding 36 real violations with no owner and no
@@ -77,41 +80,57 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
     ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
-    ...entriesFor('T4.7', T4_7_EXERCISE, ALL_SCREENS_NOTE('T4.7')),
+    // T4.7's entry deleted: exercise/exercise-components now hold zero raw
+    // type-scale classes.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
-    ...entriesFor('T4.9', T4_9_SCREENS, ALL_SCREENS_NOTE('T4.9')),
+    // T4.9's entry deleted: reports/report/(auth)/onboarding/page.tsx now
+    // hold zero raw type-scale classes.
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
   'palette-classes': [
-    ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
+    // T4.5's entry deleted: shell/wellness/buddy/ui/account now hold zero
+    // hard-coded Tailwind palette classes (the three remaining hits --
+    // DockControl.tsx's reminder dot, PrayerTimes.tsx's toggle track,
+    // account/page.tsx's range-input accent -- moved to --primary tokens).
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
-    ...entriesFor('T4.7', T4_7_EXERCISE, ALL_SCREENS_NOTE('T4.7')),
+    // T4.7's entry deleted: the six emerald hits (submit button, verdict
+    // icon, results row/review-praise text, the fix-plan hint accent, the
+    // spot-the-bug pressed line) moved to --primary/--success/--rule per
+    // the role each one actually plays, not its old hue.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
-    ...entriesFor('T4.9', T4_9_SCREENS, ALL_SCREENS_NOTE('T4.9')),
+    // T4.9's entry deleted: every emerald/neutral hit in reports, report
+    // sections, login and the landing page moved to a semantic token.
   ],
   'spacing-scale': [
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
     ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
-    ...entriesFor('T4.7', T4_7_EXERCISE, ALL_SCREENS_NOTE('T4.7')),
+    // T4.7's entry deleted: exercise/exercise-components now sit on the
+    // eight-step rhythm.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
-    ...entriesFor('T4.9', T4_9_SCREENS, ALL_SCREENS_NOTE('T4.9')),
+    // T4.9's entry deleted: every owned path now sits on the eight-step rhythm.
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
   radii: [
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
     ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
-    ...entriesFor('T4.7', T4_7_EXERCISE, ALL_SCREENS_NOTE('T4.7')),
+    // T4.7's entry deleted: exercise/exercise-components now sit on
+    // rounded-(lg|xl|2xl|full).
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
-    ...entriesFor('T4.9', T4_9_SCREENS, ALL_SCREENS_NOTE('T4.9')),
+    // T4.9's entry deleted: every owned path now sits on rounded-(lg|xl|2xl|full).
     ...entriesFor('T4.11', T4_11_CARRIED_DEBT, CARRIED_DEBT_NOTE),
   ],
   'icon-size': [
     ...entriesFor('T4.4', T4_4_LESSON, ALL_SCREENS_NOTE('T4.4')),
-    ...entriesFor('T4.5', T4_5_SHELL, ALL_SCREENS_NOTE('T4.5')),
+    // T4.5's entry deleted: every lucide icon under shell/wellness/buddy/ui/
+    // account now renders at size-4 (16px) or larger -- the wellness rail's
+    // five inline size-3.5 glyphs (Dock, Pomodoro, PrayerTimes,
+    // WaterStretch x2) and the button/badge parent-selector defaults for the
+    // xs/sm/icon-xs button sizes were the six sites raised.
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
-    ...entriesFor('T4.7', T4_7_EXERCISE, ALL_SCREENS_NOTE('T4.7')),
+    // T4.7's entry deleted: the back-link chevron and the pass/fail glyphs
+    // (both previously size-3/size-3.5) now render at size-4.
     ...entriesFor('T4.8', T4_8_DEROT, ALL_SCREENS_NOTE('T4.8')),
   ],
   'motion-css': [
@@ -123,15 +142,12 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     ...entriesFor('T4.5', ['src/components/ui'], ALL_SCREENS_NOTE('T4.5')),
     ...entriesFor('T4.8', ['src/components/rewards'], ALL_SCREENS_NOTE('T4.8')),
   ],
-  'filled-buttons-per-route': [
-    // src/app/(app)/exercise/[id]/page.tsx: 3 filled-variant Buttons today
-    // (Run/Submit-shaped controls with no explicit variant). Note this is a
-    // *static* source count -- it will not, on its own, catch T4.8's
-    // "six filled Starts" case on /derot, which is one JSX call site
-    // rendered once per card inside a `.map()`; see the header comment on
-    // `ruleFilledButtonsPerRoute` in scripts/check-design-tokens.mjs.
-    ...entriesFor('T4.7', T4_7_EXERCISE, ALL_SCREENS_NOTE('T4.7')),
-  ],
+  // 'filled-buttons-per-route': T4.7's only entry (exercise/[id]/page.tsx's
+  // two filled-variant Buttons -- Submit and Next rep, both mounted at once
+  // once a rep is passed) is deleted: Submit now steps down to
+  // `variant="outline"` once `loop.outcome === 'passed'`, a real state
+  // change (Next rep becomes the sole acting primary action from that point
+  // on), not a scanner workaround.
 }
 
 // Step 2's ratio rule (font-normal : font-medium >= 1:3) is a single

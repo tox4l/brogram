@@ -151,6 +151,22 @@ describe('exercise screen', () => {
     expect(verdict.querySelector('svg.lucide-x')).toBeTruthy()
     expect(container.querySelector('svg.lucide-check')).toBeNull()
   })
+  // T4.7 / spec section 9: "Verdicts pair glyph and word and colour" (v2 R34) -- never colour
+  // or weight alone. Both outcomes carry a real glyph node *and* a real text node, together.
+  it('pairs a glyph node and a text node on the pass verdict', () => {
+    mocks.loop.mockReturnValue({ ...model(), status: 'graded', outcome: 'passed' })
+    render(<ExercisePage />)
+    const verdict = screen.getByTestId('verdict-banner')
+    expect(verdict.querySelector('svg.lucide-check')).toBeTruthy()
+    expect(verdict.textContent).toContain('Passed')
+  })
+  it('pairs a glyph node and a text node on the fail verdict', () => {
+    mocks.loop.mockReturnValue({ ...model(), status: 'graded', outcome: 'failed' })
+    render(<ExercisePage />)
+    const verdict = screen.getByTestId('verdict-banner')
+    expect(verdict.querySelector('svg.lucide-x')).toBeTruthy()
+    expect(verdict.textContent).toContain('Needs work')
+  })
   it('does not remount the workspace when the exercise id changes in place (next())', () => {
     const { rerender } = render(<ExercisePage />)
     const before = screen.getByTestId('exercise-workspace')

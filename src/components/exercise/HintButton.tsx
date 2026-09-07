@@ -10,6 +10,6 @@ export function HintButton({ available, waitSeconds, count, busy, onRequest }: {
   const exhausted = count >= LOCKDOWN.maxHintsPerExercise
   return <div className="space-y-2">
     <Button variant="outline" disabled={!available || busy || exhausted} onClick={onRequest} className="w-full transition-none active:translate-y-0">{exhausted ? 'All hints used' : 'Ask for a hint'}</Button>
-    <p className="text-xs leading-relaxed text-muted-foreground">{exhausted ? `Use your fix plan to guide the next ${attemptWord('free')}.` : `${count} of ${LOCKDOWN.maxHintsPerExercise} hints used.${!available && waitSeconds > 0 ? ` Available in ${waitSeconds}s${count === 0 ? ', or after an edit' : ''}.` : ''}`}</p>
+    <p className="text-small text-muted-foreground">{exhausted ? `Use your fix plan to guide the next ${attemptWord('free')}.` : `${count} of ${LOCKDOWN.maxHintsPerExercise} hints used.${!available && waitSeconds > 0 ? ` Available in ${waitSeconds}s${count === 0 ? ', or after an edit' : ''}.` : ''}`}</p>
   </div>
 }

@@ -19,10 +19,10 @@ export function PredictOutput({ snippet, value, onChange, disabled = false, focu
     focusRef.current = { focus: () => textareaRef.current?.focus() }
     return () => { focusRef.current = null }
   }, [focusRef])
-  return <div className="space-y-5 p-4">
-    <pre className="overflow-x-auto rounded-md bg-muted/50 p-4 font-mono text-sm leading-7"><code>{snippet}</code></pre>
-    <label className="block space-y-2"><span className="text-sm font-medium">Predicted output</span>
-      <textarea ref={textareaRef} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" rows={7} className="w-full resize-y rounded-lg border border-input bg-background p-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" />
-    </label><p className="text-xs text-muted-foreground">Read the snippet and type what it prints.</p>
+  return <div className="space-y-4 p-4">
+    <pre className="overflow-x-auto rounded-xl bg-lesson-code-surface p-4 font-mono text-code text-code-variable"><code>{snippet}</code></pre>
+    <label className="block space-y-2"><span className="text-micro uppercase tracking-[0.06em] text-muted-foreground">Predicted output</span>
+      <textarea ref={textareaRef} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" rows={7} className="w-full resize-y rounded-lg border border-input bg-background p-3 font-mono text-body outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" />
+    </label><p className="text-small text-muted-foreground">Read the snippet and type what it prints.</p>
   </div>
 }

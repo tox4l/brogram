@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Check, Play, Send, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Send, TriangleAlert, X } from 'lucide-react'
 import { line, lineWith } from '@/lib/voice/lines'
 import { angleWord, difficultyWord, repWord } from '@/lib/voice/glossary'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -37,9 +37,9 @@ import { XpCounter } from '@/components/rewards/XpCounter'
  */
 function EditorSkeleton() {
   return <div aria-hidden="true" className="animate-pulse motion-reduce:animate-none">
-    <div className="flex items-center gap-2 border-b border-border px-4 py-2.5"><div className="h-3 w-16 rounded bg-muted" /></div>
-    <div className="min-h-[360px] space-y-2.5 bg-background p-4">
-      {[0, 1, 2, 3, 4, 5, 6].map((row) => <div key={row} className="flex items-center gap-3"><div className="h-3 w-4 shrink-0 rounded bg-muted/70" /><div className="h-3 rounded bg-muted/70" style={{ width: `${45 + (row * 7) % 40}%` }} /></div>)}
+    <div className="flex items-center gap-2 border-b border-rule px-4 py-3"><div className="h-3 w-16 rounded-full bg-muted" /></div>
+    <div className="min-h-[360px] space-y-2 bg-lesson-code-surface p-4">
+      {[0, 1, 2, 3, 4, 5, 6].map((row) => <div key={row} className="flex items-center gap-3"><div className="h-3 w-4 shrink-0 rounded-full bg-muted/70" /><div className="h-3 rounded-full bg-muted/70" style={{ width: `${45 + (row * 7) % 40}%` }} /></div>)}
     </div>
   </div>
 }
@@ -133,8 +133,13 @@ function ExerciseWorkspace({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise?.id])
   if (!exercise) return <section aria-label="Rep" className="mx-auto max-w-xl space-y-4 py-12">
-    <h1 className="text-2xl font-medium tracking-tight">{loop.status === 'loading' ? 'Opening your rep' : 'This rep could not open'}</h1>
-    <p role={loop.error ? 'alert' : 'status'} className="text-sm leading-relaxed text-muted-foreground">{loop.error ?? 'Loading your prompt and starting code.'}</p>
+    <h1 className="font-display text-h1 text-foreground">{loop.status === 'loading' ? 'Opening your rep' : 'This rep could not open'}</h1>
+    {loop.error
+      ? <div role="alert" className="flex items-start gap-3 rounded-lg border border-rule p-3 text-small">
+          <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+          <p className="min-w-0 flex-1 text-muted-foreground">{loop.error}</p>
+        </div>
+      : <p role="status" className="font-normal text-body text-muted-foreground">Loading your prompt and starting code.</p>}
     <div className="flex gap-3">{loop.error && <Button onClick={() => void loop.retry()} variant="outline">Try again</Button>}<Link href="/dashboard" className={buttonVariants({ variant: 'ghost' })}>Back to courses</Link></div>
   </section>
 
@@ -154,7 +159,7 @@ function ExerciseWorkspace({ id }: { id: string }) {
     } catch { traceUnanswerable = true }
   }
 
-  return <div {...lockdown.containerProps} ref={workspaceRef} tabIndex={-1} className="relative min-w-0 space-y-5 outline-none" data-testid="exercise-workspace" data-exercise-id={exercise.id} data-pattern={exercise.pattern}>
+  return <div {...lockdown.containerProps} ref={workspaceRef} tabIndex={-1} className="relative min-w-0 space-y-4 outline-none" data-testid="exercise-workspace" data-exercise-id={exercise.id} data-pattern={exercise.pattern}>
     {/* A11Y-05: the visible heading (focused above) already carries the new title, but a
         screen-reader user is not guaranteed to hear a plain focused heading read out reliably in
         every browser/AT combination -- this sr-only line (mirroring `RunSummary.tsx`'s own
@@ -170,54 +175,62 @@ function ExerciseWorkspace({ id }: { id: string }) {
         needs (`rep.opened` interpolating `{title}`). */}
     <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
     <div className="space-y-3" inert={Boolean(lockdown.overlay)}>
-      <Link href="/dashboard" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-3" aria-hidden="true" />Courses</Link>
-      <div className="flex flex-wrap items-start justify-between gap-3"><h1 ref={headingRef} tabIndex={-1} className="min-w-0 max-w-4xl text-2xl font-medium tracking-tight outline-none">{exercise.title}</h1><p className="pt-1 font-mono text-xs text-muted-foreground">{exercise.language} · {difficultyWord(exercise.difficulty)}</p></div>
+      <Link href="/dashboard" className="inline-flex items-center gap-1 rounded-lg text-micro text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-4" aria-hidden="true" />Courses</Link>
+      <div className="flex flex-wrap items-start justify-between gap-3"><h1 ref={headingRef} tabIndex={-1} className="min-w-0 max-w-4xl font-display text-h1 text-foreground outline-none">{exercise.title}</h1><p className="pt-1 font-mono text-micro text-muted-foreground">{exercise.language} · {difficultyWord(exercise.difficulty)}</p></div>
     </div>
 
-    {loop.error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm"><p className="min-w-0 flex-1">{loop.error}</p><Button variant="outline" disabled={loop.busy} onClick={() => void loop.retry()} className="transition-none">Try again</Button></div>}
-    {lockdown.loggingError && <p role="alert" className="text-sm text-muted-foreground">{lockdown.loggingError}</p>}
+    {loop.error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-rule p-3 text-small"><TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive" /><p className="min-w-0 flex-1 text-muted-foreground">{loop.error}</p><Button variant="outline" disabled={loop.busy} onClick={() => void loop.retry()} className="transition-none">Try again</Button></div>}
+    {lockdown.loggingError && <p role="alert" className="text-small text-muted-foreground">{lockdown.loggingError}</p>}
 
-    <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 gap-6 xl:grid-cols-[minmax(12rem,0.8fr)_minmax(22rem,1.7fr)_minmax(14rem,0.9fr)]">
+    <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 items-start gap-6 xl:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
       {/* Step 4: named so an in-place `next()` crossfades only this panel; the editor and its
           warm runtime sit outside it and never re-enter a transition. */}
       <div className="min-w-0 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1" style={{ viewTransitionName: 'exercise-prompt' }}><PromptPanel exercise={exercise} clo={loop.clo} /></div>
-      <section aria-label="Work" className="min-w-0 self-start overflow-hidden rounded-xl border border-border bg-background">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><h2 className="text-sm font-medium">{exercise.kind === 'code' || exercise.kind === 'schema' ? 'Code' : 'Answer'}</h2></div>
+      <section aria-label="Work" className="min-w-0 self-start overflow-hidden rounded-xl border border-rule bg-background">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-3"><h2 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">{exercise.kind === 'code' || exercise.kind === 'schema' ? 'Code' : 'Answer'}</h2></div>
         {exercise.kind === 'predict-output' || (exercise.kind === 'trace' && traceUnanswerable) ? <PredictOutput snippet={exercise.starterCode} {...answerProps} focusRef={editorFocusRef} />
           : exercise.kind === 'spot-the-bug' ? <SpotTheBug snippet={exercise.starterCode} {...answerProps} focusRef={editorFocusRef} />
           : exercise.kind === 'trace' ? <Trace snippet={exercise.starterCode} variables={variables} {...answerProps} focusRef={editorFocusRef} />
           : exercise.kind === 'schema' ? <DynamicSchemaEditor {...answerProps} logIntegrity={lockdown.logIntegrity} focusRef={editorFocusRef} />
           : <DynamicEditor {...answerProps} language={exercise.language} logIntegrity={lockdown.logIntegrity} focusRef={editorFocusRef} />}
-        <div className="space-y-3 border-t border-border p-3">
+        <div className="space-y-3 border-t border-rule p-3">
           {/* Java's warmup reports whole steps ("Fetching the compiler (18 MB, once)"), not package names. */}
-          {loop.progress?.phase === 'loading' && <p role="status" className="break-words text-xs leading-relaxed text-muted-foreground">{exercise.language === 'java' ? loop.progress.packageName : `Loading ${loop.progress.packageName}`}{loop.progress.message ? ` · ${loop.progress.message}` : ''}</p>}
+          {loop.progress?.phase === 'loading' && <p role="status" className="break-words text-small text-muted-foreground">{exercise.language === 'java' ? loop.progress.packageName : `Loading ${loop.progress.packageName}`}{loop.progress.message ? ` · ${loop.progress.message}` : ''}</p>}
           {loop.judgeAbsent
-            ? <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm"><p className="text-muted-foreground">Java reps aren&apos;t available yet. Pick another course for now.</p><Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>Back to dashboard</Link></div>
+            ? <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule bg-muted/40 p-3 text-small"><p className="text-muted-foreground">Java reps aren&apos;t available yet. Pick another course for now.</p><Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>Back to dashboard</Link></div>
             : <div className="flex flex-wrap items-center justify-end gap-2">
                 {(exercise.kind === 'code' || exercise.kind === 'schema') && <Button variant="outline" onClick={() => void loop.run()} disabled={disabled} className="transition-none active:translate-y-0"><Play aria-hidden="true" />{loop.status === 'running' ? 'Running…' : 'Run'}</Button>}
-                <Button onClick={() => void loop.submit()} disabled={disabled} className="bg-emerald-300 text-primary-foreground transition-none hover:bg-emerald-200 active:translate-y-0"><Send aria-hidden="true" />{loop.outcome === 'passed' ? 'Passed' : loop.status === 'submitting' ? 'Checking…' : 'Submit'}</Button>
+                {/* T4.7: the hard-coded emerald override is gone -- the default Button variant
+                    already paints `--primary`, which is the token this colour maps to. Once the
+                    rep is passed this control is no longer the acting primary action (`Next rep`
+                    below is), so it steps down to `outline` rather than leaving two filled
+                    buttons on screen at once -- a real state change, not a scanner workaround:
+                    exactly one filled Button is ever visible at a time. */}
+                <Button onClick={() => void loop.submit()} disabled={disabled} variant={loop.outcome === 'passed' ? 'outline' : 'default'} className="transition-none active:translate-y-0"><Send aria-hidden="true" />{loop.outcome === 'passed' ? 'Passed' : loop.status === 'submitting' ? 'Checking…' : 'Submit'}</Button>
               </div>}
         </div>
       </section>
-      <div ref={resultsRef} className="min-w-0 space-y-5 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1">
+      <div ref={resultsRef} className="min-w-0 space-y-4 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1">
         {/* Steps 1, 2 & 8: the verdict, the XP figure and the chain pip render the instant
             grading resolves -- `loop.outcome` flips before any network call, not after the
             eight-stage background chain. The hairline under the number marks it provisional
             (neutral quality 70) until the Reviewer's real quality lands and the counter tweens
             to it; that tween is the only "reconciliation" a learner ever sees (spec 5.3). */}
-        {loop.outcome && <div role="status" aria-live="polite" data-testid="verdict-banner" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
+        {loop.outcome && <div role="status" aria-live="polite" data-testid="verdict-banner" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule bg-muted/30 p-3">
           <div className="flex items-center gap-2">
-            <span aria-hidden="true" className={`flex size-6 shrink-0 items-center justify-center rounded-full ${loop.outcome === 'passed' ? 'bg-emerald-300/20 text-emerald-300' : 'bg-muted text-muted-foreground'}`}>
+            {/* T4.7: emerald-on-verdict maps to `--success` (glyph + word + colour, never
+                colour alone -- v2 R34); the fail state stays on the neutral `--muted` pairing. */}
+            <span aria-hidden="true" className={`flex size-6 shrink-0 items-center justify-center rounded-full ${loop.outcome === 'passed' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}`}>
               {/* Fix round I2: a failed verdict was drawing the pass checkmark too -- only the
                   ring colour changed. A distinct glyph per outcome, not a shared one. */}
-              {loop.outcome === 'passed' ? <Check className="size-3.5" strokeWidth={3} /> : <X className="size-3.5" strokeWidth={3} />}
+              {loop.outcome === 'passed' ? <Check className="size-4" strokeWidth={3} /> : <X className="size-4" strokeWidth={3} />}
             </span>
-            <span className="text-sm font-medium">{loop.outcome === 'passed' ? 'Passed' : 'Needs work'}</span>
+            <span className={`text-small font-medium ${loop.outcome === 'passed' ? 'text-success' : 'text-muted-foreground'}`}>{loop.outcome === 'passed' ? 'Passed' : 'Needs work'}</span>
           </div>
           {loop.outcome === 'passed' && <div className="flex items-center gap-4">
             <ChainPips count={loop.chain} motionPref={motionPref} />
             <span className={loop.pointsProvisional ? 'border-b border-dashed border-muted-foreground/50' : undefined}>
-              <XpCounter value={loop.pointsEarned} label="points earned" className="font-mono text-sm" motionPref={motionPref} />
+              <XpCounter value={loop.pointsEarned} label="points earned" className="font-mono text-small" motionPref={motionPref} />
             </span>
           </div>}
         </div>}
@@ -225,7 +238,7 @@ function ExerciseWorkspace({ id }: { id: string }) {
         <FixPlanPanel diagnosis={loop.diagnosis} partialDiagnosis={loop.partialDiagnosis} hints={loop.hints} partialHint={loop.partialHint} />
         {/* Step 5: the hint card's skeleton appears on click, the same frame the "hints left"
             pip already decrements in, rather than nothing until the first streamed token. */}
-        {loop.hintPending && <div aria-hidden="true" className="animate-pulse space-y-2 border-t border-border pt-4 motion-reduce:animate-none"><div className="h-3 w-24 rounded bg-muted" /><div className="h-3 w-full rounded bg-muted" /><div className="h-3 w-2/3 rounded bg-muted" /></div>}
+        {loop.hintPending && <div aria-hidden="true" className="animate-pulse space-y-2 border-t border-rule pt-4 motion-reduce:animate-none"><div className="h-3 w-24 rounded-full bg-muted" /><div className="h-3 w-full rounded-full bg-muted" /><div className="h-3 w-2/3 rounded-full bg-muted" /></div>}
         {loop.diagnosis && loop.outcome !== 'passed' && <HintButton available={loop.hintAvailable} waitSeconds={loop.hintWaitSeconds} count={loop.hintCount} busy={loop.busy} onRequest={() => void loop.requestHint()} />}
         {/* This section shows the instant `outcome` flips to 'passed' -- it no longer waits for
             the full eight-stage background chain (spec 5.4's "Pass -> next exercise" row).
@@ -234,8 +247,8 @@ function ExerciseWorkspace({ id }: { id: string }) {
             Planner outage, say) used to leave the button looking enabled while `next()`'s own
             guard silently no-op'd every click; `canAdvance` mirrors that guard honestly. The
             copy tells the truth about a failed save too, instead of claiming it landed. */}
-        {loop.outcome === 'passed' && <div className="space-y-3 border-t border-border pt-4">
-          <p className="text-sm leading-relaxed text-muted-foreground">
+        {loop.outcome === 'passed' && <div className="space-y-3 border-t border-rule pt-4">
+          <p className="text-small text-muted-foreground">
             {loop.error
               ? line('error.save', loop.lastRewardAttempt?.id ?? 'save-error')
               : loop.closed
@@ -269,7 +282,10 @@ function ExerciseWorkspace({ id }: { id: string }) {
 export default function ExercisePage() {
   const { id } = useParams<{ id: string }>()
   const { profile } = useSession()
-  if (!profile || profile.account_status === 'restricted' || profile.account_status === 'banned') return <section className="space-y-4 py-10"><h1 className="text-2xl font-medium">Reps are paused</h1><p className="text-sm text-muted-foreground">This account cannot open a rep right now.</p><Link className={buttonVariants({ variant: 'outline' })} href="/dashboard">Back to dashboard</Link></section>
+  // T4.7 / spec section 8: the restricted-state reference -- the quietest surface in the app.
+  // A flat `--muted` fill, no motion, no sound, no shader, no personality; information, not
+  // punishment. No route, hook or copy change -- token and scale only.
+  if (!profile || profile.account_status === 'restricted' || profile.account_status === 'banned') return <section className="mx-auto max-w-md space-y-4 rounded-2xl bg-muted p-8"><h1 className="font-display text-h1 text-foreground">Reps are paused</h1><p className="font-normal text-body text-muted-foreground">This account cannot open a rep right now.</p><Link className={buttonVariants({ variant: 'outline' })} href="/dashboard">Back to dashboard</Link></section>
   // Step 4: no `key={id}` -- the same workspace instance (and its mounted Editor) survives an
   // in-place `next()` between exercises; only a genuinely different route unmounts it.
   return <ExerciseWorkspace id={id} />

@@ -8,7 +8,7 @@
  */
 export default function ExerciseLoading() {
   return (
-    <div role="status" aria-label="Opening your rep" className="space-y-5">
+    <div role="status" aria-label="Opening your rep" className="space-y-4">
       <div className="space-y-3">
         <div className="h-3 w-16 animate-pulse rounded-full bg-muted" />
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -16,7 +16,7 @@ export default function ExerciseLoading() {
           <div className="h-3 w-24 animate-pulse rounded-full bg-muted" />
         </div>
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(12rem,0.8fr)_minmax(22rem,1.7fr)_minmax(14rem,0.9fr)]">
+      <div className="grid gap-6 xl:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
         <div className="space-y-4">
           <div className="h-4 w-24 animate-pulse rounded-full bg-muted" />
           <div className="space-y-2">
@@ -26,21 +26,21 @@ export default function ExerciseLoading() {
           </div>
           <div className="h-24 animate-pulse rounded-lg bg-muted/40" />
         </div>
-        <div className="overflow-hidden rounded-xl border border-border bg-background">
-          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="overflow-hidden rounded-xl border border-rule bg-background">
+          <div className="flex items-center gap-2 border-b border-rule px-4 py-3">
             <div className="h-3 w-20 animate-pulse rounded-full bg-muted" />
           </div>
-          <div className="min-h-[360px] space-y-3 p-4">
+          <div className="min-h-[360px] space-y-3 bg-lesson-code-surface p-4">
             {Array.from({ length: 8 }, (_, row) => (
               <div key={row} className="flex items-center gap-3">
-                <div className="h-3 w-4 shrink-0 animate-pulse rounded bg-muted/70" />
-                <div className="h-3 animate-pulse rounded bg-muted/70" style={{ width: `${40 + (row * 9) % 45}%` }} />
+                <div className="h-3 w-4 shrink-0 animate-pulse rounded-full bg-muted/70" />
+                <div className="h-3 animate-pulse rounded-full bg-muted/70" style={{ width: `${40 + (row * 9) % 45}%` }} />
               </div>
             ))}
           </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border p-3">
-            <div className="h-9 w-20 animate-pulse rounded-md bg-muted" />
-            <div className="h-9 w-24 animate-pulse rounded-md bg-muted" />
+          <div className="flex items-center justify-end gap-2 border-t border-rule p-3">
+            <div className="h-9 w-20 animate-pulse rounded-lg bg-muted" />
+            <div className="h-9 w-24 animate-pulse rounded-lg bg-muted" />
           </div>
         </div>
         <div className="space-y-4">

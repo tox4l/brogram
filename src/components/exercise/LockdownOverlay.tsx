@@ -141,7 +141,7 @@ export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessag
           className={`pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center p-6 text-foreground ${reason === 'idle' ? 'bg-background/85 backdrop-blur-2xl' : 'bg-background'}`}
         >
           <div className="max-w-sm space-y-4 text-center">
-            <p className="text-base leading-relaxed">{overlayMessage}</p>
+            <p className="font-normal text-body">{overlayMessage}</p>
             {reason === 'idle' && <Button type="button" onClick={onResume}>Continue rep</Button>}
           </div>
         </div>
@@ -155,24 +155,24 @@ export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessag
         // stay up indefinitely (see the effect above), it must clear the app
         // header rather than sit over it.
         <div className="pointer-events-none fixed inset-x-0 top-16 z-[90] flex justify-center px-4">
-          <div className="pointer-events-auto max-w-md rounded-lg border border-border bg-background px-4 py-3 shadow-sm">
-            <p role="status" className="text-sm text-foreground">{toastMessage}</p>
+          <div className="pointer-events-auto max-w-md rounded-lg border border-rule bg-popover px-4 py-3 text-popover-foreground shadow-md">
+            <p role="status" className="text-small">{toastMessage}</p>
             {pasteWhy && (
-              <div className="mt-1.5 flex flex-col items-start gap-1">
+              <div className="mt-2 flex flex-col items-start gap-1">
                 <button
                   type="button"
                   onClick={() => setWhyOpen((open) => !open)}
-                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  className="text-micro text-muted-foreground underline underline-offset-2 hover:text-foreground"
                 >
                   {whyOpen ? 'Hide why' : 'Why?'}
                 </button>
-                {whyOpen && <p className="text-xs leading-relaxed text-muted-foreground">{pasteWhy}</p>}
+                {whyOpen && <p className="text-small text-muted-foreground">{pasteWhy}</p>}
               </div>
             )}
           </div>
         </div>
       )}
-      {printscreenNote && <p role="status" className="text-sm leading-relaxed text-muted-foreground">{printscreenNote}</p>}
+      {printscreenNote && <p role="status" className="text-small text-muted-foreground">{printscreenNote}</p>}
     </>
   )
 }
