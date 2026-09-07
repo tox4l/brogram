@@ -120,6 +120,7 @@ async function getPyodide() {
 
 async function capturePythonStdout(code) {
   const pyodide = await getPyodide()
+  await pyodide.loadPackagesFromImports(code)
   const chunks = []
   pyodide.setStdout({ batched: (s) => chunks.push(s) })
   pyodide.setStderr({ batched: () => {} })
@@ -141,6 +142,7 @@ function detectPyFunctionName(starterCode, referenceSolution) {
 
 async function runPythonMicroCodeTests(check) {
   const pyodide = await getPyodide()
+  await pyodide.loadPackagesFromImports(check.referenceSolution)
   const funcName = detectPyFunctionName(check.starterCode, check.referenceSolution)
   const results = []
   for (const test of check.tests) {

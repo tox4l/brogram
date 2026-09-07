@@ -106,6 +106,28 @@ const invalidLesson = {
   ],
 }
 
+// `math` is stdlib, not a package pyodide needs to fetch, but
+// loadPackagesFromImports still parses this import and must not throw or
+// otherwise disturb execution -- it exercises the same call path a real
+// numpy/pandas import (DSAI2201's lessons) takes, without paying for a
+// slow real package load in the test suite.
+const packageImportLesson = {
+  id: 'TEST-VALID-PKG-1',
+  cloId: 'TEST-VALID-PKG-1',
+  course: 'TEST',
+  language: 'python',
+  version: 1,
+  title: 'package import fixture',
+  hook: 'hook',
+  estimatedMinutes: 5,
+  draft: false,
+  tags: [],
+  exitLine: 'exit',
+  blocks: [
+    { type: 'snippet', id: 'snippet-pkg', language: 'python', code: 'import math\nprint(math.floor(3.9))', runnable: true, expectedStdout: '3\n' },
+  ],
+}
+
 const invalidJavaLesson = {
   id: 'TEST-INVALID-JAVA-1',
   cloId: 'TEST-INVALID-JAVA-1',
@@ -136,7 +158,7 @@ describe('verify-lesson.mjs', () => {
 
   beforeAll(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-lesson-test-'))
-    const validFile = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson] })
+    const validFile = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson, packageImportLesson] })
     const invalidFile = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
 
     passingRun = run(['seed/lessons/INFS1101.json', validFile, '--json'], HEAVY_SPAWN_TIMEOUT_MS)
@@ -157,21 +179,37 @@ describe('verify-lesson.mjs', () => {
       expect(passingRun.status).toBe(0)
     })
 
+    // Pinned by lesson id, not array position or file-wide lesson count:
+    // the golden file grows as more CLOs are authored, so a positional or
+    // count-based assertion goes stale the moment content is added (as
+    // happened here once INFS1101 grew from 1 lesson to 4).
     it('verifies the real golden lesson unchanged (regression guard)', () => {
       const report = JSON.parse(passingRun.stdout)
       const golden = report.files.find((f) => f.file === 'seed/lessons/INFS1101.json')
-      expect(golden.lessons[0]).toEqual({ id: 'INFS1101-3', unverified: false, failures: [] })
+      const lesson = golden.lessons.find((l) => l.id === 'INFS1101-3')
+      expect(lesson).toEqual({ id: 'INFS1101-3', unverified: false, failures: [] })
     })
 
     it('verifies a synthetic lesson exercising every check kind', () => {
       const report = JSON.parse(passingRun.stdout)
       const synthetic = report.files.find((f) => f.file.endsWith('valid.json'))
-      expect(synthetic.lessons[0]).toEqual({ id: 'TEST-VALID-1', unverified: false, failures: [] })
+      const lesson = synthetic.lessons.find((l) => l.id === 'TEST-VALID-1')
+      expect(lesson).toEqual({ id: 'TEST-VALID-1', unverified: false, failures: [] })
     })
 
-    it('totals passed:2, failed:0, unverified:0 across both files', () => {
+    it('verifies a lesson snippet that imports a package via loadPackagesFromImports', () => {
       const report = JSON.parse(passingRun.stdout)
-      expect(report.passed).toBe(2)
+      const synthetic = report.files.find((f) => f.file.endsWith('valid.json'))
+      const lesson = synthetic.lessons.find((l) => l.id === 'TEST-VALID-PKG-1')
+      expect(lesson).toEqual({ id: 'TEST-VALID-PKG-1', unverified: false, failures: [] })
+    })
+
+    // Computed from the files' own lesson counts, not a hardcoded total, so
+    // this does not go stale the next time content is added to either file.
+    it('totals passed equal to the combined lesson count across both files, with none failed or unverified', () => {
+      const report = JSON.parse(passingRun.stdout)
+      const totalLessons = report.files.reduce((sum, f) => sum + f.lessons.length, 0)
+      expect(report.passed).toBe(totalLessons)
       expect(report.failed).toBe(0)
       expect(report.unverified).toBe(0)
     })
