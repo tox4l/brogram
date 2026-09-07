@@ -26,6 +26,42 @@ shapes every part of the app agrees on — learner state, exercises, agent messa
 requests — are frozen in `src/lib/contracts.ts` and
 `src/lib/agents/requests.ts`, and no other file redefines them.
 
+## How the learning model works
+
+The distinctive part of BroGram is not DeepSeek — it's what every agent call
+reads and writes. A learner's whole state lives in one row, typed as
+`LearnerState` in `src/lib/contracts.ts`: their profile and style, the
+Planner's chosen path through a course's learning outcomes, per-outcome
+mastery, a rolling window of recent mistakes, streaks, points, and integrity
+score, all under one `version` that increments on every write so a stale
+agent reply can never overwrite a newer one. Every one of the seven agents —
+Profiler, Planner, Author, Diagnoser, Coach, Reviewer, Buddy — reads only the
+narrow slice of that state its job needs and returns a reply shaped by a
+frozen Zod schema; nothing about the app's behaviour lives inside a prompt
+that isn't also checked in code. An agent call happens for exactly seven
+reasons (`AgentTrigger` in `src/lib/contracts.ts`) — an onboarding answer, a
+plan refresh, a bank miss, a failed attempt, a hint request, a passed
+attempt, a message to Buddy — and never on a keystroke, a timer, a lesson
+block, or any other UI event; `callAgent`/`streamAgent` in
+`src/lib/agents/client.ts` is the one place in the codebase that can reach
+the model, and a test (`src/lib/agents/no-agent-surfaces.test.tsx`) asserts
+zero calls across every screen and interaction that isn't one of those
+seven.
+
+Progress is measured by pattern, not by exercise. `seed/patterns.json` names
+around 40 reusable logic patterns — `accumulate`, `filter`, `nested-loop`,
+`sql-join`, `refactor-to-class`, and so on — grouped into families
+(control-flow, data, oop, sql, reading...), and every exercise, lesson check,
+and generated variant tags itself with exactly one. A learning outcome only
+closes once a learner has passed exercises using three *different* patterns
+in a row, which is what stops "got lucky on one style of problem" from
+reading as mastery, and it's the same taxonomy the Author agent uses to keep
+a generated variant from reusing the pattern of the exercise it's varying.
+Because this is a browser-graded product, none of this depends on a server
+judge or a particular model: the taxonomy, the mastery rule, and the state
+schema are what make BroGram teach the way it does, and every one of them is
+plain, forkable code and data under `src/lib/` and `seed/`.
+
 ## Running locally
 
 Requires Node.js 22 or later and npm.
