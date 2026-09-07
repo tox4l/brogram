@@ -14,6 +14,10 @@ export const DUR = {
   base: 200,
   /** A drawer, a panel expand, anything with real distance to cover. */
   slow: 320,
+  /** W4 §5.1: the code guide's band, the dock indicator, the tab underline
+   *  -- the 200-300ms on-screen-movement band had nothing between `base`
+   *  (200) and `slow` (320) until this addition. */
+  guide: 260,
   /** Reward-tier moments only: pass confetti, level-up, streak ignite. */
   celebration: 700,
 } as const

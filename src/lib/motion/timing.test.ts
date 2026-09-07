@@ -10,6 +10,7 @@ const SPEC_BANDS: Record<keyof typeof DUR, [number, number]> = {
   instant: [100, 160], // "button press 100-160ms"
   fast: [125, 200], // "tooltips 125-200ms"
   base: [150, 300], // covers both "dropdowns 150-250ms" and "on-screen movement 200-300ms"
+  guide: [200, 300], // W4 §5.1: code guide / dock indicator / tab underline, the movement band
   slow: [200, 350], // "modals and drawers 200-350ms"
   celebration: [600, 900], // "celebrations 600-900ms and only for positive moments"
 }
@@ -28,8 +29,12 @@ describe('DUR', () => {
     expect(DUR.slow).toBe(320)
   })
 
+  it('pins W4 §5.1: DUR.guide sits between base and slow at exactly 260ms', () => {
+    expect(DUR.guide).toBe(260)
+  })
+
   it('is strictly increasing from instant to celebration', () => {
-    const values = [DUR.instant, DUR.fast, DUR.base, DUR.slow, DUR.celebration]
+    const values = [DUR.instant, DUR.fast, DUR.base, DUR.guide, DUR.slow, DUR.celebration]
     for (let i = 1; i < values.length; i++) expect(values[i]).toBeGreaterThan(values[i - 1])
   })
 })
