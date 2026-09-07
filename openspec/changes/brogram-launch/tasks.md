@@ -54,7 +54,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [ ] T2.8 Honest lockdown and the integrity receipt
 - [ ] T2.9a De-rot Arcade: the hub, the run model, score normalisation
 - [ ] T2.9b De-rot Playground: six non-coding games
-- [ ] T2.10 Agent identity rewrites (copy only, no schema touched)
+- [x] T2.10 Agent identity rewrites (copy only, no schema touched) (7cbe723, 37c4f16, ef54318)
 - [ ] T2.11 Buddy drawer polish
 - [ ] T3.1 The bundle budget, generated from a measurement
 - [ ] T3.2 Timings, vitals, and the local diagnostics buffer
