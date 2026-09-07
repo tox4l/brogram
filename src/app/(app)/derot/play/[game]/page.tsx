@@ -38,7 +38,8 @@ import { buildRewardContext } from '@/lib/rewards/context'
 import { recordAchievements, recordGoalDay } from '@/lib/rewards/record'
 import { isPersonalBest as computeIsPersonalBest } from '@/lib/rewards/bestRun'
 import { play, withInterfaceSounds } from '@/lib/sound/manager'
-import type { DrillResult, UserAchievement, WellnessPrefs } from '@/lib/contracts'
+import { hasPendingPrefsWrite } from '@/app/(app)/account/prefsMutation'
+import type { Attempt, DrillResult, LessonProgress, UserAchievement, WellnessPrefs } from '@/lib/contracts'
 import { DRILL_META, computeDerotStreak, dateKey, isPlayKind, lastResultsForKind, statsForKind } from '../../lib'
 import { submitRunResult } from '../../arcade/submit'
 import type { PlayGameComponent, PlayGameId, PlayGameResult } from '@/components/derot/play/types'
@@ -216,20 +217,38 @@ function usePlayRun(game: PlayGameId, userId: string | null) {
       // ring and de-rot scores (both read through qk.wellness, seeded once
       // and never refetched on navigation) stay at the pre-run count until a
       // hard reload. Only reached once the save above actually succeeded.
-      void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
+      //
+      // F3-2: guarded by `hasPendingPrefsWrite`, mirroring Arcade's own fix --
+      // the wellness dock is mounted on every (app) route including this
+      // one, so a prefs toggle made mid-game can still be debounced/in-flight
+      // when this run's save resolves. An unconditional invalidate here
+      // would refetch and land the server's still-stale prefs snapshot over
+      // that queued write, visibly reverting the toggle -- the exact motion
+      // X3 (account/prefsMutation.ts) exists to remove.
+      const cache = getQueryClient()
+      if (!hasPendingPrefsWrite(userId)) void cache.invalidateQueries({ queryKey: qk.wellness(userId) })
 
       // X7 / X1: mirrors Arcade's own fix -- a finished Playground run is a
       // win (spec 7.4) and a source for touch-grass / beat-yourself (7.5).
-      // attempts/lessonProgress/courseLessonCounts stay empty/{}: this hook
-      // fetches none of them, so this can only ever delay a goal day or an
-      // achievement to a fuller-context caller, never over-fire one.
+      // F3-1: attempts and lessonProgress are read straight off the query
+      // cache (mirroring LessonView.tsx's own recipe and useExerciseLoop.ts's
+      // `recordRewardsAfterSettle`), not hardcoded to `[]` -- (app)/layout.tsx
+      // seeds both on every (app) route including /derot, so this costs zero
+      // extra requests and a mixed day (a walkthrough or exercise pass plus
+      // this run) sums correctly from this call alone. activityDays stays
+      // empty and courseLessonCounts stays `{}`: `winsToday` reads neither,
+      // and `courseLessonCounts: {}` cannot vacuously unlock `full-read` --
+      // that predicate iterates `Object.entries(ctx.courseLessonCounts)`, so
+      // an empty record has nothing to compare against and simply never fires.
       if (learner) {
-        const held = (getQueryClient().getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map((a) => a.achievementId)
+        const held = (cache.getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map((a) => a.achievementId)
+        const attempts = cache.getQueryData<Attempt[]>(qk.attempts(userId)) ?? []
+        const lessonProgress = cache.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) ?? []
         const ctx = buildRewardContext({
           state: learner,
-          attempts: [],
+          attempts,
           activityDays: [],
-          lessonProgress: [],
+          lessonProgress,
           drillResults: serverResults,
           prefs: stateRef.current.prefs,
           courseLessonCounts: {},

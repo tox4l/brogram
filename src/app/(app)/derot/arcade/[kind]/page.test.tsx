@@ -30,9 +30,10 @@ const mocks = vi.hoisted(() => ({
   learnerState: null as LearnerState | null,
   play: vi.fn(),
   invalidate: vi.fn(),
-  getQueryData: vi.fn((): unknown => undefined),
+  getQueryData: vi.fn<(key: readonly unknown[]) => unknown>(() => undefined),
   recordGoalDay: vi.fn(),
   recordAchievements: vi.fn(),
+  hasPendingPrefsWrite: vi.fn(() => false),
 }))
 vi.mock('next/navigation', () => ({ useParams: () => mocks.params(), useSearchParams: () => mocks.searchParams() }))
 vi.mock('@/store/session', () => ({
@@ -47,6 +48,10 @@ vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (
 // `user_achievements` / the prefs write never need mocking here.
 vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: mocks.invalidate, getQueryData: mocks.getQueryData }) }))
 vi.mock('@/lib/rewards/record', () => ({ recordGoalDay: mocks.recordGoalDay, recordAchievements: mocks.recordAchievements }))
+// F3-2: the wellness dock's own writer is unit-tested against the real
+// implementation in prefsMutation.test.ts -- this file only proves the
+// runner consults the guard before invalidating.
+vi.mock('@/app/(app)/account/prefsMutation', () => ({ hasPendingPrefsWrite: mocks.hasPendingPrefsWrite }))
 vi.mock('@/components/derot', () => ({
   DrillRunner: ({ item, onResult, paused }: { item: DrillItem; onResult: (result: DrillResult) => void; paused?: boolean }) => (
     <div>
@@ -164,6 +169,8 @@ beforeEach(() => {
   rpcData = []
   updateAffectsRow = true
   insertShouldFail = false
+  mocks.hasPendingPrefsWrite.mockReturnValue(false)
+  mocks.getQueryData.mockImplementation(() => undefined)
 })
 afterEach(() => {
   cleanup()
@@ -393,6 +400,16 @@ describe('Arcade runner', () => {
     await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] }))
   })
 
+  it('does not invalidate the wellness cache while a dock prefs write is queued (F3-2)', async () => {
+    mocks.hasPendingPrefsWrite.mockReturnValue(true)
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
+    expect(mocks.hasPendingPrefsWrite).toHaveBeenCalledWith('student')
+    expect(mocks.invalidate).not.toHaveBeenCalled()
+  })
+
   it('does not invalidate the wellness cache, or record a goal day / achievements, when the save fails (X2)', async () => {
     rpcError = { code: '42501', message: 'permission denied' }
     render(<DerotArcadeRunnerPage />)
@@ -415,6 +432,29 @@ describe('Arcade runner', () => {
     const [, calledUserId, ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { drillResults: DrillResult[] }]
     expect(calledUserId).toBe('student')
     expect(ctx.drillResults.some((r) => r.kind === 'trace' && r.lane === 'arcade')).toBe(true)
+  })
+
+  it("builds the ctx with the REAL lessonProgress and attempts off the query cache, not empty arrays (F3-1)", async () => {
+    // F3-1: without this, a mixed day (a walkthrough completed earlier today
+    // plus this de-rot run) would undercount `winsToday` and silently drop
+    // today's goal day -- reproducing X7 one layer down. `getQueryData` is
+    // keyed, not positional: qk.lessonProgress/qk.attempts resolve to the
+    // cache rows below, qk.achievements still resolves to `undefined` (held: []).
+    const todayLessonProgress = { lessonId: 'l1', userId: 'student', status: 'completed', completedAt: '2026-09-06T09:00:00.000Z', blocksRead: [] }
+    const todayAttempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
+    mocks.getQueryData.mockImplementation((key: readonly unknown[]) => {
+      if (key[0] === 'lesson-progress') return [todayLessonProgress]
+      if (key[0] === 'attempts') return [todayAttempt]
+      return undefined
+    })
+    rpcData = [result({ drillId: 'd1', kind: 'trace', lane: 'arcade', at: '2026-09-06T12:00:00.000Z' })]
+    render(<DerotArcadeRunnerPage />)
+    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
+    for (let i = 0; i < 6; i++) await answerCurrent(true)
+    await waitFor(() => expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1))
+    const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { lessonProgress: unknown[]; attempts: unknown[] }]
+    expect(ctx.lessonProgress).toEqual([todayLessonProgress])
+    expect(ctx.attempts).toEqual([todayAttempt])
   })
 
   it("calls recordAchievements with a context whose drillResults carry the run just saved (X1)", async () => {

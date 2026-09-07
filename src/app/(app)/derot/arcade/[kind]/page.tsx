@@ -22,7 +22,8 @@ import { qk } from '@/lib/query/keys'
 import { buildRewardContext } from '@/lib/rewards/context'
 import { recordAchievements, recordGoalDay } from '@/lib/rewards/record'
 import { isPersonalBest as computeIsPersonalBest } from '@/lib/rewards/bestRun'
-import type { DrillItem, DrillKind, DrillResult, MotionPreference, UserAchievement, WellnessPrefs } from '@/lib/contracts'
+import { hasPendingPrefsWrite } from '@/app/(app)/account/prefsMutation'
+import type { Attempt, DrillItem, DrillKind, DrillResult, LessonProgress, MotionPreference, UserAchievement, WellnessPrefs } from '@/lib/contracts'
 import { comboMultiplier } from '@/components/derot/scoring'
 import { DRILL_META, computeDerotStreak, dateKey, isDrillKind, lastResultsForKind, mapDrillRow, pickDrillItem, statsForKind } from '../../lib'
 import { EMPTY_RUN, RUN_SIZE, buildRunResult, isRunComplete, recordRunAnswer, summarizeRun, type RunState } from '../run'
@@ -140,24 +141,38 @@ function useArcadeRun(kind: DrillKind, userId: string | null, explicitId: string
       // qk.wellness invalidate on its pass path. Only reached once the save
       // above actually succeeded; the catch block below never runs this line,
       // so a failed save invalidates nothing.
-      void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
+      //
+      // F3-2: guarded by `hasPendingPrefsWrite` -- the wellness dock is
+      // mounted on every (app) route including this one, so a prefs toggle
+      // made mid-run can still be debounced/in-flight when this run's save
+      // resolves. An unconditional invalidate here would refetch and land
+      // the server's still-stale prefs snapshot over that queued write,
+      // visibly reverting the toggle until the debounce flushes -- the exact
+      // motion X3 (account/prefsMutation.ts) exists to remove.
+      const cache = getQueryClient()
+      if (!hasPendingPrefsWrite(userId)) void cache.invalidateQueries({ queryKey: qk.wellness(userId) })
 
       // X7 / X1: a finished de-rot run is a win (spec 7.4) and a source for
       // sharp / touch-grass / beat-yourself (7.5) -- neither had a producer.
-      // attempts/lessonProgress stay empty and courseLessonCounts stays {}:
-      // this hook fetches none of them, so a context built from what it does
-      // not have would just be wrong rather than honest. This can only ever
-      // delay a goal day or an achievement to whichever caller (exercise
-      // loop, lesson) next builds a fuller context, never over-fire one --
-      // the same convention useExerciseLoop.ts's own recordGoalAndStreak
-      // already established for the fields it cannot see either.
+      // F3-1: attempts and lessonProgress are read straight off the query
+      // cache (mirroring LessonView.tsx's own recipe and useExerciseLoop.ts's
+      // `recordRewardsAfterSettle`), not hardcoded to `[]` -- (app)/layout.tsx
+      // seeds both on every (app) route including /derot, so this costs zero
+      // extra requests and a mixed day (a walkthrough or exercise pass plus
+      // this run) sums correctly from this call alone. activityDays stays
+      // empty and courseLessonCounts stays `{}`: `winsToday` reads neither,
+      // and `courseLessonCounts: {}` cannot vacuously unlock `full-read` --
+      // that predicate iterates `Object.entries(ctx.courseLessonCounts)`, so
+      // an empty record has nothing to compare against and simply never fires.
       if (learner) {
-        const held = (getQueryClient().getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map((a) => a.achievementId)
+        const held = (cache.getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map((a) => a.achievementId)
+        const attempts = cache.getQueryData<Attempt[]>(qk.attempts(userId)) ?? []
+        const lessonProgress = cache.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) ?? []
         const ctx = buildRewardContext({
           state: learner,
-          attempts: [],
+          attempts,
           activityDays: [],
-          lessonProgress: [],
+          lessonProgress,
           drillResults: serverResults,
           prefs: stateRef.current.prefs,
           courseLessonCounts: {},

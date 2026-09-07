@@ -30,9 +30,10 @@ const mocks = vi.hoisted(() => ({
   learnerState: null as LearnerState | null,
   play: vi.fn(),
   invalidate: vi.fn(),
-  getQueryData: vi.fn((): unknown => undefined),
+  getQueryData: vi.fn<(key: readonly unknown[]) => unknown>(() => undefined),
   recordGoalDay: vi.fn(),
   recordAchievements: vi.fn(),
+  hasPendingPrefsWrite: vi.fn(() => false),
 }))
 vi.mock('next/navigation', () => ({
   useParams: () => mocks.params(),
@@ -48,6 +49,10 @@ vi.mock('@/lib/sound/manager', () => ({ play: mocks.play, withInterfaceSounds: (
 // saved, not their own internals (unit-tested in record.test.ts).
 vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: mocks.invalidate, getQueryData: mocks.getQueryData }) }))
 vi.mock('@/lib/rewards/record', () => ({ recordGoalDay: mocks.recordGoalDay, recordAchievements: mocks.recordAchievements }))
+// F3-2: the wellness dock's own writer is unit-tested against the real
+// implementation in prefsMutation.test.ts -- this file only proves the
+// runner consults the guard before invalidating.
+vi.mock('@/app/(app)/account/prefsMutation', () => ({ hasPendingPrefsWrite: mocks.hasPendingPrefsWrite }))
 
 /** One tiny stub per game id -- the route's own concerns (id validation, the three-two-one, prop wiring, scoring dispatch, submit, the run summary) are what this file tests, not each game's own mechanics (covered directly in play.test.tsx / play-games.test.tsx). */
 const stubs = vi.hoisted(() => {
@@ -122,6 +127,8 @@ beforeEach(() => {
   wellnessSelectError = null
   rpcError = null
   rpcData = []
+  mocks.hasPendingPrefsWrite.mockReturnValue(false)
+  mocks.getQueryData.mockImplementation(() => undefined)
 })
 
 afterEach(() => {
@@ -245,6 +252,16 @@ describe('DerotPlayRunnerPage', () => {
     expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['wellness', 'student'] })
   })
 
+  it('does not invalidate the wellness cache while a dock prefs write is queued (F3-2)', async () => {
+    mocks.hasPendingPrefsWrite.mockReturnValue(true)
+    rpcData = [result({ score: 50, timeMs: 500 })]
+    render(<DerotPlayRunnerPage />)
+    fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
+    await screen.findByText('Run complete')
+    expect(mocks.hasPendingPrefsWrite).toHaveBeenCalledWith('student')
+    expect(mocks.invalidate).not.toHaveBeenCalled()
+  })
+
   it('does not invalidate the wellness cache, or record a goal day / achievements, when the save fails (X2)', async () => {
     rpcError = { code: '23505', message: 'unique violation' }
     render(<DerotPlayRunnerPage />)
@@ -264,6 +281,27 @@ describe('DerotPlayRunnerPage', () => {
     const [, calledUserId, ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { drillResults: DrillResult[] }]
     expect(calledUserId).toBe('student')
     expect(ctx.drillResults.some((r) => r.kind === 'follow-the-dot' && r.lane === 'play')).toBe(true)
+  })
+
+  it('builds the ctx with the REAL lessonProgress and attempts off the query cache, not empty arrays (F3-1)', async () => {
+    // F3-1: without this, a mixed day (a walkthrough completed earlier today
+    // plus this Playground run) would undercount `winsToday` and silently
+    // drop today's goal day -- reproducing X7 one layer down.
+    const todayLessonProgress = { lessonId: 'l1', userId: 'student', status: 'completed', completedAt: '2026-09-06T09:00:00.000Z', blocksRead: [] }
+    const todayAttempt = { id: 'a1', userId: 'student', exerciseId: 'e1', code: '', results: [], passed: true, durationMs: 0, hintCount: 0, createdAt: '2026-09-06T08:00:00.000Z' }
+    mocks.getQueryData.mockImplementation((key: readonly unknown[]) => {
+      if (key[0] === 'lesson-progress') return [todayLessonProgress]
+      if (key[0] === 'attempts') return [todayAttempt]
+      return undefined
+    })
+    rpcData = [result({ drillId: 'play-follow-the-dot', kind: 'follow-the-dot', lane: 'play', score: 50 })]
+    render(<DerotPlayRunnerPage />)
+    fireEvent.click(await screen.findByText('Complete follow-the-dot', {}, COUNTDOWN_TIMEOUT))
+    await screen.findByText('Run complete')
+    expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
+    const [, , ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { lessonProgress: unknown[]; attempts: unknown[] }]
+    expect(ctx.lessonProgress).toEqual([todayLessonProgress])
+    expect(ctx.attempts).toEqual([todayAttempt])
   })
 
   it('calls recordAchievements with a context whose drillResults carry the run just saved (X1)', async () => {
