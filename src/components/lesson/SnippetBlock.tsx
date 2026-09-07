@@ -43,6 +43,9 @@ export function SnippetBlock({ block, packages, reduced }: { block: SnippetBlock
   // ships `runnable: true` (the CheerpJ adapter is live per C1), a learner
   // must never see both a working Run button and "read-only for now" at once.
   const isJavaStatic = block.language === 'java' && !block.runnable
+  // Fix round 1 (M6): wires CodeGuide's `idPrefix` to something -- the
+  // caption points back at the code region it describes via aria-describedby.
+  const idPrefix = `snippet-${block.id}`
 
   async function run() {
     setRunning(true)
@@ -89,11 +92,11 @@ export function SnippetBlock({ block, packages, reduced }: { block: SnippetBlock
             passive={passiveSpans(block.highlight)}
             reduced={reduced}
             label="Code"
-            idPrefix={`snippet-${block.id}`}
+            idPrefix={idPrefix}
           />
         )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
-        {block.caption && <p className="text-xs text-muted-foreground">{block.caption}</p>}
+        {block.caption && <p className="text-xs text-muted-foreground" aria-describedby={block.runnable ? undefined : idPrefix}>{block.caption}</p>}
         {block.runnable && (
           <Button type="button" variant="outline" size="sm" onClick={() => void run()} disabled={running}>
             <Play aria-hidden="true" />{running ? 'Running…' : 'Run'}

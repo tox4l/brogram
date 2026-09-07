@@ -45,6 +45,11 @@ function stepLabel(index: number, total: number, line: number | [number, number]
  * Fix round 1 (I3): the "Next step" button unmounts on the click that
  * reaches the last step, which would otherwise drop focus to `<body>`.
  * Focus moves to the newly-revealed last callout instead.
+ *
+ * Fix round 1 (M6): `idPrefix` is documented as aria wiring but wired
+ * nothing -- the active callout now carries `aria-describedby` pointing at
+ * `CodeGuide`'s own `id` (the same string), so a screen-reader user on the
+ * active step has a programmatic link to the code region it describes.
  */
 export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduced: boolean }) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -52,6 +57,7 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
   const isLast = stepIndex >= block.steps.length - 1
   const wasLast = useRef(false)
   const lastCalloutRef = useRef<HTMLParagraphElement>(null)
+  const idPrefix = `worked-${block.id}`
 
   useEffect(() => {
     if (isLast && !wasLast.current) lastCalloutRef.current?.focus()
@@ -71,7 +77,7 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
           active={active}
           reduced={reduced}
           label="Code"
-          idPrefix={`worked-${block.id}`}
+          idPrefix={idPrefix}
         />
       </div>
       <div className="space-y-2">
@@ -84,6 +90,7 @@ export function WorkedBlock({ block, reduced }: { block: WorkedBlockData; reduce
               ref={isLastCallout ? lastCalloutRef : undefined}
               tabIndex={isLastCallout ? -1 : undefined}
               aria-current={isActive ? 'step' : undefined}
+              aria-describedby={isActive ? idPrefix : undefined}
               className="rounded-lg border border-border bg-card p-3 text-sm leading-relaxed outline-none"
               style={{ opacity: isActive ? 1 : 0.4, transition: reduced ? 'none' : 'opacity 200ms var(--ease-move)' }}
             >

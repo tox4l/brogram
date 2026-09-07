@@ -133,9 +133,40 @@ const invalidLesson = {
       type: 'worked', id: 'worked-bad-order', language: 'sql', code: 'a\nb\nc\nd',
       steps: [{ line: 4, say: 'Later line first.' }, { line: 2, say: 'Earlier line second.' }],
     },
+    // Fix round 1 (M5): one of the four W4.23 hard failures had no test --
+    // the non-ASCII check the underline's `ch` arithmetic (spec 7.2) depends
+    // on. An en dash is the non-ASCII character.
+    {
+      type: 'worked', id: 'worked-bad-nonascii', language: 'python', code: 'x = 1 – nope',
+      steps: [{ line: 1, say: 'Bad character above.' }],
+    },
     {
       type: 'snippet', id: 'snippet-bad-highlight', language: 'python', code: 'print(1)', runnable: false,
       expectedStdout: '1\n', highlight: [[1, 5]],
+    },
+  ],
+}
+
+// Fix round 1 (M4): spec 7.5 check 3's "reported as line-level-only" half --
+// a token matching more than once in its step's line range is a safe,
+// designed fallback (spec 7.2), never a failure, but it must surface as a
+// non-failing note so an author gets some signal.
+const noteLesson = {
+  id: 'TEST-NOTE-1',
+  cloId: 'TEST-NOTE-1',
+  course: 'TEST',
+  language: 'python',
+  version: 1,
+  title: 'note fixture',
+  hook: 'hook',
+  estimatedMinutes: 5,
+  draft: false,
+  tags: [],
+  exitLine: 'exit',
+  blocks: [
+    {
+      type: 'worked', id: 'worked-multi-match', language: 'python', code: 'line one\nline two',
+      steps: [{ line: [1, 2], say: 'References `line` twice.' }],
     },
   ],
 }
@@ -195,7 +226,7 @@ describe('verify-lesson.mjs', () => {
 
   beforeAll(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-lesson-test-'))
-    const validFile = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson, packageImportLesson] })
+    const validFile = writeFixture('valid.json', { course: 'TEST', lessons: [validLesson, packageImportLesson, noteLesson] })
     const invalidFile = writeFixture('invalid.json', { course: 'TEST', lessons: [invalidLesson] })
 
     passingRun = run(['seed/lessons/INFS1101.json', validFile, '--json'], HEAVY_SPAWN_TIMEOUT_MS)
@@ -225,21 +256,33 @@ describe('verify-lesson.mjs', () => {
       const report = JSON.parse(passingRun.stdout)
       const golden = report.files.find((f) => f.file === 'seed/lessons/INFS1101.json')
       const lesson = golden.lessons.find((l) => l.id === 'INFS1101-3')
-      expect(lesson).toEqual({ id: 'INFS1101-3', unverified: false, failures: [] })
+      expect(lesson).toEqual({ id: 'INFS1101-3', unverified: false, failures: [], notes: [] })
     })
 
     it('verifies a synthetic lesson exercising every check kind', () => {
       const report = JSON.parse(passingRun.stdout)
       const synthetic = report.files.find((f) => f.file.endsWith('valid.json'))
       const lesson = synthetic.lessons.find((l) => l.id === 'TEST-VALID-1')
-      expect(lesson).toEqual({ id: 'TEST-VALID-1', unverified: false, failures: [] })
+      expect(lesson).toEqual({ id: 'TEST-VALID-1', unverified: false, failures: [], notes: [] })
     })
 
     it('verifies a lesson snippet that imports a package via loadPackagesFromImports', () => {
       const report = JSON.parse(passingRun.stdout)
       const synthetic = report.files.find((f) => f.file.endsWith('valid.json'))
       const lesson = synthetic.lessons.find((l) => l.id === 'TEST-VALID-PKG-1')
-      expect(lesson).toEqual({ id: 'TEST-VALID-PKG-1', unverified: false, failures: [] })
+      expect(lesson).toEqual({ id: 'TEST-VALID-PKG-1', unverified: false, failures: [], notes: [] })
+    })
+
+    // Fix round 1 (M4): a token matching more than once in its step's own
+    // line range is never a failure, but it must surface as a note.
+    it('notes, without failing, a worked step whose token matches more than once', () => {
+      const report = JSON.parse(passingRun.stdout)
+      const synthetic = report.files.find((f) => f.file.endsWith('valid.json'))
+      const lesson = synthetic.lessons.find((l) => l.id === 'TEST-NOTE-1')
+      expect(lesson.failures).toEqual([])
+      expect(lesson.notes).toEqual([
+        { lessonId: 'TEST-NOTE-1', checkId: 'worked-multi-match', reason: expect.stringContaining('matches 2 times') },
+      ])
     })
 
     // Computed from the files' own lesson counts, not a hardcoded total, so
@@ -250,6 +293,7 @@ describe('verify-lesson.mjs', () => {
       expect(report.passed).toBe(totalLessons)
       expect(report.failed).toBe(0)
       expect(report.unverified).toBe(0)
+      expect(report.noted).toBe(1)
     })
   })
 
@@ -303,6 +347,12 @@ describe('verify-lesson.mjs', () => {
     it('fails a worked block whose steps are not in non-decreasing line order and carries no readingOrder marker', () => {
       expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 worked-bad-order')
       expect(invalidRun.stdout).toContain('non-decreasing line order')
+    })
+
+    // Fix round 1 (M5): the one W4.23 hard failure with no regression test.
+    it('fails a worked block whose code contains a non-ASCII character', () => {
+      expect(invalidRun.stdout).toContain('FAIL: TEST-INVALID-1 worked-bad-nonascii')
+      expect(invalidRun.stdout).toContain('non-ASCII character')
     })
 
     it('fails a snippet whose highlight range falls outside the code', () => {

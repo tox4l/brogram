@@ -68,7 +68,11 @@ export function ConceptBlock({ block }: { block: ConceptBlockData }) {
   return (
     <section aria-label="Concept" className="space-y-3">
       <h2 className="text-xl font-medium tracking-tight">{block.heading}</h2>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{block.body}</p>
+      {/* Fix round 1 (I3): this is the lesson's actual reading prose, which
+       *  step 7 says "moves to --text-lede / 1.6 in --lesson-foreground,
+       *  never --muted-foreground" -- matches LessonView's hook exactly, so
+       *  a Newsreader hook is never followed by a 14px gray paragraph. */}
+      <p className="whitespace-pre-wrap font-prose text-lede leading-[1.6] text-lesson-foreground">{block.body}</p>
       {safeFigure && (
         <div
           className="overflow-hidden rounded-lg border border-border [&_svg]:h-auto [&_svg]:w-full"

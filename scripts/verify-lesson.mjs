@@ -121,6 +121,14 @@ function fail(out, lessonId, checkId, reason) {
   out.push({ lessonId, checkId, reason })
 }
 
+/** Fix round 1 (M4): a non-failing counterpart to `fail` -- spec 7.5 check 3
+ *  asks for the 2+-match case to be *reported*, not silently ignored (only
+ *  the 0-match case is a hard failure; §7.2's own designed fallback treats
+ *  "several matches" as safe, just line-level). */
+function note(out, lessonId, checkId, reason) {
+  out.push({ lessonId, checkId, reason })
+}
+
 // -- python (pyodide) --------------------------------------------------------
 
 let pyodideInstance = null
@@ -488,7 +496,7 @@ function lineRangeOf(line) {
  *  (line order) is skipped when the block sets `readingOrder: 'semantic'`,
  *  the escape hatch for content that deliberately steps out of file order
  *  (a SQL block teaching clause evaluation order, say). */
-function verifyWorkedContent(lesson, block, failures) {
+function verifyWorkedContent(lesson, block, failures, notes) {
   const lines = block.code.split('\n')
   const lineCount = lines.length
 
@@ -522,6 +530,12 @@ function verifyWorkedContent(lesson, block, failures) {
       }
       if (hits === 0) {
         fail(failures, lesson.id, block.id, `step references \`${token}\` which does not appear in lines ${start}-${end}`)
+      } else if (hits > 1) {
+        // Fix round 1 (M4): spec 7.5 check 3's "reported as line-level-only"
+        // half -- a safe fallback (§7.2), but silent before this fix, so an
+        // author got no signal that their backtick renders nothing sharper
+        // than the line it is already on.
+        note(notes, lesson.id, block.id, `step token \`${token}\` matches ${hits} times in lines ${start}-${end}; rendering line-level only`)
       }
     }
   }
@@ -625,13 +639,13 @@ function verifyChoose(lesson, check, failures) {
   }
 }
 
-async function verifyLesson(lesson, failures) {
+async function verifyLesson(lesson, failures, notes) {
   const isJava = lesson.language === 'java'
 
   for (const block of lesson.blocks) {
     if (block.type === 'worked') {
       // Structural, not execution -- runs for Java lessons too (W4.23).
-      verifyWorkedContent(lesson, block, failures)
+      verifyWorkedContent(lesson, block, failures, notes)
       continue
     }
     if (block.type === 'snippet') {
@@ -678,10 +692,14 @@ async function verifyLesson(lesson, failures) {
 // file -- verifying both would just double-report the same content).
 const DEFAULT_LESSONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'seed', 'lessons')
 
+// Fix round 1 (M3): the schema file lives alongside the per-course files and
+// is not itself a lesson file (`data.lessons` on it is always `undefined`,
+// harmlessly coerced to `[]` below) -- excluded by name so a future
+// per-file assertion never trips on it.
 function defaultLessonFiles() {
   if (!fs.existsSync(DEFAULT_LESSONS_DIR)) return []
   return fs.readdirSync(DEFAULT_LESSONS_DIR)
-    .filter((name) => name.endsWith('.json'))
+    .filter((name) => name.endsWith('.json') && name !== 'lesson.schema.json')
     .sort()
     .map((name) => path.join(DEFAULT_LESSONS_DIR, name))
 }
@@ -701,21 +719,27 @@ async function main() {
   let passed = 0
   let failed = 0
   let unverified = 0
+  let notedCount = 0
 
   for (const file of files) {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'))
     const lessonReports = []
     for (const lesson of data.lessons ?? []) {
       const failures = []
+      const notes = []
       let status
       try {
-        status = await verifyLesson(lesson, failures)
+        status = await verifyLesson(lesson, failures, notes)
       } catch (err) {
         failures.push({ lessonId: lesson.id, checkId: '(lesson)', reason: `unexpected error: ${err.message}` })
         status = { unverified: false }
       }
 
-      lessonReports.push({ id: lesson.id, unverified: status.unverified, failures })
+      lessonReports.push({ id: lesson.id, unverified: status.unverified, failures, notes })
+      notedCount += notes.length
+      if (!jsonOutput) {
+        for (const n of notes) console.log(`note: ${n.lessonId} ${n.checkId}: ${n.reason}`)
+      }
 
       if (failures.length) {
         failed++
@@ -734,9 +758,9 @@ async function main() {
   }
 
   if (jsonOutput) {
-    console.log(JSON.stringify({ files: fileReports, passed, failed, unverified }))
+    console.log(JSON.stringify({ files: fileReports, passed, failed, unverified, noted: notedCount }))
   } else {
-    console.log(`${passed} passed, ${failed} failed, ${unverified} unverified`)
+    console.log(`${passed} passed, ${failed} failed, ${unverified} unverified, ${notedCount} noted`)
   }
   process.exitCode = failed > 0 ? 1 : 0
 }

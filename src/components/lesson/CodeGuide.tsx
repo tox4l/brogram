@@ -33,6 +33,14 @@ export const GUIDE_LINE_HEIGHT_PX = 24
 /** Matches the `<pre>`'s own `p-4` (16px) padding, so the band's `top` and
  *  the underline's `left` both start flush with the first character. */
 const CODE_PAD_PX = 16
+/** Fix round 1 (I4): the underline's `ch`-unit offsets and width must
+ *  resolve against the exact same font the code text renders in, or every
+ *  column lands ~17% off (Geist Sans's `ch` advance vs Geist Mono's).
+ *  Shared by the `<pre>` and the underline so the two cannot drift apart --
+ *  `CodeGuide.test.tsx` asserts both carry it. Also discharges M2/the
+ *  `design:check` raw-text-scale allowlist entry: `--text-code` is the
+ *  token built for exactly this row. */
+const CODE_TYPE_CLASS = 'font-mono text-code'
 
 function lineRange(line: number | [number, number]): [number, number] {
   return Array.isArray(line) ? line : [line, line]
@@ -96,11 +104,20 @@ function resolveToken(lines: string[], span: GuideSpan): { line: number; column:
  * plus a rail is undistorted at any scale.
  *
  * Deliberately headless on outer chrome: the returned wrapper is `relative`
- * only, with no border, radius or fill of its own -- `WorkedBlock` and
+ * only, with no border or radius of its own -- `WorkedBlock` and
  * `SnippetBlock` each already own a differently-shaped bordered container
  * (one wraps just the code; the other shares one border with a caption/run
  * footer below it), and a second nested border here would double up against
  * either one.
+ *
+ * Fix round 1 (I2): the code surface's own fill (`--lesson-code-surface`)
+ * lives on an inner wrapper, one level below the `<pre>` and its overlays,
+ * not on the `<pre>` itself. Before this fix the `<pre>` carried
+ * `bg-muted/30` at `z-10`, which painted over the band/rail/passive tints
+ * (siblings at the default stacking order) instead of letting them show
+ * through -- a 40-53% contrast loss across all five palettes. The `<pre>`
+ * now has no background of its own: the surface fill sits behind the tints,
+ * which sit behind the (still `z-10`) code text.
  */
 export function CodeGuide({ code, language, active, passive, reduced, label, idPrefix }: CodeGuideProps) {
   const lines = code.split('\n')
@@ -109,71 +126,73 @@ export function CodeGuide({ code, language, active, passive, reduced, label, idP
 
   return (
     <div id={idPrefix} role="group" aria-label={label} data-language={language} className="relative">
-      <pre className="relative z-10 overflow-x-auto bg-muted/30 p-4 font-mono text-sm leading-6">
-        <code>
-          {lines.map((line, index) => <div key={index}>{line || ' '}</div>)}
-        </code>
-      </pre>
+      <div className="relative bg-lesson-code-surface">
+        <pre className={`relative z-10 overflow-x-auto p-4 leading-6 ${CODE_TYPE_CLASS}`}>
+          <code>
+            {lines.map((line, index) => <div key={index}>{line || ' '}</div>)}
+          </code>
+        </pre>
 
-      {passive?.map((span, index) => (
-        <div
-          key={index}
-          aria-hidden="true"
-          data-guide="passive"
-          className="pointer-events-none absolute inset-x-2 bg-guide/[7.2%]"
-          style={{
-            top: CODE_PAD_PX,
-            height: GUIDE_LINE_HEIGHT_PX,
-            transformOrigin: 'top',
-            transform: bandTransform(span),
-          }}
-        />
-      ))}
-
-      {active && (
-        <>
+        {passive?.map((span, index) => (
           <div
+            key={index}
             aria-hidden="true"
-            data-guide="band"
-            className="pointer-events-none absolute inset-x-2 bg-guide/12"
+            data-guide="passive"
+            className="pointer-events-none absolute inset-x-2 bg-guide/[7.2%]"
             style={{
               top: CODE_PAD_PX,
               height: GUIDE_LINE_HEIGHT_PX,
               transformOrigin: 'top',
-              transform: bandTransform(active),
-              transition,
+              transform: bandTransform(span),
             }}
           />
+        ))}
+
+        {active && (
+          <>
+            <div
+              aria-hidden="true"
+              data-guide="band"
+              className="pointer-events-none absolute inset-x-2 bg-guide/12"
+              style={{
+                top: CODE_PAD_PX,
+                height: GUIDE_LINE_HEIGHT_PX,
+                transformOrigin: 'top',
+                transform: bandTransform(active),
+                transition,
+              }}
+            />
+            <div
+              aria-hidden="true"
+              data-guide="rail"
+              className="pointer-events-none absolute left-2 w-0.5 bg-guide"
+              style={{
+                top: CODE_PAD_PX,
+                height: GUIDE_LINE_HEIGHT_PX,
+                transformOrigin: 'top',
+                transform: bandTransform(active),
+                transition,
+              }}
+            />
+          </>
+        )}
+
+        {activeToken && (
           <div
             aria-hidden="true"
-            data-guide="rail"
-            className="pointer-events-none absolute left-2 w-0.5 bg-guide"
+            data-guide="underline"
+            className={`pointer-events-none absolute h-0.5 bg-guide ${CODE_TYPE_CLASS}`}
             style={{
-              top: CODE_PAD_PX,
-              height: GUIDE_LINE_HEIGHT_PX,
-              transformOrigin: 'top',
-              transform: bandTransform(active),
+              left: CODE_PAD_PX,
+              top: CODE_PAD_PX + (activeToken.line - 1) * GUIDE_LINE_HEIGHT_PX + (GUIDE_LINE_HEIGHT_PX - 6),
+              width: '1ch',
+              transformOrigin: 'left',
+              transform: `translateX(${activeToken.column}ch) scaleX(${activeToken.length})`,
               transition,
             }}
           />
-        </>
-      )}
-
-      {activeToken && (
-        <div
-          aria-hidden="true"
-          data-guide="underline"
-          className="pointer-events-none absolute h-0.5 bg-guide"
-          style={{
-            left: CODE_PAD_PX,
-            top: CODE_PAD_PX + (activeToken.line - 1) * GUIDE_LINE_HEIGHT_PX + (GUIDE_LINE_HEIGHT_PX - 6),
-            width: '1ch',
-            transformOrigin: 'left',
-            transform: `translateX(${activeToken.column}ch) scaleX(${activeToken.length})`,
-            transition,
-          }}
-        />
-      )}
+        )}
+      </div>
     </div>
   )
 }

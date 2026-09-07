@@ -17,11 +17,16 @@
  *  rail alongside the outer `max-w-5xl` and the `max-w-[68ch]` prose column
  *  in `LessonView.tsx`, so the prose cap actually binds instead of the
  *  outer width winning by default. The dots themselves stay exactly as
- *  wide as before -- only the column they sit in grows. */
+ *  wide as before -- only the column they sit in grows.
+ *
+ *  Fix round 1 (M1): `items-center` orphaned the dots ~96px from either
+ *  edge of the widened 192px column, ~120px of dead space between the
+ *  index and what it indexes. `items-end` plus `pr-4` hugs the dots to the
+ *  prose column's edge instead. */
 export function ProgressRail({ total, current }: { total: number; current: number }) {
   const position = Math.min(current + 1, Math.max(total, 1))
   return (
-    <nav aria-label="Walkthrough progress" className="hidden w-48 shrink-0 flex-col items-center gap-2 pt-2 sm:flex">
+    <nav aria-label="Walkthrough progress" className="hidden w-48 shrink-0 flex-col items-end gap-2 pt-2 pr-4 sm:flex">
       <p className="sr-only">Block {position} of {total}</p>
       <ol className="flex flex-col gap-2" aria-hidden="true">
         {Array.from({ length: total }, (_, index) => (

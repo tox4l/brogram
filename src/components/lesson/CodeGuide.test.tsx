@@ -100,6 +100,24 @@ describe('CodeGuide', () => {
     expect(underline.style.left).toBe('16px')
   })
 
+  // Fix round 1 (I4): the underline's `ch`-unit offsets resolve against
+  // whatever font it inherits -- before this fix that was the page's sans
+  // font (the underline carried no font classes of its own), ~17% off the
+  // `<pre>`'s actual monospace metrics. Both must render in the exact same
+  // font, or the column drifts.
+  it('the underline carries the same font classes as the code <pre>, so its ch units resolve against the same metrics', () => {
+    const { container } = render(
+      <CodeGuide code={CODE} language="python" active={{ line: 2, token: 'two' }} reduced={false} label="Code" idPrefix="g10" />,
+    )
+    const pre = container.querySelector('pre')!
+    const underline = guideEl(container, 'underline')!
+    expect(underline.className).toContain('font-mono')
+    expect(pre.className).toContain('font-mono')
+    for (const cls of underline.className.split(/\s+/).filter((c) => c.startsWith('font-') || c.startsWith('text-'))) {
+      expect(pre.className.split(/\s+/)).toContain(cls)
+    }
+  })
+
   it('a token absent from the line range renders no underline, and does not throw', () => {
     expect(() =>
       render(<CodeGuide code={CODE} language="python" active={{ line: 1, token: 'nowhere' }} reduced={false} label="Code" idPrefix="g7" />),
@@ -126,6 +144,23 @@ describe('CodeGuide', () => {
     const tints = container.querySelectorAll('[data-guide="passive"]')
     expect(tints.length).toBe(2)
     expect(guideEl(container, 'rail')).toBeNull()
+  })
+
+  // Fix round 1 (I2): the code surface's own fill must not sit on the
+  // `<pre>` itself (at `z-10`, it painted over the band/rail/passive tints
+  // underneath it, dimming them 40-53%). The fill lives on a wrapper below
+  // the `<pre>` and its overlays instead.
+  it('the code surface fill sits on a wrapper below the pre, not on the pre itself', () => {
+    const { container } = render(
+      <CodeGuide code={CODE} language="python" active={{ line: 1 }} reduced={false} label="Code" idPrefix="g11" />,
+    )
+    const pre = container.querySelector('pre')!
+    expect(pre.className).not.toMatch(/bg-/)
+    const surface = pre.parentElement!
+    expect(surface.className).toContain('bg-lesson-code-surface')
+    // The band is a sibling of the pre inside that same surface wrapper, so
+    // it paints between the surface fill and the (still on-top) code text.
+    expect(surface.contains(guideEl(container, 'band')!)).toBe(true)
   })
 
   it('never imports GSAP', () => {
