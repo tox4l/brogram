@@ -303,6 +303,39 @@ describe('LessonView', () => {
     expect(labels).toEqual(GOLDEN_LESSON.blocks.map((block) => BLOCK_LABEL[block.type]))
   })
 
+  it('T4.4 fix round 3: the prose column is capped in rem, not ch, and the prose type sits on the paragraphs', async () => {
+    // Controller ruling (2026-09-07 20:48 Doha): `ch` is the advance of a
+    // zero, not of an average prose glyph, so a `68ch` cap rendered ~83-91
+    // characters per line instead of the target ~68 -- a `rem` cap cannot
+    // drift with the face. This pins the class string directly so a future
+    // edit reintroducing a `ch` cap on this column fails loudly here,
+    // instead of only showing up as a rendered-measure regression nobody
+    // is watching for.
+    setCurriculum(GOLDEN_LESSON)
+    render(<LessonView cloId={GOLDEN_LESSON.cloId} />, { wrapper: wrapper() })
+    const heading = await screen.findByText(GOLDEN_LESSON.title)
+
+    const column = heading.closest('div.min-w-0')
+    if (!column) throw new Error('no ancestor div carrying the prose column class')
+    expect(column.className).toContain('max-w-[34rem]')
+    expect(column.className).not.toMatch(/max-w-\[[0-9]+ch\]/)
+    // The column itself no longer carries the prose type -- it lives on the
+    // hook paragraph and (per ConceptBlock.tsx) the concept body paragraph
+    // instead, so removing the type from one paragraph can't silently drop
+    // it from the other via a shared ancestor class.
+    expect(column.className).not.toMatch(/\bfont-prose\b/)
+    expect(column.className).not.toMatch(/\btext-lede\b/)
+
+    const hookParagraph = heading.closest('div')!.parentElement!.querySelector('p')
+    expect(hookParagraph?.className).toMatch(/\bfont-prose\b/)
+    expect(hookParagraph?.className).toMatch(/\btext-lede\b/)
+
+    const conceptBody = GOLDEN_LESSON.blocks.find((block) => block.type === 'concept') as { body: string }
+    const conceptParagraph = (await screen.findByText(conceptBody.body)).closest('p')
+    expect(conceptParagraph?.className).toMatch(/\bfont-prose\b/)
+    expect(conceptParagraph?.className).toMatch(/\btext-lede\b/)
+  })
+
   it('a wrong predict-output reveals the hint, and the second wrong reveals the explain', async () => {
     setCurriculum(GOLDEN_LESSON)
     render(<LessonView cloId={GOLDEN_LESSON.cloId} />, { wrapper: wrapper() })

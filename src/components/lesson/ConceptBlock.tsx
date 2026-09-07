@@ -72,10 +72,11 @@ export function ConceptBlock({ block }: { block: ConceptBlockData }) {
        *  step 7 says "moves to --text-lede / 1.6 in --lesson-foreground,
        *  never --muted-foreground" -- matches LessonView's hook exactly, so
        *  a Newsreader hook is never followed by a 14px gray paragraph.
-       *  Fix round 2 (I3, re-check): `font-prose text-lede` now lives on
-       *  LessonView's `68ch` column so the measure resolves in the prose
-       *  face; kept off this `<p>` since it inherits the same values. */}
-      <p className="whitespace-pre-wrap leading-[1.6] text-lesson-foreground">{block.body}</p>
+       *  Fix round 3 (I3, controller ruling): the column that used to carry
+       *  `font-prose text-lede` for `ch`-measurement reasons is now a plain
+       *  `34rem` rem cap, so the prose type belongs back on this paragraph
+       *  directly -- it does not inherit it from the column any more. */}
+      <p className="whitespace-pre-wrap font-prose text-lede leading-[1.6] text-lesson-foreground">{block.body}</p>
       {safeFigure && (
         <div
           className="overflow-hidden rounded-lg border border-border [&_svg]:h-auto [&_svg]:w-full"

@@ -278,14 +278,18 @@ export function LessonView({ cloId }: { cloId: CloId }) {
     <div className="mx-auto flex max-w-5xl gap-6 py-10">
       <style>{SHAKE_STYLE}</style>
       <ProgressRail total={total} current={currentBlockIndex} />
-      {/* Fix round 2 (I3, re-check): `ch` resolves against the element's own
-       *  font/size, not its content's -- with no font class here, `68ch`
-       *  measured the ambient body sans at 16px, so the actual 18px prose
-       *  face (`--font-prose`/`--text-lede`, narrower per-glyph advance in
-       *  Newsreader) rendered ~82-93 characters per line instead of ~68.
-       *  Declaring the prose type on this capped column itself makes `ch`
-       *  resolve in the same face the text actually renders in. */}
-      <div className="min-w-0 max-w-[68ch] flex-1 space-y-6 font-prose text-lede">
+      {/* Fix round 3 (I3, controller ruling 2026-09-07 20:48 Doha): `ch` is
+       *  the advance of a zero, not of an average prose glyph -- `68ch`
+       *  measured 811px in Geist / 673px in Newsreader at 18px against an
+       *  8.2 / 7.4 px-per-character average, landing at ~99 / ~91 rendered
+       *  characters (and never binding at all in the four palettes where the
+       *  shell's own 680px affords less than 68ch). A `rem` cap cannot drift
+       *  with the face: 34rem (544px) measures 66 characters in Midnight and
+       *  73 in Folio, inside family C's 55-80 with the target near 68. The
+       *  prose type moves back onto the paragraphs themselves (the hook
+       *  below, and ConceptBlock's body) rather than living on this
+       *  structural wrapper. */}
+      <div className="min-w-0 max-w-[34rem] flex-1 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
             <ArrowLeft className="size-3" aria-hidden="true" />Path map
@@ -298,7 +302,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
             <h1 className="text-2xl font-medium tracking-tight">{lesson.title}</h1>
             {lesson.draft && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Draft</span>}
           </div>
-          <p className="leading-[1.6] text-lesson-foreground">
+          <p className="font-prose text-lede leading-[1.6] text-lesson-foreground">
             <Reveal mode="lines" reduced={reducedMotion}>{lesson.hook}</Reveal>
           </p>
         </div>
