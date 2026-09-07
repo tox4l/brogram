@@ -54,6 +54,12 @@ describe('scanForSecrets (fixture strings, no filesystem)', () => {
     expect(scanForSecrets(files, (f) => content[f])).toEqual([{ file: 'chunk-d.js', marker: 'referenceSolution' }])
   })
 
+  it('catches the double-quoted, backslash-escaped shape webpack/minifiers emit for an inlined JSON string literal (F6, review round 2)', () => {
+    const files = ['chunk-e.js']
+    const content = { 'chunk-e.js': 'JSON.parse("{\\"referenceSolution\\":\\"def f(): pass\\"}")' }
+    expect(scanForSecrets(files, (f) => content[f])).toEqual([{ file: 'chunk-e.js', marker: 'referenceSolution' }])
+  })
+
   // The two false-positive shapes below are not hypothetical: a real
   // `npm run build` of this tree emits exactly these two, reviewed as
   // identifier-only and non-secret (see the comment above markerPattern).

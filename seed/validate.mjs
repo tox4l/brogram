@@ -1,7 +1,7 @@
 // Validates seed integrity. Run: node seed/validate.mjs
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // Repo-wide emoji guard, matching src/lib/voice/copy-lint.test.ts,
 // src/lib/voice/lines.test.ts, src/lib/voice/glossary.test.ts and
@@ -12,6 +12,14 @@ import { fileURLToPath } from 'node:url'
 // it would silently un-ban the arrow range (U+2190-21FF) this file has always
 // rejected, and it misses regional-indicator flag-sequence halves and a lone
 // variation selector (U+FE0F) — so the guard is a union, not a swap.
+//
+// Deliberate narrowing (F7, review round 2): this union does not cover every
+// codepoint the old hand-rolled ranges caught. It drops the five skin-tone
+// modifiers (U+1F3FB-1F3FF), most of U+2B00-2BFF, and the non-pictographic
+// dingbats in U+2700-27BF (none of those are `\p{Extended_Pictographic}` and
+// none are otherwise in this union). None of the 26 committed lessons use
+// them; if lesson prose ever needs one, extend this pattern and this comment
+// together rather than trusting `\p{Extended_Pictographic}` to already cover it.
 export const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}|️|[\u{2190}-\u{21FF}]/u
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -353,9 +361,16 @@ if (existsSync(lessonsDir)) {
   }
 }
 
-if (errors.length) {
-  console.error('SEED INVALID')
-  for (const e of errors) console.error(' -', e)
-  process.exit(1)
+// Guarded so importing this module for EMOJI_PATTERN (seed/validate.test.mjs)
+// never prints a stray "seed ok:" line or kills the test worker with
+// process.exit(1) on a genuinely invalid seed (F5, review round 2). `node
+// seed/validate.mjs` and `npm run seed:verify` are unaffected: both invoke
+// this file directly, so the guard is always true for them.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  if (errors.length) {
+    console.error('SEED INVALID')
+    for (const e of errors) console.error(' -', e)
+    process.exit(1)
+  }
+  console.log(`seed ok: ${courses.length} courses, ${clos.length} CLOs, ${patterns.length} patterns, ${exerciseCount} exercises, ${drillCount} drills, ${lessonCount} lesson${lessonCount === 1 ? '' : 's'}`)
 }
-console.log(`seed ok: ${courses.length} courses, ${clos.length} CLOs, ${patterns.length} patterns, ${exerciseCount} exercises, ${drillCount} drills, ${lessonCount} lesson${lessonCount === 1 ? '' : 's'}`)

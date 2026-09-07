@@ -166,7 +166,7 @@ describe('planner module', () => {
   it('says the exercises are being prepared when there are no candidates', () => {
     const reply = planner.fallback!(req({ candidates: [] }))
     expect(reply.nextExerciseIds).toEqual([])
-    expect(reply.focus).toBe('Your next exercises are still being prepared.')
+    expect(reply.focus).toBe('Next exercises are still being prepared.')
     expect(() => planner.schema.parse(reply)).not.toThrow()
   })
 })

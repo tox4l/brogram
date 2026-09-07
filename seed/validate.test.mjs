@@ -3,21 +3,19 @@
 // pins the exported EMOJI_PATTERN against exactly the characters the review
 // verified: the old range set's own ✅ (✅) example (correctly caught by
 // both), the arrow range it has always banned, and characters the old ranges
-// missed.
+// missed. It does not claim full parity with the old ranges — see the
+// "deliberate narrowing" comment next to EMOJI_PATTERN's definition and the
+// second test below (F7, review round 2): the union drops the five
+// skin-tone modifiers, most of U+2B00-2BFF, and the non-pictographic
+// dingbats in U+2700-27BF.
 //
-// NOTE for whoever wires this into the gate: at the time this file was
-// written, vitest.config.mts's `test.include` only covers
-// `src/**/*.test.{ts,tsx}` and `scripts/**/*.test.{ts,mjs}` — it has no
-// `seed/**` entry, so `npx vitest run` does not discover this file yet (a
-// `seed` positional filter matches `src/components/shell/QuerySeed.test.tsx`
-// by substring instead). Add `'seed/**/*.test.{ts,mjs}'` to `include` to wire
-// it in; that file is outside this lane's owned paths, so it is reported here
-// rather than changed.
+// Wired into the gate via vitest.config.mts's `seed/**/*.test.{ts,mjs}`
+// include entry (F2, review round 2).
 import { describe, expect, it } from 'vitest'
 import { EMOJI_PATTERN } from './validate.mjs'
 
 describe('seed/validate.mjs EMOJI_PATTERN', () => {
-  it('still catches everything the old range set caught', () => {
+  it('catches the arrow range `\\p{Extended_Pictographic}` alone would drop, plus the pictographics the old ranges missed', () => {
     expect(EMOJI_PATTERN.test('nice job ✅')).toBe(true) // ✅ U+2705, inside old 2600-27BF
     expect(EMOJI_PATTERN.test('go here →')).toBe(true) // → U+2192, the arrow range \p{Extended_Pictographic} alone would drop
     expect(EMOJI_PATTERN.test('\u{1F600}')).toBe(true) // 😀 U+1F600, plain \p{Extended_Pictographic} territory

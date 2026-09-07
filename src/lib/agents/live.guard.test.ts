@@ -18,12 +18,18 @@ const LIVE_TEST_PATH = join(dirname(fileURLToPath(import.meta.url)), 'live.test.
 const SOURCE = readFileSync(LIVE_TEST_PATH, 'utf8')
 
 describe('live.test.ts stays hermetic by default (TI-1)', () => {
-  it('never calls loadDotEnvLocal() unconditionally at module scope', () => {
-    // The regression this guards: a bare `loadDotEnvLocal()` call with no
-    // guard populates DEEPSEEK_API_KEY from .env.local before
-    // describe.skipIf below ever gets to read it, so the live suite runs on
-    // any machine with a key configured.
-    expect(SOURCE).not.toMatch(/^loadDotEnvLocal\(\)\s*$/m)
+  it('calls loadDotEnvLocal() exactly once in the whole file', () => {
+    // The regression this guards: a second, unconditional `loadDotEnvLocal()`
+    // call anywhere in the file (indented, semicolon-terminated, appended
+    // right after the existing conditional call — any shape) populates
+    // DEEPSEEK_API_KEY from .env.local before describe.skipIf below ever
+    // gets to read it, so the live suite runs on any machine with a key
+    // configured. A line-shape regex (e.g. anchoring to a bare, unindented
+    // call) misses that: it only catches one specific formatting of the
+    // regression, not the call itself. Counting every call site to the
+    // function (excluding its own declaration) is shape-independent.
+    const calls = SOURCE.match(/(?<!function )\bloadDotEnvLocal\(\)/g) ?? []
+    expect(calls).toHaveLength(1)
   })
 
   it('loads .env.local only behind an explicit RUN_LIVE_AGENT_TESTS opt-in', () => {

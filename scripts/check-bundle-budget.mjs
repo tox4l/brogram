@@ -142,10 +142,15 @@ export const SECRET_MARKERS = ['reference' + 'Solution', 'expected' + 'Stdout']
  * ever reaches state) and a bare property access (the dev-only
  * `/preview/java-verify` harness, which reads `.referenceSolution` off an
  * object injected at runtime by an e2e spec, never off bundled data).
- * Neither shape is followed by `:` and a quote. A leaked secret always is.
+ * Neither shape is followed by `:` and a quote. A leaked secret always is --
+ * including the double-quoted, backslash-escaped shape webpack and several
+ * minifiers emit when a JSON blob is inlined as a string literal
+ * (`JSON.parse("{\"referenceSolution\":\"...\"}")`): an optional backslash
+ * is allowed before each quote, on both sides of the marker and before the
+ * value's opening quote (F6, review round 2).
  */
 function markerPattern(marker) {
-  return new RegExp(`["']?${marker}["']?\\s*:\\s*["'\`]`)
+  return new RegExp(`\\\\?["']?${marker}\\\\?["']?\\s*:\\s*\\\\?["'\`]`)
 }
 
 /** Every `.js` file under `dir`, recursively — every emitted client chunk,

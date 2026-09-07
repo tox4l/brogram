@@ -22,7 +22,7 @@ export const plannerReply = z.object({
   focus: z.string().min(10).max(140).refine(s => !s.includes('!'), { error: 'no exclamation marks' }),
 })
 
-const PREPARING = 'Your next exercises are still being prepared.'
+const PREPARING = 'Next exercises are still being prepared.'
 
 /** Prerequisites first; among the CLOs that are ready, open ones before closed ones, then by ordinal. */
 function orderClos(clos: Clo[], mastery: Record<CloId, Mastery>): CloId[] {

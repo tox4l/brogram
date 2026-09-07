@@ -39,23 +39,22 @@ function shouldSkip(path: string): boolean {
 }
 
 /**
- * Two known, already-triaged violations under the widened scope (V5, Wave 2
- * review §5) that this lane (W2FIX-F1) could not fix without editing a file
- * outside its owned paths:
- *   - `src/lib/agents/planner.ts:25` -- the fix is a one-line string change,
- *     but `src/lib/agents/planner.test.ts:169` pins the current text and is
- *     not owned by this lane's paths.
- *   - `src/lib/runtimes/java-structure.ts:304` -- not owned by this lane at
- *     all; also unreachable today per the review (`parser.parse` only
- *     returns null on a cancelled parse, and no caller passes a timeout or
- *     progress callback), so it is a live string with no live path to a
+ * Known, already-triaged violations under the widened scope (V5, Wave 2
+ * review §5), each mapped to the *one* rule it trips rather than blanket-
+ * skipping the file: a later edit that adds an unrelated violation (an
+ * emoji, a literal " -- ") to an allowlisted file must still be caught by
+ * this lint, not hidden behind the allowlist meant for a different string.
+ *   - `src/lib/runtimes/java-structure.ts:304` (dated 2026-09-06, owner:
+ *     W2FIX-F1 / the runtimes owner) -- not owned by any lane with the
+ *     paths to fix it; also unreachable today per the review (`parser.parse`
+ *     only returns null on a cancelled parse, and no caller passes a timeout
+ *     or progress callback), so it is a live string with no live path to a
  *     learner right now, not an urgent fix.
  * Remove an entry only in the same commit that fixes its string (and its
  * paired test, where one exists).
  */
-const KNOWN_VIOLATIONS = new Set([
-  join(SRC_DIR, 'lib', 'agents', 'planner.ts'),
-  join(SRC_DIR, 'lib', 'runtimes', 'java-structure.ts'),
+const KNOWN_VIOLATIONS = new Map<string, string>([
+  [join(SRC_DIR, 'lib', 'runtimes', 'java-structure.ts'), 'opens with "Your "'],
 ])
 
 function walk(dir: string, out: string[]): void {
@@ -107,16 +106,21 @@ interface Hit {
 function scan(): Hit[] {
   const hits: Hit[] = []
   for (const file of sourceFiles()) {
-    if (KNOWN_VIOLATIONS.has(file)) continue
+    const allowedRule = KNOWN_VIOLATIONS.get(file)
     const stripped = stripComments(readFileSync(file, 'utf8'))
+    const fileHits: Hit[] = []
     const emojiMatch = EMOJI.exec(stripped)
-    if (emojiMatch) hits.push({ file, rule: 'emoji', sample: emojiMatch[0] })
+    if (emojiMatch) fileHits.push({ file, rule: 'emoji', sample: emojiMatch[0] })
     const dashMatch = DOUBLE_DASH.exec(stripped)
-    if (dashMatch) hits.push({ file, rule: 'double dash', sample: dashMatch[0] })
+    if (dashMatch) fileHits.push({ file, rule: 'double dash', sample: dashMatch[0] })
     const jsxYourMatch = JSX_TEXT_YOUR_OPENER.exec(stripped)
-    if (jsxYourMatch) hits.push({ file, rule: 'opens with "Your "', sample: jsxYourMatch[0] })
+    if (jsxYourMatch) fileHits.push({ file, rule: 'opens with "Your "', sample: jsxYourMatch[0] })
     const stringYourMatch = STRING_YOUR_OPENER.exec(stripped)
-    if (stringYourMatch) hits.push({ file, rule: 'opens with "Your "', sample: stringYourMatch[0] })
+    if (stringYourMatch) fileHits.push({ file, rule: 'opens with "Your "', sample: stringYourMatch[0] })
+    // Only the one allowlisted rule for this file is suppressed -- every
+    // other rule still reports normally, so a new, unrelated violation in an
+    // allowlisted file is never silently missed (F3, review round 2).
+    for (const hit of fileHits) if (hit.rule !== allowedRule) hits.push(hit)
   }
   return hits
 }
@@ -132,11 +136,14 @@ describe('repo-wide copy lint (T2.7b step 4, widened per V5)', () => {
     expect(hits, `copy violations found:\n${report}`).toEqual([])
   })
 
-  it('KNOWN_VIOLATIONS stays exactly as large as the set of real, currently-unfixable violations (trip-wire: fix the string and shrink this list together)', () => {
-    for (const file of KNOWN_VIOLATIONS) {
+  it('KNOWN_VIOLATIONS stays exactly as large as the set of real, currently-unfixable violations, and each entry still trips exactly the rule it is mapped to (trip-wire: fix the string and shrink this list together)', () => {
+    for (const [file, rule] of KNOWN_VIOLATIONS) {
       const stripped = stripComments(readFileSync(file, 'utf8'))
-      const stillViolates = STRING_YOUR_OPENER.test(stripped) || JSX_TEXT_YOUR_OPENER.test(stripped) || EMOJI.test(stripped) || DOUBLE_DASH.test(stripped)
-      expect(stillViolates, `${file} no longer violates the copy lint -- remove it from KNOWN_VIOLATIONS`).toBe(true)
+      const tripped = new Set<string>()
+      if (STRING_YOUR_OPENER.test(stripped) || JSX_TEXT_YOUR_OPENER.test(stripped)) tripped.add('opens with "Your "')
+      if (EMOJI.test(stripped)) tripped.add('emoji')
+      if (DOUBLE_DASH.test(stripped)) tripped.add('double dash')
+      expect(tripped.has(rule), `${file} no longer trips "${rule}" -- remove it from KNOWN_VIOLATIONS`).toBe(true)
     }
   })
 })
