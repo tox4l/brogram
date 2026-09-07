@@ -15,6 +15,7 @@
  */
 
 import { DEFAULT_WELLNESS, type DockCorner, type DockPlacement, type MotionPreference, type ThemeName, type WellnessPrefs } from '@/lib/contracts'
+import { THEMES } from '@/lib/theme/themes'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -40,7 +41,14 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
 }
 
-const THEME_NAMES: ThemeName[] = ['midnight', 'amber', 'eclipse', 'paper', 'arcade']
+// T4.0 fix round 3 (F4/M3): derived from the same registry `ThemeQuickSwitch`
+// and the Account picker render from, so a sixth palette added to `THEMES`
+// cannot leave a stored `wellness.prefs.theme` silently unrecognised the
+// way a hand-enumerated list did for `eclipse` in fix round 1.
+// Exported (only) so contrast.test.ts (T4.0's own gate file) can assert
+// this list stays derived rather than drifting back to a hand-enumerated
+// one -- nothing outside a test imports it.
+export const THEME_NAMES: ThemeName[] = THEMES.map((theme) => theme.id)
 const DOCK_PLACEMENTS: DockPlacement[] = ['left', 'right', 'top', 'float', 'hidden']
 const DOCK_CORNERS: DockCorner[] = ['tl', 'tr', 'bl', 'br']
 const MOTION_PREFERENCES: MotionPreference[] = ['system', 'full', 'reduced']

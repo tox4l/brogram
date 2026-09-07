@@ -87,17 +87,22 @@
 //    (`bg-accent` + `text-accent-foreground`) regardless of whether the
 //    gate was checking it.
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { apcaLc, deltaL, isInGamut, parseOklch, wcagRatio } from './contrast'
 import { THEMES as PICKER_THEMES } from './themes'
+import { THEME_NAMES as WELLNESS_THEME_NAMES } from '@/lib/wellness/prefs'
 
 const SRC_DIR = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const GLOBALS_CSS_PATH = join(SRC_DIR, 'app', 'globals.css')
 
-type ThemeId = 'midnight' | 'amber' | 'eclipse' | 'arcade' | 'paper'
+// T4.0 fix round 3: derived from the registry, not hand-enumerated -- the
+// re-check's sixth-palette probe found this exact literal union would ship
+// a new theme both ungated (no [data-theme] block ever parsed for it) and
+// unlisted (never iterated by describe.each) with zero tsc/test signal.
+type ThemeId = (typeof PICKER_THEMES)[number]['id']
 type TokenMap = Record<string, string>
 
 const css = readFileSync(GLOBALS_CSS_PATH, 'utf8')
@@ -113,10 +118,12 @@ function extractDeclarations(body: string): TokenMap {
   return tokens
 }
 
-/** Every `[data-theme="x"] { ... }` block, raw (declarations unresolved). */
+/** Every `[data-theme="x"] { ... }` block, raw (declarations unresolved).
+ *  The id alternation is built from the registry, not hand-enumerated, so
+ *  a sixth palette added to `THEMES` is parsed the moment it ships. */
 function extractThemeBlocks(source: string): Record<ThemeId, TokenMap> {
   const blocks = {} as Record<ThemeId, TokenMap>
-  const blockRe = /\[data-theme="(midnight|amber|eclipse|arcade|paper)"\]\s*\{([^}]*)\}/g
+  const blockRe = new RegExp(`\\[data-theme="(${PICKER_THEMES.map((t) => t.id).join('|')})"\\]\\s*\\{([^}]*)\\}`, 'g')
   let blockMatch: RegExpExecArray | null
   while ((blockMatch = blockRe.exec(source))) {
     const [, id, body] = blockMatch
@@ -152,7 +159,14 @@ function resolve(tokens: TokenMap, key: string): string {
 
 const THEMES = extractThemeBlocks(css)
 const ROOT = extractRootBlock(css)
-const THEME_IDS: ThemeId[] = ['midnight', 'amber', 'eclipse', 'arcade', 'paper']
+// T4.0 fix round 3 (F4/M3 follow-up): derived, not hand-enumerated -- see
+// the re-check's sixth-palette probe (v2-T4.0-recheck2.md, R1) for why a
+// literal list here is the exact hole a new palette can ship through
+// unlisted.
+const THEME_IDS: ThemeId[] = PICKER_THEMES.map((t) => t.id)
+// DARK_IDS is deliberately still hand-picked: which palettes are dark is a
+// design fact `THEMES` does not encode (id/name/blurb/swatch, not
+// `color-scheme`), not something the registry alone can derive.
 const DARK_IDS: ThemeId[] = ['midnight', 'amber', 'eclipse', 'arcade']
 
 describe('theme palette: key-set parity (the half-themed-block bug)', () => {
@@ -471,6 +485,74 @@ describe('A11Y-01: the shell header, Account, dashboard, courses, onboarding, re
       const content = readFileSync(join(SRC_DIR, ...segments), 'utf8')
       const matches = content.match(RAW_PALETTE_RE)
       if (matches) violations.push(`${segments.join('/')}: ${matches.join(', ')}`)
+    }
+    expect(violations).toEqual([])
+  })
+})
+
+describe('F4/M3 (T4.0 fix round 3): wellness/prefs.ts THEME_NAMES stays derived from the registry', () => {
+  // The re-check's sixth-palette probe found this list unguarded: adding a
+  // theme to `THEMES` without also editing this array produced zero
+  // failure anywhere, and a stored `wellness.prefs.theme` for the new id
+  // would silently fall back to the default. `THEME_NAMES` is now
+  // `THEMES.map(t => t.id)` (see wellness/prefs.ts); this pins that fact
+  // so a future edit back to a hand-enumerated list fails here first.
+  it('THEME_NAMES equals the THEMES registry ids, in the same order', () => {
+    expect(WELLNESS_THEME_NAMES).toEqual(PICKER_THEMES.map((t) => t.id))
+  })
+})
+
+describe('N1 (T4.0 fix round 3): .display-caps declares an explicit font-weight', () => {
+  // Fix round 2 self-hosted Archivo/Newsreader as *static* instances (no
+  // `fvar`), which silently made this utility's `font-variation-settings:
+  // 'wdth' 118, 'wght' 850` inert -- with no `font-weight` of its own, the
+  // element inherited body's 400 and CSS Fonts 4's face-matching algorithm
+  // resolved that to the 700 face, not the 850/`wdth 118` one this utility
+  // exists to render (measured live: 22.4% narrower). A plain regex on the
+  // utility's own declaration block is a cheap, permanent gate against that
+  // regressing again, independent of which font backs `--font-display`.
+  it('the @utility display-caps block in globals.css declares font-weight: 850', () => {
+    const match = /@utility\s+display-caps\s*\{([^}]*)\}/.exec(css)
+    expect(match, 'globals.css: no @utility display-caps block found').toBeTruthy()
+    const body = match![1]
+    expect(/font-weight:\s*850\s*;/.test(body), `@utility display-caps has no font-weight: 850 declaration:\n${body}`).toBe(true)
+  })
+})
+
+describe('N2 (T4.0 fix round 3): text-warning / text-destructive stay bare -- no variant or opacity modifier resolves through the fill token', () => {
+  // The `@layer utilities` override in this file redirects exactly the two
+  // bare selectors (base class, no variant prefix, no opacity suffix) to
+  // the new text-role tokens. Tailwind still holds the fill tokens in
+  // `@theme inline`, so any *other* spelling of the same two utilities --
+  // a state-variant prefix (a pseudo-class or dark-mode selector joined by
+  // a colon) or an opacity suffix (a slash followed by digits) -- compiles
+  // to its own selector generated straight from the fill token and is not
+  // covered by the override, silently reintroducing the WCAG 1.4.3
+  // failure I1/I2 fixed. This scans every `.ts`/`.tsx` file under `src/`
+  // (not just the files this round touched) so a future screen sweep
+  // (T4.4-T4.9) trips it the moment one such spelling is written.
+  //
+  // (Deliberately not spelling out a live example of either shape in this
+  // comment: earlier drafts did, and the scan below matched its own
+  // documentation.)
+  const VARIANT_OR_OPACITY_RE = /(?:[\w-]+:)+text-(?:warning|destructive)\b(?!-)|text-(?:warning|destructive)\/\d{1,3}\b(?!-)/g
+
+  function listSourceFiles(dir: string): string[] {
+    const out: string[] = []
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) out.push(...listSourceFiles(full))
+      else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) out.push(full)
+    }
+    return out
+  }
+
+  it('no file under src/** uses a variant-prefixed or opacity-modified text-warning/text-destructive class', () => {
+    const violations: string[] = []
+    for (const file of listSourceFiles(SRC_DIR)) {
+      const content = readFileSync(file, 'utf8')
+      const matches = content.match(VARIANT_OR_OPACITY_RE)
+      if (matches) violations.push(`${file.slice(SRC_DIR.length + 1).replace(/\\/g, '/')}: ${matches.join(', ')}`)
     }
     expect(violations).toEqual([])
   })
