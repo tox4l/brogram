@@ -16,6 +16,7 @@ import { qk } from '@/lib/query/keys'
 import { useSecondTick } from '@/components/shell/useSecondTick'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { nextCorner, rememberDockPlacement } from '@/lib/wellness/dock'
+import { line } from '@/lib/voice/lines'
 import { useDockPrefsMutation } from './useDockPrefs'
 import { clearReminderBadge, setReminderPending, useReminderBadge, type ReminderSource } from '@/lib/wellness/reminderBadge'
 import type { WellnessRow } from '@/lib/learner/compile'
@@ -294,7 +295,7 @@ function VerticalCollapsedChrome({ waterLog, prayerResult, badge, onExpand }: {
   const items = [
     { key: 'prayer', icon: Sunrise, label: `Next prayer: ${nextPrayerLabel(prayerResult, now)}` },
     { key: 'water', icon: CupSoda, label: `Water today: ${todaysWaterCount(waterLog, now)}` },
-    { key: 'pomodoro', icon: Timer, label: 'Pomodoro' },
+    { key: 'pomodoro', icon: Timer, label: line('dock.pomodoro') },
   ]
   return (
     <div className="relative flex flex-col items-center gap-3">

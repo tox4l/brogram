@@ -19,7 +19,7 @@ export function ResultsPanel({ exercise, results, stdout, stderr, status, review
           <div className="flex justify-between gap-3"><span>{hidden ? 'Hidden test' : test.name ?? `Test ${index + 1}`}</span><span className={result.passed ? 'text-emerald-300' : 'text-muted-foreground'}>{result.passed ? 'Passed' : 'Needs work'}</span></div>
           {!result.passed && <p className="mt-1 text-muted-foreground">{result.failureKind === 'timeout' ? 'Time limit reached.' : result.failureKind === 'compile-error' ? 'Could not compile.' : result.failureKind === 'runtime-error' ? 'Could not finish running.' : 'The result does not match.'}</p>}
           {details && !result.passed && <dl className="mt-3 space-y-2">
-            <div><dt className="text-muted-foreground">Your result</dt><dd className="mt-1 whitespace-pre-wrap break-all font-mono">{result.actual || '(no output)'}</dd></div>
+            <div><dt className="text-muted-foreground">Actual</dt><dd className="mt-1 whitespace-pre-wrap break-all font-mono">{result.actual || '(no output)'}</dd></div>
             <div><dt className="text-muted-foreground">Expected</dt><dd className="mt-1 whitespace-pre-wrap break-all font-mono">{result.expected}</dd></div>
             {result.stderr && <div><dt className="text-muted-foreground">Error</dt><dd className="mt-1 whitespace-pre-wrap break-all font-mono">{result.stderr}</dd></div>}
           </dl>}

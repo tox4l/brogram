@@ -315,13 +315,13 @@ describe('ChainPips', () => {
   it('describes the chain honestly via one accessible label, never motion alone', async () => {
     const { ChainPips } = await import('./ChainPips')
     render(<ChainPips count={2} />)
-    screen.getByRole('img', { name: 'Chain 2 of 3' })
+    screen.getByRole('img', { name: '2 of 3 in a row' })
   })
 
   it('clamps to the 0-3 range', async () => {
     const { ChainPips } = await import('./ChainPips')
     render(<ChainPips count={7} />)
-    screen.getByRole('img', { name: 'Chain 3 of 3' })
+    screen.getByRole('img', { name: '3 of 3 in a row' })
   })
 })
 

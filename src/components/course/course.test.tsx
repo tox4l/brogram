@@ -268,7 +268,7 @@ describe('NextUpStack', () => {
   it('I3: restricted turns exercise cards inert with the restriction copy, keeping a walkthrough card live', () => {
     const cards = [walkthroughCard(), exerciseCard('E-1', { caption: 'After the walkthrough, or skip it.' }), exerciseCard('E-2', { caption: 'After the walkthrough, or skip it.' })]
     render(<NextUpStack cards={cards} reducedMotion={false} restricted />)
-    expect(screen.getByText('Exercises are paused while your account is restricted.')).toBeTruthy()
+    expect(screen.getByText('Reps are paused while your account is restricted.')).toBeTruthy()
     const region = screen.getByRole('region', { name: 'Next up' })
     expect(within(region).getAllByRole('link')).toHaveLength(1)
     expect(within(region).getByRole('link').getAttribute('href')).toBe('/lesson/C-1')

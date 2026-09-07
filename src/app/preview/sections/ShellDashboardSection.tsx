@@ -7,6 +7,8 @@ import { Progress } from '@/components/ui/progress'
 import { AppShell } from '@/components/shell/AppShell'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { cn } from '@/lib/utils'
+import type { Difficulty } from '@/lib/contracts'
+import { difficultyWord } from '@/lib/voice/glossary'
 import {
   fixtureCourse, fixtureLearnerState, fixtureNextExercises, fixtureOutcomes, fixtureSessionData,
 } from '../fixtures'
@@ -66,7 +68,7 @@ function PreviewDashboard() {
       <section aria-labelledby="preview-next-heading">
         <div className="flex items-baseline justify-between gap-3">
           <h3 id="preview-next-heading" className="text-base font-medium">Next exercises</h3>
-          <p className="text-xs text-muted-foreground">Your practice path</p>
+          <p className="text-xs text-muted-foreground">Practice path</p>
         </div>
         <ol className="mt-3 divide-y divide-border border-y border-border">
           {fixtureNextExercises.map((exercise, index) => (
@@ -75,7 +77,7 @@ function PreviewDashboard() {
                 <span className="w-5 shrink-0 font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-foreground">{exercise.title}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABEL[exercise.language] ?? exercise.language} · Difficulty {exercise.difficulty} of 5</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{LANGUAGE_LABEL[exercise.language] ?? exercise.language} · {difficultyWord(exercise.difficulty as Difficulty)}</span>
                 </span>
                 <ArrowRight className="size-4 shrink-0 text-emerald-200" aria-hidden="true" />
               </span>

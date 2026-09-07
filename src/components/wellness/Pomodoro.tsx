@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Pause, Play, RotateCcw, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { WellnessPrefs } from '@/lib/contracts'
+import { line } from '@/lib/voice/lines'
 import {
   advancePomodoro,
   pausePomodoro,
@@ -126,7 +127,7 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, onPendi
 
   return (
     <div id="pomodoro" className="scroll-mt-20">
-      <h3 className="text-sm font-medium">Pomodoro</h3>
+      <h3 className="text-sm font-medium">{line('dock.pomodoro')}</h3>
       <div className="mt-3 flex items-center justify-between gap-3">
         <div>
           <p className="font-mono text-2xl font-medium tabular-nums tracking-tight">{formatClock(remaining)}</p>

@@ -229,13 +229,13 @@ function FollowTheDotSubstitute({ onPlayAnyway }: { onPlayAnyway: () => void }) 
       <CardHeader className="gap-2">
         <CardTitle>{DRILL_META['follow-the-dot'].title} needs movement</CardTitle>
         <CardDescription>
-          This is a movement game -- a dot drifts across the screen and the point is to keep tracking it. Your motion
-          preference is set to reduced, so it does not start on its own here.
+          This is a movement game — a dot drifts across the screen and the point is to keep tracking it. Reduced
+          motion is on, so it does not start on its own here.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
-          {DRILL_META['memory-grid'].title} or {DRILL_META.reaction.title} make a good substitute -- same sixty to
+          {DRILL_META['memory-grid'].title} or {DRILL_META.reaction.title} make a good substitute — same sixty to
           ninety second break, no screen motion required.
         </p>
         <div className="flex flex-wrap gap-3">

@@ -156,7 +156,7 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
             <dd className="font-mono">{INTEGRITY_THRESHOLDS.banAt}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-0.5">
-            <dt className="text-muted-foreground">Paste blocks in one exercise that pause reps instantly</dt>
+            <dt className="text-muted-foreground">Paste blocks in one rep that pause reps instantly</dt>
             <dd className="font-mono">{INTEGRITY_THRESHOLDS.instantRestrictPasteCount}</dd>
           </div>
         </dl>
@@ -164,7 +164,7 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
 
       {variant === 'full' && (
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Every exercise is generated per learner. A leaked solution matches nobody else&apos;s problem, which is the real backstop underneath all of this.
+          Every rep is generated per learner. A leaked solution matches nobody else&apos;s problem, which is the real backstop underneath all of this.
         </p>
       )}
 

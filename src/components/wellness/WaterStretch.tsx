@@ -8,6 +8,7 @@ import type { WellnessPrefs } from '@/lib/contracts'
 import { isTickReady } from '@/components/shell/useSecondTick'
 import { dateKeyOf } from '@/lib/wellness/prayer'
 import { advanceRecurringTimer, computeLogStreak, dueRecurringTimer, startRecurringTimer, type RecurringTimerState } from '@/lib/wellness/timers'
+import { line } from '@/lib/voice/lines'
 
 export interface WellnessLogEntry {
   kind: 'water' | 'stretch'
@@ -103,8 +104,8 @@ export function WaterStretch({ prefs, now, log, onLog, attemptActive = false, on
   if (compact) {
     return (
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <button type="button" onClick={logWater} className="flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><CupSoda className="size-3.5" aria-hidden="true" />Water</button>
-        <button type="button" onClick={logStretch} className="flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><PersonStanding className="size-3.5" aria-hidden="true" />Stretch</button>
+        <button type="button" onClick={logWater} className="flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><CupSoda className="size-3.5" aria-hidden="true" />{line('dock.water')}</button>
+        <button type="button" onClick={logStretch} className="flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><PersonStanding className="size-3.5" aria-hidden="true" />{line('dock.stretch')}</button>
       </div>
     )
   }

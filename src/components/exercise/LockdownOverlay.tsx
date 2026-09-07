@@ -118,7 +118,7 @@ export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessag
         >
           <div className="max-w-sm space-y-4 text-center">
             <p className="text-base leading-relaxed">{overlayMessage}</p>
-            {reason === 'idle' && <Button type="button" onClick={onResume}>Continue exercise</Button>}
+            {reason === 'idle' && <Button type="button" onClick={onResume}>Continue rep</Button>}
           </div>
         </div>
       )}

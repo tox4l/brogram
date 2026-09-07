@@ -10,12 +10,12 @@ vi.mock('@/components/account/IntegrityPanel', () => ({
 afterEach(() => { cleanup() })
 
 describe('BannedAccount', () => {
-  // The heading and short contact line are the original v1 copy, kept
-  // byte-for-byte because `src/app/(auth)/login/page.test.tsx` (a different
-  // task's file) asserts them verbatim; not touched here.
+  // T2.7b: the heading's opening word changed from "Your" to "This" (voice
+  // rule 3, never open with "Your"); re-pointed together with
+  // `src/app/(auth)/login/page.test.tsx`, the other test that pinned it.
   it('keeps the original heading and contact line intact', () => {
     render(<BannedAccount />)
-    expect(screen.getByRole('alert').textContent).toContain('Your BroGram account has been banned.')
+    expect(screen.getByRole('alert').textContent).toContain('This BroGram account has been banned.')
     expect(screen.getByText(/Contact Velocity/)).toBeTruthy()
   })
 

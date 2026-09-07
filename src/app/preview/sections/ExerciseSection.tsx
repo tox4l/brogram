@@ -13,6 +13,7 @@ import type { LockdownReason } from '@/hooks/useLockdown'
 import { PredictOutput } from '@/components/exercise/PredictOutput'
 import { SpotTheBug } from '@/components/exercise/SpotTheBug'
 import { Trace } from '@/components/exercise/Trace'
+import { difficultyWord } from '@/lib/voice/glossary'
 import {
   fixtureClo, fixtureCodeExercise, fixtureDiagnosis, fixtureHintCooldown, fixtureHintReady, fixtureHints,
   fixturePredictExercise, fixtureResults, fixtureSchemaExercise, fixtureSpotBugExercise, fixtureTraceExercise,
@@ -52,12 +53,12 @@ export function ExerciseSection() {
     <Section id="exercise" title="Exercise screen" caption="The real three-column layout with fixture exercise, attempt, results and diagnosis. The buttons below toggle the real LockdownOverlay's blur and idle states.">
       <div className="flex flex-wrap items-baseline justify-between gap-3 rounded-xl border border-border px-5 pt-4">
         <h3 className="text-base font-medium">{fixtureCodeExercise.title}</h3>
-        <p className="font-mono text-xs text-muted-foreground">{fixtureCodeExercise.language} · Difficulty {fixtureCodeExercise.difficulty}/5</p>
+        <p className="font-mono text-xs text-muted-foreground">{fixtureCodeExercise.language} · {difficultyWord(fixtureCodeExercise.difficulty)}</p>
       </div>
       <div className="grid min-w-0 gap-6 rounded-xl border border-border p-5 xl:grid-cols-[minmax(12rem,0.8fr)_minmax(22rem,1.7fr)_minmax(14rem,0.9fr)]">
         <div className="min-w-0"><PromptPanel exercise={fixtureCodeExercise} clo={fixtureClo} /></div>
-        <section aria-label="Your work" className="min-w-0 self-start overflow-hidden rounded-xl border border-border bg-background">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><h3 className="text-sm font-medium">Your code</h3><span className="text-xs text-muted-foreground">Fixture attempt (wrong)</span></div>
+        <section aria-label="Work" className="min-w-0 self-start overflow-hidden rounded-xl border border-border bg-background">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><h3 className="text-sm font-medium">Code</h3><span className="text-xs text-muted-foreground">Fixture attempt (wrong)</span></div>
           <Editor value={code} onChange={setCode} language="python" logIntegrity={noop} />
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-3">
             <Button variant="outline" className="transition-none">Run</Button>

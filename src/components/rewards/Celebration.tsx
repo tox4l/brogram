@@ -107,7 +107,9 @@ function soundsFor(kind: CelebrationKind): SoundEventId[] {
  * the achievement bar is data, not the bank, routed through
  * `achievementLine()` -- fix round 2, I1 -- so `first-blood`'s frozen
  * `contracts.ts` line never ships verbatim. The collapsed "N new trophies"
- * card has no bank key yet, flagged for T2.7b in the report). `item.id` is
+ * announcement is `achievement.collapsed` (T2.7b) -- TrophyCard's own
+ * visible title/line stay literal, byte-identical to this key's text and
+ * already pinned by rewards.test.tsx). `item.id` is
  * used as the rotation seed: deterministic per celebration instance (stable
  * across an unrelated re-render, and safe to assert against in tests),
  * while still varying across different instances, which is what "rotating"
@@ -126,7 +128,7 @@ function textFor(item: CelebrationItem): string {
     case 'streak-milestone': return lineWith('streak.milestone', { n: detail.n ?? 0 }, seed)
     case 'best': return lineWith('best', { n: detail.n ?? 0 }, seed)
     case 'achievement': {
-      if (collapsedCount) return `${collapsedCount} new trophies. Go see them.`
+      if (collapsedCount) return lineWith('achievement.collapsed', { n: collapsedCount }, seed)
       const record = achievementRecord(detail.skill)
       return record ? achievementLine(record) : 'Trophy unlocked.'
     }

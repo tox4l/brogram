@@ -94,7 +94,7 @@ describe('course home', () => {
   it('opens on the path map, next-up stack and flat list built from the static bundle plus the seeded learner state -- zero Supabase round trips', async () => {
     renderPage()
     expect(await screen.findByText('Demo Course')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Your path' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Path map' })).toBeTruthy()
     expect(screen.getByRole('list', { name: 'Skill path' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Next up' })).toBeTruthy()
     expect(screen.getByText('Every skill in this course')).toBeTruthy()
@@ -158,7 +158,7 @@ describe('course home', () => {
     mocks.session.mockReturnValue({ learnerState: learnerState({ accountStatus: 'restricted' }) })
     renderPage()
     await screen.findByText('Demo Course')
-    expect(screen.getByText('Exercises are paused while your account is restricted.')).toBeTruthy()
+    expect(screen.getByText('Reps are paused while your account is restricted.')).toBeTruthy()
     const region = screen.getByRole('region', { name: 'Next up' })
     // DEMO101's fixture bundle carries no lessons, so every card and every
     // path-map node is exercise-bound -- restricted must block all of them.

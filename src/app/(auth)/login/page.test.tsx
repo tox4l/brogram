@@ -103,7 +103,7 @@ describe('email and password login', () => {
     mocks.params = new URLSearchParams('reason=banned')
     const { default: Login } = await import('./page')
     render(<Login />)
-    expect(screen.getByRole('alert').textContent).toContain('Your BroGram account has been banned.')
+    expect(screen.getByRole('alert').textContent).toContain('This BroGram account has been banned.')
     expect(screen.getByText(/Contact Velocity/)).toBeTruthy()
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(mocks.signInWithPassword).not.toHaveBeenCalled()

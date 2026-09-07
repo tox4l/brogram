@@ -60,7 +60,7 @@ async function writeLearnerState(
     if (!write.data) continue
     return nextState
   }
-  throw new Error('Your progress changed elsewhere. Try again.')
+  throw new Error('Progress changed elsewhere. Try again.')
 }
 
 /**

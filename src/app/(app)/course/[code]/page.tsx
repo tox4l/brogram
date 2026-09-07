@@ -168,7 +168,7 @@ export default function CoursePage() {
       <section className="space-y-5 py-6">
         <BackLink />
         {failed
-          ? <ErrorRetry message="This course could not open. Your saved progress is safe." onRetry={retry} />
+          ? <ErrorRetry message="This course could not open. Saved progress is safe." onRetry={retry} />
           : <p role="status" className="text-sm text-muted-foreground">Opening {meta.title}.</p>}
       </section>
     )
@@ -198,7 +198,7 @@ export default function CoursePage() {
       </div>
 
       <section aria-labelledby="path-heading" className="space-y-4">
-        <h2 id="path-heading" className="text-base font-medium">Your path</h2>
+        <h2 id="path-heading" className="text-base font-medium">Path map</h2>
         <PathMap nodes={nodes} exercises={bundle.exercises} reducedMotion={reducedMotion} restricted={restricted} />
       </section>
 

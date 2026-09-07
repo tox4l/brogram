@@ -5,6 +5,7 @@ import { LockKeyhole } from 'lucide-react'
 import type { ExercisePublic } from '@/lib/contracts'
 import type { MapNode } from '@/lib/course/map'
 import { nodeAccessibleName, nodeHref } from '@/lib/course/map'
+import { chainWord } from '@/lib/voice/glossary'
 import { cn } from '@/lib/utils'
 
 function flatStateLabel(node: MapNode): string {
@@ -16,7 +17,7 @@ function flatStateLabel(node: MapNode): string {
     case 'walkthrough-ready':
       return 'Walkthrough ready'
     case 'in-progress':
-      return `In progress · ${node.chain}/3`
+      return `In progress · ${chainWord(node.chain)}`
     case 'locked-in':
       return 'Locked in'
   }

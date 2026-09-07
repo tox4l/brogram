@@ -29,7 +29,7 @@ describe('exercise screen', () => {
   it('keeps restricted users out of the loading and runtime hooks', () => {
     mocks.session.mockReturnValue({ profile: { account_status: 'restricted' } })
     render(<ExercisePage />)
-    expect(screen.getByRole('heading', { name: 'Exercises are paused' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Reps are paused' })).toBeTruthy()
     expect(mocks.loop).not.toHaveBeenCalled()
     expect(screen.getByRole('link').getAttribute('href')).toBe('/dashboard')
   })
@@ -71,7 +71,7 @@ describe('exercise screen', () => {
     const state = { ...model(), exercise: javaExercise, judgeAbsent: true }
     mocks.loop.mockReturnValue(state)
     render(<ExercisePage />)
-    expect(screen.getByText('Java exercises are not available yet. Pick another course for now.')).toBeTruthy()
+    expect(screen.getByText("Java reps aren't available yet. Pick another course for now.")).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to dashboard' }).getAttribute('href')).toBe('/dashboard')
     expect(screen.queryByRole('button', { name: 'Run' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
@@ -86,7 +86,7 @@ describe('exercise screen', () => {
     expect(cover.className).toContain('pointer-events-auto')
     expect(cover.closest('[inert]')).toBeNull()
     expect(container.querySelector('textarea')?.closest('[inert]')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Continue exercise' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue rep' }))
     expect(resume).toHaveBeenCalledTimes(1)
   })
   it('renders the rotating paste bank line and its "why" affordance, not the old static string', () => {
@@ -180,7 +180,7 @@ describe('exercise screen', () => {
     const state = { ...model(), status: 'graded', outcome: 'passed', busy: true, nextExercise: null, canAdvance: false }
     mocks.loop.mockReturnValue(state)
     render(<ExercisePage />)
-    expect(screen.getByText('Preparing your next exercise.')).toBeTruthy()
+    expect(screen.getByText('Preparing your next rep.')).toBeTruthy()
     expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(true)
   })
   it('enables Next once the hook reports canAdvance, even while other background work is still busy', () => {
@@ -193,8 +193,8 @@ describe('exercise screen', () => {
     const state = { ...model(), status: 'graded', outcome: 'passed', error: 'write temporarily unavailable', canAdvance: false, nextExercise: null }
     mocks.loop.mockReturnValue(state)
     render(<ExercisePage />)
-    expect(screen.queryByText('Your pass is saved.')).toBeNull()
-    expect(screen.queryByText('Preparing your next exercise.')).toBeNull()
+    expect(screen.queryByText('Pass saved.')).toBeNull()
+    expect(screen.queryByText('Preparing your next rep.')).toBeNull()
     expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

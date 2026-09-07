@@ -8,6 +8,7 @@ import type { LessonPublicBlock, RunResult, TestResult } from '@/lib/contracts'
 import { gradeCheck, type CheckAnswer, type CheckVerdict } from '@/lib/lesson/grade'
 import { getRuntime, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
 import { play } from '@/lib/sound/manager'
+import { line } from '@/lib/voice/lines'
 import { DynamicEditor } from './DynamicEditor'
 
 type CheckBlockData = Extract<LessonPublicBlock, { type: 'check' }>
@@ -256,7 +257,7 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
 
       {block.kind === 'micro-code' && (
         <div className="overflow-hidden rounded-lg border border-border">
-          <DynamicEditor value={code} onChange={setCode} language={block.language} logIntegrity={() => {}} disabled={locked} label="Your code" />
+          <DynamicEditor value={code} onChange={setCode} language={block.language} logIntegrity={() => {}} disabled={locked} />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
             <p className="text-xs text-muted-foreground">{block.tests.length} visible {block.tests.length === 1 ? 'test' : 'tests'}</p>
             {!locked && <Button type="button" size="sm" onClick={() => void runMicroCode()} disabled={running}>{running ? 'Running…' : 'Run tests'}</Button>}
@@ -295,7 +296,7 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
             className={`flex items-center gap-2 text-sm font-medium outline-none ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}
           >
             {verdict.right ? <Check aria-hidden="true" className="size-4" /> : <X aria-hidden="true" className="size-4" />}
-            {verdict.right ? 'Right' : 'Not yet'}
+            {verdict.right ? line('lesson.verdict.right') : line('lesson.verdict.notYet')}
             {!verdict.right && <span className="sr-only"> — attempt {attempts}</span>}
           </p>
         )}

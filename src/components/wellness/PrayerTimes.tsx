@@ -6,6 +6,7 @@ import { Sunrise } from 'lucide-react'
 import type { WellnessPrefs } from '@/lib/contracts'
 import { PRAYER_ORDER, type PrayerName, type PrayerTimesResult } from '@/lib/wellness/prayer'
 import { buildPrayerReminders, dueReminders, type PrayerReminderEvent } from '@/lib/wellness/timers'
+import { line } from '@/lib/voice/lines'
 
 const PRAYER_LABEL: Record<PrayerName, string> = {
   fajr: 'Fajr', dhuhr: 'Dhuhr', asr: 'Asr', maghrib: 'Maghrib', isha: 'Isha',
@@ -78,7 +79,7 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
   if (!result) {
     return (
       <div>
-        <h3 className="text-sm font-medium">Prayer</h3>
+        <h3 className="text-sm font-medium">{line('dock.prayer')}</h3>
         <p className="mt-2 text-sm text-muted-foreground">Loading today&apos;s prayer times.</p>
       </div>
     )
@@ -98,7 +99,7 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">Prayer</h3>
+        <h3 className="text-sm font-medium">{line('dock.prayer')}</h3>
         {result.source === 'fallback' && <span className="text-xs text-muted-foreground">Computed offline</span>}
       </div>
       <ul className="mt-2 space-y-1.5">

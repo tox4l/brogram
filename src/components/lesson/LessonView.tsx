@@ -221,7 +221,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
       <div className="min-w-0 max-w-[45rem] flex-1 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-            <ArrowLeft className="size-3" aria-hidden="true" />Your path
+            <ArrowLeft className="size-3" aria-hidden="true" />Path map
           </Link>
           <SkipButton onSkip={skip} disabled={skipped} />
         </div>

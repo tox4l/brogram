@@ -335,7 +335,7 @@ describe('app shell', () => {
     expect(screen.queryByRole('button', { name: /show wellness dock/i })).toBeNull()
     expect(screen.getByRole('link', { name: 'Account' }).getAttribute('href')).toBe('/account')
     fireEvent.click(screen.getByRole('button', { name: 'Buddy' }))
-    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Your coding Buddy' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Coding Buddy' })).toBeTruthy())
     expect(screen.getByText('Ask about the code you are stuck on, or why a pattern keeps failing.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())

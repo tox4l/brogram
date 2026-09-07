@@ -84,7 +84,7 @@ describe('LockdownOverlay', () => {
     expect(overlay.className).toContain('fixed')
     expect(overlay.className).toContain('backdrop-blur')
     expect(overlay.contains(screen.getByText('Editor content'))).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Continue exercise' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue rep' }))
     expect(onResume).toHaveBeenCalledTimes(1)
     rerender(<LockdownOverlay reason="blur" onResume={onResume} />)
     // T2.8 fix round 1, I1: the body copy is now one of the bank's own

@@ -24,7 +24,7 @@ export function ChainPips({ count, motionPref, className }: ChainPipsProps) {
   const clamped = Math.max(0, Math.min(3, count))
 
   return (
-    <span className={cn('inline-flex items-center gap-1', className)} role="img" aria-label={`Chain ${clamped} of 3`}>
+    <span className={cn('inline-flex items-center gap-1', className)} role="img" aria-label={`${clamped} of 3 in a row`}>
       {[0, 1, 2].map((i) => (
         <span
           key={i}

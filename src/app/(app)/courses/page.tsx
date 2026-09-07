@@ -59,7 +59,7 @@ export default function CoursesPage() {
     apply: (previous, vars) => (previous ? withCoursePlan(previous, vars.code, vars.plan) : previous),
     mutate: async (vars) => {
       try {
-        if (!userId) throw new Error('Your session has changed. Sign in again to switch courses.')
+        if (!userId) throw new Error('The session has changed. Sign in again to switch courses.')
         const client = createClient()
         const result = await switchCourse({
           client, userId, code: vars.code, fallback: vars.previousState,
@@ -117,8 +117,8 @@ export default function CoursesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-medium tracking-tight">Your courses</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Switch anytime. Your progress in every course is kept.</p>
+        <h1 className="text-2xl font-medium tracking-tight">Courses</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Switch anytime. Progress in every course is kept.</p>
       </div>
 
       {chipVisible && (

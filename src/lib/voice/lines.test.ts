@@ -305,7 +305,10 @@ describe('voice rule 9 — English only, no institution names', () => {
 
 describe('LineKey coverage', () => {
   it('has exactly one bank entry per declared key, no more, no fewer', () => {
-    expect(ALL_KEYS.length).toBe(55)
+    // 55 at T2.7a, +5 from T2.7b's sweep: achievement.collapsed (the
+    // collapsed trophy-shelf announcement) and the four De-rot Playground
+    // run-summary tiers (derot.play.best/sharp/solid/rough).
+    expect(ALL_KEYS.length).toBe(60)
   })
 })
 

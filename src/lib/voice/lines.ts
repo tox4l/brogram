@@ -25,6 +25,8 @@ export type LineKey =
   | 'empty.bank' | 'empty.trophies' | 'error.offline' | 'error.save' | 'error.load' | 'loading.plan' | 'loading.runtime'
   | 'buddy.failed' | 'buddy.suggest.play' | 'buddy.suggest.arcade' | 'buddy.empty'
   | 'dock.prayer' | 'dock.water' | 'dock.stretch' | 'dock.pomodoro' | 'dock.collapse' | 'dock.restore'
+  | 'achievement.collapsed'
+  | 'derot.play.best' | 'derot.play.sharp' | 'derot.play.solid' | 'derot.play.rough'
 
 export type Frequency = 'rare' | 'session' | 'hot'
 
@@ -410,6 +412,39 @@ const BANK: Readonly<Record<LineKey, BankEntry>> = {
   'dock.restore': {
     frequency: 'rare',
     variants: ['Bring the dock back'],
+  },
+
+  // The collapsed trophy-shelf announcement (T2.6 report/recheck — flagged
+  // as still-unkeyed for T2.7b). TrophyCard renders its own visible title
+  // and line from `collapsedCount` directly (byte-identical to this key's
+  // text, already pinned by rewards.test.tsx); this key backs the shared
+  // sr-only live-region announcement in Celebration.tsx instead of a bare
+  // template literal.
+  'achievement.collapsed': {
+    frequency: 'session',
+    variants: ['{n} new trophies. Go see them.'],
+  },
+
+  // De-rot Playground run-summary lines (T2.9a report: "plain strings pending
+  // the T2.7a/T2.7b voice bank", src/app/(app)/derot/play/[game]/page.tsx's
+  // voiceLineFor). Relocated verbatim -- the text already satisfied every
+  // rule -- one key per tier since the tier itself is a real branch (personal
+  // best / >=80 / >=50 / else), not a rotation choice.
+  'derot.play.best': {
+    frequency: 'session',
+    variants: ['New personal best. Run it again.'],
+  },
+  'derot.play.sharp': {
+    frequency: 'session',
+    variants: ['Sharp run. Keep the streak going.'],
+  },
+  'derot.play.solid': {
+    frequency: 'session',
+    variants: ['Solid run. A little more focus next time.'],
+  },
+  'derot.play.rough': {
+    frequency: 'session',
+    variants: ['Rough one. Shake it off and go again.'],
   },
 }
 

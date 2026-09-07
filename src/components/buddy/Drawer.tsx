@@ -290,13 +290,10 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
             the flex layout the header/scroll/form below rely on. */}
         <div ref={contentRef} className="contents">
           <DrawerHeader className="flex-row items-center justify-between gap-4 border-b border-border pb-4">
-            {/* "Your coding Buddy" violates voice rule 3 ("never open with 'Your'") and is
-                slated for a bank key under T2.7b (review M2) -- kept verbatim here only because
-                src/app/(app)/dashboard/page.test.tsx (outside this task's ownership) pins this
-                exact dialog accessible name; changing it here breaks a test this task cannot
-                edit. Flagged in the fix-round report for the controller to resolve alongside
-                T2.7b's copy pass. */}
-            <DrawerTitle>Your coding Buddy</DrawerTitle>
+            {/* T2.7b: "Your coding Buddy" opened with the one word voice rule 3 bans
+                ("never open with 'Your'"). Re-pointed together with the dashboard test that
+                pinned this exact dialog accessible name (T2.11 fix-round report, review M2). */}
+            <DrawerTitle>Coding Buddy</DrawerTitle>
             <DrawerClose render={<Button variant="ghost" size="icon-sm" />}>
               <XIcon />
               <span className="sr-only">Close</span>

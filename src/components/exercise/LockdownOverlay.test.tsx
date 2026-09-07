@@ -26,7 +26,7 @@ describe('LockdownOverlay — full-screen overlay (blur / idle)', () => {
     const overlay = screen.getByTestId('lockdown-overlay')
     const matchesAVariant = LINE_BANK['guard.idle'].variants.some((variant) => overlay.textContent?.includes(variant))
     expect(matchesAVariant).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Continue exercise' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue rep' }))
     expect(onResume).toHaveBeenCalledTimes(1)
   })
 

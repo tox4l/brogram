@@ -243,10 +243,10 @@ export default function Dashboard() {
         </section>
       ) : (
         <section aria-labelledby="resume-heading" className="rounded-xl border border-border bg-linear-to-br from-emerald-200/[0.06] to-transparent p-5">
-          <h2 id="resume-heading" className="text-xs font-medium text-muted-foreground">{meta?.title ?? 'Your course'}</h2>
+          <h2 id="resume-heading" className="text-xs font-medium text-muted-foreground">{meta?.title ?? 'Course'}</h2>
           {bundleFailed ? (
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-foreground">Your course details could not load. Your saved progress is still here.</p>
+              <p className="text-sm text-foreground">Course details couldn&apos;t load. Progress is saved separately.</p>
               <Button variant="outline" onClick={retryBundle}>Try again</Button>
             </div>
           ) : resumeWalkthrough && currentTitle ? (
@@ -292,7 +292,7 @@ export default function Dashboard() {
       </div>
 
       {bundleLoading ? (
-        <p role="status" className="text-sm text-muted-foreground">Loading your next reps. Your saved progress is ready.</p>
+        <p role="status" className="text-sm text-muted-foreground">Loading your next reps. Progress saves as you go.</p>
       ) : (
         <NextUpStack cards={cards} reducedMotion={reducedMotion} restricted={restricted} />
       )}
@@ -336,7 +336,7 @@ export default function Dashboard() {
 
       {restricted && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <LockKeyhole className="size-3.5" aria-hidden="true" />Exercises are paused while your account is restricted. Walkthroughs and De-rot stay open.
+          <LockKeyhole className="size-3.5" aria-hidden="true" />Reps are paused while your account is restricted. Walkthroughs and De-rot stay open.
         </p>
       )}
     </div>

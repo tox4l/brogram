@@ -166,7 +166,7 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
     <Card className="mx-auto w-full max-w-2xl">
       <CardHeader className="gap-3">
         <CardTitle>{DRILL_META.breathe.title}</CardTitle>
-        <CardDescription>A four-seven-eight pace. This one cannot be failed -- tap along or just watch.</CardDescription>
+        <CardDescription>A four-seven-eight pace. This one cannot be failed — tap along or just watch.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-6 py-10">
         {/* Fix round 1 (B-I2): announce phase transitions only (3x per 19s
@@ -216,7 +216,7 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
             >
               Tap to breathe with it
             </Button>
-            <p className="text-xs text-muted-foreground">Optional -- hold or tap space, or just let it run.</p>
+            <p className="text-xs text-muted-foreground">Optional — hold or tap space, or just let it run.</p>
             <button type="button" onClick={onAbort} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
               Quit
             </button>

@@ -12,7 +12,8 @@ export const PLAY_KINDS: DrillKind[] = ['follow-the-dot', 'color-nback', 'reacti
 
 // Arcade titles are the voice names (spec 7.9 / T2.9a step 2). The
 // descriptions stay literal -- they explain the mechanic, not the brand --
-// and are plain strings pending the T2.7a voice bank (T2.7b re-points them).
+// and this table is data T2.9a owns (same pattern as ACHIEVEMENTS), which
+// T2.7b's sweep deliberately does not chase (T2.7a review, I13 table).
 export const DRILL_META: Record<DrillKind, { title: string; description: string; lane: DrillLane }> = {
   'predict-output': { title: 'Call It', description: 'Read a snippet and type exactly what it prints before time runs out.', lane: 'arcade' },
   'spot-the-bug': { title: 'Find the Break', description: "Click the line that's broken before the clock runs out.", lane: 'arcade' },

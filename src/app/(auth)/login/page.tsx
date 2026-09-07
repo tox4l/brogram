@@ -14,9 +14,9 @@ const MAGIC_LINK_ENABLED = process.env.NEXT_PUBLIC_AUTH_MAGIC_LINK === 'true'
 
 const linkErrors: Record<string, string> = {
   'invalid-link': 'This sign-in link has expired or is invalid. Sign in with your password, or ask Velocity for a new account.',
-  'state-unavailable': 'Your link was verified, but your learning profile could not be loaded. Try opening your dashboard again.',
+  'state-unavailable': 'The link checked out, but your learning profile could not be loaded. Try opening your dashboard again.',
   'sign-in-unavailable': 'Sign-in is unavailable right now. Try again shortly.',
-  'account-unavailable': 'Your account could not be checked. Try again shortly.',
+  'account-unavailable': 'This account could not be checked. Try again shortly.',
   configuration: 'Sign-in is unavailable right now. Try again shortly.',
 }
 
@@ -196,7 +196,7 @@ export default function LoginPage() {
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8 sm:px-10">
       <Link href="/" className="w-fit text-xl font-semibold tracking-tight">BroGram<span className="text-emerald-300">.</span></Link>
       <div className="mx-auto my-auto w-full max-w-md py-16">
-        <Suspense fallback={<p className="text-muted-foreground">Your coding space is ready. Preparing sign-in…</p>}><LoginForm /></Suspense>
+        <Suspense fallback={<p className="text-muted-foreground">The coding space is ready. Preparing sign-in…</p>}><LoginForm /></Suspense>
       </div>
     </main>
   )

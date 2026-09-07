@@ -279,7 +279,7 @@ export default function AccountPage() {
         />
         <SettingToggle
           id="dock-compact-exercise"
-          label="Compact on exercise and lesson screens"
+          label="Compact on rep and walkthrough screens"
           checked={prefs.dock.compactOnExercise}
           onChange={(compactOnExercise) => dockMutation.mutate(() => ({ compactOnExercise }))}
           reducedMotion={reducedMotion}

@@ -247,7 +247,7 @@ function DerotSection() {
         // that gap is the ruler, not their play. Plain string pending a
         // voice-bank key -- listed in the T2.9a report for T2.7b.
         <p className="-mt-2 text-xs text-muted-foreground">
-          Best scores don&apos;t line up evenly across drills -- four of them cap out near 95 by design.
+          Best scores don&apos;t line up evenly across drills — four of them cap out near 95 by design.
         </p>
       )}
 

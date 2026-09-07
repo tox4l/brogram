@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { line } from '@/lib/voice/lines'
 
 /**
  * The shared error-with-retry banner every screen in spec section 10 is
@@ -10,9 +11,14 @@ import { Button, buttonVariants } from '@/components/ui/button'
  * (`onboarding/page.tsx` has its own unexported local copy) -- this is the
  * first one under this task's own path, per the brief's instruction to
  * create it here when it is missing.
+ *
+ * `message` is optional (T2.7b): every call site today names its own cause,
+ * but a caller with no more specific cause to give can fall back to the
+ * bank's own honest, cause-then-step `error.load` line instead of inventing
+ * another literal.
  */
-export function ErrorRetry({ message, onRetry, secondaryHref, secondaryLabel }: {
-  message: string
+export function ErrorRetry({ message = line('error.load'), onRetry, secondaryHref, secondaryLabel }: {
+  message?: string
   onRetry: () => void
   secondaryHref?: string
   secondaryLabel?: string

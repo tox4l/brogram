@@ -24,15 +24,17 @@ function formatRestrictedUntil(iso: string): string {
  * and there is nothing here to read a session from anyway.
  *
  * The heading and the short "Contact Velocity..." line are the original v1
- * copy, kept byte-for-byte: `src/app/(auth)/login/page.test.tsx` (owned by a
- * different task, not editable here) asserts both verbatim. `guard.banned`'s
- * full disclosure is added underneath, which is what C2 actually required --
- * the weights, the thresholds and the window reaching this screen at all.
+ * copy; T2.7b re-pointed the heading's opening word ("Your" -> "This",
+ * voice rule 3) together with the two tests that pinned it
+ * (`src/app/(auth)/login/page.test.tsx`, `AccountNotice.test.tsx`).
+ * `guard.banned`'s full disclosure is added underneath, which is what C2
+ * actually required -- the weights, the thresholds and the window reaching
+ * this screen at all.
  */
 export function BannedAccount() {
   return (
     <div className="space-y-3">
-      <p role="alert" className="text-lg font-medium">Your BroGram account has been banned.</p>
+      <p role="alert" className="text-lg font-medium">This BroGram account has been banned.</p>
       <p className="text-sm leading-relaxed text-muted-foreground">Contact Velocity through your invitation email to appeal.</p>
       <p className="text-sm leading-relaxed text-muted-foreground">{line('guard.banned')}</p>
     </div>

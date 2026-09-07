@@ -262,12 +262,14 @@ function ThreeTwoOne({ reduced, onDone }: { reduced: boolean; onDone: () => void
   )
 }
 
-/** Plain strings pending the T2.7a/T2.7b voice bank -- mirrors Arcade's own voiceLineFor exactly (T2.9a report). */
+/** Bank-backed (T2.7b): the tier itself is a real branch on `isPersonalBest`/`score`,
+ *  not a rotation choice, so each tier is its own single-variant key rather than one
+ *  key with four variants -- mirrors Arcade's own voiceLineFor shape (T2.9a report). */
 function voiceLineFor(isPersonalBest: boolean, score: number): string {
-  if (isPersonalBest) return 'New personal best. Run it again.'
-  if (score >= 80) return 'Sharp run. Keep the streak going.'
-  if (score >= 50) return 'Solid run. A little more focus next time.'
-  return 'Rough one. Shake it off and go again.'
+  if (isPersonalBest) return line('derot.play.best')
+  if (score >= 80) return line('derot.play.sharp')
+  if (score >= 50) return line('derot.play.solid')
+  return line('derot.play.rough')
 }
 
 /** The run summary's "interesting number" (T2.9a's phrase) -- built from `timeMs`, which is where this game's own primitive raw metric lives (see `timeMsForGame`). */
