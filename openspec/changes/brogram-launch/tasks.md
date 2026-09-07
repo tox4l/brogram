@@ -58,9 +58,9 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T2.11 Buddy drawer polish (abd0c62, 098db02)
 - [x] T3.1 The bundle budget, generated from a measurement (c6fef80, fix d808ac6, approved 2026-09-07)
 - [ ] T3.2 Timings, vitals, and the local diagnostics buffer
-- [ ] T3.3 e2e updates
+- [x] T3.3 e2e updates (f2da138, fixes 4c8402f and c4141ae, approved 2026-09-07)
 - [x] T3.4 The no-agent-surfaces test (57033b2, fix 3a006d5, approved 2026-09-07)
-- [ ] T3.5 Openness: the work items that make a fork real
+- [x] T3.5 Openness: the work items that make a fork real (1c6d36c, fixes 3b27e72 and 9e9a625, approved 2026-09-07)
 - [ ] T3.6 Whole-branch review (Group B)
 - [ ] T3.7 Deploy and the ten-minute acceptance run (Group C)
 
