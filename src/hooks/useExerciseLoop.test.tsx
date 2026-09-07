@@ -57,9 +57,10 @@ let store: LearnerState
 let lastOrFilter: string | null = null
 const rowOf = (e: ExercisePublic): Row => ({ ...e, clo_id: e.cloId, starter_code: e.starterCode, verified: true })
 
-/** Holds one table's next write open until released -- proves the graded verdict renders
- *  before that write's promise ever resolves (brief acceptance: "spy on the Supabase insert
- *  and resolve it late"). */
+/** Holds one table's next operation (read or write) open until released -- proves the graded
+ *  verdict renders before that write's promise ever resolves (brief acceptance: "spy on the
+ *  Supabase insert and resolve it late"), and separately that `next()`'s in-place swap (fix
+ *  round C1) never waits on the background attempts refresh, a read. */
 let holds: Partial<Record<string, { promise: Promise<void>; release: () => void }>> = {}
 function holdWrite(table: string): () => void {
   let release!: () => void
@@ -84,7 +85,7 @@ function query(table: string) {
     upsert: (value: Row | Row[], options?: { ignoreDuplicates?: boolean }) => { action = options?.ignoreDuplicates ? 'insert' : 'upsert'; payload = value; return builder },
     update: (value: Row) => { action = 'update'; payload = value; return builder },
     then: (resolve: (result: { data: Row | Row[] | null; error: { message: string } | null }) => unknown) => (async () => {
-      const hold = action !== 'read' ? holds[table] : undefined
+      const hold = holds[table]
       if (hold) { delete holds[table]; await hold.promise }
       if (failWrite === table && action !== 'read') { failWrite = null; return resolve({ data: null, error: { message: 'write temporarily unavailable' } }) }
       const rows = tables[table] ??= []
@@ -400,6 +401,23 @@ describe('exercise loop triggers and durable progress', () => {
 })
 
 describe('the optimistic submit path (T2.2)', () => {
+  it('C1 fix round: next() swaps the exercise in place, synchronously, never waiting on the attempts read', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.nextExercise?.id).toBe('e2')
+    // Hold the background attempts refresh open -- if next() depended on it, the exercise would
+    // still read 'e1' (or the page would blank) until `release()` is called below.
+    const release = holdWrite('attempts')
+    act(() => { void hook.result.current.next() })
+    expect(hook.result.current.exercise?.id).toBe('e2')
+    expect(hook.result.current.exercise?.pattern).toBe('reduce')
+    expect(hook.result.current.code).toBe(candidate.starterCode)
+    expect(hook.result.current.status).toBe('ready')
+    expect(hook.result.current.outcome).toBeNull()
+    expect(spies.replace).toHaveBeenCalledWith('/exercise/e2')
+    release()
+  })
+
   it('reaches the graded verdict before the attempts insert ever resolves', async () => {
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     const release = holdWrite('attempts')
@@ -454,23 +472,111 @@ describe('the optimistic submit path (T2.2)', () => {
     expect(hook.result.current.status).not.toBe('error')
     expect(hook.result.current.error).toContain('write temporarily unavailable')
     expect(hook.result.current.controlsDisabled).toBe(true)
+    // C2 fix round: "Next exercise" must never look enabled while a click on it would silently
+    // do nothing -- `canAdvance` is false here (no `nextExercise`/`closed` was ever reached).
+    expect(hook.result.current.canAdvance).toBe(false)
   })
 
   it('fires each celebration exactly once per verdict, even across a retry of the background sync', async () => {
     // This first pass legitimately earns two distinct celebrations at once -- 'first-win' (the
     // account's very first pass) and 'chain' (0 -> 1) -- spec 7.6's own table has celebrations
     // compound this way (e.g. "clo.close layered with level.up"); the queue (T2.6) is what shows
-    // them one at a time. What this test pins is that a *retry* of the failed background sync
-    // never re-fires either one a second time.
+    // them one at a time. Both fire from `submit()` itself, which a retry never re-enters, so
+    // they are provably exactly-once here regardless of `celebrate()`'s own dedup.
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     failWrite = 'learner_state'
     await act(async () => { await hook.result.current.submit() })
-    const callsAfterFirstSubmit = spies.celebrate.mock.calls.length
-    expect(callsAfterFirstSubmit).toBeGreaterThan(0)
     expect(spies.celebrate).toHaveBeenCalledWith('first-win', undefined, expect.any(String))
+    expect(spies.celebrate.mock.calls.filter(([kind]) => kind === 'first-win')).toHaveLength(1)
     await act(async () => { await hook.result.current.retry() })
     expect(hook.result.current.status).toBe('passed')
-    expect(spies.celebrate).toHaveBeenCalledTimes(callsAfterFirstSubmit)
+    expect(spies.celebrate.mock.calls.filter(([kind]) => kind === 'first-win')).toHaveLength(1)
+    // Level-up/streak/goal celebrations, by contrast, live inside `finishSubmission`, which a
+    // retry genuinely re-enters -- this hook relies on `celebrate()`'s own real `eventId` dedup
+    // (T2.6 fix round) to collapse those, exactly as the Opus review confirmed for level-up.
+    // What this hook must still guarantee on its own is a STABLE id across the retry, which is
+    // what actually lets that dedup work; a fresh id each time would defeat it silently.
+    const eventIdsFor = (kind: string) => spies.celebrate.mock.calls.filter(([k]) => k === kind).map(([, , eventId]) => eventId)
+    for (const kind of ['streak-ignite', 'streak-milestone', 'level-up', 'goal']) {
+      const ids = new Set(eventIdsFor(kind))
+      expect(ids.size).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('I3 fix round: still reports the level-up crossing after a retried background sync, off the ORIGINAL pre-save points', async () => {
+    // pointsForPass(3, 0, 90) === 345 (difficulty 3, no hints, the fixture Reviewer's quality
+    // 90); 200 + 345 = 545 crosses xpToReach(2) === 500. The mastery-table write fails on the
+    // first attempt -- AFTER the points save already landed -- so a naive re-read of
+    // `state.points` inside `finishSubmission` on retry would see 545 on both sides and report
+    // no crossing at all. `operation.beforePoints`, captured once at grading time, must not.
+    store.points = 200
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    failWrite = 'mastery'
+    await act(async () => { await hook.result.current.submit() })
+    expect(store.points).toBe(545)
+    expect(spies.celebrate).not.toHaveBeenCalledWith('level-up', expect.anything(), expect.any(String))
+    await act(async () => { await hook.result.current.retry() })
+    expect(hook.result.current.status).toBe('passed')
+    expect(spies.celebrate).toHaveBeenCalledWith('level-up', expect.objectContaining({ level: 2 }), `${tables.attempts[0].id}:level`)
+  })
+
+  it('I4 fix round: a CLO-close Planner failure never strands the learner -- Submit/Next stay alive on the provisional plan', async () => {
+    store.mastery.c1 = { userId: 'student', cloId: 'c1', score: 28, chain: 2, patternsPassed: ['reduce', 'partition'], closed: false, lastAttemptAt: null }
+    spies.call.mockImplementation(async req => {
+      if (req.agent === 'planner') throw new Error('DeepSeek outage')
+      return envelope(req.agent, review)
+    })
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(store.mastery.c1.closed).toBe(true)
+    expect(hook.result.current.status).toBe('passed')
+    expect(hook.result.current.closed).toBe(true)
+    // The old behaviour: `pending.current` never clears, so Submit stays disabled and every
+    // click on Next silently does nothing forever. The fix: the provisional plan absorbs the
+    // outage and the learner is never shown an error for a background model call they cannot
+    // see or retry.
+    expect(hook.result.current.canAdvance).toBe(true)
+    expect(hook.result.current.controlsDisabled).toBe(true) // still true, but for the RIGHT reason (outcome === 'passed')
+    expect(hook.result.current.error).toBeNull()
+    await act(async () => { await hook.result.current.next() })
+    expect(spies.push).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it("I5 fix round: fires streak-ignite on the day's first qualifying action", async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(spies.celebrate).toHaveBeenCalledWith('streak-ignite', { n: 1 }, expect.any(String))
+    expect(spies.celebrate).not.toHaveBeenCalledWith('streak-milestone', expect.anything(), expect.any(String))
+  })
+
+  it('I5 fix round: fires streak-milestone (not the routine ignite) the day a streak crosses one', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+    store.streak = { exerciseDays: 2, derotDays: 0, lastExerciseDate: yesterday, lastDerotDate: null }
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(spies.celebrate).toHaveBeenCalledWith('streak-milestone', { n: 3 }, expect.any(String))
+    expect(spies.celebrate).not.toHaveBeenCalledWith('streak-ignite', expect.anything(), expect.any(String))
+  })
+
+  it('I5 fix round: fires goal.done and records the goal day once the third win of the day lands', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    tables.attempts = [
+      { id: 'win-1', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, created_at: `${today}T01:00:00.000Z` },
+      { id: 'win-2', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, created_at: `${today}T02:00:00.000Z` },
+    ]
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    await waitFor(() => expect(spies.celebrate).toHaveBeenCalledWith('goal', undefined, expect.any(String)))
+    const savedPrefs = (tables.wellness.find(row => row.user_id === 'student')?.prefs) as { goalDays?: string[] } | undefined
+    expect(savedPrefs?.goalDays).toContain(today)
+  })
+
+  it('I5 fix round: does not fire goal.done before the daily goal is actually met', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    // Give the fire-and-forget goal check a moment to run either way -- it must not decide yes.
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(spies.celebrate).not.toHaveBeenCalledWith('goal', expect.anything(), expect.any(String))
   })
 
   it('plays the routine pass sound and cue on a later pass, not the first-win one', async () => {

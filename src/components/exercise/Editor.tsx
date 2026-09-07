@@ -3,7 +3,7 @@
 import type { IntegrityEventType, Language } from '@/lib/contracts'
 import { useEffect, useMemo, useRef } from 'react'
 import { basicSetup } from 'codemirror'
-import { Compartment, EditorState, Prec } from '@codemirror/state'
+import { Compartment, EditorState, Prec, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { loadLanguageExtension } from './grammars'
 
@@ -84,7 +84,15 @@ export function Editor({ value, onChange, language, logIntegrity, disabled = fal
     const editor = view.current
     if (!editor || editor.state.doc.toString() === value) return
     replacing.current = true
-    try { editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } }) }
+    try {
+      // `addToHistory.of(false)` (T2.2 fix round, I6): a programmatic whole-doc replacement
+      // (an external `value` change -- most notably one exercise's starter code landing in
+      // place of another's, now that the workspace survives `next()` instead of remounting)
+      // must never become an undo step. Without this, Ctrl+Z on the new exercise would restore
+      // the previous exercise's full solution into `codeRef`/`onChange` -- a paste-block bypass
+      // in everything but name.
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value }, annotations: Transaction.addToHistory.of(false) })
+    }
     finally { replacing.current = false }
   }, [value])
 

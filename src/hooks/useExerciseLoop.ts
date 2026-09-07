@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Attempt, BankQuery, Clo, CoachReply, DiagnoserReply, ExercisePublic, LearnerState, Mastery, PlannerReply, ReviewerReply, RunResult, TestResult } from '@/lib/contracts'
@@ -9,14 +10,18 @@ import { callAgent, streamAgent } from '@/lib/agents/client'
 import { DEFAULT_DIFFICULTY, fetchBank, pickFromBank, toExercisePublic } from '@/lib/learner/bank'
 import { nextInChain } from '@/lib/learner/chain'
 import { applyFail, applyPass } from '@/lib/learner/score'
+import { provisionalPlan } from '@/lib/learner/provisional'
 import { getRuntime, judgeProviderAbsent, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
 import { createClient } from '@/lib/supabase/client'
 import { codeDiff, exerciseRunRequest, gradeAnswer, usesAnswerForm } from '@/lib/exercise/grading'
 import { useSession } from '@/store/session'
 import { clo as staticClo, closFor, course as staticCourse, courses as staticCourses, exerciseFrom } from '@/lib/curriculum'
-import type { RewardAttempt } from '@/lib/rewards/context'
+import { buildRewardContext, type RewardAttempt } from '@/lib/rewards/context'
+import { nextGoalDays, shouldRecordGoalDay } from '@/lib/rewards/goal'
+import { crossedMilestone } from '@/lib/rewards/streaks'
 import { celebrate, levelUpDetail, type CelebrationDetail, type CelebrationKind } from '@/lib/rewards/useCelebration'
 import { play } from '@/lib/sound/manager'
+import { prefsPatch, resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { getQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
@@ -36,6 +41,10 @@ type Submission = {
   attempt: Attempt; exercise: ExercisePublic; clo: Clo; inserted: boolean
   diagnosis?: DiagnoserReply; review?: ReviewerReply; state?: LearnerState
   masterySaved?: boolean; planned?: boolean; planner?: PlannerReply; queued?: boolean
+  /** Captured once at grading time (fix round I3): a retry that re-enters `finishSubmission`
+   *  after the state write already succeeded must still report the level/streak crossing off
+   *  the ORIGINAL pre-save numbers, not off `operation.state`, which by then already IS "after". */
+  beforePoints?: number; beforeStreak?: LearnerState['streak']
 }
 type HintReceipt = { count: number; calledAt: number | null; failureId: string | null; hints: CoachReply[] }
 const hintKey = (userId: string, exerciseId: string) => `brogram:hints:${userId}:${exerciseId}`
@@ -98,6 +107,10 @@ export function useExerciseLoop(exerciseId: string) {
   const lastCoachAt = useRef<number | null>(null); const lastHintCode = useRef('')
   const spentHints = useRef(0); const completed = useRef(false)
   const pending = useRef<Submission | null>(null)
+  /** Fix round C1: set by `next()`'s in-place transition to the id it just switched TO, so
+   *  the load effect -- which still fires because `exerciseId` (the URL param) changed --
+   *  recognizes the exercise is already fully loaded and skips its own reset/reload entirely. */
+  const handledExternally = useRef<string | null>(null)
   const reducedMotion = useReducedMotion()
   const [exercise, setExercise] = useState<ExercisePublic | null>(null)
   const [clo, setClo] = useState<Clo | null>(null)
@@ -139,73 +152,105 @@ export function useExerciseLoop(exerciseId: string) {
     return () => { try { sessionStorage.setItem('brogram:attempt-active', 'false') } catch { /* Storage is optional. */ } }
   }, [duringAttempt])
 
-  useEffect(() => {
-    const token = ++generation.current
+  /**
+   * Fix round C1: the one place an exercise (bundled or freshly fetched, an initial mount or
+   * `next()`'s in-place swap) becomes the displayed exercise. Fully synchronous and side-effect
+   * free beyond its own refs/setters -- no network call gates it. The `attempts` read that used
+   * to sit in front of it is now a background refresh kicked off from here: it only refines
+   * `history.current` and the hint quota (already seeded below from the local receipt and
+   * whatever `history.current` already holds), so it can never block the editor or the prompt.
+   */
+  function applyLoadedExercise(item: ExercisePublic, cloRow: Clo, coursePackages: string[], token: number) {
     gate.current = false; completed.current = false; pending.current = null
-    exerciseRef.current = null; cloRef.current = null; startedAt.current = null
-    failureAt.current = null; lastCoachAt.current = null; spentHints.current = 0; hintsRef.current = []; editedAfterFailure.current = false
-    failureId.current = null; hintedFailureId.current = null
+    failureAt.current = null; lastCoachAt.current = null; editedAfterFailure.current = false
+    failureId.current = null; startedAt.current = null
+    packages.current = coursePackages
+    const userId = sessionRef.current.user?.id ?? ''
+    const receipt = readHintReceipt(userId, item.id)
+    const used = Math.min(LOCKDOWN.maxHintsPerExercise, Math.max(receipt.count, ...history.current.filter(row => row.exercise_id === item.id).map(row => row.hint_count ?? 0)))
+    lastCoachAt.current = receipt.calledAt; hintsRef.current = receipt.hints
+    hintedFailureId.current = receipt.failureId
+    spentHints.current = used
+    exerciseRef.current = item; cloRef.current = cloRow
+    const initialCode = usesAnswerForm(item) ? item.kind === 'spot-the-bug' ? '[]' : item.kind === 'trace' ? '{}' : '' : item.starterCode
+    codeRef.current = initialCode
+    updateCode(initialCode)
+    setExercise(item); setClo(cloRow); setStatus('ready')
+    setResults([]); setDiagnosis(null); setPartialDiagnosis(null); setHints(receipt.hints); setPartialHint(null)
+    setReview(null); setNextExercise(null); setProgress(null); setStdout(''); setStderr('')
+    setDuringAttempt(false); setPointsEarned(0); setPointsProvisional(false); setChain(0)
+    setClosed(false); setOutcome(null); setLastRewardAttempt(null); setHintPending(false)
+    setHasPending(false); setError(null); setBusy(false); setHintCount(used)
+    setHintTiming({ failureAt: null, coachAt: receipt.calledAt, edited: false, first: true })
+    setClock(Date.now())
+    if (userId) {
+      void (async () => {
+        const client = clientRef.current ??= createClient()
+        const result = await client.from('attempts').select('id,exercise_id,passed,hint_count,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(HISTORY_CAP)
+        if (generation.current !== token || result.error) return
+        history.current = result.data ?? []
+        const refreshed = Math.min(LOCKDOWN.maxHintsPerExercise, Math.max(spentHints.current, ...history.current.filter(row => row.exercise_id === item.id).map(row => row.hint_count ?? 0)))
+        if (refreshed !== spentHints.current) { spentHints.current = refreshed; setHintCount(refreshed) }
+      })()
+    }
+    // NEXT_PUBLIC_JUDGE_PROVIDER=browser gives Java a real runtime to warm up (CheerpJ, which
+    // takes seconds, so warming it here matters). With no provider at all there is nothing to warm
+    // and no agent to call; the exercise screen replaces Run/Submit with a not-available notice.
+    if (!usesAnswerForm(item) && !(item.language === 'java' && judgeProviderAbsent())) {
+      void getRuntime(item.kind === 'schema' ? 'sql' : item.language).warmup().catch(warmupError => {
+        if (generation.current === token) setError(`Runtime preparation failed: ${messageOf(warmupError)}. Run or submit to retry.`)
+      })
+    }
+  }
+
+  useEffect(() => {
+    // Fix round C1: `next()` already loaded the target exercise synchronously and stamped its id
+    // here before updating the URL -- this effect still fires (`exerciseId`, the URL param,
+    // changed), but recognizes the work is already done and only re-arms the progress
+    // subscription and the clock tick, never the reset-then-refetch cycle below.
+    const alreadyHandled = handledExternally.current === exerciseId
+    handledExternally.current = null
+    const token = alreadyHandled ? generation.current : ++generation.current
+    if (!alreadyHandled) { gate.current = false; completed.current = false; pending.current = null }
     const active = () => generation.current === token
     const unsubscribe = subscribeRuntimeProgress(event => {
       const loaded = exerciseRef.current
       if (active() && loaded && event.language === (loaded.kind === 'schema' ? 'sql' : loaded.language)) setProgress(event)
     })
-    void (async () => {
-      await Promise.resolve()
-      if (!active()) return
-      setExercise(null); setClo(null); setStatus('loading'); setError(null); setBusy(false)
-      setResults([]); setDiagnosis(null); setPartialDiagnosis(null); setHints([]); setPartialHint(null)
-      setReview(null); setNextExercise(null); setProgress(null); setStdout(''); setStderr('')
-      setHintCount(0); setDuringAttempt(false); setPointsEarned(0); setClosed(false)
-      setHasPending(false); setOutcome(null); setPointsProvisional(false); setChain(0)
-      setLastRewardAttempt(null); setHintPending(false)
-      setHintTiming({ failureAt: null, coachAt: null, edited: false, first: true }); setClock(Date.now())
-      try {
-        const client = clientRef.current ??= createClient()
-        const userId = sessionRef.current.user?.id
-        if (!userId) throw new Error('Sign in to open an exercise.')
-        // R5.1b: the static course bundle first (zero network); the exercises_public read
-        // (one request) only when the id is a runtime-generated exercise the bundle never
-        // shipped, or a cold deep link whose bundle was never loaded this session. CLOs and
-        // course packages are always static, so neither path ever reads `clos` or `courses`.
+    if (!alreadyHandled) {
+      void (async () => {
+        await Promise.resolve()
+        if (!active()) return
+        setError(null)
+        // R5.1b + fix round C1: resolve the bundle SYNCHRONOUSLY, before any await -- a hit
+        // never shows a loading gap, even swapping straight from one exercise to another. A
+        // miss (a runtime-generated exercise, or a cold deep link) leaves whatever is already
+        // on screen in place rather than nulling `exercise` -- the previous prompt and editor
+        // stay visible and usable while this resolves, instead of collapsing to a placeholder.
         const bundled = resolveFromBundle(exerciseId)
-        let item: ExercisePublic
-        let outcome: Clo
-        let coursePackages: string[]
-        if (bundled) {
-          item = bundled.exercise; outcome = bundled.clo; coursePackages = bundled.packages
-        } else {
+        if (bundled) { applyLoadedExercise(bundled.exercise, bundled.clo, bundled.packages, token); return }
+        setStatus('loading')
+        setResults([]); setDiagnosis(null); setPartialDiagnosis(null); setHints([]); setPartialHint(null)
+        setReview(null); setNextExercise(null); setProgress(null); setStdout(''); setStderr('')
+        setHintCount(0); setDuringAttempt(false); setPointsEarned(0); setClosed(false)
+        setHasPending(false); setOutcome(null); setPointsProvisional(false); setChain(0)
+        setLastRewardAttempt(null); setHintPending(false)
+        setHintTiming({ failureAt: null, coachAt: null, edited: false, first: true }); setClock(Date.now())
+        try {
+          const client = clientRef.current ??= createClient()
+          const userId = sessionRef.current.user?.id
+          if (!userId) throw new Error('Sign in to open an exercise.')
           const { data: row, error: readError } = await client.from('exercises_public').select('*').eq('id', exerciseId).eq('verified', true).maybeSingle()
           if (readError) throw readError
           if (!row) throw new Error('This exercise is unavailable. Choose another from your dashboard.')
-          item = toExercisePublic(row)
+          const item = toExercisePublic(row)
           const staticOutcome = staticClo(item.cloId)
           if (!staticOutcome) throw new Error('This learning outcome is unavailable.')
-          outcome = staticOutcome
-          coursePackages = staticCourse(outcome.course)?.packages ?? []
-        }
-        const attempts = await client.from('attempts').select('id,exercise_id,passed,hint_count,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(HISTORY_CAP)
-        if (attempts.error) throw attempts.error
-        if (!active()) return
-        packages.current = coursePackages; history.current = attempts.data ?? []
-        const receipt = readHintReceipt(userId, item.id)
-        const used = Math.min(LOCKDOWN.maxHintsPerExercise, Math.max(receipt.count, ...history.current.filter(attempt => attempt.exercise_id === item.id).map(attempt => attempt.hint_count ?? 0)))
-        lastCoachAt.current = receipt.calledAt; hintsRef.current = receipt.hints; setHints(receipt.hints)
-        hintedFailureId.current = receipt.failureId
-        setHintTiming({ failureAt: null, coachAt: receipt.calledAt, edited: false, first: true })
-        spentHints.current = used; setHintCount(used)
-        exerciseRef.current = item; cloRef.current = outcome
-        const initialCode = usesAnswerForm(item) ? item.kind === 'spot-the-bug' ? '[]' : item.kind === 'trace' ? '{}' : '' : item.starterCode
-        codeRef.current = initialCode; updateCode(initialCode); setExercise(item); setClo(outcome); setStatus('ready')
-        // NEXT_PUBLIC_JUDGE_PROVIDER=browser gives Java a real runtime to warm up (CheerpJ, which
-        // takes seconds, so warming it here matters). With no provider at all there is nothing to warm
-        // and no agent to call; the exercise screen replaces Run/Submit with a not-available notice.
-        if (!usesAnswerForm(item) && !(item.language === 'java' && judgeProviderAbsent())) {
-          try { await getRuntime(item.kind === 'schema' ? 'sql' : item.language).warmup() }
-          catch (warmupError) { if (active()) setError(`Runtime preparation failed: ${messageOf(warmupError)}. Run or submit to retry.`) }
-        }
-      } catch (loadError) { if (active()) { setError(messageOf(loadError)); setStatus('error') } }
-    })()
+          if (!active()) return
+          applyLoadedExercise(item, staticOutcome, staticCourse(staticOutcome.course)?.packages ?? [], token)
+        } catch (loadError) { if (active()) { setError(messageOf(loadError)); setStatus('error'); setExercise(null); setClo(null) } }
+      })()
+    }
     const timer = window.setInterval(() => { if (active()) setClock(Date.now()) }, 1000)
     return () => {
       generation.current = token + 1; unsubscribe(); window.clearInterval(timer)
@@ -264,19 +309,38 @@ export function useExerciseLoop(exerciseId: string) {
     const client = clientRef.current!; const state = operation.state!
     const mastery = state.mastery[operation.exercise.cloId]
     if (mastery.closed) {
+      // CLOs are always static curriculum data, never runtime-generated (R5.1b) -- no `clos` read.
+      const clos = [...closFor(operation.clo.course)]
       if (!operation.planner) {
-        // CLOs are always static curriculum data, never runtime-generated (R5.1b) -- no `clos` read.
-        const clos = [...closFor(operation.clo.course)]
-        const banks = await Promise.all(clos.map(item => fetchBank(client, { cloId: item.id })))
+        const flatBanks = (await Promise.all(clos.map(item => fetchBank(client, { cloId: item.id })))).flat()
         if (generation.current !== token) return
-        operation.planner = (await callAgent({ agent: 'planner', trigger: 'plan-refresh', state, course: operation.clo.course, clos, candidates: banks.flat().slice(0, 30).map(({ id, cloId, pattern, difficulty, title }) => ({ id, cloId, pattern, difficulty, title })) })).reply
+        try {
+          operation.planner = (await callAgent({ agent: 'planner', trigger: 'plan-refresh', state, course: operation.clo.course, clos, candidates: flatBanks.slice(0, 30).map(({ id, cloId, pattern, difficulty, title }) => ({ id, cloId, pattern, difficulty, title })) })).reply
+        } catch (plannerError) {
+          // Fix round I4: "a course is never unusable because a model call failed" (R4.4,
+          // src/app/(app)/courses/lib.ts:111-113) -- the same ruling applies to a CLO closing
+          // mid-rep. Falling through here left `pending.current` set forever (finishSubmission
+          // never reaches its own end), stranding a learner who just passed with Submit and
+          // Next both dead. The provisional plan is a real, usable path either way.
+          console.warn('Planner refresh failed after a CLO closed; using the provisional plan.', plannerError)
+          const provisional = provisionalPlan({ code: operation.clo.course, clos, exercises: flatBanks, mastery: state.mastery })
+          operation.planner = { path: provisional.path, nextExerciseIds: provisional.nextExerciseIds, focus: '' }
+        }
       }
       if (generation.current !== token) return
       if (!operation.planned) {
-        const plan = operation.planner
-        // `focus` is not part of the frozen LearnerState contract; it rides along as an
-        // extra jsonb key so the dashboard and report can show the Planner's latest line.
-        operation.state = await saveState(base => ({ ...base, path: plan!.path, nextExerciseIds: plan!.nextExerciseIds, focus: plan!.focus }) as typeof base, token)
+        const plan = operation.planner!
+        try {
+          // `focus` is not part of the frozen LearnerState contract; it rides along as an
+          // extra jsonb key so the dashboard and report can show the Planner's latest line.
+          operation.state = await saveState(base => ({ ...base, path: plan.path, nextExerciseIds: plan.nextExerciseIds, focus: plan.focus }) as typeof base, token)
+        } catch (saveError) {
+          // Same ruling: a transient learner_state write failure here must not strand the
+          // learner either. Keep them moving on the locally-merged plan; a later save (the next
+          // pass, or a retry elsewhere) reconciles it for real.
+          console.warn('Could not persist the refreshed plan after a CLO closed; keeping the learner unblocked.', saveError)
+          operation.state = { ...operation.state!, path: plan.path, nextExerciseIds: plan.nextExerciseIds, focus: plan.focus } as LearnerState
+        }
         operation.planned = true
       }
       setClosed(true); operation.queued = true
@@ -324,6 +388,41 @@ export function useExerciseLoop(exerciseId: string) {
     setNextExercise(chosen); operation.queued = true
   }
 
+  /**
+   * Fix round I5: `shouldRecordGoalDay`/`nextGoalDays` (src/lib/rewards/goal.ts) had no
+   * producer anywhere in the tree, so `goal.done` could never fire. The pass path is the only
+   * place that advances a win count, so it is the only place that can decide this -- but
+   * `wellness.prefs` has no shared mutation exported outside `src/components/wellness/Dock.tsx`
+   * (T2.4's file, not in this task's Files list this wave). Rather than reach into that
+   * component or add a new file outside this fix round's committed paths, this mirrors its
+   * read-merge-write shape locally: a fresh read (never the possibly-stale query cache, since
+   * this decides whether to *write*), `prefsPatch` to keep the row diff-shaped, and the same
+   * update-then-insert-if-absent fallback. Degrades silently on any failure -- a missed goal
+   * day is a missed celebration, never a broken pass -- and never awaited by the caller.
+   *
+   * `lessonProgress`/`drillResults` are empty here (this hook only ever sees exercise
+   * attempts), so `winsToday` under-counts a learner who also finished a walkthrough or a
+   * de-rot run today; the exercise-only count it still gets is honest, just partial, and never
+   * over-fires (an under-count can only delay `goalMet`, never fake it early).
+   */
+  async function recordGoalAndStreak(client: SupabaseClient, userId: string, state: LearnerState, createdAt: string) {
+    try {
+      const { data } = await client.from('wellness').select('prefs').eq('user_id', userId).maybeSingle()
+      const prefs = resolveWellnessPrefs((data as { prefs: unknown } | null)?.prefs)
+      const rewardAttempts: RewardAttempt[] = history.current.map(row => ({ id: row.id, userId, exerciseId: row.exercise_id, code: '', results: [], passed: row.passed, durationMs: 0, hintCount: row.hint_count, createdAt: row.created_at }))
+      const ctx = buildRewardContext({ state, attempts: rewardAttempts, activityDays: [], lessonProgress: [], drillResults: [], prefs, courseLessonCounts: {}, now: new Date(createdAt) })
+      if (!shouldRecordGoalDay(ctx)) return
+      const goalDays = nextGoalDays(ctx)
+      if (!goalDays) return
+      const patch = prefsPatch({ ...prefs, goalDays })
+      const updated = await client.from('wellness').update({ prefs: patch, updated_at: new Date().toISOString() }).eq('user_id', userId).select('user_id').maybeSingle()
+      if (!updated.data) await client.from('wellness').insert({ user_id: userId, prefs: patch })
+      fireCelebration('goal', undefined, `${userId}:goal:${ctx.today}`)
+    } catch (goalError) {
+      console.warn("Could not record today's goal; the pass itself is unaffected.", goalError)
+    }
+  }
+
   async function finishSubmission(operation: Submission, token: number) {
     const client = clientRef.current!; const attempt = operation.attempt
     if (!operation.inserted) {
@@ -335,7 +434,12 @@ export function useExerciseLoop(exerciseId: string) {
     }
     if (generation.current !== token) return
     const state = assertAllowed()
-    const beforePoints = state.points
+    // Fix round I3: captured once at grading time (`submit()`), not re-read here -- a retry
+    // that re-enters this function after the state write already succeeded would otherwise
+    // compare `operation.state.points` against itself and silently drop a level-up card that
+    // legitimately fired on the very first attempt.
+    const beforePoints = operation.beforePoints ?? state.points
+    const beforeStreak = operation.beforeStreak ?? state.streak
     const exerciseRefForAgent = { id: operation.exercise.id, cloId: operation.exercise.cloId, pattern: operation.exercise.pattern, prompt: operation.exercise.prompt, language: operation.exercise.language }
     if (attempt.passed) {
       if (!operation.review) operation.review = (await callAgent({ agent: 'reviewer', trigger: 'attempt-passed', state, exercise: exerciseRefForAgent, code: attempt.code, hintCount: attempt.hintCount, durationMs: attempt.durationMs })).reply
@@ -395,6 +499,17 @@ export function useExerciseLoop(exerciseId: string) {
       // differently than the neutral-quality preview did.
       const levelUp = levelUpDetail(beforePoints, operation.state.points)
       if (levelUp) fireCelebration('level-up', levelUp, `${attempt.id}:level`)
+      // Fix round I5: streak ignite/milestone are pure, derived from the state this pass just
+      // saved -- no extra read. Milestone takes priority over the routine ignite card when a
+      // pass happens to do both (spec 7.6's own celebration table compounds this way elsewhere,
+      // e.g. "clo.close layered with level.up"; the queue, T2.6, shows one at a time either way).
+      const afterStreak = operation.state.streak
+      const milestone = crossedMilestone(beforeStreak.exerciseDays, afterStreak.exerciseDays)
+      if (milestone !== null) fireCelebration('streak-milestone', { n: milestone }, `${attempt.id}:streak-milestone`)
+      else if (beforeStreak.lastExerciseDate !== afterStreak.lastExerciseDate) fireCelebration('streak-ignite', { n: afterStreak.exerciseDays }, `${attempt.id}:streak-ignite`)
+      // Goal-day + `goal.done`: best-effort, fire-and-forget -- never blocks the pass or the
+      // save above. See `recordGoalAndStreak`'s own comment for the ownership note.
+      void recordGoalAndStreak(client, attempt.userId, operation.state, attempt.createdAt)
       if (!operation.queued) await queueNext(operation, token)
       if (generation.current !== token) return
       setStatus('passed')
@@ -462,10 +577,15 @@ export function useExerciseLoop(exerciseId: string) {
   }
 
   async function submit() {
-    const item = exerciseRef.current; const outcome = cloRef.current
-    if (!item || !outcome || completed.current || pending.current) return
+    const item = exerciseRef.current; const cloRow = cloRef.current
+    if (!item || !cloRow || completed.current || pending.current) return
     const token = generation.current
     await operate(async () => {
+      // Mi1 (fix round): clear the previous attempt's verdict the instant a new one starts,
+      // not once grading finishes -- a slow CheerpJ/Pyodide run must never leave "Needs work"
+      // (or a stale results table) on screen through the whole wait, and it must not survive
+      // an `operate()` error either (this runs before anything that could throw pre-grading).
+      setOutcome(null); setResults([])
       const state = assertAllowed(); const submittedCode = codeRef.current; const submittedAt = Date.now()
       const durationMs = Math.max(0, submittedAt - (startedAt.current ?? submittedAt))
       if (!item.tests.length) throw new Error('This exercise has no grading tests. Choose another exercise.')
@@ -482,7 +602,9 @@ export function useExerciseLoop(exerciseId: string) {
       // memory at pass time, so the attempt it hands downstream is `RewardAttempt`-shaped from
       // the moment it exists, even though the `attempts` table itself carries no such column.
       const rewardAttempt: RewardAttempt = { id: attemptId, userId: state.userId, exerciseId: item.id, code: submittedCode, results: result.results, passed: passedNow, hintCount: spentHints.current, durationMs, createdAt: at, difficulty: item.difficulty }
-      const operation: Submission = { exercise: item, clo: outcome, inserted: false, attempt: rewardAttempt }
+      // Fix round I3: `beforePoints`/`beforeStreak` captured once, right here, so a retried
+      // background sync always reports the level/streak crossing off these original numbers.
+      const operation: Submission = { exercise: item, clo: cloRow, inserted: false, attempt: rewardAttempt, beforePoints: state.points, beforeStreak: state.streak }
       pending.current = operation; setHasPending(true); setDiagnosis(null); setPartialDiagnosis(null)
 
       // Steps 1 & 3: the browser knows pass or fail the instant grading resolves, before any
@@ -501,7 +623,7 @@ export function useExerciseLoop(exerciseId: string) {
         // `state.points` predates this save, so 0 here means no prior pass has ever landed --
         // robust across a capped attempts window in a way scanning `history.current` is not.
         fireCelebration((state.points ?? 0) === 0 ? 'first-win' : 'pass', undefined, attemptId)
-        if (justClosed) fireCelebration('clo-close', { skill: outcome.outcome }, `${attemptId}:close`)
+        if (justClosed) fireCelebration('clo-close', { skill: cloRow.outcome }, `${attemptId}:close`)
         else if (chainIncreased) fireCelebration('chain', { n: graded.mastery.chain }, `${attemptId}:chain`)
         play('pass')
       } else {
@@ -566,25 +688,41 @@ export function useExerciseLoop(exerciseId: string) {
   }
 
   /**
-   * Step 4: `next()` no longer discards the already-fetched next exercise with a full
-   * `router.push` remount. It updates the URL with `router.replace` (history-replace
-   * semantics -- a chain of reps should not pile up the back stack) while this same hook
-   * instance and the mounted `Editor` survive: `exerciseId` simply changes on the next
-   * render, and the load effect above already handles that transition. Wrapped in the
-   * browser's native View Transition (feature-detected, reduced-motion-guarded) as the
-   * closest available stand-in for React's `<ViewTransition>`, which this tree's pinned
-   * React 19.2.8 does not export (see report) -- the prompt panel carries the transition
-   * name (`page.tsx`) so only it crossfades; the editor and the warm runtime never remount.
+   * Fix round C1: `next()` no longer routes through the load effect's reset-then-refetch cycle
+   * at all -- `nextExercise` is already a complete `ExercisePublic` (fetched by `queueNext`'s
+   * bank query or Author generation), so `applyLoadedExercise` swaps it in directly and
+   * synchronously. `handledExternally` tells the effect (which still fires once `exerciseId`,
+   * the URL param, catches up) that this transition is already done. `router.replace` is
+   * bookmarking, not data-fetching -- history-replace semantics because a chain of reps
+   * should not pile up the back stack.
+   *
+   * Fix round I1: the browser's native View Transition needs the DOM change to happen
+   * *synchronously inside* its callback, or it captures old-to-old and crossfades nothing
+   * (confirmed: `router.replace` alone never satisfies this, since the URL/param update is
+   * itself asynchronous). `flushSync` forces React to commit `applyLoadedExercise`'s state
+   * updates before the callback returns, which is the documented way to pair React with this
+   * API absent React's own `<ViewTransition>` component (not exported by this tree's pinned
+   * React 19.2.8 -- see report). The prompt panel carries the transition name (`page.tsx`) so
+   * only it crossfades; the editor and the warm runtime never remount either way.
    */
   async function next() {
     if (!completed.current || gate.current || pending.current) return
     if (closed) { router.push('/dashboard'); return }
-    if (!nextExercise) return
-    const advance = () => router.replace(`/exercise/${encodeURIComponent(nextExercise.id)}`)
+    const target = nextExercise
+    if (!target) return
+    const cloRow = cloRef.current
+    if (!cloRow) return
+    const url = `/exercise/${encodeURIComponent(target.id)}`
+    const commit = () => {
+      const token = ++generation.current
+      handledExternally.current = target.id
+      applyLoadedExercise(target, cloRow, packages.current, token)
+      router.replace(url)
+    }
     if (!reducedMotion && typeof document !== 'undefined' && 'startViewTransition' in document) {
-      (document as Document & { startViewTransition: (cb: () => void) => unknown }).startViewTransition(advance)
+      (document as Document & { startViewTransition: (cb: () => void) => unknown }).startViewTransition(() => flushSync(commit))
     } else {
-      advance()
+      commit()
     }
   }
 
@@ -592,6 +730,13 @@ export function useExerciseLoop(exerciseId: string) {
   const hintWaitSeconds = Math.max(0, Math.ceil((waitUntil - clock) / 1000))
   const hintAvailable = !busy && outcome === 'failed' && diagnosis !== null && hintCount < LOCKDOWN.maxHintsPerExercise && hintWaitSeconds === 0
   const controlsDisabled = busy || hasPending || outcome === 'passed' || !exercise
+  // Fix round C2: `next()`'s own guard is `!completed.current || gate.current || pending.current`
+  // -- once a background save fails after `completed.current` was already set (e.g. a CLO-close
+  // Planner call throwing, or any failure reached after that point), `pending.current` stays set
+  // forever and every click on "Next exercise" becomes a silent no-op while the button itself
+  // still looked enabled (`disabled={busy}` had already gone false). `canAdvance` mirrors that
+  // guard honestly so the button is disabled exactly when clicking it would do nothing.
+  const canAdvance = outcome === 'passed' && (closed || nextExercise !== null) && !hasPending
   const judgeAbsent = exercise?.language === 'java' && judgeProviderAbsent()
-  return { exercise, clo, code, setCode, run, submit, status, outcome, results, diagnosis, partialDiagnosis, hints, partialHint, hintPending, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, pointsProvisional, chain, closed, judgeAbsent, lastRewardAttempt }
+  return { exercise, clo, code, setCode, run, submit, status, outcome, results, diagnosis, partialDiagnosis, hints, partialHint, hintPending, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, pointsProvisional, chain, closed, canAdvance, judgeAbsent, lastRewardAttempt }
 }

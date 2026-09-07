@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { EditorView } from '@codemirror/view'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ExercisePublic } from '@/lib/contracts'
 import ExercisePage from './page'
@@ -10,16 +11,17 @@ vi.mock('@/hooks/useLockdown', () => ({ useLockdown: mocks.lockdown }))
 vi.mock('@/store/session', () => ({ useSession: mocks.session }))
 
 const exercise: ExercisePublic = { id: 'exercise-one', cloId: 'clo', kind: 'predict-output', language: 'javascript', difficulty: 3, pattern: 'trace', title: 'Follow the value', prompt: 'What is printed?', starterCode: 'console.log(3)', tests: [{ id: 'one', input: '', expected: '3', hidden: false }], origin: 'seed', tags: [] }
-const model = () => ({ exercise, clo: null, code: '', setCode: vi.fn(), run: vi.fn(), submit: vi.fn(), requestHint: vi.fn(), next: vi.fn(), retry: vi.fn(), status: 'ready', outcome: null, results: [], diagnosis: null, partialDiagnosis: null, hints: [], partialHint: null, hintPending: false, review: null, nextExercise: null, progress: null, stdout: '', stderr: '', error: null, hintAvailable: false, hintWaitSeconds: 0, hintCount: 0, busy: false, duringAttempt: false, pointsEarned: 0, pointsProvisional: false, chain: 0, closed: false, controlsDisabled: false, judgeAbsent: false, lastRewardAttempt: null })
+const model = () => ({ exercise, clo: null, code: '', setCode: vi.fn(), run: vi.fn(), submit: vi.fn(), requestHint: vi.fn(), next: vi.fn(), retry: vi.fn(), status: 'ready', outcome: null, results: [], diagnosis: null, partialDiagnosis: null, hints: [], partialHint: null, hintPending: false, review: null, nextExercise: null, progress: null, stdout: '', stderr: '', error: null, hintAvailable: false, hintWaitSeconds: 0, hintCount: 0, busy: false, duringAttempt: false, pointsEarned: 0, pointsProvisional: false, chain: 0, closed: false, canAdvance: false, controlsDisabled: false, judgeAbsent: false, lastRewardAttempt: null })
 const javaExercise: ExercisePublic = { id: 'exercise-java', cloId: 'clo', kind: 'code', language: 'java', difficulty: 2, pattern: 'loop', title: 'Sum the values', prompt: 'Return the sum of the inputs.', starterCode: 'class Solution {}', tests: [{ id: 'one', input: '1 2', expected: '3', hidden: false }], origin: 'seed', tags: [] }
 const traceExercise: ExercisePublic = { id: 'exercise-trace-bad', cloId: 'clo', kind: 'trace', language: 'javascript', difficulty: 2, pattern: 'trace', title: 'Trace it', prompt: 'What does count hold at line 2?', starterCode: 'let count = 0\ncount += 1', tests: [{ id: 'one', input: '', expected: '1', hidden: false }], origin: 'seed', tags: [] }
+const codeExercise: ExercisePublic = { id: 'exercise-code-one', cloId: 'clo', kind: 'code', language: 'javascript', difficulty: 2, pattern: 'scan', title: 'First code rep', prompt: 'Write it.', starterCode: 'function solveOne() {}', tests: [{ id: 'one', input: '', expected: '1', hidden: false }], origin: 'seed', tags: [] }
 
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.params.mockReturnValue({ id: 'exercise-one' })
   mocks.session.mockReturnValue({ profile: { account_status: 'active' } })
   mocks.loop.mockReturnValue(model())
-  mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', loggingError: null })
+  mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
 })
 afterEach(cleanup)
 
@@ -78,7 +80,7 @@ describe('exercise screen', () => {
   })
   it('places a separate cover above inert workspace controls', () => {
     const resume = vi.fn()
-    mocks.lockdown.mockReturnValue({ overlay: 'idle', logIntegrity: vi.fn(), containerProps: {}, resume, pasteMessage: '', loggingError: null })
+    mocks.lockdown.mockReturnValue({ overlay: 'idle', logIntegrity: vi.fn(), containerProps: {}, resume, pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
     const { container } = render(<ExercisePage />)
     const cover = screen.getByTestId('lockdown-overlay')
     expect(cover.className).toContain('pointer-events-auto')
@@ -86,6 +88,25 @@ describe('exercise screen', () => {
     expect(container.querySelector('textarea')?.closest('[inert]')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Continue exercise' }))
     expect(resume).toHaveBeenCalledTimes(1)
+  })
+  it('renders the rotating paste bank line and its "why" affordance, not the old static string', () => {
+    mocks.lockdown.mockReturnValue({
+      overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(),
+      pasteMessage: 'Paste is off on this screen. Type it out.',
+      pasteWhy: 'Paste is off because typing is the exercise, and because it is the one thing browsers actually let us enforce, so we do.',
+      printscreenNote: null, loggingError: null,
+    })
+    render(<ExercisePage />)
+    expect(screen.getByText('Paste is off on this screen. Type it out.')).toBeTruthy()
+    expect(screen.queryByText("Type it. That's the whole point.")).toBeNull()
+    expect(screen.queryByText('Paste is off because typing is the exercise, and because it is the one thing browsers actually let us enforce, so we do.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Why?' }))
+    expect(screen.getByText('Paste is off because typing is the exercise, and because it is the one thing browsers actually let us enforce, so we do.')).toBeTruthy()
+  })
+  it('renders the once-only PrintScreen note when the hook reports one', () => {
+    mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: "Screenshots aren't something a website can block. We log the attempt and move on.", loggingError: null })
+    render(<ExercisePage />)
+    expect(screen.getByText("Screenshots aren't something a website can block. We log the attempt and move on.")).toBeTruthy()
   })
   it('falls back to the typed-answer form for a trace exercise whose expected value is not a plain object', () => {
     mocks.loop.mockReturnValue({ ...model(), exercise: traceExercise })
@@ -112,6 +133,14 @@ describe('exercise screen', () => {
     render(<ExercisePage />)
     expect(screen.getByText('Needs work')).toBeTruthy()
   })
+  it('never draws the pass checkmark on a failed verdict (fix round I2)', () => {
+    mocks.loop.mockReturnValue({ ...model(), status: 'graded', outcome: 'failed' })
+    const { container } = render(<ExercisePage />)
+    const verdict = screen.getByTestId('verdict-banner')
+    expect(verdict.querySelector('svg.lucide-check')).toBeNull()
+    expect(verdict.querySelector('svg.lucide-x')).toBeTruthy()
+    expect(container.querySelector('svg.lucide-check')).toBeNull()
+  })
   it('does not remount the workspace when the exercise id changes in place (next())', () => {
     const { rerender } = render(<ExercisePage />)
     const before = screen.getByTestId('exercise-workspace')
@@ -126,11 +155,46 @@ describe('exercise screen', () => {
     expect(screen.getByRole('textbox', { name: 'Predicted output' })).toBe(workEditor)
     expect(screen.getByText('A different rep')).toBeTruthy()
   })
+  it('keeps the real CodeMirror editor instance across next() (fix round Mi3/C1)', async () => {
+    // The earlier "does not remount" test used the plain `predict-output` textbox; the brief
+    // and the review both ask specifically about the CodeMirror `Editor` instance, which only a
+    // `code`-kind exercise mounts (via `next/dynamic`, real component, not mocked here).
+    mocks.loop.mockReturnValue({ ...model(), exercise: codeExercise, code: codeExercise.starterCode })
+    const { rerender } = render(<ExercisePage />)
+    const editor = await waitFor(() => screen.getByRole('textbox', { name: 'Code editor' }))
+    const view = EditorView.findFromDOM(editor)
+    expect(view).toBeTruthy()
+    expect(editor.textContent).toBe('function solveOne() {}')
+
+    const nextCode: ExercisePublic = { ...codeExercise, id: 'exercise-code-two', title: 'Second code rep', starterCode: 'function solveTwo() {}' }
+    mocks.params.mockReturnValue({ id: 'exercise-code-two' })
+    mocks.loop.mockReturnValue({ ...model(), exercise: nextCode, code: nextCode.starterCode })
+    rerender(<ExercisePage />)
+
+    const editorAfter = screen.getByRole('textbox', { name: 'Code editor' })
+    expect(editorAfter).toBe(editor) // same DOM node -- Editor never remounted
+    expect(EditorView.findFromDOM(editorAfter)).toBe(view) // same CodeMirror instance
+    await waitFor(() => expect(editorAfter.textContent).toBe('function solveTwo() {}'))
+  })
   it('shows the next-exercise section as soon as outcome is passed, without waiting for status to settle', () => {
-    const state = { ...model(), status: 'graded', outcome: 'passed', busy: true, nextExercise: null }
+    const state = { ...model(), status: 'graded', outcome: 'passed', busy: true, nextExercise: null, canAdvance: false }
     mocks.loop.mockReturnValue(state)
     render(<ExercisePage />)
     expect(screen.getByText('Preparing your next exercise.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+  it('enables Next once the hook reports canAdvance, even while other background work is still busy', () => {
+    const state = { ...model(), status: 'graded', outcome: 'passed', busy: true, nextExercise: { ...exercise, id: 'exercise-two' }, canAdvance: true }
+    mocks.loop.mockReturnValue(state)
+    render(<ExercisePage />)
+    expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(false)
+  })
+  it('keeps Next honestly disabled and shows the save-failure line, never "saved", when the background save fails on a pass (fix round C2)', () => {
+    const state = { ...model(), status: 'graded', outcome: 'passed', error: 'write temporarily unavailable', canAdvance: false, nextExercise: null }
+    mocks.loop.mockReturnValue(state)
+    render(<ExercisePage />)
+    expect(screen.queryByText('Your pass is saved.')).toBeNull()
+    expect(screen.queryByText('Preparing your next exercise.')).toBeNull()
     expect((screen.getByRole('button', { name: /Next exercise/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

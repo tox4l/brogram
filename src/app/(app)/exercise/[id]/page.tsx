@@ -4,7 +4,8 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Check, Play, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Send, X } from 'lucide-react'
+import { line } from '@/lib/voice/lines'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { useSession } from '@/store/session'
 import { useExerciseLoop } from '@/hooks/useExerciseLoop'
@@ -76,7 +77,6 @@ function ExerciseWorkspace({ id }: { id: string }) {
     </div>
 
     {loop.error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm"><p className="min-w-0 flex-1">{loop.error}</p><Button variant="outline" disabled={loop.busy} onClick={() => void loop.retry()} className="transition-none">Try again</Button></div>}
-    {lockdown.pasteMessage && <p role="status" className="text-sm text-muted-foreground">{lockdown.pasteMessage}</p>}
     {lockdown.loggingError && <p role="alert" className="text-sm text-muted-foreground">{lockdown.loggingError}</p>}
 
     <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 gap-6 xl:grid-cols-[minmax(12rem,0.8fr)_minmax(22rem,1.7fr)_minmax(14rem,0.9fr)]">
@@ -110,7 +110,9 @@ function ExerciseWorkspace({ id }: { id: string }) {
         {loop.outcome && <div role="status" aria-live="polite" data-testid="verdict-banner" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
           <div className="flex items-center gap-2">
             <span aria-hidden="true" className={`flex size-6 shrink-0 items-center justify-center rounded-full ${loop.outcome === 'passed' ? 'bg-emerald-300/20 text-emerald-300' : 'bg-muted text-muted-foreground'}`}>
-              <Check className="size-3.5" strokeWidth={3} />
+              {/* Fix round I2: a failed verdict was drawing the pass checkmark too -- only the
+                  ring colour changed. A distinct glyph per outcome, not a shared one. */}
+              {loop.outcome === 'passed' ? <Check className="size-3.5" strokeWidth={3} /> : <X className="size-3.5" strokeWidth={3} />}
             </span>
             <span className="text-sm font-medium">{loop.outcome === 'passed' ? 'Passed' : 'Needs work'}</span>
           </div>
@@ -127,15 +129,25 @@ function ExerciseWorkspace({ id }: { id: string }) {
             pip already decrements in, rather than nothing until the first streamed token. */}
         {loop.hintPending && <div aria-hidden="true" className="animate-pulse space-y-2 border-t border-border pt-4 motion-reduce:animate-none"><div className="h-3 w-24 rounded bg-muted" /><div className="h-3 w-full rounded bg-muted" /><div className="h-3 w-2/3 rounded bg-muted" /></div>}
         {loop.diagnosis && loop.outcome !== 'passed' && <HintButton available={loop.hintAvailable} waitSeconds={loop.hintWaitSeconds} count={loop.hintCount} busy={loop.busy} onRequest={() => void loop.requestHint()} />}
-        {/* This section now shows the instant `outcome` flips to 'passed' -- it no longer waits
-            for the full eight-stage background chain (spec 5.4's "Pass -> next exercise" row) --
-            though the button itself stays honestly disabled until `next()` can actually act:
-            `loop.busy` spans exactly the window `queueNext`'s bank fetch or Planner call is
-            still choosing what "next" even is. */}
-        {loop.outcome === 'passed' && <div className="space-y-3 border-t border-border pt-4"><p className="text-sm leading-relaxed text-muted-foreground">{loop.closed ? 'Outcome complete. Your next steps are ready.' : loop.nextExercise ? 'Keep going with a different pattern.' : loop.busy ? 'Preparing your next exercise.' : 'Your pass is saved.'}</p><Button onClick={() => void loop.next()} disabled={loop.busy} className="w-full transition-none active:translate-y-0">{loop.closed ? 'Back to your path' : 'Next exercise'}<ArrowRight aria-hidden="true" /></Button></div>}
+        {/* This section shows the instant `outcome` flips to 'passed' -- it no longer waits for
+            the full eight-stage background chain (spec 5.4's "Pass -> next exercise" row).
+            Fix round C2: the button is disabled on `!loop.canAdvance`, not `loop.busy` -- a
+            background save that fails AFTER `completed.current` was already set (a CLO-close
+            Planner outage, say) used to leave the button looking enabled while `next()`'s own
+            guard silently no-op'd every click; `canAdvance` mirrors that guard honestly. The
+            copy tells the truth about a failed save too, instead of claiming it landed. */}
+        {loop.outcome === 'passed' && <div className="space-y-3 border-t border-border pt-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {loop.error ? line('error.save', loop.lastRewardAttempt?.id ?? 'save-error') : loop.closed ? 'Outcome complete. Your next steps are ready.' : loop.nextExercise ? 'Keep going with a different pattern.' : loop.busy ? 'Preparing your next exercise.' : 'Your pass is saved.'}
+          </p>
+          <Button onClick={() => void loop.next()} disabled={!loop.canAdvance} className="w-full transition-none active:translate-y-0">{loop.closed ? 'Back to your path' : 'Next exercise'}<ArrowRight aria-hidden="true" /></Button>
+        </div>}
       </div>
     </div>
-    <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} />
+    {/* T2.8's rotating paste explanation and once-only PrintScreen note (pasteWhy/printscreenNote)
+        were built and tested but never threaded through this page -- wired here so the "Why?"
+        toggle and the note are actually visible, not just logged underneath. */}
+    <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} pasteMessage={lockdown.pasteMessage} pasteWhy={lockdown.pasteWhy} printscreenNote={lockdown.printscreenNote} />
     <Celebration onOpenShelf={() => router.push('/account#trophies')} resultsAnchorRef={resultsRef} />
   </div>
 }
