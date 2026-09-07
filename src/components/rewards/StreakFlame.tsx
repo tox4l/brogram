@@ -6,6 +6,7 @@ import { gsap } from 'gsap'
 import type { MotionPreference } from '@/lib/contracts'
 import type { FlameState } from '@/lib/rewards/streaks'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { Sparks } from './Sparks'
 import { cn } from '@/lib/utils'
 
 export interface StreakFlameProps {
@@ -13,22 +14,40 @@ export interface StreakFlameProps {
   /** The streak length in days, shown next to the glyph. */
   days: number
   motionPref?: MotionPreference
+  /** False when a parent (the celebration layer) already owns the single
+   *  sr-only announcement for this moment (fix round 1, I6: one live region
+   *  per celebration, not three). Standalone uses (a persistent dashboard
+   *  flame) keep the default `true`. */
+  announce?: boolean
   className?: string
 }
 
 const FILLED_STATES = new Set<FlameState>(['lit', 'at-risk', 'ignite', 'milestone'])
+const SPARK_STATES = new Set<FlameState>(['ignite', 'milestone'])
 
-/** Hand-drawn inline SVG (brief: no emoji, on-brand CSS/SVG art), a single
- *  teardrop flame path reused filled or outline-only. */
+/**
+ * Hand-drawn inline SVG (brief: no emoji, on-brand CSS/SVG art). Fix round
+ * 1, M5: a single closed path reads as a teardrop at 20px because it has no
+ * interior structure. Two changes fix that: a second, smaller inner-core
+ * path (a flame is read from its core as much as its outline) and a pulled-in
+ * left shoulder so the silhouette is asymmetric rather than a symmetric drop.
+ */
 function FlameGlyph({ filled, glyphRef }: { filled: boolean; glyphRef: RefObject<SVGSVGElement | null> }) {
   return (
     <svg ref={glyphRef} width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
       <path
-        d="M12 2c1 3-3 4-3 8a3 3 0 1 0 6 0c1.5 1 2 3 2 4.5A5.5 5.5 0 0 1 6 20a5.5 5.5 0 0 1-1-10.5C7 7 9 5 12 2Z"
+        d="M12.5 2c1.4 2.8-2.2 4.4-2.6 7.6-.3 2.1.6 3.6 2.1 3.6a2.6 2.6 0 0 0 2.6-2.9c1.6 1.3 2.4 3.3 2.4 5.2a5.5 5.5 0 0 1-6 5.5A5.6 5.6 0 0 1 6 15.4c0-2.2 1-3.6 2.2-5 1.1-1.3 2.3-2.6 2.6-5A9 9 0 0 1 12.5 2Z"
         fill={filled ? 'currentColor' : 'none'}
         stroke="currentColor"
         strokeWidth="1.5"
       />
+      {filled && (
+        <path
+          d="M12.6 12.2c.5.6.7 1.4.4 2.2a1.7 1.7 0 0 1-3.1-.4c-.2-.9.2-1.6.8-2.2.5.3.9.2 1.9.4Z"
+          fill="var(--celebration-foreground)"
+          opacity="0.55"
+        />
+      )}
     </svg>
   )
 }
@@ -48,12 +67,12 @@ function announcement(state: FlameState, days: number): string {
  * The flame glyph and its per-state motion (spec 7.4's table, restated):
  * cold is still and outlined; lit flickers slowly via opacity only (no
  * transform, per spec); at-risk pulses once, dimmed; ignite and milestone
- * scale up briefly (milestone bigger); reset dims once to an ember and
- * holds, no loop. Every state that carries copy also renders it (an
- * sr-only announcement plus the visible day count) -- nothing here is
+ * scale up briefly plus a spark burst (milestone bigger, spec 7.6: "flame
+ * scale plus sparks"); reset dims once to an ember and holds, no loop.
+ * Every state that carries copy also renders it -- nothing here is
  * conveyed by motion alone.
  */
-export function StreakFlame({ state, days, motionPref, className }: StreakFlameProps) {
+export function StreakFlame({ state, days, motionPref, announce = true, className }: StreakFlameProps) {
   const reducedMotion = useReducedMotion(motionPref)
   const glyphRef = useRef<SVGSVGElement>(null)
   const filled = FILLED_STATES.has(state)
@@ -94,7 +113,8 @@ export function StreakFlame({ state, days, motionPref, className }: StreakFlameP
     <span className={cn('inline-flex items-center gap-1.5', filled ? 'text-celebration' : 'text-muted-foreground', className)}>
       <FlameGlyph filled={filled} glyphRef={glyphRef} />
       <span className="tabular text-sm font-medium text-foreground">{days}</span>
-      <span className="sr-only" aria-live="polite">{announcement(state, days)}</span>
+      {SPARK_STATES.has(state) && <Sparks trigger={`${state}-${days}`} motionPref={motionPref} />}
+      {announce && <span className="sr-only" aria-live="polite">{announcement(state, days)}</span>}
     </span>
   )
 }

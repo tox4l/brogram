@@ -110,17 +110,39 @@ export class WorkerAdapter implements RuntimeAdapter {
     return slot.preparation
   }
 
+  /**
+   * R5.4, fix round 1 (I6): the standby's own ~10 MB fetch is queued only
+   * once the active worker's own prepare has actually settled, never in the
+   * same tick alongside it — two simultaneous downloads racing the same
+   * connection burst is exactly what this halves. It is fire-and-forget
+   * (never awaited by `warmup()` itself, so a caller that only needs one
+   * worker for the run ahead of it is never held up waiting for the
+   * second); a failure here surfaces the same way a `promote()`-driven
+   * replenishment failure always has, through runtime-progress `'error'`,
+   * and a later `warmup()` or `run()` retries it via the usual `needsBoth`
+   * check. `dispose()`/a fresh `warmup()` racing this is safe: `prepare()`
+   * itself is keyed off `this.packages` at call time, and spawning over an
+   * already-live, non-dead standby is guarded below and in `promote()`.
+   */
+  private scheduleStandby(): void {
+    // Spawning synchronously (before the fire-and-forget `prepare()` below
+    // even starts) is itself the guard against a concurrent second call
+    // queuing a duplicate: `this.standby` is truthy and not dead the instant
+    // this line runs, so a re-entrant call sees it and returns above.
+    if (this.standby && !this.standby.dead) return
+    this.standby = this.spawn()
+    void this.prepare(this.standby).catch(error => publishRuntimeProgress({ language: this.language, phase: 'error', packageName: this.language, message: errorOutput(error).stderr }))
+  }
+
   async warmup(): Promise<void> {
-    // Spawning at least one fresh slot means this warmup cycle's steps have
+    // Spawning a fresh active slot means this warmup cycle's steps have
     // never been announced yet - even if every step name was already seen by
     // a worker pair from an earlier life of this adapter (both dead and
     // replaced). Without this reset a cold reload publishes no progress at
     // all: every step name is already in `announced`.
-    let spawned = false
-    if (!this.active || this.active.dead) { this.active = this.spawn(); spawned = true }
-    if (!this.standby || this.standby.dead) { this.standby = this.spawn(); spawned = true }
-    if (spawned) this.announced.clear()
-    await Promise.all([this.prepare(this.active), this.prepare(this.standby)])
+    if (!this.active || this.active.dead) { this.active = this.spawn(); this.announced.clear() }
+    await this.prepare(this.active)
+    this.scheduleStandby()
   }
 
   private promote(): void {
@@ -130,13 +152,14 @@ export class WorkerAdapter implements RuntimeAdapter {
     // worker and start over on a cold standby.
     this.unhealthy = false
     if (this.active) this.terminate(this.active)
-    this.active = this.standby
+    // R5.4's lazy standby (I6) means one is not guaranteed to exist yet when
+    // a run needs to promote right now — fall back to a fresh, as-yet
+    // unprepared slot rather than leaving `active` undefined; `execute()`'s
+    // own `prepare(active)` call on the next run brings it up before use.
+    this.active = this.standby ?? this.spawn()
     this.standby = undefined
     // Replenishment must not hold the next run when the promoted worker is already ready.
-    try {
-      this.standby = this.spawn()
-      void this.prepare(this.standby).catch(error => publishRuntimeProgress({ language: this.language, phase: 'error', packageName: this.language, message: errorOutput(error).stderr }))
-    } catch { /* A later warmup retries worker construction. */ }
+    this.scheduleStandby()
   }
 
   private finish(run: Run, result: RunResult): void {

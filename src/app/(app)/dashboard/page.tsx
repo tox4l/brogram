@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { ArrowUpRight, Flame, LockKeyhole, Trophy } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { buildMap, currentCloId, nextUp } from '@/lib/course/map'
 import { buildRewardContext } from '@/lib/rewards/context'
 import { goalMet, levelBand, winsToday } from '@/lib/rewards/goal'
 import { flameState } from '@/lib/rewards/streaks'
-import { useAchievements, useAttempts, useLessonProgress, useWellness } from '@/lib/query/hooks'
+import { useAchievements, useActivityDays, useAttempts, useLessonProgress, useWellness } from '@/lib/query/hooks'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { getRuntime } from '@/lib/runtimes'
@@ -80,6 +80,36 @@ function onIdle(run: () => void): () => void {
   return () => clearTimeout(handle)
 }
 
+/** Fix round 1, I6: a learner on a metered or 2G connection did not ask for
+ *  a ~10 MB Pyodide/CheerpJ prefetch just by opening the dashboard. Neither
+ *  signal exists in every engine, so a missing `navigator.connection` reads
+ *  as "no signal either way" -- warm up as normal. */
+function prefersLessData(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection
+  if (!conn) return false
+  if (conn.saveData === true) return true
+  return /(^|-)2g$/.test(conn.effectiveType ?? '')
+}
+
+function subscribeNever(): () => void { return () => {} }
+
+/**
+ * Fix round 1, I3: `getHours()` reads the runtime's configured timezone,
+ * which differs between the UTC Vercel Node runtime that renders the
+ * initial HTML and a learner's local machine (Doha, UTC+3) -- computing it
+ * during render mismatched the at-risk streak branch on hydration every
+ * evening (React logs the mismatch and the text visibly flips). `-1` before
+ * hydration always reads as "not yet past the at-risk hour" so the server
+ * and the very first client render agree; the real local hour lands in the
+ * next paint, with no `setState` in an effect (standing constraint: no
+ * synchronous `setState` in effects). `getUTCHours()` needs no such guard —
+ * it returns the same value regardless of the runtime's timezone.
+ */
+function useLocalHour(): number {
+  return useSyncExternalStore(subscribeNever, () => new Date().getHours(), () => -1)
+}
+
 function StatTile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div role="group" aria-label={label} className="min-w-0 py-1">
@@ -102,6 +132,7 @@ export default function Dashboard() {
   const lessonProgressQuery = useLessonProgress()
   const wellnessQuery = useWellness()
   const achievementsQuery = useAchievements()
+  const activityDaysQuery = useActivityDays()
 
   const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
   const reducedMotion = useReducedMotion(prefs.motion)
@@ -134,6 +165,7 @@ export default function Dashboard() {
   const warmupLanguage = cards.find((card) => card.language)?.language
   useEffect(() => {
     if (!warmupLanguage) return
+    if (prefersLessData()) return
     return onIdle(() => { void getRuntime(warmupLanguage).warmup() })
   }, [warmupLanguage])
 
@@ -141,7 +173,7 @@ export default function Dashboard() {
   const rewardCtx = learnerState ? buildRewardContext({
     state: learnerState,
     attempts: attemptsQuery.data ?? [],
-    activityDays: [],
+    activityDays: activityDaysQuery.data ?? [],
     lessonProgress: lessonProgressQuery.data ?? [],
     drillResults: wellnessQuery.data?.drill_results ?? [],
     prefs,
@@ -155,11 +187,14 @@ export default function Dashboard() {
   const exerciseDays = learnerState?.streak.exerciseDays ?? 0
   const derotDays = learnerState?.streak.derotDays ?? 0
   const countedToday = learnerState?.streak.lastExerciseDate === (rewardCtx?.today ?? now.toISOString().slice(0, 10))
+  const localHour = useLocalHour()
   // justTransitioned is always false here (fix round 1, streaks.ts): this is
   // a plain mount-time read, never the on-load "did it just die" comparison
   // or a fresh win -- both of those belong to the mutation that actually
-  // records an action, not to rendering "Today".
-  const flame = flameState(exerciseDays, countedToday, now.getHours(), now.getUTCHours(), false)
+  // records an action, not to rendering "Today". `getUTCHours()` is safe to
+  // read during render on both the server and the client (I3): unlike
+  // `getHours()`, it never depends on the runtime's configured timezone.
+  const flame = flameState(exerciseDays, countedToday, localHour, now.getUTCHours(), false)
   const flameCopy = flame === 'at-risk'
     ? { label: 'Streak at risk', note: 'No rep yet today. One keeps it alive.' }
     : exerciseDays > 0

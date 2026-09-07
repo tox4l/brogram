@@ -54,6 +54,7 @@ vi.mock('@/lib/supabase/client', () => ({
       mocks.supabaseFrom(table)
       return { select: () => ({ eq: () => ({ maybeSingle: () => mocks.query(table), order: () => ({ limit: () => mocks.query(table) }) }) }) }
     },
+    rpc: (name: string) => { mocks.supabaseFrom(name); return mocks.query(name) },
   }),
 }))
 
@@ -107,12 +108,13 @@ function bundleFixture() {
   }
 }
 
-function seededClient(overrides: { attempts?: unknown[]; wellness?: unknown; lessonProgress?: LessonProgress[]; achievements?: UserAchievement[] } = {}): QueryClient {
+function seededClient(overrides: { attempts?: unknown[]; wellness?: unknown; lessonProgress?: LessonProgress[]; achievements?: UserAchievement[]; activityDays?: unknown[] } = {}): QueryClient {
   const client = makeQueryClient()
   client.setQueryData(qk.attempts('learner-one'), overrides.attempts ?? [])
   client.setQueryData(qk.wellness('learner-one'), overrides.wellness ?? { prefs: { dailyGoal: 3 } })
   client.setQueryData(qk.lessonProgress('learner-one'), overrides.lessonProgress ?? [])
   client.setQueryData(qk.achievements('learner-one'), overrides.achievements ?? [])
+  client.setQueryData(qk.activityDays('learner-one'), overrides.activityDays ?? [])
   return client
 }
 
@@ -231,6 +233,37 @@ describe('dashboard', () => {
     renderDashboard()
     await screen.findByText('Programming foundations')
     await waitFor(() => expect(mocks.warmup).toHaveBeenCalledWith('python'))
+  })
+
+  it('fix round 1, I6: skips the idle warmup on a data-saver connection', async () => {
+    const original = Object.getOwnPropertyDescriptor(window.navigator, 'connection')
+    Object.defineProperty(window.navigator, 'connection', { value: { saveData: true }, configurable: true })
+    try {
+      renderDashboard()
+      await screen.findByText('Programming foundations')
+      // No `waitFor` to prove a negative would just pass before the effect
+      // runs -- yield a real macrotask (the idle fallback's setTimeout(…,1))
+      // so a warmup that *would* have fired has had the chance to.
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      expect(mocks.warmup).not.toHaveBeenCalled()
+    } finally {
+      if (original) Object.defineProperty(window.navigator, 'connection', original)
+      else delete (window.navigator as { connection?: unknown }).connection
+    }
+  })
+
+  it('fix round 1, I6: still warms up on a 2G effectiveType even without an explicit saveData flag', async () => {
+    const original = Object.getOwnPropertyDescriptor(window.navigator, 'connection')
+    Object.defineProperty(window.navigator, 'connection', { value: { effectiveType: '2g' }, configurable: true })
+    try {
+      renderDashboard()
+      await screen.findByText('Programming foundations')
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      expect(mocks.warmup).not.toHaveBeenCalled()
+    } finally {
+      if (original) Object.defineProperty(window.navigator, 'connection', original)
+      else delete (window.navigator as { connection?: unknown }).connection
+    }
   })
 })
 

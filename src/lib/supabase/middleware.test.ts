@@ -96,6 +96,26 @@ describe('Supabase request proxy', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('lift_expired_restriction')
   })
 
+  // Fix round 1, I7: this header is now `(app)/layout.tsx`'s sole source of
+  // identity (T2.1). A future refactor of `finish()` that dropped the
+  // `delete()` before the `set()` would have every other test in this file
+  // still pass -- only a forged inbound value proves the strip actually happens.
+  it('strips a forged x-brogram-user-id header, forwarding the verified claim instead', async () => {
+    const response = await visit('/dashboard', { 'x-brogram-user-id': 'victim-uuid' })
+    expect(response.headers.get('x-middleware-request-x-brogram-user-id')).toBe('student')
+  })
+
+  it('strips a forged x-brogram-user-email header, forwarding the verified claim instead', async () => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'student', email: 'real@uni.edu.qa' } }, error: null })
+    const response = await visit('/dashboard', { 'x-brogram-user-email': 'phisher@evil.example' })
+    expect(response.headers.get('x-middleware-request-x-brogram-user-email')).toBe('real@uni.edu.qa')
+  })
+
+  it('forwards no email header at all when the verified claims carry none', async () => {
+    const response = await visit('/dashboard', { 'x-brogram-user-email': 'forged@evil.example' })
+    expect(response.headers.get('x-middleware-request-x-brogram-user-email')).toBeNull()
+  })
+
   it('retains refreshed cookies and SSR cache headers on a signed-out redirect', async () => {
     mocks.getClaims.mockImplementation(async () => {
       await cookieAdapter.setAll!([

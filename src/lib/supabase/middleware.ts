@@ -14,6 +14,11 @@ export async function updateSession(request: NextRequest) {
   // `(app)/layout.tsx` never has to call `auth.getUser()` a second time just
   // to learn who is signed in (T2.1).
   let userId: string | undefined
+  // Fix round 1 (C1): `getClaims()` already carries the email in the same
+  // verified claims as `sub` -- without forwarding it too, the layout's
+  // replacement `User` stub has no email at all, and /account permanently
+  // falls back to "Your account email is unavailable."
+  let userEmail: string | undefined
 
   function finish(destination?: string) {
     // Read headers after getClaims: its cookie rotation must reach the Server Components too.
@@ -23,11 +28,13 @@ export async function updateSession(request: NextRequest) {
     forwarded.delete('x-brogram-account-status')
     forwarded.delete('x-brogram-restricted-until')
     forwarded.delete('x-brogram-user-id')
+    forwarded.delete('x-brogram-user-email')
     if (account) {
       forwarded.set('x-brogram-account-status', account.account_status)
       forwarded.set('x-brogram-restricted-until', account.restricted_until ?? '')
     }
     if (userId) forwarded.set('x-brogram-user-id', userId)
+    if (userEmail) forwarded.set('x-brogram-user-email', userEmail)
     const response = destination
       ? NextResponse.redirect(new URL(destination, request.url))
       : NextResponse.next({ request: { headers: forwarded } })
@@ -55,6 +62,7 @@ export async function updateSession(request: NextRequest) {
     })
     const { data, error } = await supabase.auth.getClaims()
     userId = data?.claims?.sub
+    userEmail = typeof data?.claims?.email === 'string' ? data.claims.email : undefined
     // Keep the recovery page reachable when a valid identity cannot load its account.
     const recoveringAccount = request.nextUrl.searchParams.get('error') === 'account-unavailable'
     if (pathname === '/login' && !recoveringAccount && !error && userId) return finish('/dashboard')

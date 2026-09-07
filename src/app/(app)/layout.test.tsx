@@ -118,6 +118,15 @@ describe('app hydration', () => {
     expect(tree.props.initialState.profile.account_status).toBe('active')
     expect(mocks.from.mock.calls.map(([table]) => table)).not.toContain('profiles')
   })
+  it('C1: forwards the verified email into the User the account page reads, not a stub with no email at all', async () => {
+    mocks.headers.set('x-brogram-user-email', 'learner@uni.edu.qa')
+    const tree = await layout()
+    expect(tree.props.initialState.user?.email).toBe('learner@uni.edu.qa')
+  })
+  it('C1: carries no email rather than inventing one when the proxy forwarded none', async () => {
+    const tree = await layout()
+    expect(tree.props.initialState.user?.email).toBeUndefined()
+  })
   it('redirects a visit with no forwarded identity to login', async () => {
     mocks.headers.delete('x-brogram-user-id')
     await expect(layout()).rejects.toThrow('REDIRECT:/login')
@@ -139,9 +148,50 @@ describe('app hydration', () => {
     expect(tree.props.initialState.learnerState.profile.onboardingComplete).toBe(false)
     expect(tree.props.initialState.learnerState.streak.exerciseDays).toBe(0)
     expect(tree.props.initialState.learnerState.version).toBe(4)
-    // An incomplete document never qualifies as `saved`, so the second wave
-    // of reads this layout only makes for a real returning learner never fires.
-    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+  it('I5: seeds real attempts, lesson_progress and achievements even when the stored document fails the shape check', async () => {
+    // The one wave now runs unconditionally (I4/I5): a learner whose
+    // learner_state document is incomplete (commit 9bc1896, "completion
+    // survives a failed write") still has real rows in every other table,
+    // and losing them behind the `saved` gate for the whole session was the
+    // bug — reloading re-ran the same gate and never recovered them.
+    mocks.query.mockImplementation((table: string) => {
+      if (table === 'learner_state') return { data: { state: {}, version: 4 }, error: null }
+      if (table === 'attempts') return { data: [{ id: 'a1', exercise_id: 'ex1', code: 'x', results: [], passed: true, duration_ms: 100, hint_count: 0, created_at: '2026-09-05T00:00:00Z' }], error: null }
+      if (table === 'lesson_progress') return { data: [{ lesson_id: 'C1-1', clo_id: 'C1-1', status: 'completed', block_index: 3, checks_passed: 2, checks_failed: 0, lesson_version: 1, started_at: '2026-09-05T00:00:00Z', completed_at: '2026-09-05T00:10:00Z', updated_at: '2026-09-05T00:10:00Z' }], error: null }
+      if (table === 'user_achievements') return { data: [{ achievement_id: 'first-blood', unlocked_at: '2026-09-05T00:00:00Z' }], error: null }
+      return defaultQueryResult(table)
+    })
+    const tree = await layoutTree()
+    const seed = findChild<Parameters<typeof QuerySeed>[0]>(tree, QuerySeed)
+    expect(seed.props.attempts).toHaveLength(1)
+    expect(seed.props.lessonProgress).toHaveLength(1)
+    expect(seed.props.achievements).toHaveLength(1)
+    expect(mocks.rpc).toHaveBeenCalledWith('my_activity_days')
+  })
+  it('I4: issues all six reads in one wave — none of them waits for learner_state to resolve first', async () => {
+    let resolveLearnerState: (value: unknown) => void = () => {}
+    const pendingLearnerState = new Promise((resolve) => { resolveLearnerState = resolve })
+    const calledTables: string[] = []
+    mocks.from.mockImplementation((table: string) => {
+      calledTables.push(table)
+      if (table === 'learner_state') return { select: () => ({ eq: () => ({ maybeSingle: () => pendingLearnerState }) }) }
+      return makeBuilder(table)
+    })
+    // Resolve the dynamic import first (cached after the first test in this
+    // file, but still at least one microtask) so the timing below is about
+    // AppLayout's own body, not module resolution.
+    const { default: Layout } = await import('./layout')
+    const treePromise = Layout({ children: <p>Protected child</p> })
+    // A handful of microtask turns is enough for every synchronous entry in
+    // the Promise.all array to have been invoked, while learner_state's own
+    // promise is still deliberately unresolved — a two-serial-waves
+    // implementation would not have called any of these yet.
+    for (let i = 0; i < 5; i += 1) await Promise.resolve()
+    expect(calledTables).toEqual(expect.arrayContaining(['learner_state', 'wellness', 'attempts', 'lesson_progress', 'user_achievements']))
+    expect(mocks.rpc).toHaveBeenCalledWith('my_activity_days')
+    resolveLearnerState({ data: null, error: null })
+    await treePromise
   })
   it('expires saved streaks with the server clock and keeps dates and aggregates', async () => {
     const saved = compileLearnerState({ id: 'student' }, [], [], [], null)
@@ -249,16 +299,65 @@ describe('app hydration', () => {
     // Deep-merged, not a half-built object missing the other three dock keys.
     expect(resolvedPrefs(seed.props.wellness)?.dock).toEqual({ placement: 'left', collapsed: false, compactOnExercise: true, corner: 'br' })
   })
-  it('tolerates my_activity_days not existing yet (migration 0008 not deployed to production), keeping the saved streak untouched instead of zeroing it', async () => {
+  it('I2: expires a stale saved streak by date when my_activity_days is missing (migration 0008 not deployed), rather than freezing the exact bug R5.2a exists to kill', async () => {
     const saved = compileLearnerState({ id: 'student' }, [], [], [], null)
-    saved.streak = { exerciseDays: 6, derotDays: 1, lastExerciseDate: '2026-09-06', lastDerotDate: '2026-09-06' }
+    saved.streak = { exerciseDays: 12, derotDays: 5, lastExerciseDate: '2020-01-08', lastDerotDate: '2020-01-04' }
     withSavedState(saved, 5)
     mocks.rpc.mockImplementation(() => Promise.resolve({ data: null, error: { message: 'Could not find the function public.my_activity_days', code: 'PGRST202' } }))
     const tree = await layoutTree()
     const seed = findChild<Parameters<typeof QuerySeed>[0]>(tree, QuerySeed)
     expect(seed.props.activityDays).toEqual([])
     const rendered = findChild<RenderedSession>(tree, SessionProvider)
-    expect(rendered.props.initialState.learnerState.streak).toEqual(saved.streak)
+    // Zeroed, not frozen: a stored streak with a three-week-old
+    // lastExerciseDate must not keep reading as a live streak forever just
+    // because the RPC that would normally verify it is not deployed yet.
+    expect(rendered.props.initialState.learnerState.streak.exerciseDays).toBe(0)
+    expect(rendered.props.initialState.learnerState.streak.derotDays).toBe(0)
+    // The dates themselves still survive untouched -- only the counts expire.
+    expect(rendered.props.initialState.learnerState.streak.lastExerciseDate).toBe('2020-01-08')
+    expect(rendered.props.initialState.learnerState.streak.lastDerotDate).toBe('2020-01-04')
+  })
+  it('I2: a current saved streak (last activity today or yesterday, UTC) survives the same RPC-missing path', async () => {
+    const now = new Date()
+    const todayKey = now.toISOString().slice(0, 10)
+    const yesterdayKey = new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10)
+    const saved = compileLearnerState({ id: 'student' }, [], [], [], null)
+    saved.streak = { exerciseDays: 6, derotDays: 1, lastExerciseDate: todayKey, lastDerotDate: yesterdayKey }
+    withSavedState(saved, 5)
+    mocks.rpc.mockImplementation(() => Promise.resolve({ data: null, error: { message: 'Could not find the function public.my_activity_days', code: 'PGRST202' } }))
+    const tree = await layout()
+    expect(tree.props.initialState.learnerState.streak.exerciseDays).toBe(6)
+    expect(tree.props.initialState.learnerState.streak.derotDays).toBe(1)
+  })
+  it('I1: seeds undefined, not an empty array, for lesson_progress/achievements/activity-days on a non-schema error, so the client hook fetches instead of caching a false empty', async () => {
+    const saved = compileLearnerState({ id: 'student' }, [], [], [], null)
+    const transientError = { message: 'Connection pool exhausted' }
+    mocks.query.mockImplementation((table: string) => {
+      if (table === 'learner_state') return { data: { state: saved, version: 2 }, error: null }
+      if (table === 'lesson_progress' || table === 'user_achievements') return { data: null, error: transientError }
+      return defaultQueryResult(table)
+    })
+    mocks.rpc.mockImplementation(() => Promise.resolve({ data: null, error: transientError }))
+    const tree = await layoutTree()
+    const seed = findChild<Parameters<typeof QuerySeed>[0]>(tree, QuerySeed)
+    expect(seed.props.lessonProgress).toBeUndefined()
+    expect(seed.props.achievements).toBeUndefined()
+    expect(seed.props.activityDays).toBeUndefined()
+  })
+  it('I1: still seeds an empty array (never undefined) for the confirmed "not there yet" codes', async () => {
+    const saved = compileLearnerState({ id: 'student' }, [], [], [], null)
+    mocks.query.mockImplementation((table: string) => {
+      if (table === 'learner_state') return { data: { state: saved, version: 2 }, error: null }
+      if (table === 'lesson_progress') return { data: null, error: { message: 'relation does not exist', code: '42P01' } }
+      if (table === 'user_achievements') return { data: null, error: { message: 'not found', code: 'PGRST205' } }
+      return defaultQueryResult(table)
+    })
+    mocks.rpc.mockImplementation(() => Promise.resolve({ data: null, error: { message: 'function missing', code: '42883' } }))
+    const tree = await layoutTree()
+    const seed = findChild<Parameters<typeof QuerySeed>[0]>(tree, QuerySeed)
+    expect(seed.props.lessonProgress).toEqual([])
+    expect(seed.props.achievements).toEqual([])
+    expect(seed.props.activityDays).toEqual([])
   })
   it('throws when wellness fails to load, since the dock has nothing honest to fall back to', async () => {
     mocks.query.mockImplementation((table: string) => table === 'wellness' ? { data: null, error: { message: 'Database unavailable' } } : defaultQueryResult(table))

@@ -228,4 +228,40 @@ describe('worker runtime lifecycle', () => {
     expect(phases).not.toContain('error')
     unsubscribe()
   })
+
+  // R5.4, fix round 1 (I6): the standby's own fetch must never race the
+  // active's — that simultaneous burst is the whole bug this ruling exists
+  // to kill. `warmup()` itself must also resolve as soon as the active is
+  // usable, not wait for the standby too (a caller that only needs one
+  // worker for the run ahead of it must never be held up by the second).
+  it('R5.4: queues the standby only after the active worker\'s own prepare has settled, never in the same tick', async () => {
+    vi.useFakeTimers()
+    const workers: ControlledWorker[] = []
+    const adapter = new WorkerAdapter('python', () => { const w = new ControlledWorker(); w.prepareDelayMs = 50; workers.push(w); return w })
+    const warming = adapter.warmup()
+    await Promise.resolve()
+    // The active's own (delayed) prepare reply has not arrived yet: the
+    // standby must not exist at all, let alone have a queued fetch.
+    expect(workers).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(50)
+    await warming
+    // `warmup()` resolved as soon as the active settled -- the standby is
+    // spawned and its own prepare command queued in the very same turn,
+    // strictly after, never racing the active's own network activity.
+    expect(workers).toHaveLength(2)
+    expect(workers[1].commands.some(c => c.type === 'prepare')).toBe(true)
+  })
+
+  it('R5.4: a run that must promote before the lazily-scheduled standby exists falls back to a fresh worker rather than leaving active undefined', async () => {
+    const workers: ControlledWorker[] = []
+    const adapter = new WorkerAdapter('python', () => { const w = new ControlledWorker(); workers.push(w); return w })
+    await adapter.warmup()
+    // Simulate promote() firing before the (synchronously-queued, but not
+    // yet replied-to) standby has finished preparing, by crashing the
+    // active immediately -- `run()` must still recover, exactly as the
+    // existing "recovers an idle active worker failure" test already covers
+    // for the ordinary case where the standby was already ready.
+    workers[0].onerror?.({ message: 'Worker crashed' })
+    expect((await adapter.run(request)).ok).toBe(true)
+  })
 })

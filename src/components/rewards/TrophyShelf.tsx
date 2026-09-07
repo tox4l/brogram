@@ -5,6 +5,7 @@ import { ACHIEVEMENTS, type MotionPreference } from '@/lib/contracts'
 import { useAchievements } from '@/lib/query/hooks'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { STAGGER } from '@/lib/motion/tokens'
+import { line } from '@/lib/voice/lines'
 import { TrophyGlyph } from './TrophyCard'
 import { cn } from '@/lib/utils'
 
@@ -38,17 +39,22 @@ export function TrophyShelf({ motionPref, unlockedThisSession }: TrophyShelfProp
   const reducedMotion = useReducedMotion(motionPref)
   const query = useAchievements()
   const unlockedMap = new Map((query.data ?? []).map((row) => [row.achievementId, row.unlockedAt]))
-  const sorted = [...ACHIEVEMENTS].sort((a, b) => a.ordinal - b.ordinal)
-  const showEmpty = unlockedMap.size === 0 && !query.isPending
+  // visibleWhenLocked (fix round 1, M4): every shipped achievement sets this
+  // true today, but the flag exists so a future secret unlock is not spoiled
+  // by a shelf that shows every row regardless.
+  const sorted = [...ACHIEVEMENTS]
+    .filter((achievement) => achievement.visibleWhenLocked || unlockedMap.has(achievement.id))
+    .sort((a, b) => a.ordinal - b.ordinal)
+  // Fix round 1, I5: an error and "nothing unlocked" must never render at
+  // the same time -- a learner with real unlocks behind a 404'd query was
+  // being told their shelf was empty underneath the line saying it failed
+  // to load. One honest state per situation, not two stacked.
+  const showEmpty = !query.isPending && !query.isError && unlockedMap.size === 0
 
   return (
     <div className="space-y-3">
-      {query.isError && (
-        <p role="status" className="text-xs text-muted-foreground">
-          Trophies could not load right now. Showing what is available to earn.
-        </p>
-      )}
-      {showEmpty && <p className="text-sm text-muted-foreground">Nothing on the shelf yet. First pass puts something here.</p>}
+      {query.isError && <p className="text-xs text-muted-foreground">{line('error.load')}</p>}
+      {showEmpty && <p className="text-sm text-muted-foreground">{line('empty.trophies')}</p>}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {sorted.map((achievement, index) => {
           const unlockedAt = unlockedMap.get(achievement.id)

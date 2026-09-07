@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ACHIEVEMENTS, type UserAchievement } from '@/lib/contracts'
+import { line, lineWith } from '@/lib/voice/lines'
 
 // ---------------------------------------------------------------------------
 // Shared fakes
@@ -39,6 +40,13 @@ function visibleCard(): HTMLElement {
   return el
 }
 
+/** The one sr-only announcement channel every celebration renders through
+ *  (fix round 1, I6), used for kinds with no visible card at all (chain,
+ *  goal -- the pip/ring is the visual, this layer only sounds and announces). */
+function liveText(): string {
+  return document.querySelector('[aria-live="polite"]')?.textContent ?? ''
+}
+
 const gsapMocks = vi.hoisted(() => ({
   to: vi.fn(),
   set: vi.fn(),
@@ -64,13 +72,17 @@ vi.mock('canvas-confetti', () => ({ default: confettiMock }))
 const achievementsQueryMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/query/hooks', () => ({ useAchievements: achievementsQueryMock }))
 
+const vibrateMock = vi.hoisted(() => vi.fn())
+
 beforeEach(() => {
   installMatchMedia(false)
+  Object.defineProperty(navigator, 'vibrate', { value: vibrateMock, configurable: true, writable: true })
 })
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 // ---------------------------------------------------------------------------
@@ -153,6 +165,36 @@ describe('XpCounter', () => {
     gsapMocks.to.mockClear()
     rerender(<XpCounter value={50} />)
     expect(gsapMocks.to).not.toHaveBeenCalled()
+  })
+
+  it('fix round 1 I2: kills the previous tween before starting the next one, so two fast passes never run backwards', async () => {
+    const { XpCounter } = await import('./XpCounter')
+    const { rerender } = render(<XpCounter value={100} />)
+    gsapMocks.killTweensOf.mockClear()
+    rerender(<XpCounter value={160} />) // tween A: 100 -> 160
+    const proxyA = gsapMocks.to.mock.calls.at(-1)![0]
+    rerender(<XpCounter value={220} />) // lands ~600ms later: tween B must kill A first
+    expect(gsapMocks.killTweensOf).toHaveBeenCalledWith(proxyA)
+  })
+
+  it('fix round 1 I3: plays xp.settle once the tween completes, never per frame', async () => {
+    const { XpCounter } = await import('./XpCounter')
+    const { rerender } = render(<XpCounter value={100} />)
+    rerender(<XpCounter value={160} />)
+    const vars = gsapMocks.to.mock.calls.at(-1)![1] as { onUpdate?: () => void; onComplete?: () => void }
+    act(() => vars.onUpdate?.())
+    expect(soundMocks.play).not.toHaveBeenCalledWith('xp.settle')
+    act(() => vars.onComplete?.())
+    expect(soundMocks.play).toHaveBeenCalledWith('xp.settle')
+    expect(soundMocks.play).toHaveBeenCalledTimes(1)
+  })
+
+  it('fix round 1 I3: under reduced motion, xp.settle still plays immediately -- feedback reduces, it never vanishes', async () => {
+    installMatchMedia(true)
+    const { XpCounter } = await import('./XpCounter')
+    const { rerender } = render(<XpCounter value={100} />)
+    rerender(<XpCounter value={160} />)
+    expect(soundMocks.play).toHaveBeenCalledWith('xp.settle')
   })
 })
 
@@ -239,6 +281,14 @@ describe('GoalRing', () => {
     render(<GoalRing wins={9} goal={3} />)
     screen.getByText('9/3')
   })
+
+  it('fix round 1 I2: kills the previous tween before starting the next one', async () => {
+    const { GoalRing } = await import('./GoalRing')
+    const { rerender } = render(<GoalRing wins={1} goal={3} />)
+    gsapMocks.killTweensOf.mockClear()
+    rerender(<GoalRing wins={2} goal={3} />)
+    expect(gsapMocks.killTweensOf).toHaveBeenCalled()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -300,12 +350,15 @@ describe('TrophyShelf', () => {
     screen.getByText(ACHIEVEMENTS[0].name)
   })
 
-  it('renders honestly (all locked, no crash) when the query errors -- the migration is not applied in production yet', async () => {
+  it('fix round 1 I5: on error, shows ONLY the error note -- never "nothing unlocked" stacked underneath it', async () => {
     achievementsQueryMock.mockReturnValue({ data: undefined, isPending: false, isError: true })
     const { TrophyShelf } = await import('./TrophyShelf')
     expect(() => render(<TrophyShelf />)).not.toThrow()
-    screen.getByText(/could not load/i)
+    screen.getByText(line('error.load'))
     screen.getByText(ACHIEVEMENTS[0].how)
+    // A learner with real unlocks behind a failed query must never be told
+    // their shelf is empty underneath the line saying it failed to load.
+    expect(screen.queryByText('Nothing on the shelf yet. First pass puts something here.')).toBeNull()
   })
 
   it('shows an unlocked achievement lit with its date, and a locked one with its rule, side by side', async () => {
@@ -336,30 +389,31 @@ describe('Celebration', () => {
     const { Celebration, celebrate } = await freshCelebration()
     render(<Celebration />)
     act(() => {
-      celebrate('pass')
-      celebrate('best')
+      celebrate('pass') // celebration-1, minor lane -- a compact chip
+      celebrate('best') // celebration-2
     })
     // Only one visible celebration card renders, regardless of queue depth.
     expect(document.querySelectorAll('.pointer-events-auto').length).toBe(1)
-    within(visibleCard()).getByText('Locked in. Keep going.')
+    within(visibleCard()).getByText(line('pass', 'celebration-1'))
   })
 
-  it('never fires a sound without also rendering its text (pass, chain, level-up, achievement)', async () => {
+  it('never fires a sound without also rendering its text (pass)', async () => {
     const { Celebration, celebrate } = await freshCelebration()
     render(<Celebration />)
 
     act(() => celebrate('pass'))
     expect(soundMocks.play).toHaveBeenCalledWith('pass')
-    within(visibleCard()).getByText('Locked in. Keep going.')
+    within(visibleCard()).getByText(line('pass', 'celebration-1'))
   })
 
-  it('plays the sound tier mapped to each celebration kind', async () => {
+  it('never fires a sound without also rendering its text, even for a kind with no visible card (chain -- (f): the pip animates in place, this layer only sounds and announces)', async () => {
     const { Celebration, celebrate } = await freshCelebration()
     render(<Celebration />)
 
     act(() => celebrate('chain', { n: 2 }))
     expect(soundMocks.play).toHaveBeenCalledWith('chain.tick')
-    within(visibleCard()).getByText('Chain ×2.')
+    expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0)
+    expect(liveText()).toBe(lineWith('chain.tick', { n: 2 }, 'celebration-1'))
   })
 
   it("course-clear layers clo.close with level.up (both calls; the manager's own debounce picks the winner)", async () => {
@@ -382,26 +436,27 @@ describe('Celebration', () => {
     await waitFor(() => expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0))
   })
 
-  it('a level-up never auto-dismisses on its own (only Escape or the close button end it)', async () => {
+  it('fix round 1 C2: a level-up gets a real, bounded auto-dismiss (it is not the only way to end it, but it does end)', async () => {
     vi.useFakeTimers()
     const { Celebration, celebrate } = await freshCelebration()
     render(<Celebration />)
     act(() => celebrate('level-up', { level: 4 }))
-    act(() => { vi.advanceTimersByTime(10_000) })
+    act(() => { vi.advanceTimersByTime(5_000) })
     expect(visibleCard().querySelector('p')?.textContent).toMatch(/Level 4/)
-    vi.useRealTimers()
+    act(() => { vi.advanceTimersByTime(2_500) }) // past the 7s bound
+    expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0)
   })
 
   it('the close button dismisses the current card and promotes the next one', async () => {
     const { Celebration, celebrate } = await freshCelebration()
     render(<Celebration />)
     act(() => {
-      celebrate('level-up', { level: 3 })
-      celebrate('pass')
+      celebrate('level-up', { level: 3 }) // celebration-1
+      celebrate('pass') // celebration-2
     })
     expect(visibleCard().querySelector('p')?.textContent).toMatch(/Level 3/)
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    await waitFor(() => within(visibleCard()).getByText('Locked in. Keep going.'))
+    await waitFor(() => within(visibleCard()).getByText(line('pass', 'celebration-2')))
   })
 
   it('fires confetti only when the queued item earned it (session-first pass), not on a routine second pass', async () => {
@@ -428,7 +483,7 @@ describe('Celebration', () => {
     expect(gsapMocks.fromTo).not.toHaveBeenCalled()
     // The text is still shown and the sound still plays -- feedback reduces, it never vanishes.
     expect(soundMocks.play).toHaveBeenCalledWith('first.win')
-    within(visibleCard()).getByText(ACHIEVEMENTS.find((a) => a.id === 'first-blood')!.line)
+    within(visibleCard()).getByText(line('pass.first', 'celebration-1'))
   })
 
   it('collapses three queued achievement unlocks into one card and opens the shelf on request', async () => {
@@ -450,5 +505,80 @@ describe('Celebration', () => {
     render(<Celebration />)
     expect(soundMocks.play).not.toHaveBeenCalled()
     expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0)
+  })
+
+  // ---------------------------------------------------------------------
+  // Fix round 1, C1: no replay on preempt-and-return
+  // ---------------------------------------------------------------------
+
+  it('C1: a preempted item does not replay its sound, haptic or confetti when it returns to the front of the queue', async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    render(<Celebration />)
+
+    act(() => celebrate('pass')) // celebration-1: session-first pass -- sound, haptic (buzz 15), confetti
+    await act(async () => { await Promise.resolve() })
+    expect(soundMocks.play).toHaveBeenCalledWith('pass')
+    expect(soundMocks.play.mock.calls.filter((call) => call[0] === 'pass')).toHaveLength(1)
+    expect(vibrateMock.mock.calls.filter((call) => call[0] === 15)).toHaveLength(1) // pass's own pattern
+    expect(confettiMock).toHaveBeenCalledTimes(1)
+
+    act(() => celebrate('level-up', { level: 5 })) // celebration-2: preempts pass (priority 90 > 70) -- also haptic
+    await waitFor(() => expect(visibleCard().querySelector('p')?.textContent).toMatch(/Level 5/))
+
+    // Dismissing level-up restores pass to the front -- the exact C1 scenario.
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => within(visibleCard()).getByText(line('pass', 'celebration-1')))
+
+    // Nothing about pass fired a second time (level-up's own haptic pattern is untouched by this check).
+    expect(soundMocks.play.mock.calls.filter((call) => call[0] === 'pass')).toHaveLength(1)
+    expect(vibrateMock.mock.calls.filter((call) => call[0] === 15)).toHaveLength(1)
+    expect(confettiMock).toHaveBeenCalledTimes(1)
+  })
+
+  // ---------------------------------------------------------------------
+  // Fix round 1, C2: TTL -- a never-shown item does not survive past its
+  // own lifetime, and is never promoted (with sound) on a later mount.
+  // ---------------------------------------------------------------------
+
+  it('C2: an item queued but never shown is dropped once its lifetime elapses, and is not promoted on a later mount', async () => {
+    vi.useFakeTimers()
+    const start = new Date('2026-01-01T00:00:00.000Z')
+    vi.setSystemTime(start)
+    const { Celebration, celebrate } = await freshCelebration()
+    const { unmount } = render(<Celebration />)
+
+    act(() => {
+      celebrate('level-up', { level: 9 }) // celebration-1: shown (current), lifetime 7000ms
+      celebrate('pass') // celebration-2: never shown -- outranked by level-up the whole time
+    })
+    expect(visibleCard().querySelector('p')?.textContent).toMatch(/Level 9/)
+    soundMocks.play.mockClear()
+
+    // A route change: the layer unmounts without either item having been dismissed.
+    unmount()
+
+    // Past pass's ~1.5s lifetime, well before level-up's 7s (irrelevant --
+    // level-up was already cleared on unmount because it WAS shown).
+    vi.setSystemTime(new Date(start.getTime() + 2_000))
+
+    render(<Celebration />) // the next route mounts a fresh layer
+    await act(async () => {})
+
+    expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0)
+    expect(soundMocks.play).not.toHaveBeenCalled()
+  })
+
+  // ---------------------------------------------------------------------
+  // Fix round 1, I8: idempotency
+  // ---------------------------------------------------------------------
+
+  it('I8: a repeated celebrate() call for the same eventId is a no-op while the first is still live', async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    render(<Celebration />)
+    act(() => {
+      celebrate('best', { n: 10 }, 'submit-42')
+      celebrate('best', { n: 10 }, 'submit-42') // a StrictMode double-invoke / retried mutation
+    })
+    expect(soundMocks.play.mock.calls.filter((call) => call[0] === 'best')).toHaveLength(1)
   })
 })

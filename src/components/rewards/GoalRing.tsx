@@ -35,6 +35,10 @@ export function GoalRing({ wins, goal, motionPref, className }: GoalRingProps) {
   useGSAP(() => {
     const el = circleRef.current
     if (!el) return
+    // Fix round 1, I2 (the same fault as XpCounter): kill whatever tween a
+    // previous `wins` change started before beginning the next one, so two
+    // wins landing close together cannot leave the ring fighting itself.
+    gsap.killTweensOf(el)
     if (reducedMotion) {
       gsap.set(el, { strokeDashoffset: targetOffset })
       return

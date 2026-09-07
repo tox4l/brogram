@@ -242,7 +242,7 @@ describe('levelUpDetail (level-up detection to presentation)', () => {
   it('reports the level reached on an ordinary single-level-up pass', async () => {
     const mod = await loadModule()
     // xpToReach(2) = 500
-    expect(mod.levelUpDetail(400, 600)).toEqual({ level: 2, n: 1 })
+    expect(mod.levelUpDetail(400, 600)).toEqual({ level: 2, n: 1, fromXp: 400, toXp: 600 })
   })
 
   it('reports every level crossed when a jump spans more than one boundary', async () => {
@@ -256,5 +256,135 @@ describe('levelUpDetail (level-up detection to presentation)', () => {
   it('never reports a crossing when XP moves backward', async () => {
     const mod = await loadModule()
     expect(mod.levelUpDetail(1400, 400)).toBeNull()
+  })
+})
+
+describe('celebrate() idempotency (fix round 1, I8)', () => {
+  it('a repeated eventId is a no-op while the first item is still in the queue', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('best', { n: 5 }, 'submit-1')
+      mod.celebrate('best', { n: 5 }, 'submit-1')
+      mod.celebrate('best', { n: 5 }, 'submit-1')
+    })
+    expect(result.current.queue).toHaveLength(1)
+  })
+
+  it('a different eventId is a distinct celebration', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('best', { n: 5 }, 'submit-1')
+      mod.celebrate('best', { n: 6 }, 'submit-2')
+    })
+    expect(result.current.queue).toHaveLength(2)
+  })
+
+  it('no eventId at all never dedupes -- every plain call is its own celebration', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('best', { n: 5 })
+      mod.celebrate('best', { n: 5 })
+    })
+    expect(result.current.queue).toHaveLength(2)
+  })
+
+  it('the same eventId can fire again once the first item has left the queue', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => mod.celebrate('best', { n: 5 }, 'submit-1'))
+    act(() => result.current.dismiss(result.current.current!.id))
+    act(() => mod.celebrate('best', { n: 5 }, 'submit-1'))
+    expect(result.current.queue).toHaveLength(1)
+  })
+})
+
+describe('the staleness TTL (fix round 1, C2)', () => {
+  it('a queued item is dropped on the next read once its own lifetime has elapsed', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => mod.celebrate('pass')) // base lifetime 1500ms
+    expect(result.current.queue).toHaveLength(1)
+    advance(1600)
+    act(() => mod.celebrate('best', { n: 1 })) // any read/write re-evaluates staleness
+    expect(result.current.queue.find((item) => item.kind === 'pass')).toBeUndefined()
+  })
+
+  it('a fresh item within its lifetime survives a read', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => mod.celebrate('level-up', { level: 5 })) // base lifetime 7000ms
+    advance(3000)
+    act(() => mod.celebrate('best', { n: 1 }))
+    expect(result.current.queue.find((item) => item.kind === 'level-up')).toBeDefined()
+  })
+
+  it('clearShownCelebrations removes exactly the ids given, leaving the rest queued', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('pass')
+      mod.celebrate('best', { n: 1 })
+    })
+    const shownId = result.current.queue[0].id
+    act(() => mod.clearShownCelebrations(new Set([shownId])))
+    expect(result.current.queue).toHaveLength(1)
+    expect(result.current.queue[0].id).not.toBe(shownId)
+  })
+})
+
+describe('the same-submit time budget (fix round 1, I4b)', () => {
+  it('two routine events landing together keep their normal lifetime', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('pass') // 1500ms base
+      mod.celebrate('best', { n: 1 }) // 1400ms base
+    })
+    const total = result.current.queue.reduce((sum, item) => sum + item.lifetimeMs, 0)
+    expect(total).toBe(1500 + 1400)
+  })
+
+  it('a third routine event in the same ~300ms submit shrinks the whole batch to fit a ~3s budget', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('pass')
+      mod.celebrate('best', { n: 1 })
+      mod.celebrate('chain', { n: 1 })
+    })
+    for (const item of result.current.queue) {
+      expect(item.lifetimeMs).toBeLessThanOrEqual(1000) // 3000 / 3
+    }
+    const total = result.current.queue.reduce((sum, item) => sum + item.lifetimeMs, 0)
+    expect(total).toBeLessThanOrEqual(3000)
+  })
+
+  it('level-up and achievement are exempt from the batch cap', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('pass')
+      mod.celebrate('best', { n: 1 })
+      mod.celebrate('level-up', { level: 5 })
+    })
+    const levelUp = result.current.queue.find((item) => item.kind === 'level-up')
+    expect(levelUp?.lifetimeMs).toBe(7000)
+  })
+
+  it('events well outside the 300ms window are never batched together', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => mod.celebrate('pass'))
+    advance(1000)
+    act(() => mod.celebrate('best', { n: 1 }))
+    advance(1000)
+    act(() => mod.celebrate('chain', { n: 1 }))
+    for (const item of result.current.queue) {
+      const base = item.kind === 'pass' ? 1500 : item.kind === 'best' ? 1400 : 1200
+      expect(item.lifetimeMs).toBe(base)
+    }
   })
 })
