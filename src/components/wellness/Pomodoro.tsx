@@ -117,8 +117,8 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, onPendi
 
   if (compact) {
     return (
-      <div id="pomodoro" className="flex scroll-mt-20 items-center gap-2 text-xs text-muted-foreground">
-        <Timer className="size-3.5 shrink-0" aria-hidden="true" />
+      <div id="pomodoro" className="flex scroll-mt-20 items-center gap-2 text-micro text-muted-foreground">
+        <Timer className="size-4 shrink-0" aria-hidden="true" />
         <span className="font-mono tabular-nums">{formatClock(remaining)}</span>
         <span className="capitalize">{derived.state.phase}</span>
       </div>
@@ -127,11 +127,11 @@ export function Pomodoro({ prefs, now, attemptActive, onSessionComplete, onPendi
 
   return (
     <div id="pomodoro" className="scroll-mt-20">
-      <h3 className="text-sm font-medium">{line('dock.pomodoro')}</h3>
+      <h3 className="text-small font-medium">{line('dock.pomodoro')}</h3>
       <div className="mt-3 flex items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-2xl font-medium tabular-nums tracking-tight">{formatClock(remaining)}</p>
-          <p className="mt-1 text-xs text-muted-foreground capitalize">{derived.state.phase} · {derived.state.running ? 'running' : 'paused'}</p>
+          <p className="font-mono text-h2 font-medium tabular-nums tracking-tight">{formatClock(remaining)}</p>
+          <p className="mt-1 text-micro text-muted-foreground capitalize">{derived.state.phase} · {derived.state.running ? 'running' : 'paused'}</p>
         </div>
         <div className="flex gap-2">
           {derived.state.running ? (

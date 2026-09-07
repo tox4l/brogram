@@ -98,7 +98,7 @@ function parsePositiveMinutes(value: string, fallback: number, max: number): num
 
 function NumberField({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (value: number) => void }) {
   return (
-    <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+    <label className="flex items-center justify-between gap-3 text-micro text-muted-foreground">
       <span>{label}</span>
       <input
         type="number"
@@ -106,7 +106,7 @@ function NumberField({ label, value, max, onChange }: { label: string; value: nu
         max={max}
         value={value}
         onChange={(event) => onChange(parsePositiveMinutes(event.target.value, value, max))}
-        className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="w-16 rounded-lg border border-input bg-background px-2 py-1 text-right text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
     </label>
   )
@@ -126,10 +126,10 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
   onDockChange: (patch: Partial<WellnessPrefs['dock']>) => void
 }) {
   return (
-    <details className="mt-5 border-t border-border pt-5">
-      <summary className="w-fit cursor-pointer rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">Settings</summary>
+    <details className="mt-4 border-t border-rule pt-4">
+      <summary className="w-fit cursor-pointer rounded-lg text-small font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">Settings</summary>
       <div className="mt-4 space-y-3">
-        <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <label className="flex items-center justify-between gap-3 text-micro text-muted-foreground">
           <span>Dock position</span>
           <select
             value={prefs.dock.placement}
@@ -138,18 +138,18 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
               rememberDockPlacement(placement)
               onDockChange({ placement })
             }}
-            className="rounded-md border border-input bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-lg border border-input bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {PLACEMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <label className="flex items-center justify-between gap-3 text-micro text-muted-foreground">
           <span>Collapse on reps and walkthroughs</span>
           <input
             type="checkbox"
             checked={prefs.dock.compactOnExercise}
             onChange={(event) => onDockChange({ compactOnExercise: event.target.checked })}
-            className="size-4 rounded-sm border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="size-4 rounded-lg border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
         <NumberField label="Prayer lead time (min)" value={prefs.prayerLeadMinutes} max={60} onChange={(value) => onChange({ prayerLeadMinutes: value })} />
@@ -157,13 +157,13 @@ function WellnessSettings({ prefs, onChange, onDockChange }: {
         <NumberField label="Stretch interval (min)" value={prefs.stretchIntervalMin} max={180} onChange={(value) => onChange({ stretchIntervalMin: value })} />
         <NumberField label="Pomodoro work (min)" value={prefs.pomodoroWorkMin} max={120} onChange={(value) => onChange({ pomodoroWorkMin: value })} />
         <NumberField label="Pomodoro break (min)" value={prefs.pomodoroBreakMin} max={60} onChange={(value) => onChange({ pomodoroBreakMin: value })} />
-        <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <label className="flex items-center justify-between gap-3 text-micro text-muted-foreground">
           <span>Use device location</span>
           <input
             type="checkbox"
             checked={prefs.useDeviceLocation}
             onChange={(event) => onChange({ useDeviceLocation: event.target.checked })}
-            className="size-4 rounded-sm border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="size-4 rounded-lg border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
       </div>
@@ -244,11 +244,11 @@ function WellnessReminderEngine({ prefs, waterLog, prayerResult, onTogglePrayer,
     <>
       <PrayerTimes prefs={prefs} onTogglePrayer={onTogglePrayer} result={prayerResult} now={now} attemptActive={attemptActive} compact={compact} visible={visible}
         onPendingChange={(pending) => onPendingChange('prayer', pending)} />
-      <div className={visible && !compact ? 'border-t border-border pt-5' : undefined}>
+      <div className={visible && !compact ? 'border-t border-rule pt-4' : undefined}>
         <WaterStretch prefs={prefs} now={now} log={waterLog} onLog={onLog} attemptActive={attemptActive} compact={compact} visible={visible}
           onPendingChange={(pending) => onPendingChange('wellness', pending)} />
       </div>
-      <div className={visible && !compact ? 'border-t border-border pt-5' : undefined}>
+      <div className={visible && !compact ? 'border-t border-rule pt-4' : undefined}>
         <Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={onSessionComplete} compact={compact} visible={visible}
           onPendingChange={(pending) => onPendingChange('pomodoro', pending)} />
       </div>
@@ -266,8 +266,8 @@ function SettingsAndFooter({ prefs, onPrefsChange, onDockChange }: DockChromePro
   return (
     <>
       <WellnessSettings prefs={prefs} onChange={onPrefsChange} onDockChange={onDockChange} />
-      <div className="mt-5 border-t border-border pt-5">
-        <Link href="/derot" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">Open de-rot<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+      <div className="mt-4 border-t border-rule pt-4">
+        <Link href="/derot" className="inline-flex items-center gap-1 rounded-lg text-small font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring">Open de-rot<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </div>
     </>
   )
@@ -301,10 +301,10 @@ function VerticalCollapsedChrome({ waterLog, prayerResult, badge, onExpand }: {
           key={key}
           type="button"
           onClick={onExpand}
-          className="group relative flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="group relative flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Icon className="size-4" aria-hidden="true" />
-          <span className="pointer-events-none absolute left-full ml-2 hidden w-max max-w-40 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground group-hover:block group-focus-visible:block">
+          <span className="pointer-events-none absolute left-full ml-2 hidden w-max max-w-40 rounded-lg border border-rule bg-popover px-2 py-1 text-micro text-popover-foreground group-hover:block group-focus-visible:block">
             {label}
           </span>
           <span className="sr-only">{label}. Expand the wellness dock.</span>
@@ -453,7 +453,7 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
             const moved = nextCorner(corner, event.key)
             if (moved !== corner) { event.preventDefault(); onCornerChange(moved) }
           }}
-          className="relative flex h-11 items-center gap-2 rounded-full border border-border bg-popover px-4 text-sm font-medium text-popover-foreground shadow-lg outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative flex h-11 items-center gap-2 rounded-full border border-border bg-popover px-4 text-small font-medium text-popover-foreground shadow-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Sunrise className="size-4" aria-hidden="true" />
           <NextPrayerLabel prayerResult={prayerResult} />
@@ -462,13 +462,13 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
         <div
           className={cn(
             !collapsed && [
-              'w-[280px] max-w-[calc(100vw-2rem)] origin-bottom rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-xl',
+              'w-[280px] max-w-[calc(100vw-2rem)] origin-bottom rounded-xl border border-rule bg-popover p-4 text-popover-foreground shadow-md',
               !reducedMotion && 'transition-transform duration-200 ease-out motion-reduce:transition-none',
             ],
           )}
         >
-          {!collapsed && <h2 className="text-sm font-medium text-foreground">Wellness</h2>}
-          <div className={!collapsed ? 'mt-5 space-y-6' : undefined}>
+          {!collapsed && <h2 className="text-small font-medium text-foreground">Wellness</h2>}
+          <div className={!collapsed ? 'mt-4 space-y-6' : undefined}>
             {engine}
           </div>
           {!collapsed && <SettingsAndFooter prefs={prefs} onPrefsChange={updatePrefs} onDockChange={updateDockPrefs} />}
@@ -480,8 +480,8 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
   if (orientation === 'horizontal') {
     return (
       <div className={collapsed ? 'flex items-center justify-between gap-3' : 'flex flex-wrap items-center justify-between gap-4'}>
-        <div className={collapsed ? 'flex items-center gap-2 text-xs text-muted-foreground' : 'flex flex-wrap items-center gap-4'}>
-          {collapsed && <Sunrise className="size-3.5 shrink-0" aria-hidden="true" />}
+        <div className={collapsed ? 'flex items-center gap-2 text-micro text-muted-foreground' : 'flex flex-wrap items-center gap-4'}>
+          {collapsed && <Sunrise className="size-4 shrink-0" aria-hidden="true" />}
           {collapsed && <NextPrayerLabel prayerResult={prayerResult} />}
           {engine}
           {badge && <PendingBadge />}
@@ -504,7 +504,7 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
         <VerticalCollapsedChrome waterLog={waterLog} prayerResult={prayerResult} badge={badge} onExpand={handleExpand} />
       ) : (
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium text-foreground">Wellness</h2>
+          <h2 className="text-small font-medium text-foreground">Wellness</h2>
           <div className="flex items-center gap-2">
             {badge && <PendingBadge />}
             <Button type="button" variant="ghost" size="icon-sm" aria-label="Collapse wellness dock" onClick={onToggleCollapse}>
@@ -513,7 +513,7 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
           </div>
         </div>
       )}
-      <div className={!collapsed ? 'mt-5 space-y-6' : undefined}>
+      <div className={!collapsed ? 'mt-4 space-y-6' : undefined}>
         {engine}
       </div>
       {!collapsed && <SettingsAndFooter prefs={prefs} onPrefsChange={updatePrefs} onDockChange={updateDockPrefs} />}

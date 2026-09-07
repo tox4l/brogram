@@ -79,8 +79,8 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
   if (!result) {
     return (
       <div>
-        <h3 className="text-sm font-medium">{line('dock.prayer')}</h3>
-        <p className="mt-2 text-sm text-muted-foreground">Loading today&apos;s prayer times.</p>
+        <h3 className="text-small font-medium">{line('dock.prayer')}</h3>
+        <p className="mt-2 text-small text-muted-foreground">Loading today&apos;s prayer times.</p>
       </div>
     )
   }
@@ -89,8 +89,8 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
     const next = PRAYER_ORDER.map((prayer) => ({ prayer, time: result.times[prayer] }))
       .find(({ time }) => new Date(now).getHours() * 60 + new Date(now).getMinutes() < Number(time.slice(0, 2)) * 60 + Number(time.slice(3)))
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Sunrise className="size-3.5 shrink-0" aria-hidden="true" />
+      <div className="flex items-center gap-2 text-micro text-muted-foreground">
+        <Sunrise className="size-4 shrink-0" aria-hidden="true" />
         {next ? <span>{PRAYER_LABEL[next.prayer]} · {next.time}</span> : <span>Prayers complete for today</span>}
       </div>
     )
@@ -99,22 +99,22 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">{line('dock.prayer')}</h3>
-        {result.source === 'fallback' && <span className="text-xs text-muted-foreground">Computed offline</span>}
+        <h3 className="text-small font-medium">{line('dock.prayer')}</h3>
+        {result.source === 'fallback' && <span className="text-micro text-muted-foreground">Computed offline</span>}
       </div>
-      <ul className="mt-2 space-y-1.5">
+      <ul className="mt-2 space-y-2">
         {PRAYER_ORDER.map((prayer) => (
-          <li key={prayer} className="flex items-center justify-between gap-3 text-sm">
+          <li key={prayer} className="flex items-center justify-between gap-3 text-small">
             <span className="text-foreground">{PRAYER_LABEL[prayer]}</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">{result.times[prayer]}</span>
+              <span className="font-mono text-micro tabular-nums text-muted-foreground">{result.times[prayer]}</span>
               <button
                 type="button"
                 role="switch"
                 aria-checked={prefs.prayerReminders[prayer]}
                 aria-label={`${PRAYER_LABEL[prayer]} reminder`}
                 onClick={() => onTogglePrayer(prayer)}
-                className="relative h-4 w-7 shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-[state=on]:bg-emerald-300 data-[state=off]:bg-muted"
+                className="relative h-4 w-7 shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-[state=on]:bg-primary data-[state=off]:bg-muted"
                 data-state={prefs.prayerReminders[prayer] ? 'on' : 'off'}
               >
                 <span className="absolute top-0.5 left-0.5 size-3 rounded-full bg-background transition-transform data-[state=on]:translate-x-3" data-state={prefs.prayerReminders[prayer] ? 'on' : 'off'} />

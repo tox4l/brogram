@@ -164,10 +164,12 @@ const ROOT = extractRootBlock(css)
 // literal list here is the exact hole a new palette can ship through
 // unlisted.
 const THEME_IDS: ThemeId[] = PICKER_THEMES.map((t) => t.id)
-// DARK_IDS is deliberately still hand-picked: which palettes are dark is a
-// design fact `THEMES` does not encode (id/name/blurb/swatch, not
-// `color-scheme`), not something the registry alone can derive.
-const DARK_IDS: ThemeId[] = ['midnight', 'amber', 'eclipse', 'arcade']
+// T4.0 recheck 3, N12 (carried to T4.5): derived from THEMES' own `scheme`
+// field rather than hand-picked -- the sixth-palette probe that flagged the
+// original literal (a design fact the registry did not encode) is closed by
+// recording `scheme` on each `THEMES` entry itself (`themes.ts`), so a new
+// dark palette lands in this list the moment it is registered.
+const DARK_IDS: ThemeId[] = PICKER_THEMES.filter((t) => t.scheme === 'dark').map((t) => t.id)
 
 describe('theme palette: key-set parity (the half-themed-block bug)', () => {
   it('found all five [data-theme] blocks in globals.css', () => {
@@ -552,7 +554,19 @@ describe('N2 (T4.0 fix round 3): text-warning / text-destructive stay bare -- no
   // (Deliberately not spelling out a live example of either shape in this
   // comment: earlier drafts did, and the scan below matched its own
   // documentation.)
-  const VARIANT_OR_OPACITY_RE = /(?:[\w-]+:)+text-(?:warning|destructive)\b(?!-)|text-(?:warning|destructive)\/\d{1,3}\b(?!-)/g
+  //
+  // T4.0 recheck 3, N9 (carried to T4.5): the shape above anchored on the
+  // variant *prefix* (`[\w-]+:`, which cannot cross a `]`) and on a plain
+  // `\d{1,3}` opacity suffix, so Tailwind's arbitrary-variant syntax
+  // (`data-[state=open]:`, `peer-[.err]:`) and arbitrary-opacity syntax
+  // (`/[0.7]`) walked straight past it -- confirmed live in `ui/badge.tsx`
+  // and `ui/button.tsx`, which already use the arbitrary-variant form for
+  // other utilities. Anchoring on the class token itself instead: a match is
+  // any `text-warning`/`text-destructive` NOT immediately preceded by a
+  // whitespace/quote boundary (i.e. it sits after *some* variant, however
+  // that variant spells its own internal brackets), or one immediately
+  // followed by a `/` (an opacity modifier, bracketed or not).
+  const VARIANT_OR_OPACITY_RE = /(?<![\w-])(?:[^\s"'`]+[:/])text-(?:warning|destructive)(?![\w-])|text-(?:warning|destructive)\/[^\s"'`]+/g
 
   function listSourceFiles(dir: string): string[] {
     const out: string[] = []
@@ -564,7 +578,7 @@ describe('N2 (T4.0 fix round 3): text-warning / text-destructive stay bare -- no
     return out
   }
 
-  it('no file under src/** uses a variant-prefixed or opacity-modified text-warning/text-destructive class', () => {
+  it('no file under src/** uses a variant-prefixed or opacity-modified text-warning or text-destructive class', () => {
     const violations: string[] = []
     for (const file of listSourceFiles(SRC_DIR)) {
       const content = readFileSync(file, 'utf8')

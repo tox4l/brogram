@@ -163,4 +163,19 @@ describe('IntegrityPanel', () => {
     await waitFor(() => expect(screen.getByText(/^Total 20\./)).toBeTruthy())
     expect(screen.getByRole('region', { name: 'Integrity record' })).toBeTruthy()
   })
+
+  // T4.5 (wave 4 plan, "Tests it adds"): the fourth of the four required
+  // states (empty, loading, error, restricted) for the Account surface --
+  // empty ("no flags"), error (the retry test above) and restricted
+  // (banned/warned/restricted, above) were already covered; this is the
+  // shape of the answer, never a spinner, per spec section 8.
+  it('shows the loading shape while the record is in flight, and never the loaded text before it resolves', async () => {
+    let resolveRpc: (value: { data: typeof RPC_ROWS; error: null }) => void = () => {}
+    spies.rpc.mockReturnValue(new Promise((resolve) => { resolveRpc = resolve }))
+    setup('active')
+    expect(screen.getByRole('status').textContent).toBe('Loading the record.')
+    expect(screen.queryByText(/^Total /)).toBeNull()
+    resolveRpc({ data: RPC_ROWS, error: null })
+    await waitFor(() => expect(screen.getByText('Total 20.')).toBeTruthy())
+  })
 })

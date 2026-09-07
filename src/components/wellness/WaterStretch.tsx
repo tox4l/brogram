@@ -103,22 +103,22 @@ export function WaterStretch({ prefs, now, log, onLog, attemptActive = false, on
 
   if (compact) {
     return (
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <button type="button" onClick={logWater} className="flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><CupSoda className="size-3.5" aria-hidden="true" />{line('dock.water')}</button>
-        <button type="button" onClick={logStretch} className="flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><PersonStanding className="size-3.5" aria-hidden="true" />{line('dock.stretch')}</button>
+      <div className="flex items-center gap-3 text-micro text-muted-foreground">
+        <button type="button" onClick={logWater} className="flex items-center gap-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"><CupSoda className="size-4" aria-hidden="true" />{line('dock.water')}</button>
+        <button type="button" onClick={logStretch} className="flex items-center gap-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"><PersonStanding className="size-4" aria-hidden="true" />{line('dock.stretch')}</button>
       </div>
     )
   }
 
   return (
     <div>
-      <h3 className="text-sm font-medium">Water &amp; stretch</h3>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Every {prefs.waterIntervalMin} minutes for water, {prefs.stretchIntervalMin} for a stretch.</p>
+      <h3 className="text-small font-medium">Water &amp; stretch</h3>
+      <p className="mt-1 text-micro leading-relaxed text-muted-foreground">Every {prefs.waterIntervalMin} minutes for water, {prefs.stretchIntervalMin} for a stretch.</p>
       <div className="mt-3 flex gap-2">
         <Button variant="outline" size="sm" onClick={logWater} className="flex-1"><CupSoda />Log water</Button>
         <Button variant="outline" size="sm" onClick={logStretch} className="flex-1"><PersonStanding />Log stretch</Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{streak > 0 ? `${streak} ${streak === 1 ? 'day' : 'days'} of staying on top of it.` : 'Log one to start a streak.'}</p>
+      <p className="mt-2 text-micro text-muted-foreground">{streak > 0 ? `${streak} ${streak === 1 ? 'day' : 'days'} of staying on top of it.` : 'Log one to start a streak.'}</p>
     </div>
   )
 }

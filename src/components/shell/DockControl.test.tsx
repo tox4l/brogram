@@ -87,6 +87,14 @@ describe('DockControl', () => {
     expect(await screen.findByRole('button', { name: /show wellness dock/i })).toBeTruthy()
   })
 
+  // T4.5 (wave 4 plan, "Tests it adds"): a bounding-box proxy for the 44px
+  // header control -- see SoundToggle.test.tsx's identical note.
+  it('carries the 44px header-control size class', async () => {
+    render(<DockControl />, { wrapper: wrapper('learner-one') })
+    const button = await screen.findByRole('button', { name: /show wellness dock/i })
+    expect(button.className).toMatch(/\bsize-11\b/)
+  })
+
   it('restores the previously remembered placement, not a hardcoded default, on click', async () => {
     sessionStorage.setItem('brogram:dock:last-placement', 'left')
     render(<DockControl />, { wrapper: wrapper('learner-one') })

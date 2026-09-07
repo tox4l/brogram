@@ -276,7 +276,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="right" modal={false}>
       <DrawerContent
         className={cn(
-          'inset-y-0 right-0 left-auto h-dvh w-full max-w-[min(24rem,100%)] rounded-none border-l border-border bg-background sm:max-w-sm',
+          'inset-y-0 right-0 left-auto h-dvh w-full max-w-[min(24rem,100%)] rounded-none border-l border-rule bg-background sm:max-w-sm',
           // I3: a directional slide becomes a plain, short cross-fade under reduced motion (R7.9)
           // -- `transform: none` (inline, below) removes the position entirely so only opacity is
           // left to animate. Full motion keeps the 320ms enter / 200ms exit drawer curve.
@@ -289,7 +289,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
         {/* `display: contents` -- a real DOM node for I5's focus-containment check, invisible to
             the flex layout the header/scroll/form below rely on. */}
         <div ref={contentRef} className="contents">
-          <DrawerHeader className="flex-row items-center justify-between gap-4 border-b border-border pb-4">
+          <DrawerHeader className="flex-row items-center justify-between gap-4 border-b border-rule pb-4">
             {/* T2.7b: "Your coding Buddy" opened with the one word voice rule 3 bans
                 ("never open with 'Your'"). Re-pointed together with the dashboard test that
                 pinned this exact dialog accessible name (T2.11 fix-round report, review M2). */}
@@ -309,7 +309,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
             className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
           >
             {messages.length === 0 && !sending && (
-              <p className="text-sm leading-relaxed text-muted-foreground">Ask about the code you are stuck on, or why an angle keeps failing.</p>
+              <p className="text-small leading-relaxed text-muted-foreground">Ask about the code you are stuck on, or why an angle keeps failing.</p>
             )}
             {messages.map(message => (
               <motion.div
@@ -324,15 +324,15 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
                   <button
                     type="button"
                     onClick={() => void retry(message)}
-                    className="max-w-[85%] rounded-lg border border-dashed border-destructive/50 bg-muted px-3 py-2 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground transition-colors hover:bg-muted/70"
+                    className="max-w-[85%] rounded-lg border border-dashed border-destructive/50 bg-muted px-3 py-2 text-left text-small leading-relaxed whitespace-pre-wrap text-foreground transition-colors hover:bg-muted/70"
                   >
                     <span className="block">{message.content}</span>
-                    <span className="mt-1 block text-xs text-destructive">{line('buddy.failed')}</span>
+                    <span className="mt-1 block text-micro text-destructive">{line('buddy.failed')}</span>
                   </button>
                 ) : (
                   <div
                     className={cn(
-                      'max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap',
+                      'max-w-[85%] rounded-lg px-3 py-2 text-small leading-relaxed whitespace-pre-wrap',
                       // Token surfaces, not grey-on-grey: the learner's own words sit on `muted`;
                       // the Buddy's carry the app's accent hue so it reads as a distinct voice, not
                       // a second copy of the same neutral chat bubble.
@@ -346,7 +346,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
                   <Link
                     href={suggestionHref(message.suggestion.kind, message.suggestion.ref, pathname, message.suggestion.lane)}
                     onClick={() => handleSuggestionClick(message.suggestion!.kind, onOpenChange)}
-                    className="max-w-[85%] rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                    className="max-w-[85%] rounded-lg bg-accent px-3 py-2 text-small font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                   >
                     {message.suggestion.lineKey ? line(message.suggestion.lineKey) : suggestionLabel(message.suggestion.kind)}
                   </Link>
@@ -355,7 +355,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
             ))}
             {sending && (
               <div className="flex flex-col items-start gap-2">
-                <div className="max-w-[85%] rounded-lg bg-accent/10 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap text-foreground ring-1 ring-accent/30">
+                <div className="max-w-[85%] rounded-lg bg-accent/10 px-3 py-2 text-small leading-relaxed whitespace-pre-wrap text-foreground ring-1 ring-accent/30">
                   {streamingText ? (
                     // A11Y-07: this text node rewrites on every SSE frame -- dozens per reply --
                     // and used to sit as a plain addition inside the `role="log"` region above,
@@ -367,7 +367,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
                     // content unchanged until the one real commit.
                     <span aria-hidden="true">
                       {streamingText}
-                      {showCursor && <span className={cn('ml-0.5 inline-block', !reducedMotion && 'animate-pulse')}>▍</span>}
+                      {showCursor && <span className={cn('ml-1 inline-block', !reducedMotion && 'animate-pulse')}>▍</span>}
                     </span>
                   ) : (
                     <TypingDots reducedMotion={reducedMotion} />
@@ -375,10 +375,10 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
                 </div>
               </div>
             )}
-            {error && <p role="status" className="text-xs text-muted-foreground">{error}</p>}
+            {error && <p role="status" className="text-micro text-muted-foreground">{error}</p>}
           </div>
           <form
-            className="flex shrink-0 items-end gap-2 border-t border-border p-4"
+            className="flex shrink-0 items-end gap-2 border-t border-rule p-4"
             onSubmit={event => { event.preventDefault(); void send() }}
           >
             <textarea
@@ -390,7 +390,7 @@ export function BuddyDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
               onKeyDown={onKeyDown}
               rows={2}
               placeholder="Ask your Buddy"
-              className="min-h-16 w-full min-w-0 resize-none rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-16 w-full min-w-0 resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-small transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
             />
             <Button type="submit" size="icon" disabled={sending || !value.trim()} aria-label="Send">
               <SendIcon />

@@ -10,7 +10,7 @@ export function BuddyButton() {
 
   return (
     <>
-      <Button variant="outline" className="h-9 border-input px-3 text-foreground" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="h-11 border-input px-3 text-foreground" onClick={() => setOpen(true)}>
         <MessageCircle aria-hidden="true" />Buddy
       </Button>
       <BuddyDrawer open={open} onOpenChange={setOpen} />

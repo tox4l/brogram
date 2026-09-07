@@ -31,7 +31,7 @@ export function ShellHeaderControls() {
       <SoundToggle />
       <ThemeQuickSwitch />
       <Link href="/account" aria-current={pathname.startsWith('/account') ? 'page' : undefined}
-        className="rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+        className="inline-flex items-center rounded-lg px-1 py-2 text-small text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
         Account
       </Link>
       <BuddyButton />

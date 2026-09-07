@@ -76,6 +76,11 @@ const DEPTH_OPTIONS: { value: Depth; label: string }[] = [
   { value: 'master', label: 'Master it' },
 ]
 
+// Wave 4 spec section 9, /account: "labels at --text-micro uppercase" -- the
+// short eyebrow label that heads a field or a group of options (never the
+// longer descriptive text next to a toggle, which stays body-adjacent).
+const LABEL_CLASS = 'text-micro font-medium uppercase tracking-[0.06em] text-muted-foreground'
+
 const DIAGNOSTIC_LABEL: Record<DiagnosticMetric, string> = {
   LCP: 'Largest paint',
   CLS: 'Layout shift',
@@ -89,8 +94,8 @@ function formatDiagnosticValue(metric: DiagnosticMetric, value: number): string 
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="space-y-5 rounded-xl border border-border p-5">
-      <h2 id={id} className="text-base font-medium text-foreground">{title}</h2>
+    <section aria-labelledby={id} className="space-y-4 rounded-xl border border-rule p-4">
+      <h2 id={id} className="text-lede font-medium text-foreground">{title}</h2>
       {children}
     </section>
   )
@@ -137,8 +142,8 @@ function RadioPills<T extends string>({ label, options, value, onChange }: {
   const roving = useRovingRadioGroup(options.map((option) => option.value), activeIndex, onChange)
 
   return (
-    <div className="space-y-1.5">
-      <span className="text-sm font-medium text-foreground">{label}</span>
+    <div className="space-y-2">
+      <span className={LABEL_CLASS}>{label}</span>
       <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
         {options.map((option, index) => {
           const checked = option.value === value
@@ -153,7 +158,7 @@ function RadioPills<T extends string>({ label, options, value, onChange }: {
               onClick={() => onChange(option.value)}
               onKeyDown={(event) => roving.onKeyDown(event, index)}
               className={cn(
-                'rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                'rounded-full border px-3 py-2 text-small outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 checked ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
               )}
             >
@@ -175,7 +180,7 @@ function SettingToggle({ id, label, checked, onChange, reducedMotion }: {
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <label htmlFor={id} className="text-sm text-foreground">{label}</label>
+      <label htmlFor={id} className="text-small text-foreground">{label}</label>
       <button
         id={id}
         type="button"
@@ -313,16 +318,20 @@ export default function AccountPage() {
     }
   }
 
+  // Wave 4 spec section 4: --measure-form is 34rem. The token itself never
+  // landed in globals.css (T4.0's row; not part of this task's ownership) --
+  // the literal value is used directly here and flagged in the T4.5 report
+  // as a gap for a future token-layer pass.
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-[34rem] space-y-6">
       <div>
-        <h1 className="text-2xl font-medium tracking-tight">Account</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{user?.email ?? 'Account email is unavailable.'}</p>
+        <h1 className="text-lede font-medium tracking-tight">Account</h1>
+        <p className="mt-2 text-small text-muted-foreground">{user?.email ?? 'Account email is unavailable.'}</p>
       </div>
 
       <Section id="make-it-yours-heading" title="Make it yours">
-        <div className="space-y-1.5">
-          <span className="text-sm font-medium text-foreground">Theme</span>
+        <div className="space-y-2">
+          <span className={LABEL_CLASS}>Theme</span>
           <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {THEMES.map((entry, index) => {
               const checked = mounted && entry.id === activeTheme
@@ -337,13 +346,13 @@ export default function AccountPage() {
                   onClick={() => applyTheme(entry.id)}
                   onKeyDown={(event) => themeRoving.onKeyDown(event, index)}
                   className={cn(
-                    'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                    'flex min-h-11 flex-col items-start justify-center gap-2 rounded-lg border p-2 text-left text-micro outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                     checked ? 'border-ring ring-1 ring-ring/50' : 'border-border hover:border-ring/50',
                   )}
                 >
                   <span className="flex gap-1" aria-hidden="true">
                     {entry.swatch.map((color, index) => (
-                      <span key={index} className="size-3 rounded-full border border-border/50" style={{ backgroundColor: color }} />
+                      <span key={index} className="size-5 rounded-full border border-border/50" style={{ backgroundColor: color }} />
                     ))}
                   </span>
                   <span className="font-medium text-foreground">{entry.name}</span>
@@ -381,8 +390,8 @@ export default function AccountPage() {
           onChange={(enabled) => prefsMutation.mutate((current) => ({ sound: { ...current.sound, enabled } }))}
           reducedMotion={reducedMotion}
         />
-        <div className="space-y-1.5">
-          <label htmlFor="sound-volume" className="text-sm font-medium text-foreground">Volume</label>
+        <div className="space-y-2">
+          <label htmlFor="sound-volume" className={LABEL_CLASS}>Volume</label>
           <input
             id="sound-volume"
             type="range"
@@ -391,7 +400,7 @@ export default function AccountPage() {
             step={0.05}
             value={prefs.sound.volume}
             onChange={(event) => prefsMutation.mutate((current) => ({ sound: { ...current.sound, volume: Number(event.target.value) } }))}
-            className="w-full accent-emerald-300"
+            className="w-full accent-primary"
           />
         </div>
         <SettingToggle
@@ -409,8 +418,8 @@ export default function AccountPage() {
           onChange={(motion) => prefsMutation.mutate(() => ({ motion }))}
         />
 
-        <div className="space-y-1.5">
-          <span id="daily-goal-label" className="text-sm font-medium text-foreground">Daily goal</span>
+        <div className="space-y-2">
+          <span id="daily-goal-label" className={LABEL_CLASS}>Daily goal</span>
           <div className="flex items-center gap-3" role="group" aria-labelledby="daily-goal-label">
             <Button
               type="button" variant="outline" size="icon" aria-label="Decrease daily goal"
@@ -419,7 +428,7 @@ export default function AccountPage() {
             >
               −
             </Button>
-            <span data-testid="daily-goal-value" className="tabular w-8 text-center text-sm font-medium text-foreground" aria-live="polite">{prefs.dailyGoal}</span>
+            <span data-testid="daily-goal-value" className="tabular w-8 text-center text-small font-medium text-foreground" aria-live="polite">{prefs.dailyGoal}</span>
             <Button
               type="button" variant="outline" size="icon" aria-label="Increase daily goal"
               disabled={prefs.dailyGoal >= 10}
@@ -458,16 +467,16 @@ export default function AccountPage() {
           `crossedAt={null}`: the plain Account view has no single threshold
           being explained (unlike a warned/restricted notice), per the
           prop's own doc comment. */}
-      <div className="rounded-xl border border-border p-5">
+      <div className="rounded-xl border border-rule p-4">
         <IntegrityPanel crossedAt={null} />
       </div>
 
       <Section id="diagnostics-heading" title="Diagnostics">
-        <p className="text-xs leading-relaxed text-muted-foreground">Local performance signals from this device, this tab, this session only. Nothing here is uploaded.</p>
+        <p className="text-small leading-relaxed text-muted-foreground">Local performance signals from this device, this tab, this session only. Nothing here is uploaded.</p>
         {diagnostics.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No signals recorded yet this session.</p>
+          <p className="text-small text-muted-foreground">No signals recorded yet this session.</p>
         ) : (
-          <ul className="space-y-1.5 text-sm">
+          <ul className="space-y-2 text-small">
             {[...diagnostics].reverse().map((entry) => (
               <li key={entry.id} className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">{DIAGNOSTIC_LABEL[entry.metric]}</span>
@@ -479,9 +488,9 @@ export default function AccountPage() {
       </Section>
 
       <Section id="password-heading" title="Password">
-        <form onSubmit={submit} className="space-y-5">
+        <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="new-password" className="text-sm font-medium">New password</label>
+            <label htmlFor="new-password" className={LABEL_CLASS}>New password</label>
             <Input
               id="new-password"
               type="password"
@@ -490,11 +499,11 @@ export default function AccountPage() {
               value={password}
               disabled={submitting}
               onChange={(event) => { setPassword(event.target.value); setError(null); setSuccess(false) }}
-              className="h-12 text-base"
+              className="h-12 text-body"
             />
           </div>
           <div className="space-y-2">
-            <label htmlFor="confirm-password" className="text-sm font-medium">Confirm new password</label>
+            <label htmlFor="confirm-password" className={LABEL_CLASS}>Confirm new password</label>
             <Input
               id="confirm-password"
               type="password"
@@ -503,12 +512,12 @@ export default function AccountPage() {
               value={confirmPassword}
               disabled={submitting}
               onChange={(event) => { setConfirmPassword(event.target.value); setError(null); setSuccess(false) }}
-              className="h-12 text-base"
+              className="h-12 text-body"
             />
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">Use at least {MIN_PASSWORD_LENGTH} characters.</p>
-          {error && <p role="alert" className="text-sm text-foreground">{error}</p>}
-          {success && <p role="status" className="text-sm leading-relaxed text-success">Password changed.</p>}
+          <p className="text-small leading-relaxed text-muted-foreground">Use at least {MIN_PASSWORD_LENGTH} characters.</p>
+          {error && <p role="alert" className="text-small text-foreground">{error}</p>}
+          {success && <p role="status" className="text-small leading-relaxed text-success">Password changed.</p>}
           <Button type="submit" disabled={submitting} className="h-12 w-full">
             {submitting ? 'Changing password…' : 'Change password'}
           </Button>
@@ -516,7 +525,7 @@ export default function AccountPage() {
       </Section>
 
       <Section id="sign-out-heading" title="Sign out">
-        <p className="text-sm leading-relaxed text-muted-foreground">Signs this device out of the account.</p>
+        <p className="text-small leading-relaxed text-muted-foreground">Signs this device out of the account.</p>
         <Button type="button" variant="outline" disabled={signingOut} onClick={() => void signOut()}>
           {signingOut ? 'Signing out…' : 'Sign out'}
         </Button>

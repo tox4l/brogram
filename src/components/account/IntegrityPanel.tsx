@@ -102,23 +102,23 @@ function Receipt({ breakdown, crossedAt }: { breakdown: IntegrityBreakdown; cros
   return (
     <div className="space-y-3">
       {isLocal && (
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="text-micro leading-relaxed text-muted-foreground">
           This is this device&apos;s own record, not the server&apos;s count. The server&apos;s count is what actually decided the account&apos;s status, and will show here once it is reachable.
         </p>
       )}
       {breakdown.rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No flags in the last 7 days.</p>
+        <p className="text-small text-muted-foreground">No flags in the last 7 days.</p>
       ) : (
         <>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {breakdown.rows.map((row) => (
-              <li key={row.type} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 text-sm">
+              <li key={row.type} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-small">
                 <span>{EVENT_LABELS[row.type]}</span>
-                <span className="font-mono text-xs text-muted-foreground">{row.events} at weight {row.weight} — {row.points}</span>
+                <span className="font-mono text-micro text-muted-foreground">{row.events} at weight {row.weight} — {row.points}</span>
               </li>
             ))}
           </ul>
-          <p className="text-sm font-medium">
+          <p className="text-small font-medium">
             Total {breakdown.total}.{!isLocal && crossedAt != null && ` The line is ${crossedAt}.`}
           </p>
         </>
@@ -143,30 +143,30 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
     <section
       aria-labelledby={variant === 'full' ? 'integrity-heading' : undefined}
       aria-label={variant === 'full' ? undefined : 'Integrity record'}
-      className="space-y-5"
+      className="space-y-4"
     >
       {variant === 'full' && (
         <div className="space-y-2">
-          <h2 id="integrity-heading" className="text-lg font-medium tracking-tight">Integrity, explained</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">{line('guard.why')}</p>
+          <h2 id="integrity-heading" className="text-lede font-medium tracking-tight">Integrity, explained</h2>
+          <p className="text-small leading-relaxed text-muted-foreground">{line('guard.why')}</p>
         </div>
       )}
 
       {variant === 'full' && (
-        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-0.5">
+        <dl className="grid gap-x-6 gap-y-2 text-small sm:grid-cols-2">
+          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-1">
             <dt className="text-muted-foreground">Flags before a warning</dt>
             <dd className="font-mono">{INTEGRITY_THRESHOLDS.warnAt}</dd>
           </div>
-          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-0.5">
+          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-1">
             <dt className="text-muted-foreground">Flags before reps pause for {INTEGRITY_THRESHOLDS.restrictHours}h</dt>
             <dd className="font-mono">{INTEGRITY_THRESHOLDS.restrictAt}</dd>
           </div>
-          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-0.5">
+          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-1">
             <dt className="text-muted-foreground">Flags before an account is banned</dt>
             <dd className="font-mono">{INTEGRITY_THRESHOLDS.banAt}</dd>
           </div>
-          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-0.5">
+          <div className="flex items-baseline justify-between gap-3 sm:block sm:space-y-1">
             <dt className="text-muted-foreground">Paste blocks in one rep that pause reps instantly</dt>
             <dd className="font-mono">{INTEGRITY_THRESHOLDS.instantRestrictPasteCount}</dd>
           </div>
@@ -174,17 +174,17 @@ export function IntegrityPanel({ variant = 'full', crossedAt }: IntegrityPanelPr
       )}
 
       {variant === 'full' && (
-        <p className="text-sm leading-relaxed text-muted-foreground">
+        <p className="text-small leading-relaxed text-muted-foreground">
           Every rep is generated per learner. A leaked solution matches nobody else&apos;s problem, which is the real backstop underneath all of this.
         </p>
       )}
 
       <div>
-        {variant === 'full' && <h3 className="mb-2 text-sm font-medium text-muted-foreground">Last 7 days</h3>}
+        {variant === 'full' && <h3 className="mb-2 text-small font-medium text-muted-foreground">Last 7 days</h3>}
         {query.isLoading ? (
-          <p role="status" className="text-sm text-muted-foreground">Loading the record.</p>
+          <p role="status" className="text-small text-muted-foreground">Loading the record.</p>
         ) : query.isError ? (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 text-small text-muted-foreground">
             <p>{line('error.load')}</p>
             <button type="button" onClick={() => void query.refetch()} className="underline underline-offset-2 hover:text-foreground">Try again</button>
           </div>

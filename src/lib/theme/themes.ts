@@ -19,37 +19,52 @@ import type { ThemeName } from '@/lib/contracts'
  * falls back to `midnight` on an id it does not recognise, so a rename
  * would silently reset a stored preference. Only its label moves, to
  * "Folio". Eclipse is new and opt-in; Midnight stays seeded.
+ *
+ * T4.0 recheck 3, N12 (carried to T4.5): `scheme` is the one fact about a
+ * palette that was previously hand-maintained in three separate places
+ * (`contrast.test.ts`'s `DARK_IDS`, `sonner.tsx`'s `THEME_TO_SONNER`,
+ * `globals.css`'s `@custom-variant dark` list) with only one of the three
+ * (`THEME_TO_SONNER`, via a `Record<ThemeName, ...>` exhaustiveness check)
+ * failing loudly on a sixth palette. Recording it here lets `DARK_IDS` and
+ * `THEME_TO_SONNER` derive instead of re-enumerate, and lets
+ * `dark-variant.test.ts` assert the CSS list (which cannot itself "derive"
+ * from a TypeScript source) still matches this registry.
  */
-export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swatch: [string, string, string] }[] = [
+export const THEMES: readonly { id: ThemeName; name: string; blurb: string; swatch: [string, string, string]; scheme: 'light' | 'dark' }[] = [
   {
     id: 'midnight',
     name: 'Midnight',
     blurb: 'Cool graphite, one indigo through button and ring. The room you already work in at 2am, tidier.',
     swatch: ['oklch(0.16 0.014 260)', 'oklch(0.78 0.11 264)', 'oklch(0.74 0.12 200)'],
+    scheme: 'dark',
   },
   {
     id: 'amber',
     name: 'Amber',
     blurb: 'The only warm dark. A lamp on a desk.',
     swatch: ['oklch(0.17 0.02 55)', 'oklch(0.78 0.148 55)', 'oklch(0.80 0.115 35)'],
+    scheme: 'dark',
   },
   {
     id: 'eclipse',
     name: 'Eclipse',
     blurb: 'Almost black, almost colourless, until one violet lights the thing you must look at.',
     swatch: ['oklch(0.09 0.008 285)', 'oklch(0.80 0.126 305)', 'oklch(0.84 0.06 300)'],
+    scheme: 'dark',
   },
   {
     id: 'paper',
     name: 'Folio',
     blurb: 'Warm white ground, ink text, one indigo mark. A printed listing.',
     swatch: ['oklch(0.972 0.006 85)', 'oklch(0.40 0.12 275)', 'oklch(0.92 0.03 275)'],
+    scheme: 'light',
   },
   {
     id: 'arcade',
     name: 'Arcade',
     blurb: 'Pure black, cyan and magenta at full volume. Loud on purpose, easiest of the five to read.',
     swatch: ['oklch(0.12 0 0)', 'oklch(0.85 0.13 195)', 'oklch(0.84 0.10 350)'],
+    scheme: 'dark',
   },
 ] as const
 

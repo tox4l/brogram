@@ -57,6 +57,7 @@ export function SoundToggle() {
       type="button"
       variant="ghost"
       size="icon"
+      className="size-11"
       aria-pressed={prefs.sound.enabled}
       aria-label={prefs.sound.enabled ? 'Mute sound' : 'Unmute sound'}
       onClick={toggle}

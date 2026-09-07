@@ -116,6 +116,13 @@ describe('ThemeQuickSwitch', () => {
     expect(screen.getByRole('radio', { name: 'Midnight' }).getAttribute('aria-checked')).toBe('true')
   })
 
+  // T4.5 (wave 4 plan, "Tests it adds"): a bounding-box proxy for the 44px
+  // header control -- see SoundToggle.test.tsx's identical note.
+  it('carries the 44px header-control size class', () => {
+    renderSwitch()
+    expect(screen.getByRole('button', { name: /choose theme/i }).className).toMatch(/\bsize-11\b/)
+  })
+
   it('keyboard-only traversal cycles through all five and selects each one', () => {
     renderSwitch()
     fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))

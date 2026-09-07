@@ -20,6 +20,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { THEMES } from './themes'
 
 const SRC_DIR = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const GLOBALS_CSS_PATH = join(SRC_DIR, 'app', 'globals.css')
@@ -73,5 +74,19 @@ describe('C1: the `dark:` variant follows the active theme, not the OS', () => {
     expect(body).not.toContain('[data-theme="paper"]')
     // The old binary must not have crept back in alongside the new one.
     expect(body).not.toMatch(/\.dark\b/)
+  })
+
+  // T4.0 recheck 3, N12 (carried to T4.5): this list and `THEMES`' own
+  // `scheme` field (`themes.ts`) are two hand-maintained records of the same
+  // design fact, and only this test closes the gap between them -- CSS has
+  // no way to "derive" from a TypeScript registry, so the guarantee has to
+  // be an assertion that the two agree, checked every run.
+  it('the @custom-variant dark theme list matches THEMES\' own dark-scheme entries exactly', () => {
+    const match = /@custom-variant\s+dark\s*\(([^;]*)\);/.exec(css)
+    expect(match).not.toBeNull()
+    const body = match![1]
+    const idsInVariant = [...body.matchAll(/\[data-theme="([\w-]+)"\]/g)].map((m) => m[1]).sort()
+    const darkIdsFromRegistry = THEMES.filter((t) => t.scheme === 'dark').map((t) => t.id).sort()
+    expect(idsInVariant).toEqual(darkIdsFromRegistry)
   })
 })

@@ -70,9 +70,9 @@ function restrictedFrame(breakdown: IntegrityBreakdown | undefined, time: string
 export function BannedAccount() {
   return (
     <div className="space-y-3">
-      <p role="alert" className="text-lg font-medium">This BroGram account has been banned.</p>
-      <p className="text-sm leading-relaxed text-muted-foreground">Contact Velocity through your invitation email to appeal.</p>
-      <p className="text-sm leading-relaxed text-muted-foreground">{line('guard.banned')}</p>
+      <p role="alert" className="text-lede font-medium">This BroGram account has been banned.</p>
+      <p className="text-small leading-relaxed text-muted-foreground">Contact Velocity through your invitation email to appeal.</p>
+      <p className="text-small leading-relaxed text-muted-foreground">{line('guard.banned')}</p>
     </div>
   )
 }
@@ -110,13 +110,13 @@ function Banner({ status, restrictedUntil }: { status: 'restricted' | 'warned'; 
   const frame = status === 'warned' ? warnedFrame(query.data) : restrictedFrame(query.data, time)
 
   return (
-    <div className="space-y-3 border-b border-border bg-muted px-6 py-4 text-sm text-foreground">
+    <div className="space-y-3 border-b border-rule bg-muted px-6 py-4 text-small text-foreground">
       {/* Fix round 2, N5: role="status" scoped to the frame sentence alone --
           the receipt and the link below it are not part of this one live
           announcement, and IntegrityPanel already manages its own state. */}
       <p role="status">{frame}</p>
       <IntegrityPanel variant="receipt" />
-      <Link href="/account" className="inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+      <Link href="/account" className="inline-block text-micro text-muted-foreground underline underline-offset-2 hover:text-foreground">
         Integrity, explained
       </Link>
     </div>

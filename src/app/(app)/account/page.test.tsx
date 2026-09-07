@@ -277,6 +277,26 @@ describe('Account page', () => {
       expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Midnight' }))
     })
 
+    // T4.5 (wave 4 plan, "Tests it adds"): a keyboard traversal test of the
+    // five-swatch radiogroup -- the ArrowRight-wrap test above already
+    // covers arrow-key roving across all five (Midnight..Arcade come from
+    // the same THEMES registry); this closes the Home/End half of the
+    // WAI-ARIA radiogroup pattern specifically on the theme grid.
+    it('jumps to the first and last theme swatch with Home and End', () => {
+      mocks.useTheme.mockReturnValue({ theme: 'eclipse', setTheme: mocks.setTheme })
+      render(<AccountPage />, { wrapper: wrapper().Wrapper })
+      const eclipse = screen.getByRole('radio', { name: 'Eclipse' })
+      eclipse.focus()
+
+      fireEvent.keyDown(eclipse, { key: 'End' })
+      expect(mocks.setTheme).toHaveBeenCalledWith('arcade')
+      expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Arcade' }))
+
+      fireEvent.keyDown(screen.getByRole('radio', { name: 'Arcade' }), { key: 'Home' })
+      expect(mocks.setTheme).toHaveBeenCalledWith('midnight')
+      expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Midnight' }))
+    })
+
     it('moves a RadioPills group with ArrowRight/ArrowLeft and jumps with Home/End', async () => {
       render(<AccountPage />, { wrapper: wrapper().Wrapper })
       const supportive = await screen.findByRole('radio', { name: 'Supportive' })

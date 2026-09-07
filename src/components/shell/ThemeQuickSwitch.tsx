@@ -168,6 +168,7 @@ export function ThemeQuickSwitch() {
         type="button"
         variant="ghost"
         size="icon"
+        className="size-11"
         aria-expanded={open}
         aria-label="Choose theme"
         onClick={() => setOpen((v) => !v)}
@@ -196,7 +197,7 @@ export function ThemeQuickSwitch() {
                   onClick={() => selectAndClose(entry.id)}
                   onKeyDown={(event) => onRadioKeyDown(event, index)}
                   className={cn(
-                    'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left text-xs outline-none',
+                    'flex min-h-11 flex-col items-start justify-center gap-2 rounded-lg border p-2 text-left text-micro outline-none',
                     'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover',
                     checked ? 'border-ring ring-2 ring-ring/50' : 'border-border hover:border-ring/50',
                   )}
@@ -205,7 +206,7 @@ export function ThemeQuickSwitch() {
                     {entry.swatch.map((color, dotIndex) => (
                       <span
                         key={dotIndex}
-                        className="size-3 rounded-full border border-border/50"
+                        className="size-5 rounded-full border border-border/50"
                         style={{ backgroundColor: color }}
                       />
                     ))}

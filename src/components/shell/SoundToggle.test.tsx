@@ -92,6 +92,15 @@ describe('SoundToggle', () => {
     expect(button.getAttribute('aria-pressed')).toBe('true')
   })
 
+  // T4.5 (wave 4 plan, "Tests it adds"): a bounding-box proxy for the 44px
+  // header control -- jsdom has no real layout engine, so this pins the
+  // `size-11` (44px) class the real box model resolves; e2e/measure.spec.ts
+  // (T4.10) asserts the actual rendered geometry at 1280x800.
+  it('carries the 44px header-control size class', () => {
+    render(<SoundToggle />, { wrapper: wrapper(null) })
+    expect(screen.getByRole('button', { name: /mute sound/i }).className).toMatch(/\bsize-11\b/)
+  })
+
   it('hydrates the sound manager from resolved prefs on load (I8)', async () => {
     db.row = { prefs: { sound: { enabled: false, volume: 0.4, interface: true } } }
     render(<SoundToggle />, { wrapper: wrapper('learner-one') })

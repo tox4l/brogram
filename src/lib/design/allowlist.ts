@@ -110,7 +110,7 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // leaves only 8px for a 12px knob and clips it. Every other spacing
     // utility under shell/wellness/buddy/ui/account now sits on the
     // eight-step rhythm.
-    ...entriesFor('T4.5', ['src/components/wellness'], 'PrayerTimes.tsx toggle-knob inset is load-bearing geometry, not a rhythm miss -- see the comment above this entry.'),
+    ...entriesFor('T4.5', ['src/components/wellness'], 'PrayerTimes.tsx toggle-knob inset is load-bearing geometry, not a rhythm miss — see the comment above this entry.'),
     // `src/components/ui` (badge/button/drawer/input/tabs): the fractional
     // Tailwind paddings/gaps (py-0.5, px-2.5, gap-1.5, ...) are base-ui/
     // shadcn primitive internals tuned against those components' own fixed
@@ -120,7 +120,7 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // height control used on every screen in the app, which is a visual
     // regression risk this pure-presentation sweep does not have the
     // rendered-screenshot coverage to verify safely across every consumer.
-    ...entriesFor('T4.5', ['src/components/ui'], 'shadcn/base-ui primitive micro-padding tuned to fixed control heights (h-5..h-8) -- see the comment above this entry.'),
+    ...entriesFor('T4.5', ['src/components/ui'], 'shadcn/base-ui primitive micro-padding tuned to fixed control heights (h-5..h-8) — see the comment above this entry.'),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
     // T4.7's entry deleted: exercise/exercise-components now sit on the
     // eight-step rhythm.
@@ -142,7 +142,7 @@ export const ALLOWLIST: Record<string, AllowlistEntry[]> = {
     // own overflow-clip matches the popup's real corner without re-deriving
     // the same four-way conditional a second time. Every other radius under
     // shell/wellness/buddy/ui/account now sits on rounded-(lg|xl|2xl|full).
-    ...entriesFor('T4.5', ['src/components/buddy', 'src/components/ui'], 'Drawer.tsx (buddy) rounded-none and drawer.tsx (ui) rounded-[inherit] are load-bearing shape, not a scale miss -- see the comment above this entry.'),
+    ...entriesFor('T4.5', ['src/components/buddy', 'src/components/ui'], 'Drawer.tsx (buddy) rounded-none and drawer.tsx (ui) rounded-[inherit] are load-bearing shape, not a scale miss — see the comment above this entry.'),
     ...entriesFor('T4.6', T4_6_COURSE, ALL_SCREENS_NOTE('T4.6')),
     // T4.7's entry deleted: exercise/exercise-components now sit on
     // rounded-(lg|xl|2xl|full).

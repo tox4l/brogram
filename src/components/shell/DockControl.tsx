@@ -54,9 +54,9 @@ export function DockControl() {
   }
 
   return (
-    <Button type="button" variant="ghost" size="icon" aria-label="Show wellness dock" onClick={handleClick} className="relative">
+    <Button type="button" variant="ghost" size="icon" aria-label="Show wellness dock" onClick={handleClick} className="relative size-11">
       <PanelRightOpen aria-hidden="true" />
-      {badge && <span data-testid="dock-badge" role="status" className="absolute top-1 right-1 inline-flex size-2 rounded-full bg-emerald-300"><span className="sr-only">A reminder is waiting.</span></span>}
+      {badge && <span data-testid="dock-badge" role="status" className="absolute top-1 right-1 inline-flex size-2 rounded-full bg-primary"><span className="sr-only">A reminder is waiting.</span></span>}
     </Button>
   )
 }

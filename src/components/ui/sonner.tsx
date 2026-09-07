@@ -14,22 +14,19 @@ import { THEMES } from "@/lib/theme/themes"
 // own OS-based "system" detection, which BroGram's five-theme model has no
 // use for (`enableSystem` is `false` on the real provider).
 //
-// Fix round 2 (T4.0 recheck R1): `THEME_TO_SONNER` stays an explicit
-// `Record<ThemeName, ...>` on purpose -- light/dark is a judgment call per
-// palette, not derivable from the registry, and the exhaustiveness check
-// TypeScript already runs on a `Record` over a union is exactly the gate
-// that caught the missing `eclipse` entry here. `isThemeName` is the one
-// that must never hand-enumerate again: it is now a runtime derivation of
-// `THEMES` (`src/lib/theme/themes.ts`), the same registry `ThemeQuickSwitch`
-// and the Account picker render from, so a sixth palette added there can
-// never leave this guard silently stale the way a plain `||` chain can.
-const THEME_TO_SONNER: Record<ThemeName, "light" | "dark"> = {
-  midnight: "dark",
-  amber: "dark",
-  eclipse: "dark",
-  paper: "light",
-  arcade: "dark",
-}
+// T4.0 recheck 3, N12 (carried to T4.5): fix round 2's `THEME_TO_SONNER`
+// (a hand-written `Record<ThemeName, ...>`) is superseded here -- `scheme`
+// on each `THEMES` entry (`src/lib/theme/themes.ts`) is now the single
+// authored fact "is this palette light or dark," so this map derives from
+// the registry instead of re-stating it. `Record<ThemeName, ...>`'s own
+// exhaustiveness check (what caught the missing `eclipse` entry originally)
+// still applies: `Object.fromEntries` needs the cast below, but if a sixth
+// `THEMES` entry ever shipped without a `scheme`, `themes.ts`'s own object
+// literal would fail to satisfy its declared element type at that call
+// site, not silently here.
+const THEME_TO_SONNER: Record<ThemeName, "light" | "dark"> = Object.fromEntries(
+  THEMES.map((t) => [t.id, t.scheme] as const),
+) as Record<ThemeName, "light" | "dark">
 
 const THEME_NAME_SET = new Set<ThemeName>(THEMES.map((t) => t.id))
 
