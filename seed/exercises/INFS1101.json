@@ -59,7 +59,7 @@
     {
       "cloId": "INFS1101-1",
       "language": "python",
-      "kind": "trace",
+      "kind": "predict-output",
       "difficulty": 3,
       "pattern": "trace",
       "title": "Drone Battery Checkpoint",

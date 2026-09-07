@@ -53,6 +53,18 @@ if (existsSync(exDir)) {
       if (tests.filter((t) => !t.hidden).length < 2) errors.push(`${tag} needs 2 visible tests`)
       if (tests.filter((t) => t.hidden).length < 3) errors.push(`${tag} needs 3 hidden tests`)
       if (!e.referenceSolution) errors.push(`${tag} missing referenceSolution`)
+      // src/lib/exercise/grading.ts's `gradeAnswer` and src/app/(app)/exercise/[id]/page.tsx's
+      // variable extraction both parse `tests[0].expected` as JSON and require a plain object
+      // (variable name -> value) for kind 'trace' — a single scalar (e.g. `"70"`) parses fine as
+      // JSON but leaves zero variables, so `Trace.tsx` renders zero input fields and the exercise
+      // cannot be answered at all (found live: seed/exercises/INFS1101.json's since-fixed "Drone
+      // Battery Checkpoint"). Catch that shape here instead of at runtime.
+      if (e.kind === 'trace') {
+        let parsedExpected
+        try { parsedExpected = JSON.parse(tests[0]?.expected ?? '') } catch { parsedExpected = undefined }
+        const isVariableMap = parsedExpected !== null && typeof parsedExpected === 'object' && !Array.isArray(parsedExpected)
+        if (!isVariableMap) errors.push(`${tag} trace exercise's tests[0].expected must parse to a JSON object of variable name to value, not a bare scalar`)
+      }
       const key = `${e.cloId}|${e.title}`
       if (titles.has(key)) errors.push(`${tag} duplicate cloId+title`)
       titles.add(key)

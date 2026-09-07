@@ -617,11 +617,11 @@
     {
       "cloId": "DSAI2201-4",
       "language": "python",
-      "kind": "trace",
+      "kind": "predict-output",
       "difficulty": 2,
       "pattern": "spec-to-steps",
       "title": "Observatory Learning Checklist",
-      "prompt": "An observatory's software team turned their planning notes into an ordered checklist before writing any code. The function below runs that checklist top to bottom to label a new project.\n\n```python\ndef pick_approach(has_reward, all_labeled, some_labeled):\n    if has_reward:\n        approach = \"reinforcement\"\n    elif all_labeled:\n        approach = \"supervised\"\n    elif some_labeled:\n        approach = \"semi-supervised\"\n    else:\n        approach = \"unsupervised\"\n    return approach\n```\n\nExample: `pick_approach(False, True, False)` checks reward first (no), then `all_labeled` (yes), and stops there, so `approach` ends as `\"supervised\"`.\n\nA new project sorts telescope images by galaxy shape. No reward signal is used, and not a single image has been reviewed or labeled yet by an astronomer.\n\nTrace the checklist for this project and type the final value of `approach`, exactly as the function would set it (one word, such as `unsupervised`).",
+      "prompt": "An observatory's software team turned their planning notes into an ordered checklist before writing any code. The function below runs that checklist top to bottom to label a new project.\n\n```python\ndef pick_approach(has_reward, all_labeled, some_labeled):\n    if has_reward:\n        approach = \"reinforcement\"\n    elif all_labeled:\n        approach = \"supervised\"\n    elif some_labeled:\n        approach = \"semi-supervised\"\n    else:\n        approach = \"unsupervised\"\n    return approach\n```\n\nExample: `pick_approach(False, True, False)` checks reward first (no), then `all_labeled` (yes), and stops there, so `approach` ends as `\"supervised\"`.\n\nA new project sorts telescope images by galaxy shape. No reward signal is used, and not a single image has been reviewed or labeled yet by an astronomer.\n\nFollow the checklist for this project step by step and type the final value of `approach`, exactly as the function would set it (one word, such as `unsupervised`).",
       "starterCode": "def pick_approach(has_reward, all_labeled, some_labeled):\n    if has_reward:\n        approach = \"reinforcement\"\n    elif all_labeled:\n        approach = \"supervised\"\n    elif some_labeled:\n        approach = \"semi-supervised\"\n    else:\n        approach = \"unsupervised\"\n    return approach\n",
       "tests": [
         {

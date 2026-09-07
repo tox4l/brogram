@@ -117,7 +117,7 @@
     {
       "cloId": "INFS2201-1",
       "language": "sql",
-      "kind": "trace",
+      "kind": "predict-output",
       "difficulty": 4,
       "pattern": "spec-to-steps",
       "title": "Turning an order sheet into tables",
