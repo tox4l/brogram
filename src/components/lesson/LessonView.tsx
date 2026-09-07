@@ -15,7 +15,6 @@ import { buildRewardContext } from '@/lib/rewards/context'
 import { recordGoalDay } from '@/lib/rewards/record'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
-import { Reveal } from '@/components/motion/Reveal'
 import { play } from '@/lib/sound/manager'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
@@ -257,10 +256,10 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   const skipped = progress?.status === 'skipped'
 
   return (
-    <div className="mx-auto flex max-w-5xl gap-6 py-10">
+    <div className="mx-auto flex max-w-3xl gap-6 py-10">
       <style>{SHAKE_STYLE}</style>
       <ProgressRail total={total} current={currentBlockIndex} />
-      <div className="min-w-0 max-w-[68ch] flex-1 space-y-6">
+      <div className="min-w-0 max-w-[45rem] flex-1 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link href={course ? `/course/${course}` : '/courses'} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
             <ArrowLeft className="size-3" aria-hidden="true" />Path map
@@ -273,9 +272,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
             <h1 className="text-2xl font-medium tracking-tight">{lesson.title}</h1>
             {lesson.draft && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Draft</span>}
           </div>
-          <p className="font-prose text-lede leading-[1.6] text-lesson-foreground">
-            <Reveal mode="lines" reduced={reducedMotion}>{lesson.hook}</Reveal>
-          </p>
+          <p className="text-base text-muted-foreground">{lesson.hook}</p>
         </div>
 
         {staleNotice && (
@@ -292,10 +289,10 @@ export function LessonView({ cloId }: { cloId: CloId }) {
         {lesson.blocks.map((block, index) => (
           <RevealBlock key={block.id} reduced={reducedMotion} onReveal={() => advanceBlock(index)}>
             {block.type === 'concept' && <ConceptBlock block={block} />}
-            {block.type === 'snippet' && <SnippetBlock block={block} packages={packages} reduced={reducedMotion} />}
+            {block.type === 'snippet' && <SnippetBlock block={block} packages={packages} />}
             {block.type === 'worked' && <WorkedBlock block={block} reduced={reducedMotion} />}
             {block.type === 'check' && <CheckBlock block={block} reduced={reducedMotion} onAnswered={answerCheck} packages={packages} />}
-            {block.type === 'recap' && <RecapBlock block={block} reduced={reducedMotion} />}
+            {block.type === 'recap' && <RecapBlock block={block} />}
             {block.type === 'bridge' && <BridgeBlock block={block} course={course ?? ''} completed={completed} onComplete={complete} />}
           </RevealBlock>
         ))}
