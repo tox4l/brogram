@@ -14,9 +14,26 @@ export interface SparksProps {
   count?: number
   motionPref?: MotionPreference
   className?: string
+  /** `row`: an inline flex row (a progress-adjacent flourish, e.g. beside
+   *  the XP bar). `burst`: absolutely positioned around a centre point, for
+   *  layering directly over a hero glyph (fix round 2, Defect C -- an
+   *  in-flow row of dots next to text read as a loading ellipsis, not a
+   *  burst). Default `row`. */
+  layout?: 'row' | 'burst'
 }
 
 const DEFAULT_COUNT = 5
+
+/** A rough ring of offsets around a centred hero glyph, in percent of the
+ *  container -- enough spread at typical hero sizes (40-48px) to read as
+ *  radiating sparks rather than a cluster. */
+const BURST_OFFSETS: { top: string; left: string }[] = [
+  { top: '0%', left: '50%' },
+  { top: '30%', left: '95%' },
+  { top: '80%', left: '80%' },
+  { top: '80%', left: '20%' },
+  { top: '30%', left: '5%' },
+]
 
 /**
  * A short, transform-and-opacity-only spark burst -- shared by
@@ -27,7 +44,7 @@ const DEFAULT_COUNT = 5
  * own text and plays its own sound; this never carries information on its
  * own (R7.5).
  */
-export function Sparks({ trigger, count = DEFAULT_COUNT, motionPref, className }: SparksProps) {
+export function Sparks({ trigger, count = DEFAULT_COUNT, motionPref, className, layout = 'row' }: SparksProps) {
   const reducedMotion = useReducedMotion(motionPref)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -50,6 +67,24 @@ export function Sparks({ trigger, count = DEFAULT_COUNT, motionPref, className }
   }, [trigger, reducedMotion])
 
   if (reducedMotion) return null
+
+  if (layout === 'burst') {
+    return (
+      <div ref={containerRef} className={cn('pointer-events-none absolute inset-0', className)} aria-hidden="true">
+        {Array.from({ length: count }).map((_, index) => {
+          const offset = BURST_OFFSETS[index % BURST_OFFSETS.length]
+          return (
+            <span
+              key={index}
+              data-spark
+              className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-celebration"
+              style={{ top: offset.top, left: offset.left }}
+            />
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div ref={containerRef} className={cn('pointer-events-none flex items-center gap-1', className)} aria-hidden="true">

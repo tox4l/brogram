@@ -158,6 +158,62 @@ describe('the achievement collapse (brief step 1)', () => {
     act(() => result.current.dismiss(collapsedId))
     expect(result.current.queue.filter((item) => item.kind === 'achievement')).toHaveLength(0)
   })
+
+  it('fix round 2 (C1/C2): a second collapsed burst gets a different id than the first, and carries collapsedIds', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('achievement', { skill: 'a' })
+      mod.celebrate('achievement', { skill: 'b' })
+      mod.celebrate('achievement', { skill: 'c' })
+    })
+    const firstCollapsed = result.current.queue.find((item) => item.kind === 'achievement')!
+    expect(firstCollapsed.id).not.toBe('achievement-collapsed') // no more magic constant
+    expect(firstCollapsed.collapsedIds).toHaveLength(3)
+    act(() => result.current.dismiss(firstCollapsed.id))
+
+    act(() => {
+      mod.celebrate('achievement', { skill: 'd' })
+      mod.celebrate('achievement', { skill: 'e' })
+      mod.celebrate('achievement', { skill: 'f' })
+    })
+    const secondCollapsed = result.current.queue.find((item) => item.kind === 'achievement')!
+    expect(secondCollapsed.id).not.toBe(firstCollapsed.id)
+  })
+
+  it('fix round 2 (C2): clearShownCelebrations resolves a collapsed card id back to its underlying raw ids', async () => {
+    const mod = await loadModule()
+    const { result } = renderHook(() => mod.useCelebrationQueue())
+    act(() => {
+      mod.celebrate('achievement', { skill: 'a' })
+      mod.celebrate('achievement', { skill: 'b' })
+      mod.celebrate('achievement', { skill: 'c' })
+      mod.celebrate('pass') // an unrelated item that must survive the clear
+    })
+    const collapsed = result.current.queue.find((item) => item.kind === 'achievement')!
+    act(() => mod.clearShownCelebrations(new Set([collapsed.id])))
+    expect(result.current.queue.filter((item) => item.kind === 'achievement')).toHaveLength(0)
+    expect(result.current.queue.find((item) => item.kind === 'pass')).toBeDefined()
+  })
+
+  it('fix round 2: the collapsed id is deterministic regardless of insertion order (sorted)', async () => {
+    const modA = await loadModule()
+    modA.celebrate('achievement', { skill: 'a' })
+    modA.celebrate('achievement', { skill: 'b' })
+    modA.celebrate('achievement', { skill: 'c' })
+    const { result: resultA } = renderHook(() => modA.useCelebrationQueue())
+    const collapsedA = resultA.current.queue.find((item) => item.kind === 'achievement')!.id
+
+    const modB = await loadModule()
+    modB.celebrate('achievement', { skill: 'a' })
+    modB.celebrate('achievement', { skill: 'b' })
+    modB.celebrate('achievement', { skill: 'c' })
+    const { result: resultB } = renderHook(() => modB.useCelebrationQueue())
+    const collapsedB = resultB.current.queue.find((item) => item.kind === 'achievement')!.id
+
+    // Same three raw ids (celebration-1/2/3 in both fresh modules) -> same collapsed id.
+    expect(collapsedA).toBe(collapsedB)
+  })
 })
 
 describe('confetti eligibility and the 1200ms cooldown (brief step 1)', () => {

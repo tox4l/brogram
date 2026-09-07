@@ -19,6 +19,11 @@ export interface StreakFlameProps {
    *  per celebration, not three). Standalone uses (a persistent dashboard
    *  flame) keep the default `true`. */
   announce?: boolean
+  /** `default`: the compact inline glyph (a header/dashboard flame).
+   *  `hero`: a large, vertically-stacked presentation with the sparks
+   *  radiating around the glyph instead of sitting in a row beside it (fix
+   *  round 2: the major-tier streak card's centrepiece, not a toast row). */
+  size?: 'default' | 'hero'
   className?: string
 }
 
@@ -32,9 +37,10 @@ const SPARK_STATES = new Set<FlameState>(['ignite', 'milestone'])
  * path (a flame is read from its core as much as its outline) and a pulled-in
  * left shoulder so the silhouette is asymmetric rather than a symmetric drop.
  */
-function FlameGlyph({ filled, glyphRef }: { filled: boolean; glyphRef: RefObject<SVGSVGElement | null> }) {
+function FlameGlyph({ filled, glyphRef, hero }: { filled: boolean; glyphRef: RefObject<SVGSVGElement | null>; hero: boolean }) {
+  const size = hero ? 44 : 20
   return (
-    <svg ref={glyphRef} width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+    <svg ref={glyphRef} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M12.5 2c1.4 2.8-2.2 4.4-2.6 7.6-.3 2.1.6 3.6 2.1 3.6a2.6 2.6 0 0 0 2.6-2.9c1.6 1.3 2.4 3.3 2.4 5.2a5.5 5.5 0 0 1-6 5.5A5.6 5.6 0 0 1 6 15.4c0-2.2 1-3.6 2.2-5 1.1-1.3 2.3-2.6 2.6-5A9 9 0 0 1 12.5 2Z"
         fill={filled ? 'currentColor' : 'none'}
@@ -72,10 +78,11 @@ function announcement(state: FlameState, days: number): string {
  * Every state that carries copy also renders it -- nothing here is
  * conveyed by motion alone.
  */
-export function StreakFlame({ state, days, motionPref, announce = true, className }: StreakFlameProps) {
+export function StreakFlame({ state, days, motionPref, announce = true, size = 'default', className }: StreakFlameProps) {
   const reducedMotion = useReducedMotion(motionPref)
   const glyphRef = useRef<SVGSVGElement>(null)
   const filled = FILLED_STATES.has(state)
+  const hero = size === 'hero'
 
   useGSAP(() => {
     const el = glyphRef.current
@@ -109,11 +116,29 @@ export function StreakFlame({ state, days, motionPref, announce = true, classNam
     }
   }, [state, reducedMotion])
 
+  const glyphAndSparks = (
+    <span className={cn('relative inline-flex items-center justify-center', hero && 'size-16')}>
+      <FlameGlyph filled={filled} glyphRef={glyphRef} hero={hero} />
+      {SPARK_STATES.has(state) && (
+        <Sparks trigger={`${state}-${days}`} motionPref={motionPref} layout={hero ? 'burst' : 'row'} className={hero ? undefined : 'ml-1.5'} />
+      )}
+    </span>
+  )
+
+  if (hero) {
+    return (
+      <span className={cn('flex flex-col items-center gap-1', filled ? 'text-celebration' : 'text-muted-foreground', className)}>
+        {glyphAndSparks}
+        <span className="tabular text-2xl font-semibold text-foreground">{days}</span>
+        {announce && <span className="sr-only" aria-live="polite">{announcement(state, days)}</span>}
+      </span>
+    )
+  }
+
   return (
     <span className={cn('inline-flex items-center gap-1.5', filled ? 'text-celebration' : 'text-muted-foreground', className)}>
-      <FlameGlyph filled={filled} glyphRef={glyphRef} />
+      {glyphAndSparks}
       <span className="tabular text-sm font-medium text-foreground">{days}</span>
-      {SPARK_STATES.has(state) && <Sparks trigger={`${state}-${days}`} motionPref={motionPref} />}
       {announce && <span className="sr-only" aria-live="polite">{announcement(state, days)}</span>}
     </span>
   )

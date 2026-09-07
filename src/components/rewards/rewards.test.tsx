@@ -19,13 +19,19 @@ class FakeMediaQueryList {
   }
 }
 
-/** Installs `window.matchMedia` for `(prefers-reduced-motion: reduce)` only
- *  -- every component here reads exactly that one query via `useReducedMotion()`. */
+/** Installs `window.matchMedia` for `(prefers-reduced-motion: reduce)`, the
+ *  only query every component here reads via `useReducedMotion()`. Any
+ *  other query (e.g. `canvas-confetti`'s own internal
+ *  `(prefers-reduced-motion)` check, without `: reduce`, inside its
+ *  `disableForReducedMotion` handling) gets a harmless non-matching stub
+ *  rather than a thrown error -- this suite only asserts on the one query
+ *  that matters to this code, not on every query anything imported happens
+ *  to make. */
 function installMatchMedia(initial: boolean): FakeMediaQueryList {
   const mql = new FakeMediaQueryList(initial)
   window.matchMedia = ((query: string) => {
-    if (query !== '(prefers-reduced-motion: reduce)') throw new Error(`unexpected query: ${query}`)
-    return mql as unknown as MediaQueryList
+    if (query === '(prefers-reduced-motion: reduce)') return mql as unknown as MediaQueryList
+    return new FakeMediaQueryList(false) as unknown as MediaQueryList
   }) as typeof window.matchMedia
   return mql
 }
@@ -86,35 +92,45 @@ afterEach(() => {
 })
 
 // ---------------------------------------------------------------------------
-// ConfettiBurst
+// Confetti (fix round 2: a plain function, not a component -- see C1)
 // ---------------------------------------------------------------------------
 
-describe('ConfettiBurst', () => {
-  it('fires the library exactly once per trigger, dynamically imported', async () => {
-    const { ConfettiBurst } = await import('./Confetti')
-    render(<ConfettiBurst trigger="a" />)
-    await act(async () => { await Promise.resolve() })
+describe('fireConfetti / originFromRect', () => {
+  it('fires the library, dynamically imported', async () => {
+    const { fireConfetti } = await import('./Confetti')
+    fireConfetti(false)
     await act(async () => { await Promise.resolve() })
     expect(confettiMock).toHaveBeenCalledTimes(1)
-    expect(confettiMock).toHaveBeenCalledWith(expect.objectContaining({ disableForReducedMotion: true }))
+    expect(confettiMock).toHaveBeenCalledWith(expect.objectContaining({ disableForReducedMotion: true, origin: { x: 0.5, y: 0.35 } }))
   })
 
   it('under reduced motion, canvas-confetti is never imported or called', async () => {
-    installMatchMedia(true)
-    const { ConfettiBurst } = await import('./Confetti')
-    render(<ConfettiBurst trigger="a" />)
+    const { fireConfetti } = await import('./Confetti')
+    fireConfetti(true)
     await act(async () => { await Promise.resolve() })
     expect(confettiMock).not.toHaveBeenCalled()
   })
 
-  it('a re-render with the same trigger never fires a second burst', async () => {
-    const { ConfettiBurst } = await import('./Confetti')
-    const { rerender } = render(<ConfettiBurst trigger="same" />)
-    await act(async () => { await Promise.resolve() })
-    rerender(<ConfettiBurst trigger="same" />)
-    await act(async () => { await Promise.resolve() })
-    expect(confettiMock).toHaveBeenCalledTimes(1)
+  it('originFromRect converts a bounding rect into a viewport fraction', async () => {
+    const { originFromRect } = await import('./Confetti')
+    const rect = { left: 100, width: 40, top: 200 } as DOMRect
+    const origin = originFromRect(rect)
+    expect(origin).toEqual({ x: (100 + 20) / window.innerWidth, y: 200 / window.innerHeight })
   })
+
+  it('originFromRect returns undefined with no rect', async () => {
+    const { originFromRect } = await import('./Confetti')
+    expect(originFromRect(null)).toBeUndefined()
+    expect(originFromRect(undefined)).toBeUndefined()
+  })
+
+  // Note: `fireConfetti` itself carries no once-per-item gate by design --
+  // that guarantee lives in the store (`markConfettiFired`) and is covered
+  // by the Celebration-level C1 test below, which is also where the "once
+  // per item, even across a remount" guarantee actually matters. A bare
+  // "call it twice" test against the real `canvas-confetti` package is not
+  // reliable under jsdom (no 2D canvas context without the native `canvas`
+  // package), so that scenario is exercised at the level that matters.
 })
 
 // ---------------------------------------------------------------------------
@@ -317,11 +333,16 @@ describe('TrophyCard', () => {
   const firstBlood = ACHIEVEMENTS.find((a) => a.id === 'first-blood')!
 
   it('renders a single unlock with its name and line, and dismisses on click', async () => {
-    const { TrophyCard } = await import('./TrophyCard')
+    const { TrophyCard, achievementLine } = await import('./TrophyCard')
     const onDismiss = vi.fn()
     render(<TrophyCard achievement={firstBlood} onDismiss={onDismiss} />)
     screen.getByText(firstBlood.name)
-    screen.getByText(firstBlood.line)
+    // Fix round 2, I1: first-blood's own `.line` in the frozen contracts.ts
+    // still carries the banned "the whole product" wording; every read site
+    // goes through `achievementLine()` instead, which maps it to the voice
+    // bank's honest `pass.first` text.
+    screen.getByText(achievementLine(firstBlood))
+    expect(screen.queryByText(firstBlood.line)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
@@ -443,8 +464,13 @@ describe('Celebration', () => {
     act(() => celebrate('level-up', { level: 4 }))
     act(() => { vi.advanceTimersByTime(5_000) })
     expect(visibleCard().querySelector('p')?.textContent).toMatch(/Level 4/)
-    act(() => { vi.advanceTimersByTime(2_500) }) // past the 7s bound
-    expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0)
+    act(() => { vi.advanceTimersByTime(2_500) }) // past the 7s bound -- triggers dismiss()
+    // dismiss() has now fired at the JS level; Motion's own exit animation
+    // runs on real animation frames fake timers do not drive, so switch back
+    // before waiting for the DOM to actually settle (same shape as the
+    // Escape-dismiss test above).
+    vi.useRealTimers()
+    await waitFor(() => expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0))
   })
 
   it('the close button dismisses the current card and promotes the next one', async () => {
@@ -580,5 +606,91 @@ describe('Celebration', () => {
       celebrate('best', { n: 10 }, 'submit-42') // a StrictMode double-invoke / retried mutation
     })
     expect(soundMocks.play.mock.calls.filter((call) => call[0] === 'best')).toHaveLength(1)
+  })
+
+  // ---------------------------------------------------------------------
+  // Fix round 2, C1: confetti tracked in the store, not a component ref --
+  // a preempted-then-never-shown item must not burst again on a remount.
+  // ---------------------------------------------------------------------
+
+  it("C1 (fix round 2): a confetti item preempted before it showed does not burst again on the next route's mount", async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    const { unmount } = render(<Celebration />)
+
+    act(() => celebrate('pass')) // celebration-1: session-first pass, confetti-eligible
+    act(() => celebrate('level-up', { level: 5 })) // celebration-2: preempts immediately -- pass never becomes current
+    await act(async () => { await Promise.resolve() })
+    expect(confettiMock).toHaveBeenCalledTimes(1) // fired at enqueue, independent of visibility
+
+    unmount() // route change: level-up (shown) is cleared, pass (never shown) survives
+    confettiMock.mockClear()
+
+    render(<Celebration />) // the next route mounts a fresh layer
+    await act(async () => { await Promise.resolve() })
+    expect(confettiMock).not.toHaveBeenCalled() // no second burst for the same pass item
+  })
+
+  it('C1 (fix round 2): a second collapsed achievement burst in the same session still plays its sound (unique id per burst)', async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    render(<Celebration />)
+    act(() => {
+      celebrate('achievement', { skill: 'first-blood' })
+      celebrate('achievement', { skill: 'no-wheels' })
+      celebrate('achievement', { skill: 'three-angles' })
+    })
+    await waitFor(() => within(visibleCard()).getByText('3 new trophies'))
+    expect(soundMocks.play.mock.calls.filter((call) => call[0] === 'best')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0))
+
+    act(() => {
+      celebrate('achievement', { skill: 'day-three' })
+      celebrate('achievement', { skill: 'week-strong' })
+      celebrate('achievement', { skill: 'thirty' })
+    })
+    await waitFor(() => within(visibleCard()).getByText('3 new trophies'))
+    // A constant collapsed id would have already been in `firedSoundIds`
+    // from the first burst and played nothing here.
+    expect(soundMocks.play.mock.calls.filter((call) => call[0] === 'best')).toHaveLength(2)
+  })
+
+  // ---------------------------------------------------------------------
+  // Fix round 2, C2: a shown collapsed achievement card must actually be
+  // clearable -- its id is synthetic and no raw item carries it verbatim.
+  // ---------------------------------------------------------------------
+
+  it('C2 (fix round 2): a shown collapsed achievement card is cleared on unmount and does not reappear on the next mount', async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    const { unmount } = render(<Celebration />)
+    act(() => {
+      celebrate('achievement', { skill: 'first-blood' })
+      celebrate('achievement', { skill: 'no-wheels' })
+      celebrate('achievement', { skill: 'three-angles' })
+    })
+    await waitFor(() => within(visibleCard()).getByText('3 new trophies')) // shown
+    unmount() // route change without dismissing
+
+    render(<Celebration />)
+    await act(async () => {})
+    expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0)
+  })
+
+  // ---------------------------------------------------------------------
+  // Fix round 2, I7 regression: AnimatePresence must actually play an exit.
+  // ---------------------------------------------------------------------
+
+  it('I7 (fix round 2): an exit transition actually runs when the queue empties -- the card is not synchronously removed', async () => {
+    const { Celebration, celebrate } = await freshCelebration()
+    render(<Celebration />)
+    act(() => celebrate('pass'))
+    const card = visibleCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // Immediately after dismiss, the card is still in the document -- Motion's
+    // exit is in flight. A mis-nested `AnimatePresence` (inside the
+    // `current && tier` conditional) would have unmounted it synchronously
+    // in this same tick, with no exit ever playing.
+    expect(document.body.contains(card)).toBe(true)
+    await waitFor(() => expect(document.querySelectorAll('.pointer-events-auto').length).toBe(0))
   })
 })

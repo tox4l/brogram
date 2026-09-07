@@ -4,8 +4,27 @@ import { motion } from 'motion/react'
 import { X } from 'lucide-react'
 import type { Achievement, AchievementTier, MotionPreference } from '@/lib/contracts'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { line as bankLine } from '@/lib/voice/lines'
+import { ENTER_EASE, ENTER_S, EXIT_S } from './motionTokens'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+
+/**
+ * Fix round 2, I1: `src/lib/contracts.ts` is frozen (standing constraint 4)
+ * and still holds `first-blood`'s original line -- "First one down. That
+ * feeling is the whole product." -- the exact sentence the voice bank's own
+ * fix round 1 removed as "the founder's word, not the bro's"
+ * (`src/lib/voice/lines.ts:136-137`, key `pass.first`). Since the contract
+ * cannot be edited, every read site goes through this instead of
+ * `achievement.line` directly, so the honest bank text is what actually
+ * reaches a learner. Flagged for the controller's ledger: `contracts.ts`'s
+ * `first-blood.line` itself still reads the removed wording and should be
+ * corrected there whenever that frozen file next gets a signed-off pass.
+ */
+export function achievementLine(achievement: Achievement): string {
+  if (achievement.id === 'first-blood') return bankLine('pass.first')
+  return achievement.line
+}
 
 /**
  * Fix round 1, M3: `bronze` (`text-warning`) and `gold` (`text-celebration`)
@@ -95,7 +114,7 @@ export function TrophyCard({ achievement, collapsedCount, collapsedAchievements,
   const reducedMotion = useReducedMotion(motionPref)
   const isCollapsed = Boolean(collapsedCount && collapsedCount > 0)
   const title = isCollapsed ? `${collapsedCount} new trophies` : achievement?.name ?? 'Trophy unlocked'
-  const line = isCollapsed ? 'Go see them.' : achievement?.line ?? ''
+  const line = isCollapsed ? 'Go see them.' : achievement ? achievementLine(achievement) : ''
 
   const entrance = reducedMotion
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.15 } }
@@ -104,8 +123,10 @@ export function TrophyCard({ achievement, collapsedCount, collapsedAchievements,
         // generic drop-from-top every other card round 1 shared.
         initial: { opacity: 0, x: 32, scale: 0.96 },
         animate: { opacity: 1, x: 0, scale: 1 },
-        exit: { opacity: 0, x: 16, scale: 0.98, transition: { duration: 0.2 } },
-        transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as const },
+        // Fix round 2, I7: exit carries no `ease` -- never `ease-in` on UI,
+        // and the shorter duration alone already makes exit faster than enter.
+        exit: { opacity: 0, x: 16, scale: 0.98, transition: { duration: EXIT_S } },
+        transition: { duration: ENTER_S, ease: ENTER_EASE },
       }
 
   return (

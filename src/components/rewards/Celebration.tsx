@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { useGSAP } from '@gsap/react'
+import { gsap } from 'gsap'
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { ACHIEVEMENTS, xpToReach, type Achievement, type MotionPreference } from '@/lib/contracts'
@@ -8,17 +10,17 @@ import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { play } from '@/lib/sound/manager'
 import type { SoundEventId } from '@/lib/sound/events'
 import { line, lineWith } from '@/lib/voice/lines'
-import { DUR, EASE } from '@/lib/motion/tokens'
 import {
-  clearShownCelebrations, useCelebrationQueue,
+  clearShownCelebrations, markConfettiFired, markSoundFired, useCelebrationQueue,
   type CelebrationDetail, type CelebrationItem, type CelebrationKind,
 } from '@/lib/rewards/useCelebration'
 import { Button } from '@/components/ui/button'
-import { ConfettiBurst } from './Confetti'
+import { fireConfetti } from './Confetti'
 import { LevelBadge } from './LevelBadge'
 import { StreakFlame } from './StreakFlame'
 import { Sparks } from './Sparks'
-import { TrophyCard } from './TrophyCard'
+import { TrophyCard, achievementLine } from './TrophyCard'
+import { ENTER_EASE, ENTER_S, EXIT_S } from './motionTokens'
 
 export interface CelebrationProps {
   motionPref?: MotionPreference
@@ -57,14 +59,6 @@ function tierFor(kind: CelebrationKind): Tier {
       return 'silent'
   }
 }
-
-/**
- * Fired exactly once per item, ever, for the tab's lifetime (fix round 1,
- * C1). Module-level rather than a per-mount ref: `<Celebration />` remounts
- * on every route change, and an item's sound/haptic/confetti must never
- * replay just because the layer that renders it did.
- */
-const firedIds = new Set<string>()
 
 /** Pass and level-up only (brief step 7) -- a bonus layer, feature-detected,
  *  and never the only channel for anything (every fired item also plays a
@@ -110,12 +104,14 @@ function soundsFor(kind: CelebrationKind): SoundEventId[] {
 
 /**
  * Every kind's copy comes from `src/lib/voice/lines.ts` (fix round 1, I1;
- * the achievement bar is data, not the bank: an unlock's own `.line` from
- * `ACHIEVEMENTS`, and the collapsed "N new trophies" card, which has no
- * bank key yet -- flagged for T2.7b in the report). `item.id` is used as
- * the rotation seed: deterministic per celebration instance (stable across
- * an unrelated re-render, and safe to assert against in tests), while still
- * varying across different instances, which is what "rotating" means here.
+ * the achievement bar is data, not the bank, routed through
+ * `achievementLine()` -- fix round 2, I1 -- so `first-blood`'s frozen
+ * `contracts.ts` line never ships verbatim. The collapsed "N new trophies"
+ * card has no bank key yet, flagged for T2.7b in the report). `item.id` is
+ * used as the rotation seed: deterministic per celebration instance (stable
+ * across an unrelated re-render, and safe to assert against in tests),
+ * while still varying across different instances, which is what "rotating"
+ * means here.
  */
 function textFor(item: CelebrationItem): string {
   const { kind, detail, collapsedCount, id: seed } = item
@@ -131,7 +127,8 @@ function textFor(item: CelebrationItem): string {
     case 'best': return lineWith('best', { n: detail.n ?? 0 }, seed)
     case 'achievement': {
       if (collapsedCount) return `${collapsedCount} new trophies. Go see them.`
-      return achievementRecord(detail.skill)?.line ?? 'Trophy unlocked.'
+      const record = achievementRecord(detail.skill)
+      return record ? achievementLine(record) : 'Trophy unlocked.'
     }
     case 'goal': return line('goal.done', seed)
     default: return ''
@@ -151,32 +148,29 @@ export function Celebration({ motionPref, onOpenShelf, resultsAnchorRef }: Celeb
   const { queue, current, dismiss } = useCelebrationQueue()
   const shownIdsRef = useRef<Set<string>>(new Set())
 
-  // Fix round 1, C1 + I4a: fire sound/haptic exactly once per item, decoupled
-  // from card visibility. Keyed off the FULL queue (every item that
-  // currently exists), not `current` -- an item preempted by something
-  // higher-priority and later restored to the front only ever appears in
-  // `queue` once, at the moment it was enqueued, so `firedIds` (module
-  // level, see above) makes replay structurally impossible rather than
-  // merely unlikely. This also lands the sound at the moment of the event
-  // instead of whenever its card finally reaches the front (I4a) -- a card
-  // queued behind two others still sounds on time. This is a plain module
-  // mutation plus imperative calls, never a React `setState`, so it stays
-  // clear of the "no synchronous setState in an effect" rule.
+  // Fix round 1, C1 + I4a; fix round 2, C1: fire sound/haptic/confetti
+  // exactly once per item, decoupled from card visibility, and tracked in
+  // the STORE (`markSoundFired`/`markConfettiFired`) rather than a
+  // component-level tracker -- `<Celebration />` remounts on every route
+  // change, and an item queued but never shown deliberately survives a
+  // route change (see `clearShownCelebrations`'s doc comment), so it is
+  // still live when the next route mounts a fresh layer. A component-level
+  // guard (a `useRef`, or round 1's mounted-`<ConfettiBurst>` trick) resets
+  // exactly then; the store-level guard cannot, because it was never tied
+  // to any one mount. Keyed off the FULL queue (every item that currently
+  // exists), not `current`, so a card queued behind two others still
+  // sounds/bursts on time (I4a) instead of whenever it reaches the front.
   useEffect(() => {
     for (const item of queue) {
-      if (firedIds.has(item.id)) continue
-      firedIds.add(item.id)
-      for (const soundId of soundsFor(item.kind)) play(soundId)
-      if (HAPTIC_KINDS.has(item.kind)) buzz(item.kind === 'level-up' ? [20, 40, 20] : 15)
+      if (markSoundFired(item.id)) {
+        for (const soundId of soundsFor(item.kind)) play(soundId)
+        if (HAPTIC_KINDS.has(item.kind)) buzz(item.kind === 'level-up' ? [20, 40, 20] : 15)
+      }
+      if (item.confetti && markConfettiFired(item.id)) {
+        fireConfetti(reducedMotion)
+      }
     }
-  }, [queue])
-
-  // Confetti (I4a) is a plain derivation from `queue`, not state: the item
-  // that earned it stays findable in `queue` for its whole lifetime, and
-  // `<ConfettiBurst>` (mounted unconditionally, C1) already guards "the same
-  // trigger id never fires twice" for its own mount lifetime. No effect, no
-  // setState, no replay path.
-  const confettiTrigger = queue.find((item) => item.confetti)?.id ?? null
+  }, [queue, reducedMotion])
 
   // C2: track every id this MOUNT actually displayed, so its own unmount
   // (a route change) can clear them -- an item that was shown and then
@@ -220,9 +214,13 @@ export function Celebration({ motionPref, onOpenShelf, resultsAnchorRef }: Celeb
           -- every card/component below is inert to assistive tech so a
           streak milestone is announced once, not three times. */}
       <div aria-live="polite" className="sr-only">{text}</div>
-      <ConfettiBurst trigger={confettiTrigger} motionPref={motionPref} />
-      {current && tier && (
-        <AnimatePresence mode="wait">
+      {/* Fix round 2, I7 regression: AnimatePresence must wrap the
+          conditional, not sit inside it -- nested inside `current && tier`,
+          React unmounts AnimatePresence together with its child the moment
+          the queue empties (every ordinary auto-dismiss and every
+          close-button click on the last card), so no exit ever played. */}
+      <AnimatePresence mode="wait">
+        {current && tier && (
           <CelebrationPresentation
             key={current.id}
             item={current}
@@ -234,8 +232,8 @@ export function Celebration({ motionPref, onOpenShelf, resultsAnchorRef }: Celeb
             onOpenShelf={onOpenShelf}
             resultsAnchorRef={resultsAnchorRef}
           />
-        </AnimatePresence>
-      )}
+        )}
+      </AnimatePresence>
     </>
   )
 }
@@ -244,32 +242,18 @@ export function Celebration({ motionPref, onOpenShelf, resultsAnchorRef }: Celeb
 // Presentation
 // ---------------------------------------------------------------------------
 
-/**
- * Fix round 1, I7: the timing law's own tokens, not literals -- 700ms in,
- * faster out (exit is always faster than enter). `EASE.enter` is stored as
- * the CSS `cubic-bezier(...)` string every plain-CSS transition in this
- * tree reads (`src/lib/motion/tokens.ts`); Motion's `ease` prop wants the
- * same four numbers as a plain tuple, so they are parsed out of the one
- * source of truth rather than re-typed as a second literal here.
- */
-const ENTER_S = DUR.celebration / 1000
-const EXIT_S = DUR.base / 1000
-
-function bezierTuple(css: string): [number, number, number, number] {
-  const match = /cubic-bezier\(([^)]+)\)/.exec(css)
-  const parts = (match?.[1] ?? '0,0,1,1').split(',').map((n) => Number.parseFloat(n.trim()))
-  return [parts[0], parts[1], parts[2], parts[3]]
-}
-
-const ENTER_EASE = bezierTuple(EASE.enter)
-
 interface CardMotionProps {
   initial: { opacity: number; y: number; scale: number }
   animate: { opacity: number; y: number; scale: number }
-  exit: { opacity: number; y: number; scale: number; transition: { duration: number; ease?: 'easeIn' } }
+  exit: { opacity: number; y: number; scale: number; transition: { duration: number } }
   transition: { duration: number; ease?: readonly [number, number, number, number] }
 }
 
+/**
+ * Fix round 2, I7 regression: exits never set `ease` -- "Never `ease-in` on
+ * UI" (spec line 1039) is an explicit ban, and duration alone (`EXIT_S` <
+ * `ENTER_S`) already satisfies "exit is always faster than enter."
+ */
 function glowCardEntrance(reducedMotion: boolean): CardMotionProps {
   return reducedMotion
     ? {
@@ -281,7 +265,7 @@ function glowCardEntrance(reducedMotion: boolean): CardMotionProps {
     : {
         initial: { opacity: 0, y: -8, scale: 0.95 },
         animate: { opacity: 1, y: 0, scale: 1 },
-        exit: { opacity: 0, y: -4, scale: 0.97, transition: { duration: EXIT_S, ease: 'easeIn' } },
+        exit: { opacity: 0, y: -4, scale: 0.97, transition: { duration: EXIT_S } },
         transition: { duration: ENTER_S, ease: ENTER_EASE },
       }
 }
@@ -317,7 +301,10 @@ function CelebrationPresentation(props: {
         ?.map((detail) => achievementRecord(detail.skill))
         .filter((a): a is Achievement => a !== undefined)
       return (
-        <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-6 sm:justify-end sm:pr-6">
+        // Fix round 2: anchored below the shell header instead of `top-4`
+        // sitting directly over it (the achievement lane was the one tier
+        // M9's fix round 1 pass missed).
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4 sm:top-24 sm:justify-end sm:pr-6">
           <TrophyCard
             achievement={item.collapsedCount ? null : achievementRecord(item.detail.skill) ?? null}
             collapsedCount={item.collapsedCount}
@@ -344,11 +331,16 @@ function CelebrationPresentation(props: {
 /** (b) First-ever win and course cleared: a full-viewport moment -- dimmed
  *  backdrop, large type, the confetti burst already timed with the reveal
  *  (fired at enqueue, see the queue-watching effect above), dismissed by
- *  any key or a click anywhere. */
+ *  any key or a click anywhere.
+ *
+ *  Fix round 2 minor: a plain `div[role="presentation"]` instead of a
+ *  `<motion.button>` wrapping a `<motion.p>` -- a `<p>` is not phrasing
+ *  content, and a full-screen focusable control sitting in the tab order
+ *  for ~2.8s bought nothing the existing key handler did not already cover. */
 interface ScaleMotionProps {
   initial: { opacity: number; scale: number }
   animate: { opacity: number; scale: number }
-  exit: { opacity: number; scale: number; transition: { duration: number; ease?: 'easeIn' } }
+  exit: { opacity: number; scale: number; transition: { duration: number } }
   transition: { duration: number; ease?: readonly [number, number, number, number] }
 }
 
@@ -363,30 +355,41 @@ function EpicCelebration({ text, reducedMotion, onDismiss }: { text: string; red
     : {
         initial: { opacity: 0, scale: 0.96 },
         animate: { opacity: 1, scale: 1 },
-        exit: { opacity: 0, scale: 0.98, transition: { duration: EXIT_S, ease: 'easeIn' } },
+        exit: { opacity: 0, scale: 0.98, transition: { duration: EXIT_S } },
         transition: { duration: ENTER_S, ease: ENTER_EASE },
       }
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="presentation"
       onClick={onDismiss}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: EXIT_S } }}
       transition={{ duration: ENTER_S }}
       className="pointer-events-auto fixed inset-0 z-50 flex cursor-pointer items-center justify-center bg-background/85 backdrop-blur-sm"
-      aria-label="Dismiss celebration"
     >
       <motion.p {...entrance} className="max-w-xl px-6 text-center text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
         {text}
       </motion.p>
-    </motion.button>
+    </motion.div>
   )
 }
 
-/** (c) Level up: the badge grows in place with a `--glow` edge and the XP
- *  bar refills from the old level's fraction to the new one, stepping
- *  through every crossed level in sequence, with sparks along the bar. */
+/**
+ * A theme-portable rarity accent, layered under `--glow`'s own box-shadow
+ * (fix round 2, Defect B): `--glow` is a near-invisible 18%-alpha dark blue
+ * on Paper's near-white card (`globals.css:314`), leaving the level-up and
+ * major cards with no rarity signal at all on that theme. `--celebration`
+ * is a saturated, always-legible accent in every theme (it is what the
+ * glyphs and the goal ring already use), so a 2px border in that colour
+ * reads on all four themes regardless of whether the glow itself renders.
+ */
+const RARITY_BORDER = 'border-2 border-celebration'
+
+/** (c) Level up: the badge grows in place with a `--glow`/`--celebration`
+ *  edge and the XP bar refills from the old level's fraction to the new
+ *  one, stepping through every crossed level in sequence, with sparks
+ *  along the bar. */
 function LevelUpCelebration({
   item, text, reducedMotion, motionPref, onDismiss,
 }: { item: CelebrationItem; text: string; reducedMotion: boolean; motionPref?: MotionPreference; onDismiss: () => void }) {
@@ -395,14 +398,15 @@ function LevelUpCelebration({
     <div className="pointer-events-none fixed inset-x-0 top-1/3 z-50 flex justify-center px-4">
       <motion.div
         {...entrance}
-        className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-8 py-6 text-center shadow-[0_0_0_1px_var(--glow),0_0_56px_var(--glow)]"
+        className={`relative pointer-events-auto flex flex-col items-center gap-3 rounded-2xl ${RARITY_BORDER} bg-card px-8 py-6 text-center shadow-[0_0_0_1px_var(--glow),0_0_56px_var(--glow)]`}
       >
-        <LevelBadge level={item.detail.level ?? 1} animateEntrance motionPref={motionPref} className="text-base" />
-        <LevelUpXpBar detail={item.detail} reducedMotion={reducedMotion} />
-        <p className="text-sm font-medium text-foreground">{text}</p>
         <Button type="button" variant="ghost" size="icon" aria-label="Dismiss" onClick={onDismiss} className="absolute right-2 top-2">
           <X aria-hidden="true" />
         </Button>
+        <span className="text-5xl font-semibold tabular text-foreground">{item.detail.level ?? 1}</span>
+        <LevelBadge level={item.detail.level ?? 1} animateEntrance motionPref={motionPref} className="text-base" />
+        <LevelUpXpBar detail={item.detail} reducedMotion={reducedMotion} />
+        <p className="text-sm font-medium text-foreground">{text}</p>
       </motion.div>
     </div>
   )
@@ -415,76 +419,97 @@ function LevelUpXpBar({ detail, reducedMotion }: { detail: CelebrationDetail; re
   const startLevel = Math.max(1, finalLevel - levelsUp + 1)
   const hasXp = detail.fromXp !== undefined && detail.toXp !== undefined
 
-  useEffect(() => {
+  // Fix round 2, GSAP discipline: this used to run a `gsap.timeline()` from
+  // a bare `useEffect` with its own dynamic `import('gsap')`, with no kill
+  // on cleanup -- dismissing a level-up mid-refill left a timeline ticking
+  // against a detached node, and `gsap` is already statically imported by
+  // every sibling in this file. `useGSAP` owns the timeline now, so a
+  // route change or a re-run mid-tween reverts it automatically.
+  useGSAP(() => {
     const el = barRef.current
     if (!el) return
+    gsap.killTweensOf(el)
     if (reducedMotion || !hasXp) {
-      el.style.transform = 'scaleX(1)'
+      gsap.set(el, { scaleX: 1, transformOrigin: 'left' })
       return
     }
     const fromXp = detail.fromXp as number
     const toXp = detail.toXp as number
-
-    let cancelled = false
-    void import('gsap').then(({ gsap }) => {
-      if (cancelled || !el) return
-      gsap.killTweensOf(el)
-      const startFrom = xpToReach(startLevel)
-      const startTo = xpToReach(startLevel + 1)
-      const startFrac = startTo > startFrom ? Math.max(0, Math.min(1, (fromXp - startFrom) / (startTo - startFrom))) : 0
-      gsap.set(el, { scaleX: startFrac, transformOrigin: 'left' })
-      const timeline = gsap.timeline()
-      for (let level = startLevel; level <= finalLevel; level += 1) {
-        const bandFrom = xpToReach(level)
-        const bandTo = xpToReach(level + 1)
-        const isLast = level === finalLevel
-        const endFrac = isLast
-          ? bandTo > bandFrom ? Math.max(0, Math.min(1, (toXp - bandFrom) / (bandTo - bandFrom))) : 1
-          : 1
-        timeline.to(el, { scaleX: endFrac, duration: 0.4, ease: 'power2.out' })
-        if (!isLast) timeline.set(el, { scaleX: 0 })
-      }
-    })
-    return () => {
-      cancelled = true
+    const startFrom = xpToReach(startLevel)
+    const startTo = xpToReach(startLevel + 1)
+    const startFrac = startTo > startFrom ? Math.max(0, Math.min(1, (fromXp - startFrom) / (startTo - startFrom))) : 0
+    gsap.set(el, { scaleX: startFrac, transformOrigin: 'left' })
+    const timeline = gsap.timeline()
+    for (let level = startLevel; level <= finalLevel; level += 1) {
+      const bandFrom = xpToReach(level)
+      const bandTo = xpToReach(level + 1)
+      const isLast = level === finalLevel
+      const endFrac = isLast
+        ? bandTo > bandFrom ? Math.max(0, Math.min(1, (toXp - bandFrom) / (bandTo - bandFrom))) : 1
+        : 1
+      timeline.to(el, { scaleX: endFrac, duration: 0.4, ease: 'power2.out' })
+      if (!isLast) timeline.set(el, { scaleX: 0 })
     }
   }, [detail.fromXp, detail.toXp, finalLevel, startLevel, hasXp, reducedMotion])
 
   return (
-    <div className="flex w-40 flex-col items-center gap-1">
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+    <div className="flex w-48 flex-col items-center gap-1.5">
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
         <div ref={barRef} className="h-full w-full origin-left rounded-full bg-celebration" style={{ transform: 'scaleX(0)' }} />
       </div>
-      {!reducedMotion && <Sparks trigger={`${startLevel}-${finalLevel}`} motionPref={undefined} count={4} />}
+      {!reducedMotion && <Sparks trigger={`${startLevel}-${finalLevel}`} count={4} />}
     </div>
   )
 }
 
-/** (a) Skill locked / streak ignite / streak milestone: a centred card with
- *  the `--glow` edge spec 7.6 asks for by name, one size step below the
- *  epic/level-up moments. */
+/** Simple hand-drawn padlock (brief: CSS/inline SVG, no emoji) -- the "skill
+ *  locked" moment's hero glyph, standing in for the path-map node fill
+ *  (spec 7.6) at the scale this overlay can show. */
+function LockGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path d="M7 10.5V7.5a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="12" cy="15" r="1.6" fill="currentColor" />
+      <path d="M12 16.6v1.9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/**
+ * (a)/(d) Skill locked / streak ignite / streak milestone: a vertical
+ * composed card with the flame or the lock as the hero element and the
+ * line beneath it (fix round 2, presentation finding -- both used to be a
+ * single horizontal toast row: a 20px glyph, the sentence, and an X, which
+ * read as a notification regardless of the glow edge). The rarity border
+ * (`RARITY_BORDER`) plus `--glow` together carry the signal on every theme.
+ */
 function MajorCelebration({
   item, text, reducedMotion, motionPref, onDismiss,
 }: { item: CelebrationItem; text: string; reducedMotion: boolean; motionPref?: MotionPreference; onDismiss: () => void }) {
   const entrance = glowCardEntrance(reducedMotion)
+  const isStreak = item.kind === 'streak-ignite' || item.kind === 'streak-milestone'
   return (
     <div className="pointer-events-none fixed inset-x-0 top-1/4 z-50 flex justify-center px-4">
       <motion.div
         {...entrance}
-        className="pointer-events-auto flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 shadow-[0_0_0_1px_var(--glow),0_0_40px_var(--glow)]"
+        className={`relative pointer-events-auto flex w-72 flex-col items-center gap-3 rounded-2xl ${RARITY_BORDER} bg-card px-6 py-6 text-center shadow-[0_0_0_1px_var(--glow),0_0_40px_var(--glow)]`}
       >
-        {(item.kind === 'streak-ignite' || item.kind === 'streak-milestone') && (
+        <Button type="button" variant="ghost" size="icon" aria-label="Dismiss" onClick={onDismiss} className="absolute right-2 top-2">
+          <X aria-hidden="true" />
+        </Button>
+        {isStreak ? (
           <StreakFlame
             state={item.kind === 'streak-milestone' ? 'milestone' : 'ignite'}
             days={item.detail.n ?? 0}
             motionPref={motionPref}
             announce={false}
+            size="hero"
           />
+        ) : (
+          <LockGlyph className="size-10 text-celebration" />
         )}
         <p className="text-sm font-semibold text-foreground">{text}</p>
-        <Button type="button" variant="ghost" size="icon" aria-label="Dismiss" onClick={onDismiss} className="ml-1 shrink-0">
-          <X aria-hidden="true" />
-        </Button>
       </motion.div>
     </div>
   )
@@ -508,7 +533,7 @@ function MinorCelebration({
     : {
         initial: { opacity: 0, y: 6, scale: 0.97 },
         animate: { opacity: 1, y: 0, scale: 1 },
-        exit: { opacity: 0, y: 4, scale: 0.98, transition: { duration: EXIT_S, ease: 'easeIn' } },
+        exit: { opacity: 0, y: 4, scale: 0.98, transition: { duration: EXIT_S } },
         transition: { duration: ENTER_S, ease: ENTER_EASE },
       }
   return (
@@ -526,13 +551,20 @@ function MinorCelebration({
   )
 }
 
-/** Anchors the minor lane just below the results panel when one is
- *  provided; falls back to a bottom-centre position that never overlaps
- *  the shell header (fix round 1, M9 named the header collision directly). */
+/**
+ * Anchors the minor lane just below the results panel when one is
+ * provided; falls back to a bottom-centre position that never overlaps the
+ * shell header (fix round 1, M9). Fix round 2: measured in a **layout**
+ * effect, synchronously before the browser paints, instead of a plain
+ * effect -- a plain `useEffect` runs after paint, so the chip visibly
+ * rendered at the bottom-centre fallback for one frame and then jumped to
+ * the anchor. A `scroll` listener keeps it attached to the panel if the
+ * learner scrolls during the chip's ~1.5s lifetime.
+ */
 function useAnchoredStyle(anchorRef?: RefObject<HTMLElement | null>): CSSProperties {
   const [rect, setRect] = useState<{ top: number; left: number } | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = anchorRef?.current
     if (!el) {
       setRect(null)
@@ -544,11 +576,12 @@ function useAnchoredStyle(anchorRef?: RefObject<HTMLElement | null>): CSSPropert
     }
     update()
     window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
   }, [anchorRef])
 
-  return useMemo<CSSProperties>(
-    () => (rect ? { top: rect.top, left: rect.left } : { bottom: 24, left: '50%', transform: 'translateX(-50%)' }),
-    [rect],
-  )
+  return rect ? { top: rect.top, left: rect.left } : { bottom: 24, left: '50%', transform: 'translateX(-50%)' }
 }

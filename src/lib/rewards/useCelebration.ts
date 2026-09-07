@@ -73,6 +73,12 @@ export interface CelebrationItem {
    *  round 1, C3: the render layer fans these out on hover/focus). Present
    *  only alongside `collapsedCount`. */
   collapsedDetails?: readonly CelebrationDetail[]
+  /** The underlying raw item ids a collapsed card represents (fix round 2,
+   *  C1/C2). The collapsed card's own `id` is synthesized fresh from these
+   *  every time the pending set changes (see `recomputeDerived`), so
+   *  dismissing or clearing it needs to resolve back to the real ids -- the
+   *  card itself is never a raw item, it has no id of its own to remove. */
+  collapsedIds?: readonly string[]
   /** Milliseconds this item may live in the queue: both the auto-dismiss
    *  budget the render layer uses while it is current, and the staleness
    *  TTL the store itself enforces on read (fix round 1, C2/I4b). */
@@ -175,6 +181,39 @@ let hasPassedThisSession = false
 let lastConfettiAt = -Infinity
 const listeners = new Set<() => void>()
 
+/**
+ * Fix round 2, C1: "has this item's sound/haptic (or confetti) already
+ * fired" now lives here, in the store, instead of a component-level
+ * tracker -- `<Celebration />` remounts on every route change, and a
+ * per-mount tracker (a `useRef`, or `ConfettiBurst`'s own guard in round 1)
+ * resets exactly when it must not: an item queued but never shown survives
+ * a route change by design (see `clearShownCelebrations`'s doc comment
+ * below), so it is still live when the next route mounts a fresh
+ * `<Celebration />` -- a fresh per-mount guard would let it fire a second
+ * time. Two separate sets, not one shared flag: sound/haptic and confetti
+ * are independent channels an item can each fire (or not) on its own.
+ */
+const firedSoundIds = new Set<string>()
+const firedConfettiIds = new Set<string>()
+
+function markFiredOnce(set: Set<string>, id: string): boolean {
+  if (set.has(id)) return false
+  set.add(id)
+  return true
+}
+
+/** Returns true the first time `id`'s sound/haptic is claimed, false on
+ *  every call after -- call exactly once per item, from wherever plays the
+ *  sound, so the check and the claim can never race apart. */
+export function markSoundFired(id: string): boolean {
+  return markFiredOnce(firedSoundIds, id)
+}
+
+/** Same contract as `markSoundFired`, for the confetti channel. */
+export function markConfettiFired(id: string): boolean {
+  return markFiredOnce(firedConfettiIds, id)
+}
+
 function notify(): void {
   for (const listener of listeners) listener()
 }
@@ -232,19 +271,36 @@ function pruneStale(now: number): boolean {
   return rawItems.length !== before
 }
 
+/**
+ * Fix round 2, C1/C2: the constant `'achievement-collapsed'` id meant a
+ * session's SECOND collapsed burst arrived at an id `firedSoundIds` already
+ * had marked (from the first burst), so it played no sound at all -- and
+ * `clearShownCelebrations` could never resolve it back to real raw items to
+ * remove, so a dismissed-by-navigation collapsed card reappeared, unchanged,
+ * on the next route. The id is now derived from the sorted raw ids it
+ * represents (always unique -- `nextId()` never repeats), so a different
+ * pending set is always a different id, and `collapsedIds` on the item
+ * itself is the source of truth every read site resolves through instead of
+ * parsing the id string.
+ */
+function collapsedAchievementId(ids: readonly string[]): string {
+  return `achievement-collapsed-${[...ids].sort().join('-')}`
+}
+
 function recomputeDerived(): void {
   const achievements = rawItems.filter((item) => item.kind === 'achievement')
   const rest = rawItems.filter((item) => item.kind !== 'achievement')
   const achievementView: CelebrationItem[] =
     achievements.length > ACHIEVEMENT_COLLAPSE_THRESHOLD
       ? [{
-          id: 'achievement-collapsed',
+          id: collapsedAchievementId(achievements.map((item) => item.id)),
           kind: 'achievement',
           detail: {},
           at: achievements[0].at,
           confetti: false,
           collapsedCount: achievements.length,
           collapsedDetails: achievements.map((item) => item.detail),
+          collapsedIds: achievements.map((item) => item.id),
           lifetimeMs: Math.max(...achievements.map((item) => item.lifetimeMs)),
         }]
       : achievements.map((item) => ({ ...item }))
@@ -252,6 +308,16 @@ function recomputeDerived(): void {
     const byPriority = PRIORITY[b.kind] - PRIORITY[a.kind]
     return byPriority !== 0 ? byPriority : a.at - b.at
   })
+}
+
+/** Resolves an item id from `derivedQueue` back to the raw item ids it
+ *  actually removes -- a plain item removes just itself; a collapsed
+ *  achievement card removes every id in `collapsedIds` (fix round 2). Falls
+ *  back to treating `id` as a raw id itself when it is not found in the
+ *  current queue (e.g. an already-stale id passed to `clearShownCelebrations`). */
+function resolveRawIds(id: string): readonly string[] {
+  const found = derivedQueue.find((item) => item.id === id)
+  return found?.collapsedIds ?? [id]
 }
 
 /**
@@ -267,6 +333,10 @@ function recomputeDerived(): void {
  */
 export function celebrate(kind: CelebrationKind, detail?: CelebrationDetail, eventId?: string): void {
   const at = Date.now()
+  // Prune first (fix round 2 minor): an already-expired-but-unread item must
+  // not count toward a fresh batch's size or block a legitimate re-fire of
+  // its old `eventId`.
+  pruneStale(at)
   if (eventId !== undefined && rawItems.some((item) => item.eventId === eventId)) return
   const confetti = decideConfetti(kind, detail, at)
   if (kind === 'pass' || kind === 'first-win') hasPassedThisSession = true
@@ -280,9 +350,11 @@ export function celebrate(kind: CelebrationKind, detail?: CelebrationDetail, eve
 /** Dismissing the collapsed achievement card clears every pending
  *  achievement it represents, not just a placeholder row -- there is
  *  nothing left behind for a fourth unlock to silently re-collapse into a
- *  stale count. */
+ *  stale count. Resolved via `resolveRawIds` (fix round 2) rather than a
+ *  magic-string id check, now that the collapsed id is unique per burst. */
 export function dismissCelebration(id: string): void {
-  rawItems = id === 'achievement-collapsed' ? rawItems.filter((item) => item.kind !== 'achievement') : rawItems.filter((item) => item.id !== id)
+  const idsToRemove = new Set(resolveRawIds(id))
+  rawItems = rawItems.filter((item) => !idsToRemove.has(item.id))
   recomputeDerived()
   notify()
 }
@@ -300,8 +372,14 @@ export function dismissCelebration(id: string): void {
  */
 export function clearShownCelebrations(shownIds: ReadonlySet<string>): void {
   if (shownIds.size === 0) return
+  // Fix round 2: a shown id may be a collapsed achievement card's synthetic
+  // id, which no raw item carries -- resolve every shown id back to real
+  // raw ids (a plain id resolves to itself) before filtering, or the clear
+  // silently did nothing for the one kind that most needs it.
+  const idsToRemove = new Set<string>()
+  for (const shownId of shownIds) for (const rawId of resolveRawIds(shownId)) idsToRemove.add(rawId)
   const before = rawItems.length
-  rawItems = rawItems.filter((item) => !shownIds.has(item.id))
+  rawItems = rawItems.filter((item) => !idsToRemove.has(item.id))
   if (rawItems.length === before) return
   recomputeDerived()
   notify()

@@ -1,70 +1,52 @@
 'use client'
 
-import { useEffect, useRef, type RefObject } from 'react'
-import type { MotionPreference } from '@/lib/contracts'
-import { useReducedMotion } from '@/lib/motion/useReducedMotion'
-
 /**
  * The only place `canvas-confetti` is imported anywhere in this tree (brief
- * step 6): a plain dynamic `import()` inside an effect, never a static
- * `import` at the top of a module, so the ~6KB library never rides any
- * route's initial chunk regardless of which page happens to mount
- * `<Celebration />`.
+ * step 6): a plain dynamic `import()`, never a static `import` at the top
+ * of a module, so the ~6KB library never rides any route's initial chunk
+ * regardless of which page happens to mount `<Celebration />`.
  *
- * Renders nothing -- this is a pure side-effect component. `trigger`
- * identifies one specific celebration (its queue id), or `null` for "nothing
- * pending". A re-render with the same `trigger` never fires twice.
- *
- * Fix round 1, C1: this component is now mounted **unconditionally** for
- * the celebration layer's whole lifetime (`Celebration.tsx` used to render
- * it only inside `{current?.confetti && <ConfettiBurst .../>}`, which
- * unmounted and remounted it every time the queue's front item changed --
- * resetting the `firedRef` guard below and letting an item preempted and
- * later restored to the front burst a second time). Kept mounted, the same
- * "same trigger never fires twice" guard is correct for the component's
- * entire lifetime instead of one card's.
+ * Fix round 2, C1: this used to be a React component (`<ConfettiBurst>`)
+ * whose "same trigger never fires twice" guard was a per-mount `useRef`.
+ * `<Celebration />` remounts on every route change, and an item queued but
+ * never shown deliberately survives a route change (see
+ * `useCelebration.ts`'s `clearShownCelebrations`), so a fresh mount got a
+ * fresh ref and burst a second time for the same item. There is now no
+ * component and no ref at all: `fireConfetti` is a plain function, called
+ * at most once per item because the caller checks
+ * `markConfettiFired(item.id)` (the store, not a component) before calling
+ * it -- see `Celebration.tsx`'s queue-watching effect.
  */
-export interface ConfettiBurstProps {
-  trigger: string | null
-  motionPref?: MotionPreference
-  /** The element the burst should appear to originate from. Defaults to
-   *  upper-centre of the viewport when omitted or not yet mounted. */
-  originRef?: RefObject<HTMLElement | null>
+export interface ConfettiOrigin {
+  x: number
+  y: number
 }
 
-export function ConfettiBurst({ trigger, motionPref, originRef }: ConfettiBurstProps) {
-  const reducedMotion = useReducedMotion(motionPref)
-  const firedRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (trigger === null) return
-    // R7.9 / brief step 5: under reduced motion, confetti does not fire at
-    // all -- not "fires but is invisible". `disableForReducedMotion` below
-    // is defense in depth for a direct OS-level check the library does on
-    // its own; this component's own gate is what the tests assert against.
-    if (reducedMotion) return
-    if (firedRef.current === trigger) return
-    firedRef.current = trigger
-    let cancelled = false
-
-    void import('canvas-confetti').then(({ default: confetti }) => {
-      if (cancelled) return
-      const rect = originRef?.current?.getBoundingClientRect()
-      const origin = rect
-        ? { x: (rect.left + rect.width / 2) / window.innerWidth, y: rect.top / window.innerHeight }
-        : { x: 0.5, y: 0.35 }
-      confetti({
-        particleCount: 60,
-        spread: 55,
-        origin,
-        disableForReducedMotion: true,
-      })
+/**
+ * `reducedMotion` is the one resolved boolean from `useReducedMotion()`
+ * (OS signal plus the in-app override) -- checked BEFORE the dynamic
+ * import even starts, never left to the library's own `disableForReducedMotion`
+ * alone, because that flag only ever sees the OS-level media query, not a
+ * learner who set `wellness.prefs.motion = 'reduced'` on an OS with no
+ * preference (R7.9's load-bearing case). `disableForReducedMotion: true` is
+ * still passed through as defense in depth.
+ */
+export function fireConfetti(reducedMotion: boolean, origin?: ConfettiOrigin): void {
+  if (reducedMotion) return
+  void import('canvas-confetti').then(({ default: confetti }) => {
+    confetti({
+      particleCount: 60,
+      spread: 55,
+      origin: origin ?? { x: 0.5, y: 0.35 },
+      disableForReducedMotion: true,
     })
+  })
+}
 
-    return () => {
-      cancelled = true
-    }
-  }, [trigger, reducedMotion, originRef])
-
-  return null
+/** Converts an element's bounding rect into the `{x, y}` fraction-of-viewport
+ *  origin `fireConfetti` wants, so a burst can appear to come from the
+ *  result panel or the trophy shelf rather than always the same fixed point. */
+export function originFromRect(rect: DOMRect | null | undefined): ConfettiOrigin | undefined {
+  if (!rect || typeof window === 'undefined') return undefined
+  return { x: (rect.left + rect.width / 2) / window.innerWidth, y: rect.top / window.innerHeight }
 }
