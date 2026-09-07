@@ -48,7 +48,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [ ] T2.3 Data layer: Progress and Account
 - [x] T2.4 The wellness dock (ae16661, 6293b9d, e629a97, b9e5393)
 - [x] T2.5 Rewards: XP, levels, streaks, achievement predicates (pure) (e8bc78e, 86ad21b)
-- [ ] T2.6 Rewards: celebrations, counters and the trophy shelf
+- [x] T2.6 Rewards: celebrations, counters and the trophy shelf (5761cf8, af54860, b3b3558)
 - [x] T2.7a The voice bank (Group A) (cc56445, c5c0189)
 - [ ] T2.7b The copy sweep (Group C, serial, last)
 - [ ] T2.8 Honest lockdown and the integrity receipt
