@@ -417,6 +417,11 @@ export function useExerciseLoop(exerciseId: string) {
       const patch = prefsPatch({ ...prefs, goalDays })
       const updated = await client.from('wellness').update({ prefs: patch, updated_at: new Date().toISOString() }).eq('user_id', userId).select('user_id').maybeSingle()
       if (!updated.data) await client.from('wellness').insert({ user_id: userId, prefs: patch })
+      // Fix round 2, N2: the dock's goal ring, `SoundToggle` and `DockControl` all read
+      // `qk.wellness` from the shared query cache (seeded once by `QuerySeed`, never refetched
+      // on focus) -- without this, the ring silently stops moving for the rest of the session
+      // the moment the learner actually hits their goal.
+      void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
       fireCelebration('goal', undefined, `${userId}:goal:${ctx.today}`)
     } catch (goalError) {
       console.warn("Could not record today's goal; the pass itself is unaffected.", goalError)
@@ -710,13 +715,20 @@ export function useExerciseLoop(exerciseId: string) {
     if (closed) { router.push('/dashboard'); return }
     const target = nextExercise
     if (!target) return
-    const cloRow = cloRef.current
+    // Fix round 2, N1: `queueNext`'s last-resort fallback is explicitly cross-CLO (it searches
+    // every CLO in the course once the current one's bank and the Author both come up empty),
+    // so `target` can legitimately belong to a different CLO than the one just passed. Reusing
+    // `cloRef.current` unchanged ran the new rep under the wrong CLO -- wrong prompt outcome
+    // text, the next `submit()` querying the wrong bank, a `clo-close` naming the wrong skill.
+    // Every other entry point derives the CLO from the exercise itself; this one now does too.
+    const cloRow = staticClo(target.cloId) ?? cloRef.current
     if (!cloRow) return
+    const coursePackages = staticCourse(cloRow.course)?.packages ?? packages.current
     const url = `/exercise/${encodeURIComponent(target.id)}`
     const commit = () => {
       const token = ++generation.current
       handledExternally.current = target.id
-      applyLoadedExercise(target, cloRow, packages.current, token)
+      applyLoadedExercise(target, cloRow, coursePackages, token)
       router.replace(url)
     }
     if (!reducedMotion && typeof document !== 'undefined' && 'startViewTransition' in document) {

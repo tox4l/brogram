@@ -418,6 +418,27 @@ describe('the optimistic submit path (T2.2)', () => {
     release()
   })
 
+  it('N1 fix round 2: next() takes the CLO from the target exercise, not the CLO the learner just left', async () => {
+    // The exact cross-CLO fallback scenario from "uses the nearest course fallback..." above:
+    // the bank/Author path both come up empty for c1, so `queueNext` widens to every CLO in the
+    // course (`closFor`) and can legitimately hand back an exercise that belongs to a sibling
+    // CLO (c2). Reusing the stale `cloRef.current` (c1) here would run the new rep under the
+    // wrong outcome text, the wrong bank query on its own next submit, and a wrong clo-close name.
+    tables.exercises_public = [rowOf(current), rowOf({ ...candidate, cloId: 'c2' })]
+    tables.clos.push({ ...clo, id: 'c2', outcome: 'A sibling outcome' })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.nextExercise?.id).toBe('e2')
+    expect(hook.result.current.nextExercise?.cloId).toBe('c2')
+    expect(hook.result.current.clo?.id).toBe('c1') // still on the CLO just passed, pre-next()
+    act(() => { void hook.result.current.next() })
+    expect(hook.result.current.exercise?.id).toBe('e2')
+    expect(hook.result.current.clo?.id).toBe('c2') // the TARGET's CLO, not the one left behind
+    expect(hook.result.current.clo?.outcome).toBe('A sibling outcome')
+    warn.mockRestore()
+  })
+
   it('reaches the graded verdict before the attempts insert ever resolves', async () => {
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     const release = holdWrite('attempts')
@@ -569,6 +590,11 @@ describe('the optimistic submit path (T2.2)', () => {
     await waitFor(() => expect(spies.celebrate).toHaveBeenCalledWith('goal', undefined, expect.any(String)))
     const savedPrefs = (tables.wellness.find(row => row.user_id === 'student')?.prefs) as { goalDays?: string[] } | undefined
     expect(savedPrefs?.goalDays).toContain(today)
+    // N2 fix round 2: the dock's goal ring reads `qk.wellness` from the shared query cache,
+    // which is never refetched on focus -- without this the ring stays stale for the session
+    // even though the write above genuinely landed.
+    const wellnessInvalidations = spies.invalidate.mock.calls.filter(([arg]) => JSON.stringify(arg.queryKey) === JSON.stringify(qk.wellness('student')))
+    expect(wellnessInvalidations.length).toBeGreaterThan(0)
   })
 
   it('I5 fix round: does not fire goal.done before the daily goal is actually met', async () => {
