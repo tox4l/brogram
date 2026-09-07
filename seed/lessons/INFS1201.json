@@ -1,5 +1,5 @@
 {
-  "$note": "BroGram walkthroughs. One per skill. No institution names, no pattern ids, no emoji.",
+  "$note": "BroGram lessons. One lesson per CLO. No institution names, no pattern ids, no emoji.",
   "course": "INFS1201",
   "lessons": [
     {
@@ -64,11 +64,11 @@
           "kind": "predict-output",
           "prompt": "What does this print?",
           "language": "python",
-          "code": "def double_first(nums):\n    nums[0] = nums[0] * 2\n    return nums\n\nstock = [10, 20, 30]\ndouble_first(stock)\nprint(stock)",
+          "code": "def double_first(nums):\n    nums[0] = nums[0] * 2\n    return nums\n\nprices = [10, 20, 30]\ndouble_first(prices)\nprint(prices)",
           "expected": "[20, 20, 30]\n",
           "normalize": "exact",
           "hint": "Look at what nums[0] actually is inside the function — is it a copy?",
-          "explain": "nums and stock name the same list, so mutating nums[0] inside the function changes stock too."
+          "explain": "nums and prices name the same list, so mutating nums[0] inside the function changes prices too."
         },
         {
           "type": "check",
@@ -158,55 +158,55 @@
           "type": "worked",
           "id": "worked-1",
           "language": "python",
-          "code": "def first_below_zero(temps):\n    for i in range(len(temps)):\n        if temps[i] < 0:\n            return i\n    return -1",
+          "code": "def first_gap(seats):\n    for i in range(len(seats)):\n        if seats[i] == \"free\":\n            return i\n    return -1",
           "steps": [
             {
               "line": 2,
-              "say": "Walk from the front, in order, so the first match is the true first match."
+              "say": "Walk from the front, in order, so the first free seat you meet really is the first one."
             },
             {
               "line": 3,
-              "say": "Test each temperature only once you reach it, no peeking ahead."
+              "say": "Test each seat only when you reach it; peeking ahead would break what first even means."
             },
             {
               "line": 4,
-              "say": "Return the position right away, stop the walk the instant it hits."
+              "say": "Return the position right away and the walk stops there, with the rest of the row untouched."
             },
             {
               "line": 5,
-              "say": "Only fall through to here once every temperature failed the test."
+              "say": "Only fall through to here once every seat came back taken."
             }
           ],
-          "caption": "Index 2 is the first negative reading, so that's what comes back."
+          "caption": "A row of seats, checked left to right, until one comes back free."
         },
         {
           "type": "check",
           "id": "check-1",
           "kind": "choose",
-          "prompt": "A list of support tickets is stored newest first. You need the position of the oldest ticket still marked urgent. Which walk gives it to you?",
+          "prompt": "A list holds every scan code a warehouse logged today, in the order they arrived. You need to know how many of them start with \"RX\". Which tool does the job?",
           "options": [
-            "Walk from the front and return the position of the first urgent ticket.",
-            "Walk from the back and return the position of the first urgent ticket you hit.",
-            "Walk the whole list and count how many tickets are urgent.",
-            "Check whether an urgent ticket is anywhere in the list at all."
+            "in, because it already walks the whole list for you",
+            ".index(), because it returns where the first match sits",
+            "A loop you write yourself, because nothing built in counts a custom match",
+            "Nothing works; a list cannot be searched for part of a value"
           ],
-          "correctIndex": 1,
+          "correctIndex": 2,
           "why": [
-            "Front-first stops at the newest urgent ticket, the opposite end from the one you want.",
-            "Oldest sits last in a newest-first list, so the first hit from the back is it.",
-            "A count tells you how many there are, never where any single one sits.",
-            "A plain yes or no cannot hand you a position to report."
+            "in only ever answers yes or no, and a count is neither of those.",
+            ".index() hands back one position and then stops; it never sees the rest.",
+            "Right — a count with a rule of its own needs work on every step, which is exactly when you write the walk.",
+            "Every value in the list can be tested however you like; the question is only which tool does the testing."
           ],
-          "hint": "Work out which end of a newest-first list the oldest ticket sits at, then aim the walk at that end.",
-          "explain": "Stopping at the first match only lands on the right one when you start from the end the answer lives on; in a newest-first list the oldest urgent ticket is the last one, so the walk runs backwards."
+          "hint": "Ask what each built-in actually hands back, then compare that with what a count needs.",
+          "explain": "Both built-ins stop at their answer: one a yes or no, one a position. A count has to look at every item and apply a rule of its own, so this is the case your own loop was saved for."
         },
         {
           "type": "check",
           "id": "check-2",
           "kind": "micro-code",
-          "prompt": "Write `first_full(levels)`. It returns the index of the first tank level that is 60 or higher. If none qualify, return -1.",
+          "prompt": "Write `first_passing(scores)`. It returns the index of the first score that is 60 or higher. If none qualify, return -1.",
           "language": "python",
-          "starterCode": "def first_full(levels):\n    pass",
+          "starterCode": "def first_passing(scores):\n    pass",
           "tests": [
             {
               "id": "t1",
@@ -223,9 +223,9 @@
               "name": "none qualify"
             }
           ],
-          "referenceSolution": "def first_full(levels):\n    for i in range(len(levels)):\n        if levels[i] >= 60:\n            return i\n    return -1",
+          "referenceSolution": "def first_passing(scores):\n    for i in range(len(scores)):\n        if scores[i] >= 60:\n            return i\n    return -1",
           "hint": "Loop with the index, test the condition, and return the moment it's true.",
-          "explain": "Walking from index 0 and returning right away finds the first full tank without checking any others; falling through the whole loop means nothing matched, so -1 is correct."
+          "explain": "Walking from index 0 and returning right away finds the first qualifying score without checking any others; falling through the whole loop means nothing matched, so -1 is correct."
         },
         {
           "type": "recap",
@@ -240,7 +240,7 @@
         {
           "type": "bridge",
           "id": "bridge-1",
-          "say": "Next up: a real rep where you build binary search and bubble sort the same way."
+          "say": "Real rep next: build binary search and bubble sort yourself, then pick the right one."
         }
       ],
       "exitLine": "Time for a real rep: build one of these searches yourself."
@@ -272,23 +272,23 @@
           "type": "snippet",
           "id": "snippet-1",
           "language": "python",
-          "code": "def split_name(full):\n    first, last = full.split(\" \", 1)\n    return first, last\n\nfirst, last = split_name(\"Amara Musa\")\nprint(first, last)",
+          "code": "def split_name(full):\n    first, last = full.split(\" \", 1)\n    return first, last\n\nfirst, last = split_name(\"Nadia Karim\")\nprint(last + \", \" + first)",
           "runnable": true,
-          "expectedStdout": "Amara Musa\n",
-          "caption": "One tuple out, two names in."
+          "expectedStdout": "Karim, Nadia\n",
+          "caption": "Two values came back. Printing them out of order is the proof they really came apart."
         },
         {
           "type": "worked",
           "id": "worked-1",
           "language": "python",
-          "code": "def leg_total(leg):\n    return leg[\"stop\"], leg[\"km\"] * leg[\"trips\"]\n\ndef summarize(legs):\n    total = 0\n    count = 0\n    for leg in legs:\n        stop, subtotal = leg_total(leg)\n        total += subtotal\n        count += 1\n    return total, count\n\nlegs = [{\"stop\": \"Depot\", \"km\": 3, \"trips\": 2}, {\"stop\": \"Yard\", \"km\": 1, \"trips\": 8}]\ngrand_total, leg_count = summarize(legs)\nprint(grand_total, leg_count)",
+          "code": "def line_total(order):\n    return order[\"item\"], order[\"qty\"] * order[\"price\"]\n\ndef summarize(orders):\n    total = 0\n    count = 0\n    for order in orders:\n        item, subtotal = line_total(order)\n        total += subtotal\n        count += 1\n    return total, count\n\norders = [{\"item\": \"Pen\", \"qty\": 3, \"price\": 2}, {\"item\": \"Mug\", \"qty\": 1, \"price\": 8}]\ngrand_total, line_count = summarize(orders)\nprint(grand_total, line_count)",
           "steps": [
             {
               "line": [
                 1,
                 2
               ],
-              "say": "leg_total owns one record's math, so summarize never repeats that formula."
+              "say": "line_total owns one record's math, so summarize never repeats that formula."
             },
             {
               "line": 4,
@@ -296,7 +296,7 @@
             },
             {
               "line": 8,
-              "say": "Unpacking here names both parts so the loop never confuses the stop with its subtotal."
+              "say": "Unpacking here names both parts so the loop never confuses the item with its subtotal."
             },
             {
               "line": 11,
@@ -315,11 +315,11 @@
           "kind": "predict-output",
           "prompt": "This function returns two numbers from one list. What does the last line print?",
           "language": "python",
-          "code": "def bounds(lengths):\n    return min(lengths), max(lengths)\n\nlow, high = bounds([12, 4, 9])\nprint(low, high)",
+          "code": "def bounds(prices):\n    return min(prices), max(prices)\n\nlow, high = bounds([12, 4, 9])\nprint(low, high)",
           "expected": "4 12\n",
           "normalize": "exact",
           "hint": "Check which value the return statement lists first, then match it to the name that unpacks first.",
-          "explain": "min(lengths) is 4 and max(lengths) is 12; low unpacks the first returned value and high the second, so it prints \"4 12\"."
+          "explain": "min(prices) is 4 and max(prices) is 12; low unpacks the first returned value and high the second, so it prints \"4 12\"."
         },
         {
           "type": "check",
@@ -368,10 +368,10 @@
         {
           "type": "bridge",
           "id": "bridge-1",
-          "say": "Real rep next: pull two answers out of one function over real records."
+          "say": "Next up: pull two answers out of one function, using real records instead of examples."
         }
       ],
-      "exitLine": "Turn a pile of records into two answers, in one pass."
+      "exitLine": "Go turn a list of records into answers only your function can give."
     },
     {
       "id": "INFS1201-4",
@@ -379,7 +379,7 @@
       "course": "INFS1201",
       "language": "python",
       "version": 1,
-      "title": "Reading a csv without crashing",
+      "title": "Reading a CSV without crashing",
       "hook": "One blank cell in a file, and a careless script dies right there.",
       "estimatedMinutes": 7,
       "draft": true,
@@ -393,7 +393,7 @@
           "type": "concept",
           "id": "concept-1",
           "heading": "Rows become dictionaries",
-          "body": "A csv file is rows of text with commas between values, and the first row usually names each column. Python's csv module can hand you each row as a plain list, but csv.DictReader upgrades that: it reads the header once and turns every later row into a dictionary, so you pull a value by column name instead of counting commas. Real files are messy — a shopper skips a field, a price cell is left blank. If you assume every field holds a number and convert it, that one blank cell crashes the whole read. Check what actually came back before you trust it, and skip or replace an empty field instead of letting it blow up your program."
+          "body": "A CSV file is rows of text with commas between values, and the first row usually names each column. Python's csv module can hand you each row as a plain list, but csv.DictReader upgrades that: it reads the header once and turns every later row into a dictionary, so you pull a value by column name instead of counting commas. Real files are messy — a shopper skips a field, a price cell is left blank. If you assume every field holds a number and convert it, that one blank cell crashes the whole read. Check what actually came back before you trust it, and skip or replace an empty field instead of letting it blow up your program."
         },
         {
           "type": "snippet",
@@ -436,44 +436,44 @@
           "type": "check",
           "id": "check-1",
           "kind": "predict-output",
-          "prompt": "This one replaces a blank field instead of skipping it. Say exactly what it prints, line by line.",
+          "prompt": "Read this script mentally, then say exactly what it prints, line by line.",
           "language": "python",
-          "code": "import csv, io\n\ntext = \"code,units\\nA1,4\\nB2,\\nC3,6\\nD4,\\n\"\nreader = csv.DictReader(io.StringIO(text))\nunits = []\nfor row in reader:\n    value = row[\"units\"].strip()\n    if value == \"\":\n        value = \"0\"\n    units.append(int(value))\nprint(units)\nprint(sum(units))",
-          "expected": "[4, 0, 6, 0]\n10",
+          "code": "import csv, io\n\ntext = \"day,temp\\nMon,72\\nTue,\\nWed,68\\n\"\nreader = csv.DictReader(io.StringIO(text))\ntotal = 0\nskipped = 0\nfor row in reader:\n    temp = row[\"temp\"].strip()\n    if temp == \"\":\n        skipped += 1\n        continue\n    total += int(temp)\nprint(total)\nprint(skipped)",
+          "expected": "140\n1",
           "normalize": "lines",
-          "hint": "A replaced field still lands in the list - work out what it becomes before it is converted.",
-          "explain": "Both blank cells become \"0\" before the conversion, so they stay in the list as zeros and add nothing to the total."
+          "hint": "Trace each row: does the guard let a blank field reach the conversion?",
+          "explain": "Tuesday's blank field never reaches int(), so only 72 and 68 get added — one row skipped."
         },
         {
           "type": "check",
           "id": "check-2",
           "kind": "micro-code",
-          "prompt": "Write average_price(text): it takes csv text with header item,price and returns the mean of the valid prices rounded to 2 decimals, ignoring any row whose price is blank. With no valid price at all, return 0.0.",
+          "prompt": "Write total_price(text): it takes csv text with header item,price and returns the sum of the valid prices as a float, skipping any row whose price is blank.",
           "language": "python",
-          "starterCode": "import csv, io\n\ndef average_price(text):\n    pass",
+          "starterCode": "import csv, io\n\ndef total_price(text):\n    pass",
           "tests": [
             {
               "id": "t1",
-              "input": "[\"item,price\\nBolt,2.5\\nNut,\\nWasher,1.5\\n\"]",
-              "expected": "2.0",
+              "input": "[\"item,price\\nMask,2.5\\nGloves,\\nWipes,1.2\\n\"]",
+              "expected": "3.7",
               "name": "mixed rows"
             },
             {
               "id": "t2",
-              "input": "[\"item,price\\nBolt,\\nNut,\\n\"]",
+              "input": "[\"item,price\\nA,\\nB,\\n\"]",
               "expected": "0.0",
-              "name": "no valid price"
+              "name": "all blank"
             },
             {
               "id": "t3",
-              "input": "[\"item,price\\nBolt,10\\nNut,5\\n\"]",
-              "expected": "7.5",
+              "input": "[\"item,price\\nX,10\\nY,5\\n\"]",
+              "expected": "15.0",
               "name": "all valid"
             }
           ],
-          "referenceSolution": "import csv, io\n\ndef average_price(text):\n    reader = csv.DictReader(io.StringIO(text))\n    total = 0.0\n    count = 0\n    for row in reader:\n        price = row[\"price\"].strip()\n        if price == \"\":\n            continue\n        total += float(price)\n        count += 1\n    if count == 0:\n        return 0.0\n    return round(total / count, 2)",
-          "hint": "Count the prices you actually accepted, and decide what to return before you divide by that count.",
-          "explain": "Skipping a blank keeps one bad row from crashing the read, and checking the count before dividing keeps an all-blank file from raising a second error."
+          "referenceSolution": "import csv, io\n\ndef total_price(text):\n    reader = csv.DictReader(io.StringIO(text))\n    total = 0.0\n    for row in reader:\n        price = row[\"price\"].strip()\n        if price == \"\":\n            continue\n        total += float(price)\n    return round(total, 2)",
+          "hint": "Read the text with csv.DictReader, then guard the price field the same way the worked example did.",
+          "explain": "Skipping a blank field before converting is what keeps one row from crashing the whole read."
         },
         {
           "type": "recap",
@@ -491,7 +491,7 @@
           "say": "Next you'll clean a full file that's built to break naive code."
         }
       ],
-      "exitLine": "Real file next - make it give you numbers that hold up."
+      "exitLine": "Go turn a messy file into numbers that hold up."
     }
   ]
 }

@@ -35,13 +35,13 @@
           "type": "check",
           "id": "chk1",
           "kind": "predict-output",
-          "prompt": "The thumbnail has a written description; the star icon next to it is purely decorative. What does this print?",
+          "prompt": "say(id) is true only when the alt is a real description. The star is decorative, the thumbnail's alt was copied from the file name, and the map has a written sentence. What does this print?",
           "language": "web",
-          "code": "document.body.insertAdjacentHTML('beforeend', `\n  <img id=\"thumb\" src=\"shoe.jpg\" alt=\"Red running shoe, side view\">\n  <img id=\"star\" src=\"star.png\" alt=\"\">\n`)\nconst thumb = document.getElementById('thumb')\nconst star = document.getElementById('star')\nconsole.log(thumb.alt.length > 0, star.alt.length > 0)\n",
-          "expected": "true false",
+          "code": "document.body.insertAdjacentHTML('beforeend', `\n  <img id=\"thumb\" src=\"shoe.jpg\" alt=\"shoe.jpg\">\n  <img id=\"star\" src=\"star.png\" alt=\"\">\n  <img id=\"map\" src=\"map.png\" alt=\"Street map with the library marked\">\n`)\nconst say = (id) => {\n  const img = document.getElementById(id)\n  return img.alt.length > 0 && img.alt !== img.getAttribute('src')\n}\nconsole.log(say('thumb'), say('star'), say('map'))\n",
+          "expected": "false false true",
           "normalize": "lines",
-          "hint": "Check each image's alt attribute before you decide true or false.",
-          "explain": "thumb.alt holds real words, so its length is over zero: true. star.alt is empty on purpose, so its length is zero: false."
+          "hint": "Run say in your head on each image: does it have words, and are those words anything more than the file name?",
+          "explain": "thumb has words, but they are the file name, so the second test fails it. star is empty on purpose, so the first test fails it. Only map carries a sentence a screen reader can actually use."
         },
         {
           "type": "check",

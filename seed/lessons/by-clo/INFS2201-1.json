@@ -34,22 +34,22 @@
           "type": "check",
           "id": "check-1",
           "kind": "choose",
-          "prompt": "A gym's booking sheet repeats every trainer's phone number on every class row. One trainer changes numbers. What breaks in a flat file that a foreign key would prevent?",
+          "prompt": "A clinic keeps one flat sheet where every appointment row repeats the dentist's phone number. A dentist changes numbers and only this week's rows get edited. What is now true of that sheet?",
           "options": [
-            "Every class row with that trainer now shows the old number until each row is manually fixed.",
-            "The gym loses all its class history because flat files cannot store phone numbers.",
-            "Nothing breaks, because flat files update every copy of a value automatically.",
-            "The class rows delete themselves because they no longer match the trainer."
+            "The sheet holds two different numbers for one dentist and cannot say which is current.",
+            "The sheet rejects the edit, because a value repeated across rows can only change everywhere at once.",
+            "The older rows are now unreadable, since their number no longer matches the newer rows.",
+            "Nothing is wrong yet; a number only has to be correct on the most recent row."
           ],
           "correctIndex": 0,
           "why": [
-            "Right - the number lives in every row, so nothing points back to one shared value.",
-            "Flat files store phone numbers fine; the failure is duplication, not the data type.",
-            "A flat file never updates its copies together; each row holds its own separate value.",
-            "Rows do not vanish on their own; they just quietly disagree with each other."
+            "Right — the same fact is stored many times, so a partial edit leaves the copies disagreeing.",
+            "A flat sheet enforces nothing; it holds whatever each row was last edited to.",
+            "Every row still reads fine on its own. The damage is that two of them now claim different things.",
+            "Every row is a live record, so an old row with a stale number is a wrong record, not an archive."
           ],
-          "hint": "Think about how many places that phone number actually lives in a flat file.",
-          "explain": "A foreign key stores the trainer once and every class row points at it, so a change happens in exactly one place instead of hundreds."
+          "hint": "Count how many places that one phone number lives once it is repeated on every row.",
+          "explain": "A foreign key stores the dentist once and lets every appointment point at that one row, so a number change lands in a single place and no two rows can disagree."
         },
         {
           "type": "check",
@@ -70,7 +70,7 @@
             "A primary key names a row; a foreign key points back to one.",
             "Keeping a fact in one place stops updates from drifting out of sync."
           ],
-          "remember": "One fact, one place - the foreign key is the only copy you need."
+          "remember": "One fact, one place. The foreign key is the pointer, not a second copy."
         },
         {
           "type": "bridge",

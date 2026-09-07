@@ -23,7 +23,7 @@
           "id": "snippet-customers-orders",
           "language": "sql",
           "code": "CREATE TABLE customers (\n  id INTEGER PRIMARY KEY,\n  name TEXT\n);\n\nCREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_id INTEGER REFERENCES customers(id)\n);",
-          "runnable": true,
+          "runnable": false,
           "expectedStdout": "",
           "caption": "orders holds customer_id; customers holds nothing extra."
         },

@@ -16,7 +16,7 @@
           "type": "concept",
           "id": "concept-1",
           "heading": "Sketch the classes before you code",
-          "body": "Before you open an editor, sketch the classes on paper first: one box per class, its fields listed inside, lines connecting boxes that need each other. A line between two boxes means one class holds a reference to the other — a has-a relationship, called an association. An open arrow from a smaller box up to a bigger one means the smaller class inherits everything the bigger one has — an is-a relationship. Decide which kind each connection is before writing a single class. Then coding becomes translation, not invention: each box becomes a class, each listed field becomes a class field, and each line becomes either a stored reference or an extends clause."
+          "body": "Before you open an editor, sketch the classes on paper first. That sketch has a standard notation, UML: one box per class, its fields listed inside, lines connecting boxes that need each other. A line between two boxes means one class holds a reference to the other — a has-a relationship, called an association. An open arrow from a smaller box up to a bigger one means the smaller class inherits everything the bigger one has — an is-a relationship. Decide which kind each connection is first. Then coding becomes translation, not invention: each box becomes a class, each listed field becomes a class field, and each line becomes either a stored reference or an extends clause."
         },
         {
           "type": "snippet",
@@ -25,7 +25,7 @@
           "code": "class Shape {\n    String color;\n}\nclass Square extends Shape {\n    double side;\n}\nclass Drawing {\n    Shape shape;\n}",
           "runnable": false,
           "expectedStdout": "",
-          "caption": "Square is-a Shape (extends). Drawing has-a Shape (a stored field). Same two relationships, side by side."
+          "caption": "Static example, no Run button here. Square is-a Shape (extends). Drawing has-a Shape (a stored field). Same two relationships, side by side."
         },
         {
           "type": "worked",
@@ -66,14 +66,14 @@
           "type": "check",
           "id": "check-2",
           "kind": "micro-code",
-          "prompt": "Finish Dog so describe(\"dog\", name) returns a bark line and describe(\"cat\", name) still returns the plain Animal line — using a constructor and an override, not a new field.",
+          "prompt": "Finish Dog so a dog prints \"Rex barks\" while any other animal still prints \"Milo makes a sound\" — using a constructor and an override, not a new field. Main already reads the kind and the name for you.",
           "language": "java",
-          "starterCode": "class Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    // add a constructor and override speak() here\n}\nclass Solution {\n    static String describe(String kind, String name) {\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        return a.speak();\n    }\n}",
+          "starterCode": "import java.util.Scanner;\nclass Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    // add a constructor and override speak() here\n}\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String kind = sc.next();\n        String name = sc.next();\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        System.out.println(a.speak());\n    }\n}",
           "tests": [
-            { "id": "t1", "input": "[\"dog\",\"Rex\"]", "expected": "\"Rex barks\"", "name": "dog barks" },
-            { "id": "t2", "input": "[\"cat\",\"Milo\"]", "expected": "\"Milo makes a sound\"", "name": "non-dog unchanged" }
+            { "id": "t1", "input": "dog Rex", "expected": "Rex barks", "hidden": false, "name": "dog barks" },
+            { "id": "t2", "input": "cat Milo", "expected": "Milo makes a sound", "hidden": false, "name": "non-dog unchanged" }
           ],
-          "referenceSolution": "class Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    Dog(String name) { super(name); }\n    @Override\n    String speak() { return name + \" barks\"; }\n}\nclass Solution {\n    static String describe(String kind, String name) {\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        return a.speak();\n    }\n}",
+          "referenceSolution": "import java.util.Scanner;\nclass Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    Dog(String name) { super(name); }\n    @Override\n    String speak() { return name + \" barks\"; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String kind = sc.next();\n        String name = sc.next();\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        System.out.println(a.speak());\n    }\n}",
           "hint": "Give Dog a constructor that calls super(name), then override speak() to return something different from Animal's version.",
           "explain": "Dog's constructor passes name up with super(name), and overriding speak() lets the same call, a.speak(), produce a different result depending on the actual object — exactly what an is-a relationship promises."
         },

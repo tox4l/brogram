@@ -53,27 +53,27 @@
           "type": "check",
           "id": "check-2",
           "kind": "micro-code",
-          "prompt": "Two tables sit in front of you: books(id, title) and sales(id, book_id, copies). Write one query that joins them and returns each title with total_copies sold, highest total first.",
+          "prompt": "Two tables sit in front of you: games(id, title) and sales(id, game_id, copies). Write one query that joins them and returns each title with total_copies sold, highest total first.",
           "language": "sql",
-          "starterCode": "-- books(id, title), sales(id, book_id, copies)\n-- return columns: title, total_copies (highest first)",
+          "starterCode": "-- games(id, title) and sales(id, game_id, copies) are already loaded.\n-- return columns: title, total_copies (highest total first)",
           "tests": [
             {
               "id": "t1",
-              "name": "final-totals",
-              "input": "__STUDENT__",
-              "expected": "{\"columns\":[\"title\",\"total_copies\"],\"values\":[[\"Dune\",70],[\"Emma\",10]]}",
+              "name": "one game sold twice",
+              "input": "CREATE TABLE games (id INTEGER, title TEXT);\nCREATE TABLE sales (id INTEGER, game_id INTEGER, copies INTEGER);\nINSERT INTO games VALUES (1,'Rift'),(2,'Tidepool');\nINSERT INTO sales VALUES (1,1,50),(2,1,20),(3,2,10);\n__STUDENT__",
+              "expected": "{\"columns\":[\"title\",\"total_copies\"],\"values\":[[\"Rift\",70],[\"Tidepool\",10]]}",
               "hidden": false
             },
             {
               "id": "t2",
-              "name": "joined-rows",
-              "input": "SELECT COUNT(*) AS n FROM books JOIN sales ON sales.book_id = books.id;",
-              "expected": "{\"columns\":[\"n\"],\"values\":[[3]]}",
+              "name": "both games sold twice, order flips",
+              "input": "CREATE TABLE games (id INTEGER, title TEXT);\nCREATE TABLE sales (id INTEGER, game_id INTEGER, copies INTEGER);\nINSERT INTO games VALUES (1,'Coral'),(2,'Nimbus');\nINSERT INTO sales VALUES (1,1,5),(2,2,8),(3,2,9),(4,1,3);\n__STUDENT__",
+              "expected": "{\"columns\":[\"title\",\"total_copies\"],\"values\":[[\"Nimbus\",17],[\"Coral\",8]]}",
               "hidden": false
             }
           ],
-          "referenceSolution": "CREATE TABLE books (id INTEGER, title TEXT);\nCREATE TABLE sales (id INTEGER, book_id INTEGER, copies INTEGER);\nINSERT INTO books VALUES (1,'Dune'),(2,'Emma');\nINSERT INTO sales VALUES (1,1,50),(2,1,20),(3,2,10);\nSELECT books.title, SUM(sales.copies) AS total_copies\nFROM books\nJOIN sales ON sales.book_id = books.id\nGROUP BY books.title\nORDER BY total_copies DESC;",
-          "hint": "Join on book_id, group by title, then order the summed column, not the title, in descending order.",
+          "referenceSolution": "SELECT games.title, SUM(sales.copies) AS total_copies\nFROM games\nJOIN sales ON sales.game_id = games.id\nGROUP BY games.title\nORDER BY total_copies DESC;",
+          "hint": "Join on game_id, group by title, then order the summed column, not the title, in descending order.",
           "explain": "JOIN pairs each sale with its book by book_id, GROUP BY title folds every matching sale into one row per book, SUM adds copies inside each group, and ORDER BY total_copies DESC puts the best seller on top."
         },
         {

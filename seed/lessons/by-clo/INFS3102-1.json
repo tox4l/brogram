@@ -24,8 +24,8 @@
           "language": "java",
           "code": "class Dog {\n    String name;\n    Dog(String name) { this.name = name; }\n    String bark() { return name + \": Woof!\"; }\n}\n\npublic class Main {\n    public static void main(String[] args) {\n        Dog d = new Dog(\"Rex\");\n        System.out.println(d.bark());\n    }\n}\n",
           "runnable": false,
-          "expectedStdout": "Rex: Woof!",
-          "caption": "Same idea: the name and the behavior that uses it travel together in one object."
+          "expectedStdout": "Rex: Woof!\n",
+          "caption": "Static example, no Run button here. Same idea: the name and the behavior that uses it travel together in one object."
         },
         {
           "type": "worked",

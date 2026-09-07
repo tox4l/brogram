@@ -27,7 +27,7 @@
             { "line": 3, "say": "display: flex turns nav into a row container, so the three links sit side by side." },
             { "line": 4, "say": "space-between hands the leftover width to the gaps between links, not to the links themselves." },
             { "line": [8, 12], "say": "Only nav's direct children, the three links, become flex items here; nothing nested deeper counts." },
-            { "line": 4, "say": "Home stays pinned to the left edge and About stays pinned to the right; only the middle gap grows." }
+            { "line": [9, 11], "say": "Home pins to the left edge and About to the right; the two gaps between them grow equally." }
           ],
           "caption": "One row, three links, the leftover width absorbed by the gaps between them."
         },
@@ -54,7 +54,7 @@
           "type": "check",
           "id": "check-2",
           "kind": "spot-the-bug",
-          "prompt": "The three buttons should spread across the toolbar with space-between, but they are stacking as plain block elements instead. Which line breaks it?",
+          "prompt": "The three buttons should spread across the toolbar with space-between, but they sit bunched together at the left edge instead. Which line breaks it?",
           "language": "web",
           "code": "<style>\n  .toolbar {\n    display: flexbox;\n    justify-content: space-between;\n  }\n  .toolbar button { padding: 6px 10px; }\n</style>\n<div class=\"toolbar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
           "bugLines": [3],

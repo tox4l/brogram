@@ -16,7 +16,7 @@
           "type": "concept",
           "id": "concept-1",
           "heading": "Ask what a column actually depends on",
-          "body": "Every table should describe one kind of thing, keyed by one thing. If a column's value depends on only part of a multi-column key, or on some other ordinary column instead of the key, that fact gets copied onto every row sharing that value - and one edit can leave two rows disagreeing. First normal form breaks up a cell holding more than one value. Second normal form moves a column that depends on only part of the key into its own table, keyed by that part. Third normal form moves a column that depends on another ordinary column into a table of its own. Each step removes one way rows could drift apart."
+          "body": "Every table should describe one kind of thing, keyed by one thing. If a column's value depends on only part of a multi-column key, or on some other ordinary column instead of the key, that fact gets copied onto every row sharing that value - and one edit can leave two rows disagreeing. First normal form breaks up a cell holding more than one value. Second normal form moves a column that depends on only part of the key into its own table, keyed by that part. Third normal form moves a column that depends on another ordinary column somewhere else. Each step removes one update anomaly: a fact stored twice that a single edit can leave disagreeing."
         },
         {
           "type": "snippet",
@@ -65,24 +65,24 @@
           "kind": "micro-code",
           "prompt": "A table bookings(booking_id, room_id, room_type, nightly_rate, guest_name) is keyed on booking_id alone, but room_type and nightly_rate only depend on room_id. Write one query that returns the rows a separate rooms table should hold: one row per room_id, with columns room_id, room_type, nightly_rate, ordered by room_id ascending.",
           "language": "sql",
-          "starterCode": "-- expected columns: room_id, room_type, nightly_rate\n",
+          "starterCode": "-- bookings(booking_id, room_id, room_type, nightly_rate, guest_name)\n-- is already loaded when your query runs.\n-- expected columns: room_id, room_type, nightly_rate\n",
           "tests": [
             {
               "id": "t1",
-              "input": "select distinct room_id, room_type, nightly_rate\nfrom bookings\norder by room_id;",
+              "input": "create table bookings(booking_id integer primary key, room_id integer,\n  room_type text, nightly_rate numeric, guest_name text);\ninsert into bookings values (1,101,'Standard',120,'Mina'),\n  (2,102,'Suite',250,'Tobias'), (3,101,'Standard',120,'Priya');\n__STUDENT__",
               "expected": "{\"columns\":[\"room_id\",\"room_type\",\"nightly_rate\"],\"values\":[[101,\"Standard\",120],[102,\"Suite\",250]]}",
               "hidden": false,
-              "name": "example"
+              "name": "two rooms, one booked twice"
             },
             {
               "id": "t2",
-              "input": "__STUDENT__",
-              "expected": "{\"columns\":[\"room_id\",\"room_type\",\"nightly_rate\"],\"values\":[[101,\"Standard\",120],[102,\"Suite\",250]]}",
+              "input": "create table bookings(booking_id integer primary key, room_id integer,\n  room_type text, nightly_rate numeric, guest_name text);\ninsert into bookings values (1,205,'Suite',300,'Lea'),\n  (2,204,'Standard',150,'Noor'), (3,205,'Suite',300,'Ivo'),\n  (4,204,'Standard',150,'Ken');\n__STUDENT__",
+              "expected": "{\"columns\":[\"room_id\",\"room_type\",\"nightly_rate\"],\"values\":[[204,\"Standard\",150],[205,\"Suite\",300]]}",
               "hidden": false,
-              "name": "your query"
+              "name": "different rooms, still one row each"
             }
           ],
-          "referenceSolution": "create table bookings(\n  booking_id integer primary key,\n  room_id integer,\n  room_type text,\n  nightly_rate numeric,\n  guest_name text\n);\ninsert into bookings values\n  (1,101,'Standard',120,'Huda'),\n  (2,102,'Suite',250,'Omar'),\n  (3,101,'Standard',120,'Layla');\n\nselect distinct room_id, room_type, nightly_rate\nfrom bookings\norder by room_id;",
+          "referenceSolution": "select distinct room_id, room_type, nightly_rate\nfrom bookings\norder by room_id;",
           "hint": "Which two columns are duplicated across bookings that share the same room_id?",
           "explain": "room_type and nightly_rate depend only on room_id, not on booking_id, so distinct room_id, room_type, nightly_rate pulls out exactly the rows a rooms table should hold - one per room."
         },
@@ -92,7 +92,7 @@
           "bullets": [
             "Ask what each column actually depends on, not just its table.",
             "Move a column to the table its value truly belongs to.",
-            "Each split removes one way rows could disagree after an edit."
+            "Name it: each split removes one update anomaly."
           ],
           "remember": "The key, the whole key, and nothing but the key."
         },

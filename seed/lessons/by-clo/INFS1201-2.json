@@ -32,35 +32,35 @@
           "type": "worked",
           "id": "worked-1",
           "language": "python",
-          "code": "def first_below_zero(temps):\n    for i in range(len(temps)):\n        if temps[i] < 0:\n            return i\n    return -1",
+          "code": "def first_gap(seats):\n    for i in range(len(seats)):\n        if seats[i] == \"free\":\n            return i\n    return -1",
           "steps": [
-            { "line": 2, "say": "Walk from the front, in order, so the first match is the true first match." },
-            { "line": 3, "say": "Test each temperature only once you reach it, no peeking ahead." },
-            { "line": 4, "say": "Return the position right away, stop the walk the instant it hits." },
-            { "line": 5, "say": "Only fall through to here once every temperature failed the test." }
+            { "line": 2, "say": "Walk from the front, in order, so the first free seat you meet really is the first one." },
+            { "line": 3, "say": "Test each seat only when you reach it; peeking ahead would break what first even means." },
+            { "line": 4, "say": "Return the position right away and the walk stops there, with the rest of the row untouched." },
+            { "line": 5, "say": "Only fall through to here once every seat came back taken." }
           ],
-          "caption": "Index 2 is the first negative reading, so that's what comes back."
+          "caption": "A row of seats, checked left to right, until one comes back free."
         },
         {
           "type": "check",
           "id": "check-1",
           "kind": "choose",
-          "prompt": "You're checking whether a typed username already exists in a list of taken usernames. You don't need the position, just yes or no. What's the best move?",
+          "prompt": "A list holds every scan code a warehouse logged today, in the order they arrived. You need to know how many of them start with \"RX\". Which tool does the job?",
           "options": [
-            "Write a for loop that returns True the moment you find a match.",
-            "Use `username in taken_usernames` and read the result.",
-            "Call `taken_usernames.index(username)` and catch the error if it's missing.",
-            "Sort the list first, then scan it top to bottom."
+            "in, because it already walks the whole list for you",
+            ".index(), because it returns where the first match sits",
+            "A loop you write yourself, because nothing built in counts a custom match",
+            "Nothing works; a list cannot be searched for part of a value"
           ],
-          "correctIndex": 1,
+          "correctIndex": 2,
           "why": [
-            "Works, but you're rebuilding a scan Python already gives you for free.",
-            "This is exactly the yes-or-no scan you need, already written and stopped early.",
-            "Index makes you handle a lookup failure just to get a plain yes or no.",
-            "Sorting costs extra work you don't need for a single yes-or-no check."
+            "in only ever answers yes or no, and a count is neither of those.",
+            ".index() hands back one position and then stops; it never sees the rest.",
+            "Right — a count with a rule of its own needs work on every step, which is exactly when you write the walk.",
+            "Every value in the list can be tested however you like; the question is only which tool does the testing."
           ],
-          "hint": "Ask what you actually need back: a position, or just yes or no.",
-          "explain": "`in` walks the list the same way a hand-written loop would, stopping at the first match, so there's no reason to write that loop yourself for a plain yes-or-no answer."
+          "hint": "Ask what each built-in actually hands back, then compare that with what a count needs.",
+          "explain": "Both built-ins stop at their answer: one a yes or no, one a position. A count has to look at every item and apply a rule of its own, so this is the case your own loop was saved for."
         },
         {
           "type": "check",
@@ -90,7 +90,7 @@
         {
           "type": "bridge",
           "id": "bridge-1",
-          "say": "Next up: a real rep where you build binary search and bubble sort the same way."
+          "say": "Real rep next: build binary search and bubble sort yourself, then pick the right one."
         }
       ],
       "exitLine": "Time for a real rep: build one of these searches yourself."

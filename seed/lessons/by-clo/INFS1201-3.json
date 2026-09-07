@@ -22,10 +22,10 @@
           "type": "snippet",
           "id": "snippet-1",
           "language": "python",
-          "code": "def split_name(full):\n    first, last = full.split(\" \", 1)\n    return first, last\n\nfirst, last = split_name(\"Amara Musa\")\nprint(first, last)",
+          "code": "def split_name(full):\n    first, last = full.split(\" \", 1)\n    return first, last\n\nfirst, last = split_name(\"Nadia Karim\")\nprint(last + \", \" + first)",
           "runnable": true,
-          "expectedStdout": "Amara Musa\n",
-          "caption": "One tuple out, two names in."
+          "expectedStdout": "Karim, Nadia\n",
+          "caption": "Two values came back. Printing them out of order is the proof they really came apart."
         },
         {
           "type": "worked",

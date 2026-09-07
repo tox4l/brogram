@@ -44,13 +44,13 @@
           "type": "check",
           "id": "check-1",
           "kind": "predict-output",
-          "prompt": "Same plan, a smaller order. What does this print?",
+          "prompt": "A different plan: (1) the fee starts at 20, (2) add 40 if the bag is over 23 kg, (3) the total is the fee. This code runs step two before step one. What does it print?",
           "language": "python",
-          "code": "tickets = 4\nprice = 10\n\nif tickets >= 5:\n    price = price - 2\n\ntotal = tickets * price\nprint(total)",
-          "expected": "40",
+          "code": "kg = 25\nfee = 0\n\nif kg > 23:\n    fee = fee + 40\n\nfee = 20\ntotal = fee\nprint(total)",
+          "expected": "20",
           "normalize": "lines",
-          "hint": "Check whether four tickets actually clears the condition before you multiply anything.",
-          "explain": "Four is less than five, so the condition never fires and price stays at ten; four tickets times ten is forty."
+          "hint": "Follow the lines top to bottom and watch what happens to fee after the condition has already run.",
+          "explain": "The condition fires and sets fee to 40, but the next line overwrites it with 20, so the surcharge is thrown away. The plan said start at 20 first; doing it out of order loses the step entirely."
         },
         {
           "type": "check",

@@ -1,5 +1,5 @@
 {
-  "$note": "BroGram lessons. One lesson per skill. No institution names, no pattern ids, no emoji.",
+  "$note": "BroGram lessons. One lesson per CLO. No institution names, no pattern ids, no emoji.",
   "course": "INFS2101",
   "lessons": [
     {
@@ -59,19 +59,19 @@
           "type": "check",
           "id": "chk1",
           "kind": "predict-output",
-          "prompt": "The thumbnail has a written description; the star icon next to it is purely decorative. What does this print?",
+          "prompt": "say(id) is true only when the alt is a real description. The star is decorative, the thumbnail's alt was copied from the file name, and the map has a written sentence. What does this print?",
           "language": "web",
-          "code": "document.body.insertAdjacentHTML('beforeend', `\n  <img id=\"thumb\" src=\"shoe.jpg\" alt=\"Red running shoe, side view\">\n  <img id=\"star\" src=\"star.png\" alt=\"\">\n`)\nconst thumb = document.getElementById('thumb')\nconst star = document.getElementById('star')\nconsole.log(thumb.alt.length > 0, star.alt.length > 0)\n",
-          "expected": "true false",
+          "code": "document.body.insertAdjacentHTML('beforeend', `\n  <img id=\"thumb\" src=\"shoe.jpg\" alt=\"shoe.jpg\">\n  <img id=\"star\" src=\"star.png\" alt=\"\">\n  <img id=\"map\" src=\"map.png\" alt=\"Street map with the library marked\">\n`)\nconst say = (id) => {\n  const img = document.getElementById(id)\n  return img.alt.length > 0 && img.alt !== img.getAttribute('src')\n}\nconsole.log(say('thumb'), say('star'), say('map'))\n",
+          "expected": "false false true",
           "normalize": "lines",
-          "hint": "Check each image's alt attribute before you decide true or false.",
-          "explain": "thumb.alt holds real words, so its length is over zero: true. star.alt is empty on purpose, so its length is zero: false."
+          "hint": "Run say in your head on each image: does it have words, and are those words anything more than the file name?",
+          "explain": "thumb has words, but they are the file name, so the second test fails it. star is empty on purpose, so the first test fails it. Only map carries a sentence a screen reader can actually use."
         },
         {
           "type": "check",
           "id": "chk2",
           "kind": "micro-code",
-          "prompt": "This page has one image, `#hero`, whose `alt` is still empty even though the photo is not decorative -- it is the page's main team photo.\n\nWrite a script that sets `#hero`'s `alt` to a real description of the photo: a short sentence naming who is in the shot and what they are doing, not the filename.",
+          "prompt": "This page has one image, `#hero`, whose `alt` is still empty even though the photo is not decorative -- it is the page's main team photo.\n\nWrite a script that sets `#hero`'s `alt` to a real description of the photo, a few actual words, not the filename.\n\nExample: alt could read something like \"Three teammates high-fiving at a launch party\".",
           "language": "web",
           "starterCode": "<img id=\"hero\" src=\"team.jpg\" alt=\"\">\n<script>\n  // your code here\n</script>\n",
           "tests": [
@@ -107,10 +107,10 @@
         {
           "type": "bridge",
           "id": "b1",
-          "say": "Real markup now, with alt text that is missing, wrong, or just a filename."
+          "say": "Time to hunt real markup where alt text is missing, wrong, or just a filename."
         }
       ],
-      "exitLine": "Find the images that say nothing, and give each one its sentence."
+      "exitLine": "Time to hunt real markup where alt text is missing, wrong, or just a filename."
     },
     {
       "id": "INFS2101-2",
@@ -156,8 +156,11 @@
               "say": "Only nav's direct children, the three links, become flex items here; nothing nested deeper counts."
             },
             {
-              "line": 4,
-              "say": "Home stays pinned to the left edge and About stays pinned to the right; only the middle gap grows."
+              "line": [
+                9,
+                11
+              ],
+              "say": "Home pins to the left edge and About to the right; the two gaps between them grow equally."
             }
           ],
           "caption": "One row, three links, the leftover width absorbed by the gaps between them."
@@ -166,26 +169,26 @@
           "type": "check",
           "id": "check-1",
           "kind": "choose",
-          "prompt": "Same nav, still set to space-between, but a fourth link is added and the row is exactly wide enough to hold all four with nothing to spare. What do you see?",
+          "prompt": "Same nav, but justify-content is changed to center instead of space-between. Where does the leftover width go now?",
           "options": [
-            "The four links sit flush against each other, because there is no leftover width left to hand out",
-            "The links spread apart anyway, since space-between always inserts a fixed gap between items",
-            "The fourth link drops to a second row so the other three can keep their gaps"
+            "Split into two equal margins, one before the first link and one after the last, with the links bunched together in the middle",
+            "Spread evenly only between the links, with nothing before the first or after the last",
+            "Added entirely after the last link, so the links pack against the left edge"
           ],
           "correctIndex": 0,
           "why": [
-            "Right. space-between only ever shares out width that is left over, and here none is.",
-            "The gaps are not a fixed size — each one is only as wide as the leftover width allows.",
-            "Dropping to a second row is a separate instruction the container never got; a full row stays full."
+            "Right. center treats the whole leftover width as two matching margins around the bunched-together group.",
+            "That description fits space-between, not center — center does not touch the space between individual links.",
+            "That fits flex-start, not center — center never leaves the group pressed against one edge."
           ],
-          "hint": "Ask what space-between actually has to work with once the links already fill the row.",
-          "explain": "justify-content shares out leftover width and nothing else. Four links that exactly fill the row leave zero left over, so every gap it would have opened is zero wide and the links end up touching."
+          "hint": "center is about grouping the children, not spacing them apart. Where would two matching margins have to sit?",
+          "explain": "center treats the three links as one tight group and puts all of the leftover width into two equal margins, one before the group and one after it, so nothing opens up between the links themselves."
         },
         {
           "type": "check",
           "id": "check-2",
           "kind": "spot-the-bug",
-          "prompt": "The three buttons should spread across the toolbar with space-between, but they are stacking as plain block elements instead. Which line breaks it?",
+          "prompt": "The three buttons should spread across the toolbar with space-between, but they sit bunched together at the left edge instead. Which line breaks it?",
           "language": "web",
           "code": "<style>\n  .toolbar {\n    display: flexbox;\n    justify-content: space-between;\n  }\n  .toolbar button { padding: 6px 10px; }\n</style>\n<div class=\"toolbar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
           "bugLines": [
@@ -198,9 +201,9 @@
           "type": "check",
           "id": "check-3",
           "kind": "micro-code",
-          "prompt": "Fill in the two missing declarations in .toolbar so the three buttons sit together as one group in the middle of the row, with the leftover width split into two equal margins, one before the group and one after it, and none between the buttons.",
+          "prompt": "Fill in the two missing declarations in .toolbar so the three buttons form a flex row with the leftover width spread out as equal gaps between them, none before the first and none after the last.",
           "language": "web",
-          "starterCode": "<style>\n  .toolbar {\n    /* add the two declarations that turn this\n       into a flex row with the buttons grouped\n       in the middle and equal room either side */\n  }\n</style>\n<div class=\"toolbar\" id=\"bar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
+          "starterCode": "<style>\n  .toolbar {\n    /* add the two declarations that turn this\n       into a flex row with even gaps between\n       the buttons, none before or after them */\n  }\n</style>\n<div class=\"toolbar\" id=\"bar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
           "tests": [
             {
               "id": "t1",
@@ -211,15 +214,15 @@
             },
             {
               "id": "t2",
-              "input": "const bar = document.getElementById('bar');\nconst s = getComputedStyle(bar);\nreturn s.justifyContent === 'center' ? 'ok' : 'wrong leftover-space rule';",
+              "input": "const bar = document.getElementById('bar');\nconst s = getComputedStyle(bar);\nreturn s.justifyContent === 'space-between' ? 'ok' : 'wrong leftover-space rule';",
               "expected": "ok",
               "hidden": false,
-              "name": "leftover space goes to the outside edges"
+              "name": "leftover space goes between items"
             }
           ],
-          "referenceSolution": "<style>\n  .toolbar {\n    display: flex;\n    justify-content: center;\n  }\n</style>\n<div class=\"toolbar\" id=\"bar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
-          "hint": "One property makes it a row. The other decides where the leftover width lands — here, on both outside edges.",
-          "explain": "display: flex turns .toolbar into a row, and justify-content: center holds the three buttons together as one group, sending every leftover pixel into matching margins on either side of them."
+          "referenceSolution": "<style>\n  .toolbar {\n    display: flex;\n    justify-content: space-between;\n  }\n</style>\n<div class=\"toolbar\" id=\"bar\">\n  <button>Save</button>\n  <button>Cancel</button>\n  <button>Delete</button>\n</div>",
+          "hint": "One property turns the container into a flex row. Another says how the leftover width should be shared.",
+          "explain": "display: flex turns .toolbar into a flex row, and justify-content: space-between sends every pixel of leftover width into the gaps between buttons, leaving none before the first or after the last."
         },
         {
           "type": "recap",
@@ -237,7 +240,7 @@
           "say": "Next you write that rule yourself, on a layout you have not seen yet."
         }
       ],
-      "exitLine": "Leftover space is a decision, not an accident. Make the call on a live layout."
+      "exitLine": "That's the leftover-space rule. Time to write it into a layout of your own."
     },
     {
       "id": "INFS2101-3",
@@ -264,7 +267,7 @@
           "type": "snippet",
           "id": "snippet-1",
           "language": "web",
-          "code": "document.body.innerHTML = '<form id=\"f\"><input id=\"email\" value=\"taylor@mail.co\"></form>';\nconst form = document.getElementById('f');\nform.addEventListener('submit', (e) => {\n  e.preventDefault();\n  const value = document.getElementById('email').value;\n  console.log(value.includes('@') ? 'sending' : 'fix that email');\n});\nform.dispatchEvent(new Event('submit', { cancelable: true }));",
+          "code": "document.body.innerHTML = '<form id=\"f\"><input id=\"email\" value=\"taylor@brogram\"></form>';\nconst form = document.getElementById('f');\nform.addEventListener('submit', (e) => {\n  e.preventDefault();\n  const value = document.getElementById('email').value;\n  console.log(value.includes('@') ? 'sending' : 'fix that email');\n});\nform.dispatchEvent(new Event('submit', { cancelable: true }));",
           "runnable": true,
           "expectedStdout": "sending\n",
           "caption": "Change the value so it has no @ and run it again. Watch which line logs."
@@ -316,20 +319,20 @@
           "type": "check",
           "id": "check-2",
           "kind": "choose",
-          "prompt": "One change to the signup handler above: event.preventDefault() is moved inside the empty-name branch, so it only runs when the name is blank. Someone types a real name and clicks Join. What happens?",
+          "prompt": "You delete event.preventDefault() from the handler above. The name field is empty and the button is clicked. What happens?",
           "options": [
-            "The success line runs, then the browser reloads anyway, so nothing typed stays on screen",
-            "Nothing changes — reaching the end of the handler is enough to stop the submit",
-            "The browser blocks the submit regardless, because a submit listener always cancels it"
+            "Nothing changes — the check still stops the page from submitting.",
+            "The browser reloads the page as soon as submit fires, before the error message can be seen.",
+            "The error message shows twice instead of once."
           ],
-          "correctIndex": 0,
+          "correctIndex": 1,
           "why": [
-            "Right. The default is only cancelled on the blank path, so a valid name falls straight through to a reload.",
-            "Running to the end cancels nothing. Only the call itself does, and a valid name never reaches it.",
-            "Listening to an event never cancels it — cancelling is an explicit call, and here it sits on the other branch."
+            "The check still runs and still writes the message, but nothing stops the browser's normal reload from happening right after.",
+            "Right. preventDefault is the only thing stopping the reload. Skip it, and the page reloads regardless of what the check decided.",
+            "The handler still only runs once per click, so nothing here would make a message double up."
           ],
-          "hint": "Follow which branch actually runs when the name is valid, and ask what got skipped on the way.",
-          "explain": "Cancelling the default is one call, not a property of the listener. A valid name skips the branch holding that call, so nothing stops the reload and the success message disappears with the page."
+          "hint": "Think about what preventDefault is actually stopping the browser from doing.",
+          "explain": "preventDefault is the only thing standing between your check and the browser's default reload. Remove it and the reload happens no matter what the check found, so the message never gets a chance to be read."
         },
         {
           "type": "check",
@@ -378,10 +381,10 @@
         {
           "type": "bridge",
           "id": "bridge-1",
-          "say": "Different form, real input, and the check is yours to write."
+          "say": "Different form, real input. Time to write the check yourself."
         }
       ],
-      "exitLine": "A form that fights back is waiting. Hold the line before anything gets sent."
+      "exitLine": "That's the guard. Now go build one that has to hold up."
     },
     {
       "id": "INFS2101-4",
@@ -501,10 +504,10 @@
         {
           "type": "bridge",
           "id": "bridge-1",
-          "say": "Ahead of you: a whole page — structure, style, and one signal between them."
+          "say": "Time to wire a whole page yourself — structure, style, and one signal between them."
         }
       ],
-      "exitLine": "One flipped value can hold a whole page together. Prove it on a page of your own."
+      "exitLine": "That's the wiring. Now go build a page that holds together on its own."
     }
   ]
 }

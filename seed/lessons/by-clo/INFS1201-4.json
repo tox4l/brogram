@@ -6,7 +6,7 @@
       "course": "INFS1201",
       "language": "python",
       "version": 1,
-      "title": "Reading a csv without crashing",
+      "title": "Reading a CSV without crashing",
       "hook": "One blank cell in a file, and a careless script dies right there.",
       "estimatedMinutes": 7,
       "draft": true,
@@ -16,7 +16,7 @@
           "type": "concept",
           "id": "concept-1",
           "heading": "Rows become dictionaries",
-          "body": "A csv file is rows of text with commas between values, and the first row usually names each column. Python's csv module can hand you each row as a plain list, but csv.DictReader upgrades that: it reads the header once and turns every later row into a dictionary, so you pull a value by column name instead of counting commas. Real files are messy — a shopper skips a field, a price cell is left blank. If you assume every field holds a number and convert it, that one blank cell crashes the whole read. Check what actually came back before you trust it, and skip or replace an empty field instead of letting it blow up your program."
+          "body": "A CSV file is rows of text with commas between values, and the first row usually names each column. Python's csv module can hand you each row as a plain list, but csv.DictReader upgrades that: it reads the header once and turns every later row into a dictionary, so you pull a value by column name instead of counting commas. Real files are messy — a shopper skips a field, a price cell is left blank. If you assume every field holds a number and convert it, that one blank cell crashes the whole read. Check what actually came back before you trust it, and skip or replace an empty field instead of letting it blow up your program."
         },
         {
           "type": "snippet",

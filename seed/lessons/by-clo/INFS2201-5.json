@@ -54,27 +54,13 @@
         {
           "type": "check",
           "id": "check-2",
-          "kind": "micro-code",
-          "prompt": "A tickets collection stores { event, price, vip } per ticket. Write a query that returns every non-VIP ticket priced under 50.",
+          "kind": "spot-the-bug",
+          "prompt": "This should return every non-VIP ticket priced under 50. It returns every non-VIP ticket instead, whatever the price. Which line is wrong?",
           "language": "mongo",
-          "starterCode": "// collection: tickets\n",
-          "tests": [
-            {
-              "id": "t1",
-              "input": "{\"op\":\"find\",\"args\":[{\"vip\":false,\"price\":{\"$lt\":50}}]}",
-              "expected": "[{\"event\":\"Finals\",\"price\":40,\"vip\":false},{\"event\":\"Opener\",\"price\":25,\"vip\":false}]",
-              "name": "example"
-            },
-            {
-              "id": "t2",
-              "input": "{\"op\":\"find\",\"args\":[{\"vip\":false,\"price\":{\"$lt\":50}}]}",
-              "expected": "[{\"event\":\"Finals\",\"price\":40,\"vip\":false},{\"event\":\"Opener\",\"price\":25,\"vip\":false}]",
-              "name": "vip ticket under fifty still excluded"
-            }
-          ],
-          "referenceSolution": "{\n  \"fixture\": [\n    {\"event\": \"Finals\", \"price\": 40, \"vip\": false},\n    {\"event\": \"Finals\", \"price\": 30, \"vip\": true},\n    {\"event\": \"Opener\", \"price\": 25, \"vip\": false},\n    {\"event\": \"Opener\", \"price\": 60, \"vip\": false}\n  ],\n  \"args\": [\n    {\"vip\": false, \"price\": {\"$lt\": 50}}\n  ]\n}",
-          "hint": "Match vip to false directly, then compare price with an operator instead of an exact value.",
-          "explain": "vip: false keeps only non-VIP tickets, and price: { $lt: 50 } narrows further to ones under fifty; both must hold together."
+          "code": "db.tickets.find(\n  { vip: false },\n  { price: { $lt: 50 } }\n)",
+          "bugLines": [3],
+          "hint": "Count how many objects this call hands to find, then ask which one it actually filters on.",
+          "explain": "find() filters on its first object only; anything in a second object is not a condition at all. Both keys belong in one object: { vip: false, price: { $lt: 50 } }."
         },
         {
           "type": "recap",

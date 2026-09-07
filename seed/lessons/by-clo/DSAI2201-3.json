@@ -77,17 +77,17 @@
           "type": "check",
           "id": "check-3",
           "kind": "micro-code",
-          "prompt": "Write `clean_totals(records)`. Each record is a dict with `id`, `price` (a string that might not be a number) and `qty`. Return a list of `price * qty` after converting price to a number (dropping rows that fail) and dropping duplicate ids, keeping the first.",
+          "prompt": "Write `mean_rate(records)`. Each record is a dict with `code`, `grams` (a string that might not be a number) and `boxes`. Convert grams to a number and drop the rows that fail, drop repeated codes keeping the first, then return the mean of grams divided by boxes, rounded to 2 places. With nothing left, return 0.0.",
           "language": "python",
-          "starterCode": "import pandas as pd\n\ndef clean_totals(records):\n    pass\n",
+          "starterCode": "import pandas as pd\n\ndef mean_rate(records):\n    pass\n",
           "tests": [
-            { "id": "t1", "input": "[[{\"id\": 1, \"price\": \"10\", \"qty\": 2}, {\"id\": 2, \"price\": \"bad\", \"qty\": 5}, {\"id\": 3, \"price\": \"4\", \"qty\": 3}]]", "expected": "[20.0, 12.0]", "hidden": false, "name": "one bad price dropped" },
-            { "id": "t2", "input": "[[{\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 2, \"price\": \"3\", \"qty\": 2}]]", "expected": "[20.0, 6.0]", "hidden": false, "name": "duplicate id kept once" },
-            { "id": "t3", "input": "[[{\"id\": 1, \"price\": \"nope\", \"qty\": 2}]]", "expected": "[]", "hidden": false, "name": "everything drops out" }
+            { "id": "t1", "input": "[[{\"code\": \"A\", \"grams\": \"10\", \"boxes\": 2}, {\"code\": \"B\", \"grams\": \"bad\", \"boxes\": 5}, {\"code\": \"C\", \"grams\": \"9\", \"boxes\": 3}]]", "expected": "4.0", "hidden": false, "name": "one bad row dropped" },
+            { "id": "t2", "input": "[[{\"code\": \"A\", \"grams\": \"8\", \"boxes\": 4}, {\"code\": \"A\", \"grams\": \"8\", \"boxes\": 4}, {\"code\": \"B\", \"grams\": \"6\", \"boxes\": 2}]]", "expected": "2.5", "hidden": false, "name": "repeated code kept once" },
+            { "id": "t3", "input": "[[{\"code\": \"A\", \"grams\": \"nope\", \"boxes\": 2}]]", "expected": "0.0", "hidden": false, "name": "nothing survives" }
           ],
-          "referenceSolution": "import pandas as pd\n\ndef clean_totals(records):\n    df = pd.DataFrame(records)\n    df[\"price\"] = pd.to_numeric(df[\"price\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"price\"])\n    df = df.drop_duplicates(subset=[\"id\"])\n    df[\"total\"] = df[\"price\"] * df[\"qty\"]\n    return list(df[\"total\"])",
-          "hint": "Convert price with pd.to_numeric(errors=\"coerce\"), drop the missing ones, then drop duplicate ids before multiplying.",
-          "explain": "Coercing price to numeric turns bad text into missing values, dropping those rows keeps only real prices, and dropping duplicate ids removes repeats before qty multiplies price into total."
+          "referenceSolution": "import pandas as pd\n\ndef mean_rate(records):\n    df = pd.DataFrame(records)\n    df[\"grams\"] = pd.to_numeric(df[\"grams\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"grams\"])\n    df = df.drop_duplicates(subset=[\"code\"])\n    if len(df) == 0:\n        return 0.0\n    return round((df[\"grams\"] / df[\"boxes\"]).mean(), 2)",
+          "hint": "Clean in the same order as before, then decide what to return before you divide by an empty frame.",
+          "explain": "The same three cleaning steps run first, but the answer here is one number, so an empty frame has to be caught before the mean is taken — that is the step the walkthrough never had to make."
         },
         {
           "type": "recap",

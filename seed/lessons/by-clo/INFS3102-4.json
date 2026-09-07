@@ -25,7 +25,7 @@
           "code": "interface Sound { void play(); }\nclass Beep implements Sound { public void play() { System.out.println(\"beep\"); } }\nclass Chime implements Sound { public void play() { System.out.println(\"chime\"); } }\nclass Alarm {\n  Sound sound;\n  Alarm(Sound sound) { this.sound = sound; }\n  void ring() { sound.play(); }\n}",
           "runnable": false,
           "expectedStdout": "",
-          "caption": "Same call, different sound - swap the object, not the class."
+          "caption": "Static example, no Run button here. Same call, different sound - swap the object, not the class."
         },
         {
           "type": "worked",

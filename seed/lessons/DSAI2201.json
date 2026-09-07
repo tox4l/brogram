@@ -38,26 +38,26 @@
           "type": "worked",
           "id": "worked-1",
           "language": "python",
-          "code": "import pandas as pd\n\ndf = pd.DataFrame({\n    \"route\": [\"north\", \"harbor\", \"airport\", \"old town\"],\n    \"minutes\": [88, 92, 79, 95],\n    \"on_time\": [True, True, False, True],\n})\n\nprint(round(df[\"minutes\"].mean(), 1))\nprint(round(df[\"minutes\"].std(), 1))\nprint(df.dtypes[\"on_time\"])",
+          "code": "import pandas as pd\n\ndf = pd.DataFrame({\n    \"student\": [\"Ali\", \"Sara\", \"Omar\", \"Lina\"],\n    \"score\": [88, 92, 79, 95],\n    \"passed\": [True, True, False, True],\n})\n\nprint(round(df[\"score\"].mean(), 1))\nprint(round(df[\"score\"].std(), 1))\nprint(df.dtypes[\"passed\"])",
           "steps": [
             {
               "line": [
                 3,
                 7
               ],
-              "say": "One row per route keeps minutes and on_time together, so every stat lines up with the right trip."
+              "say": "One row per student keeps score and passed together, so every stat lines up with the right person."
             },
             {
               "line": 9,
-              "say": "Mean gives the center, but one slow trip can drag it away from where most routes cluster."
+              "say": "Mean gives the center, but one wild score can drag it away from where most students cluster."
             },
             {
               "line": 10,
-              "say": "Standard deviation shows how far trip times typically sit from that center, something the mean alone can't tell you."
+              "say": "Standard deviation shows how far scores typically sit from that center, something the mean alone can't tell you."
             },
             {
               "line": 11,
-              "say": "Checking dtype confirms on_time loaded as a boolean, not text, so later comparisons behave correctly."
+              "say": "Checking dtype confirms passed loaded as a boolean, not text, so later comparisons behave correctly."
             }
           ],
           "caption": "Full summary stats plus a dtype check, all in a few lines."
@@ -78,22 +78,22 @@
           "type": "check",
           "id": "check-2",
           "kind": "choose",
-          "prompt": "Four short lists all have a mean of 10. Which one has the largest standard deviation?",
+          "prompt": "Two classes both average 75 on a test. Class A has a standard deviation of 2; Class B has one of 18. Which statement is true?",
           "options": [
-            "[10, 10, 10, 10]",
-            "[9, 10, 10, 11]",
-            "[1, 5, 15, 19]",
-            "[8, 9, 11, 12]"
+            "Class A's scores cluster tightly near 75; Class B's scores vary widely around 75.",
+            "Class A and Class B have identical distributions since their means match.",
+            "Class B's students scored higher on average than Class A's.",
+            "Standard deviation only matters when the two means differ."
           ],
-          "correctIndex": 2,
+          "correctIndex": 0,
           "why": [
-            "Every value already equals the mean, so nothing wanders from it and the spread is zero.",
-            "These stay within one of the mean, closer in than any list reaching further out.",
-            "Correct: these sit 9, 5, 5 and 9 away from the mean, further than any other list here.",
-            "These sit at most two away from the mean, so they wander less than the 1-to-19 list."
+            "Correct: a small standard deviation means values cluster close to the mean.",
+            "Wrong: identical means say nothing about how spread out each group's scores are.",
+            "Wrong: a larger standard deviation says nothing about which mean is higher, and both means are 75 here.",
+            "Wrong: standard deviation measures spread whether or not two means happen to differ."
           ],
-          "hint": "Work out how far each value sits from 10, then compare those distances list by list.",
-          "explain": "Standard deviation grows with distance from the mean. The 1-to-19 list puts values 5 and 9 away from 10, while every other list stays within two, so it is the one that spreads widest."
+          "hint": "Standard deviation measures distance from the mean, not the mean's value itself.",
+          "explain": "Same mean, very different spread: Class A's scores barely move from 75, while Class B's swing widely above and below it."
         },
         {
           "type": "check",
@@ -108,7 +108,7 @@
               "input": "[[62, 71, 74, 78, 91]]",
               "expected": "10.6",
               "hidden": false,
-              "name": "mixed readings"
+              "name": "exam scores"
             },
             {
               "id": "t2",
@@ -176,13 +176,13 @@
           "code": "import pandas as pd\n\nx = pd.Series([1, 2, 3, 4, 5])\ny = pd.Series([10, 20, 30, 40, 50])\n\nprint(round(x.corr(y), 2))",
           "runnable": true,
           "expectedStdout": "1.0\n",
-          "caption": "Both Series climb in lockstep, so the number lands right on 1.0."
+          "caption": "Make y count down instead of up and run it again."
         },
         {
           "type": "worked",
           "id": "worked-1",
           "language": "python",
-          "code": "import pandas as pd\n\nwaterings = pd.Series([1, 2, 3, 4])\nblooms = pd.Series([2, 3, 5, 4])\n\ncorr = waterings.corr(blooms)\nprint(round(corr, 2))",
+          "code": "import pandas as pd\n\nhours = pd.Series([1, 2, 3, 4])\nwon = pd.Series([2, 3, 5, 4])\n\ncorr = hours.corr(won)\nprint(round(corr, 2))",
           "steps": [
             {
               "line": 1,
@@ -193,7 +193,7 @@
                 3,
                 4
               ],
-              "say": "Two Series of the same length line up index by index, so each row still means one week in the greenhouse."
+              "say": "Two Series of the same length line up index by index, so each row still means one practice session."
             },
             {
               "line": 6,
@@ -204,7 +204,7 @@
               "say": "Rounding to two places keeps the printed number readable without losing the pattern it represents."
             }
           ],
-          "caption": "Waterings per week against blooms counted, boiled down to one number."
+          "caption": "Practice hours against games won, boiled down to one number."
         },
         {
           "type": "check",
@@ -225,13 +225,13 @@
           "prompt": "Which pair of columns is most likely to show a correlation near 0?",
           "options": [
             "Cups of coffee bought today, and the buyer's shoe size",
-            "Kilometres cycled this week, and calories burned that week",
+            "Hours of study this week, and the exam score that follows",
             "Minutes left on a countdown timer, and minutes already elapsed"
           ],
           "correctIndex": 0,
           "why": [
             "Shoe size has nothing to do with coffee habits, so knowing one tells you nothing about the other.",
-            "More cycling burns more calories, so this pair moves together — near 1, not 0.",
+            "More study time tends to raise scores, so this pair moves together — near 1, not 0.",
             "As elapsed time rises, remaining time falls in lockstep — near -1, not 0."
           ],
           "hint": "Which two things have no real reason to move together at all?",
@@ -359,56 +359,56 @@
           "type": "check",
           "id": "check-2",
           "kind": "choose",
-          "prompt": "A table holds six sensor readings. One reading is the text \"n/a\", and two of the other five rows are exact copies of each other. You convert with errors=\"coerce\", drop missing values, then drop duplicates. How many rows survive?",
+          "prompt": "You need a new column total = price * qty, but price is stored as text and a few values aren't real numbers. What should happen first?",
           "options": [
-            "Six rows, because converting text never removes anything.",
-            "Five rows, once the unreadable value is gone.",
-            "Four rows, once the unreadable value and one copy are gone.",
-            "Three rows, once the unreadable value and both copies are gone."
+            "Multiply price by qty directly, then fix whatever looks wrong afterward.",
+            "Convert price to numeric, turning bad text into missing values, then drop those rows.",
+            "Delete the qty column so there is nothing left to multiply by.",
+            "Build total first, then check afterward which rows came out as missing."
           ],
-          "correctIndex": 2,
+          "correctIndex": 1,
           "why": [
-            "Converting removes nothing on its own, but the two steps after it each take a row out.",
-            "Dropping the missing value is only the first cut; the identical pair still has to collapse.",
-            "Correct: six, minus the reading that coerced to missing, minus the second of the identical rows.",
-            "Dropping duplicates keeps the first of a repeated pair, so only the second copy leaves."
+            "Multiplying while price is still text either raises an error or silently produces junk.",
+            "Cleaning the type first means every row that reaches total is a real number.",
+            "Qty is already fine — removing it throws away data the feature still needs.",
+            "This still multiplies dirty values before you know which rows are actually broken."
           ],
-          "hint": "Take the three steps in order and count what each one actually removes.",
-          "explain": "\"n/a\" coerces to a missing value and gets dropped, leaving five. Dropping duplicates then removes the second of the two identical rows and keeps the first, so four rows survive."
+          "hint": "Think about what a string times a number actually does before you fix anything.",
+          "explain": "Converting price to numeric first turns unparseable text into missing values you can drop, so total only ever gets built from real numbers."
         },
         {
           "type": "check",
           "id": "check-3",
           "kind": "micro-code",
-          "prompt": "Write `clean_totals(records)`. Each record is a dict with `id`, `price` (a string that might not be a number) and `qty`. Return a list of `price * qty` after converting price to a number (dropping rows that fail) and dropping duplicate ids, keeping the first.",
+          "prompt": "Write `mean_rate(records)`. Each record is a dict with `code`, `grams` (a string that might not be a number) and `boxes`. Convert grams to a number and drop the rows that fail, drop repeated codes keeping the first, then return the mean of grams divided by boxes, rounded to 2 places. With nothing left, return 0.0.",
           "language": "python",
-          "starterCode": "import pandas as pd\n\ndef clean_totals(records):\n    pass\n",
+          "starterCode": "import pandas as pd\n\ndef mean_rate(records):\n    pass\n",
           "tests": [
             {
               "id": "t1",
-              "input": "[[{\"id\": 1, \"price\": \"10\", \"qty\": 2}, {\"id\": 2, \"price\": \"bad\", \"qty\": 5}, {\"id\": 3, \"price\": \"4\", \"qty\": 3}]]",
-              "expected": "[20.0, 12.0]",
+              "input": "[[{\"code\": \"A\", \"grams\": \"10\", \"boxes\": 2}, {\"code\": \"B\", \"grams\": \"bad\", \"boxes\": 5}, {\"code\": \"C\", \"grams\": \"9\", \"boxes\": 3}]]",
+              "expected": "4.0",
               "hidden": false,
-              "name": "one bad price dropped"
+              "name": "one bad row dropped"
             },
             {
               "id": "t2",
-              "input": "[[{\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 1, \"price\": \"5\", \"qty\": 4}, {\"id\": 2, \"price\": \"3\", \"qty\": 2}]]",
-              "expected": "[20.0, 6.0]",
+              "input": "[[{\"code\": \"A\", \"grams\": \"8\", \"boxes\": 4}, {\"code\": \"A\", \"grams\": \"8\", \"boxes\": 4}, {\"code\": \"B\", \"grams\": \"6\", \"boxes\": 2}]]",
+              "expected": "2.5",
               "hidden": false,
-              "name": "duplicate id kept once"
+              "name": "repeated code kept once"
             },
             {
               "id": "t3",
-              "input": "[[{\"id\": 1, \"price\": \"nope\", \"qty\": 2}]]",
-              "expected": "[]",
+              "input": "[[{\"code\": \"A\", \"grams\": \"nope\", \"boxes\": 2}]]",
+              "expected": "0.0",
               "hidden": false,
-              "name": "everything drops out"
+              "name": "nothing survives"
             }
           ],
-          "referenceSolution": "import pandas as pd\n\ndef clean_totals(records):\n    df = pd.DataFrame(records)\n    df[\"price\"] = pd.to_numeric(df[\"price\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"price\"])\n    df = df.drop_duplicates(subset=[\"id\"])\n    df[\"total\"] = df[\"price\"] * df[\"qty\"]\n    return list(df[\"total\"])",
-          "hint": "Convert price with pd.to_numeric(errors=\"coerce\"), drop the missing ones, then drop duplicate ids before multiplying.",
-          "explain": "Coercing price to numeric turns bad text into missing values, dropping those rows keeps only real prices, and dropping duplicate ids removes repeats before qty multiplies price into total."
+          "referenceSolution": "import pandas as pd\n\ndef mean_rate(records):\n    df = pd.DataFrame(records)\n    df[\"grams\"] = pd.to_numeric(df[\"grams\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"grams\"])\n    df = df.drop_duplicates(subset=[\"code\"])\n    if len(df) == 0:\n        return 0.0\n    return round((df[\"grams\"] / df[\"boxes\"]).mean(), 2)",
+          "hint": "Clean in the same order as before, then decide what to return before you divide by an empty frame.",
+          "explain": "The same three cleaning steps run first, but the answer here is one number, so an empty frame has to be caught before the mean is taken — that is the step the walkthrough never had to make."
         },
         {
           "type": "recap",
@@ -480,14 +480,16 @@
         {
           "type": "check",
           "id": "check-1",
-          "kind": "predict-output",
-          "prompt": "Same function, a different set of flags. What does this print?",
+          "kind": "spot-the-bug",
+          "prompt": "A teammate rewrote the same sorter. A robot that earns a reward for every good move, and that also has a correct answer on every training example, comes back from this as \"supervised\". Which line should not be where it is?",
           "language": "python",
-          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"\n\nprint(learning_type(has_labels=True, has_reward=True, some_labels=False))",
-          "expected": "reinforcement",
-          "normalize": "lines",
-          "hint": "Read the checks in the order the function makes them. Which one does it reach first?",
-          "explain": "has_reward is true, so the very first check returns before either label flag is ever read - a reward signal settles it no matter what the labels say."
+          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"",
+          "bugLines": [
+            2,
+            3
+          ],
+          "hint": "Work out which check the robot's flags reach first, then ask whether that check is the one that should decide.",
+          "explain": "A reward signal settles the answer on its own, so it has to be tested before any label check. Here the supervised test runs first and claims the robot before the reward test is ever reached."
         },
         {
           "type": "check",
@@ -591,22 +593,20 @@
           "type": "check",
           "id": "check-1",
           "kind": "choose",
-          "prompt": "You have X_train, X_test, y_train, y_test and a model, already fitted, that predicts a house price. Which line reports a score you can trust?",
+          "prompt": "A model predicts a house's price in dollars from its size. After splitting and fitting, which score tells you how good those price predictions are?",
           "options": [
-            "accuracy_score(y_test, model.predict(X_test))",
-            "r2_score(y_train, model.predict(X_train))",
-            "r2_score(y_test, model.predict(X_test))",
-            "r2_score(y_test, model.predict(X_train))"
+            "accuracy_score, since it works for any kind of prediction",
+            "r2_score, since price is a continuous number, not a category",
+            "Whatever number .fit() reports, no extra step needed"
           ],
-          "correctIndex": 2,
+          "correctIndex": 1,
           "why": [
-            "Accuracy counts exact matches, and a predicted price almost never lands on the real one exactly.",
-            "The metric fits, but these are the rows the model was fitted on, so the number flatters it.",
-            "Correct: the metric matches a numeric target, and the rows are ones the fit never saw.",
-            "Predictions from the training rows compared against test answers line up the wrong rows entirely."
+            "accuracy_score only counts exact matches; a predicted price almost never lands on the exact real one.",
+            "Right. Price is continuous, and r2_score is built to score numeric predictions like this one.",
+            ".fit() only adjusts the model's parameters; it never reports how predictions did on held-out rows."
           ],
-          "hint": "Two things have to be right at once: the metric for this target, and which rows the score reads.",
-          "explain": "A price is a continuous number, so accuracy has nothing to count, and a score only means something on rows held out of the fit. Only the line that pairs test predictions with test answers gets both right."
+          "hint": "Ask whether the model is outputting a category or a number, then match the score to that.",
+          "explain": "Price is a continuous number, not a label, so accuracy (which only counts exact matches) doesn't apply here; r2_score is built to measure how closely continuous predictions track the real values."
         },
         {
           "type": "check",

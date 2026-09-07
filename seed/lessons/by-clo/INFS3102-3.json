@@ -25,7 +25,7 @@
           "code": "class Instrument {\n    String play() { return \"...\"; }\n}\nclass Guitar extends Instrument {\n    @Override\n    String play() { return \"Strum\"; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Instrument i = new Guitar();\n        System.out.println(i.play());\n    }\n}",
           "runnable": false,
           "expectedStdout": "Strum\n",
-          "caption": "i is typed Instrument, but the object underneath is a Guitar."
+          "caption": "Static example, no Run button here. i is typed Instrument, but the object underneath is a Guitar."
         },
         {
           "type": "worked",

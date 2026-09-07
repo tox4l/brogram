@@ -34,14 +34,13 @@
         {
           "type": "check",
           "id": "check-1",
-          "kind": "predict-output",
-          "prompt": "Same function as above. What does this print?",
+          "kind": "spot-the-bug",
+          "prompt": "A teammate rewrote the same sorter. A robot that earns a reward for every good move, and that also has a correct answer on every training example, comes back from this as \"supervised\". Which line should not be where it is?",
           "language": "python",
-          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"\n\nprint(learning_type(has_labels=True, has_reward=False, some_labels=True))",
-          "expected": "semi-supervised",
-          "normalize": "lines",
-          "hint": "Reward is false, so skip that branch. Are all the examples labeled, or just some of them?",
-          "explain": "has_reward is false, so the first check fails. has_labels is true but some_labels is also true, meaning only part of the data is labeled - that's the semi-supervised branch."
+          "code": "def learning_type(has_labels, has_reward, some_labels):\n    if has_labels and not some_labels:\n        return \"supervised\"\n    if has_reward:\n        return \"reinforcement\"\n    if has_labels and some_labels:\n        return \"semi-supervised\"\n    return \"unsupervised\"",
+          "bugLines": [2, 3],
+          "hint": "Work out which check the robot's flags reach first, then ask whether that check is the one that should decide.",
+          "explain": "A reward signal settles the answer on its own, so it has to be tested before any label check. Here the supervised test runs first and claims the robot before the reward test is ever reached."
         },
         {
           "type": "check",

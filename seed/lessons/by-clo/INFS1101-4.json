@@ -15,8 +15,8 @@
         {
           "type": "concept",
           "id": "concept-1",
-          "heading": "A function returns one answer; a bad index names itself",
-          "body": "A function lets you wrap logic that walks a list once and hands back a single answer, instead of repeating the same loop everywhere you need it. Give it a list of strings, check each one with a string method like len(), and return the value you actually want, not print it. The moment you assume a list is longer than it really is, Python raises an error and names the exact line where the index went past the end. Read that message before you guess: it tells you which line asked for a position, and that position did not exist."
+          "heading": "One pass through a list, one answer back",
+          "body": "A function lets you wrap logic that walks a list once and hands back a single answer, instead of repeating the same loop everywhere you need it. Give it a list of strings, measure each one with len(), and return the value you actually want, not print it. That single pass is the whole idea. It only breaks when you reach for a position that is not there: Python stops, names the exact line, and tells you the index went past the end. Read that message before you guess."
         },
         {
           "type": "snippet",

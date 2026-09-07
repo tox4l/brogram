@@ -28,10 +28,10 @@
           "type": "snippet",
           "id": "s1",
           "language": "java",
-          "code": "class Badge {\n    String label;\n    Badge(String label) { this.label = label; }\n    String stamp() { return label + \": approved\"; }\n}\n\npublic class Main {\n    public static void main(String[] args) {\n        Badge b = new Badge(\"Visitor\");\n        System.out.println(b.stamp());\n    }\n}\n",
+          "code": "class Dog {\n    String name;\n    Dog(String name) { this.name = name; }\n    String bark() { return name + \": Woof!\"; }\n}\n\npublic class Main {\n    public static void main(String[] args) {\n        Dog d = new Dog(\"Rex\");\n        System.out.println(d.bark());\n    }\n}\n",
           "runnable": false,
-          "expectedStdout": "Visitor: approved",
-          "caption": "Same idea: the label and the behavior that uses it travel together in one object."
+          "expectedStdout": "Rex: Woof!\n",
+          "caption": "Static example, no Run button here. Same idea: the name and the behavior that uses it travel together in one object."
         },
         {
           "type": "worked",
@@ -69,22 +69,22 @@
           "type": "check",
           "id": "chk1",
           "kind": "choose",
-          "prompt": "Picture the procedural version: main holds scoreA and scoreB as loose ints, and calls addPoints(scoreA, 10), which returns the updated total. Two players are tracked at once. Which job does main carry there that the class version above takes off its hands?",
+          "prompt": "A procedural version of Player would keep name and score as separate variables and pass them into standalone functions. What's the real difference once you switch to the class version above?",
           "options": [
-            "Keeping each total matched to the right player, and storing the returned value back on every call.",
-            "Converting each total to a String before it can be printed at all.",
-            "Splitting addPoints into two functions, since a standalone function cannot take two arguments.",
-            "Reserving memory for both totals by hand, since only objects get memory automatically."
+            "The class version bundles score with the method that changes it, so a Player carries its own behavior.",
+            "The class version runs faster because Java optimizes classes automatically.",
+            "The class version needs no constructor because Java creates default values for every field.",
+            "The class version can only be used once, while procedural functions can be reused."
           ],
           "correctIndex": 0,
           "why": [
-            "Right -- loose totals have no owner, so main is the only thing tracking whose is whose.",
-            "println handles an int the same way in both versions; that part never changed.",
-            "A standalone function takes as many arguments as you give it -- that was never the limit.",
-            "Both versions get their memory the same way; that is not what the rewrite bought you."
+            "Right -- the object owns its own data and the method that updates it.",
+            "Speed is not the point; the code does the same work either way.",
+            "The class still needs a constructor to set score for you -- you wrote one above.",
+            "You can create as many Player objects as you want; that's part of the value."
           ],
-          "hint": "Ask what main is forced to remember once the totals sit outside any object.",
-          "explain": "In the procedural version main owns both totals, picks the right one for every call, and writes the result back afterwards. Moving score inside Player retires all three of those steps: p.addPoints(10) can only ever reach that player's own score."
+          "hint": "Look at what lives inside Player versus what used to be separate variables and functions.",
+          "explain": "Grouping score and addPoints inside Player means the object always knows how to change its own state, instead of a function reaching in from outside."
         },
         {
           "type": "check",
@@ -136,7 +136,7 @@
           "say": "Time to turn a real procedural mess into your own class -- a real one's next."
         }
       ],
-      "exitLine": "That's the shift. Now build a class yourself."
+      "exitLine": "Time to turn a real procedural mess into your own class -- a real one's next."
     },
     {
       "id": "INFS3102-2",
@@ -158,7 +158,7 @@
           "type": "concept",
           "id": "concept-1",
           "heading": "Sketch the classes before you code",
-          "body": "Before you open an editor, sketch the classes on paper first: one box per class, its fields listed inside, lines connecting boxes that need each other. A line between two boxes means one class holds a reference to the other — a has-a relationship, called an association. An open arrow from a smaller box up to a bigger one means the smaller class inherits everything the bigger one has — an is-a relationship. Decide which kind each connection is before writing a single class. Then coding becomes translation, not invention: each box becomes a class, each listed field becomes a class field, and each line becomes either a stored reference or an extends clause."
+          "body": "Before you open an editor, sketch the classes on paper first. That sketch has a standard notation, UML: one box per class, its fields listed inside, lines connecting boxes that need each other. A line between two boxes means one class holds a reference to the other — a has-a relationship, called an association. An open arrow from a smaller box up to a bigger one means the smaller class inherits everything the bigger one has — an is-a relationship. Decide which kind each connection is first. Then coding becomes translation, not invention: each box becomes a class, each listed field becomes a class field, and each line becomes either a stored reference or an extends clause."
         },
         {
           "type": "snippet",
@@ -167,7 +167,7 @@
           "code": "class Shape {\n    String color;\n}\nclass Square extends Shape {\n    double side;\n}\nclass Drawing {\n    Shape shape;\n}",
           "runnable": false,
           "expectedStdout": "",
-          "caption": "Square is-a Shape (extends). Drawing has-a Shape (a stored field). Same two relationships, side by side."
+          "caption": "Static example, no Run button here. Square is-a Shape (extends). Drawing has-a Shape (a stored field). Same two relationships, side by side."
         },
         {
           "type": "worked",
@@ -214,45 +214,47 @@
           "type": "check",
           "id": "check-1",
           "kind": "choose",
-          "prompt": "A Playlist class keeps a list of Track objects it manages. A PodcastTrack class extends Track and adds nothing else. Which pair of words correctly labels the two relationships?",
+          "prompt": "A Team class keeps a list of Player objects it manages. A Goalkeeper class extends Player and adds nothing else. Which pair of words correctly labels the two relationships?",
           "options": [
-            "Playlist has-a Track; PodcastTrack is-a Track",
-            "Playlist is-a Track; PodcastTrack has-a Track",
-            "Playlist has-a Track; PodcastTrack has-a Track",
-            "Playlist is-a Track; PodcastTrack is-a Track"
+            "Team has-a Player; Goalkeeper is-a Player",
+            "Team is-a Player; Goalkeeper has-a Player",
+            "Team has-a Player; Goalkeeper has-a Player",
+            "Team is-a Player; Goalkeeper is-a Player"
           ],
           "correctIndex": 0,
           "why": [
             "Right — a stored list is a reference, so that is has-a, and extends is inheritance, so that is is-a.",
             "Backwards — a stored list is an association, not inheritance, and extends is inheritance, not an association.",
-            "Playlist is right, but extends always means is-a, never has-a, no matter what the subclass adds.",
-            "A stored list is never inheritance — Playlist only holds Track objects, it does not extend Track."
+            "Team is right, but extends always means is-a, never has-a, no matter what the subclass adds.",
+            "A stored list is never inheritance — Team only holds Player objects, it does not extend Player."
           ],
           "hint": "Look at what each relationship actually does: does one class extend the other, or just keep a reference to it?",
-          "explain": "Playlist stores a list of Track references, so that is has-a — an association. PodcastTrack extends Track, so that is is-a — inheritance. Same two relationship types as the sketch, applied to a new pair of classes."
+          "explain": "Team stores a list of Player references, so that is has-a — an association. Goalkeeper extends Player, so that is is-a — inheritance. Same two relationship types as the sketch, applied to a new pair of classes."
         },
         {
           "type": "check",
           "id": "check-2",
           "kind": "micro-code",
-          "prompt": "Finish Dog so describe(\"dog\", name) returns a bark line and describe(\"cat\", name) still returns the plain Animal line — using a constructor and an override, not a new field.",
+          "prompt": "Finish Dog so a dog prints \"Rex barks\" while any other animal still prints \"Milo makes a sound\" — using a constructor and an override, not a new field. Main already reads the kind and the name for you.",
           "language": "java",
-          "starterCode": "class Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    // add a constructor and override speak() here\n}\nclass Solution {\n    static String describe(String kind, String name) {\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        return a.speak();\n    }\n}",
+          "starterCode": "import java.util.Scanner;\nclass Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    // add a constructor and override speak() here\n}\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String kind = sc.next();\n        String name = sc.next();\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        System.out.println(a.speak());\n    }\n}",
           "tests": [
             {
               "id": "t1",
-              "input": "[\"dog\",\"Rex\"]",
-              "expected": "\"Rex barks\"",
+              "input": "dog Rex",
+              "expected": "Rex barks",
+              "hidden": false,
               "name": "dog barks"
             },
             {
               "id": "t2",
-              "input": "[\"cat\",\"Milo\"]",
-              "expected": "\"Milo makes a sound\"",
+              "input": "cat Milo",
+              "expected": "Milo makes a sound",
+              "hidden": false,
               "name": "non-dog unchanged"
             }
           ],
-          "referenceSolution": "class Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    Dog(String name) { super(name); }\n    @Override\n    String speak() { return name + \" barks\"; }\n}\nclass Solution {\n    static String describe(String kind, String name) {\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        return a.speak();\n    }\n}",
+          "referenceSolution": "import java.util.Scanner;\nclass Animal {\n    String name;\n    Animal(String name) { this.name = name; }\n    String speak() { return name + \" makes a sound\"; }\n}\nclass Dog extends Animal {\n    Dog(String name) { super(name); }\n    @Override\n    String speak() { return name + \" barks\"; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String kind = sc.next();\n        String name = sc.next();\n        Animal a = kind.equals(\"dog\") ? new Dog(name) : new Animal(name);\n        System.out.println(a.speak());\n    }\n}",
           "hint": "Give Dog a constructor that calls super(name), then override speak() to return something different from Animal's version.",
           "explain": "Dog's constructor passes name up with super(name), and overriding speak() lets the same call, a.speak(), produce a different result depending on the actual object — exactly what an is-a relationship promises."
         },
@@ -272,7 +274,7 @@
           "say": "Next you sketch a structure yourself, then build it in code without drifting from that sketch."
         }
       ],
-      "exitLine": "Sketch it first. Then make the code match."
+      "exitLine": "Go sketch the next one first — then make the code match it exactly."
     },
     {
       "id": "INFS3102-3",
@@ -300,10 +302,10 @@
           "type": "snippet",
           "id": "snippet-1",
           "language": "java",
-          "code": "class Route {\n    int minutes() { return 30; }\n}\nclass BikeRoute extends Route {\n    @Override\n    int minutes() { return 12; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Route r = new BikeRoute();\n        System.out.println(r.minutes());\n    }\n}",
+          "code": "class Instrument {\n    String play() { return \"...\"; }\n}\nclass Guitar extends Instrument {\n    @Override\n    String play() { return \"Strum\"; }\n}\npublic class Main {\n    public static void main(String[] args) {\n        Instrument i = new Guitar();\n        System.out.println(i.play());\n    }\n}",
           "runnable": false,
-          "expectedStdout": "12\n",
-          "caption": "r is typed Route, but the object underneath is a BikeRoute."
+          "expectedStdout": "Strum\n",
+          "caption": "Static example, no Run button here. i is typed Instrument, but the object underneath is a Guitar."
         },
         {
           "type": "worked",
@@ -334,13 +336,13 @@
           "type": "check",
           "id": "check-1",
           "kind": "predict-output",
-          "prompt": "show(t) only ever sees t as a Tag. What does this print?",
+          "prompt": "notify(n) only ever sees n as a Notification. What does this print?",
           "language": "java",
-          "code": "class Tag {\n    String render() { return \"plain\"; }\n}\nclass BoldTag extends Tag {\n    @Override\n    String render() { return \"BOLD\"; }\n}\npublic class Main {\n    static void show(Tag t) {\n        System.out.println(t.render());\n    }\n    public static void main(String[] args) {\n        Tag[] slots = { new Tag(), new BoldTag() };\n        for (Tag t : slots) show(t);\n    }\n}",
-          "expected": "plain\nBOLD",
+          "code": "class Notification {\n    String send() { return \"ping\"; }\n}\nclass UrgentNotification extends Notification {\n    @Override\n    String send() { return \"ALERT\"; }\n}\npublic class Main {\n    static void notify(Notification n) {\n        System.out.println(n.send());\n    }\n    public static void main(String[] args) {\n        Notification[] queue = { new Notification(), new UrgentNotification() };\n        for (Notification n : queue) notify(n);\n    }\n}",
+          "expected": "ping\nALERT",
           "normalize": "lines",
-          "hint": "show's parameter type never changes. Ask what each array slot actually holds instead.",
-          "explain": "show always receives something typed Tag, but the first slot really is a plain Tag and the second really is a BoldTag, so render() resolves separately for each one: plain, then BOLD."
+          "hint": "notify's parameter type never changes. Ask what each array slot actually holds instead.",
+          "explain": "notify always receives something typed Notification, but the first slot really is a plain Notification and the second really is an UrgentNotification, so send() resolves separately for each one: ping, then ALERT."
         },
         {
           "type": "check",
@@ -410,7 +412,7 @@
           "code": "interface Sound { void play(); }\nclass Beep implements Sound { public void play() { System.out.println(\"beep\"); } }\nclass Chime implements Sound { public void play() { System.out.println(\"chime\"); } }\nclass Alarm {\n  Sound sound;\n  Alarm(Sound sound) { this.sound = sound; }\n  void ring() { sound.play(); }\n}",
           "runnable": false,
           "expectedStdout": "",
-          "caption": "Same call, different sound - swap the object, not the class."
+          "caption": "Static example, no Run button here. Same call, different sound - swap the object, not the class."
         },
         {
           "type": "worked",
@@ -463,22 +465,22 @@
           "type": "check",
           "id": "check-2",
           "kind": "choose",
-          "prompt": "A checkout class picks its logic with a five-branch if/else instead of separate classes behind one interface. A sixth payment type arrives. Which statement about that change holds?",
+          "prompt": "A payment class picks its logic with a five-branch if/else instead of separate classes behind one interface. What's the real cost of leaving it that way?",
           "options": [
-            "The sixth type reopens the one class already handling the other five, so shipped branches land in the diff.",
-            "The sixth type makes checkout run slower, because branching costs more than calling an interface method.",
-            "Java refuses to compile a class once it passes a fixed number of if/else branches.",
-            "Both designs need the same edit; the interface version only spreads it across more files."
+            "Every new payment type means editing that one class and risking the branches that already work.",
+            "The code runs slower because if/else is slower than calling an interface method.",
+            "Java won't compile a class once it has more than a few if/else branches.",
+            "Nothing changes - if/else and separate classes behave identically either way."
           ],
           "correctIndex": 0,
           "why": [
-            "Right - working branches sit inside every future change to that class, so each addition puts them back in play.",
+            "Right - every new option touches shared code, so one mistake can break a branch that already shipped.",
             "Speed isn't the issue here; both approaches run in about the same time for this kind of logic.",
             "Java has no branch limit - this fails for a design reason, not a compiler one.",
-            "The interface version adds a file and leaves the existing ones untouched - that is the whole difference."
+            "They can produce the same output, but only one of them keeps changes contained to new code."
           ],
-          "hint": "Picture the diff for that sixth type in each design - which lines does a reviewer have to read?",
-          "explain": "The interface version adds one new class and leaves every shipped class alone. The if/else version reopens a class already handling five live payment types, so each addition drags working code back into review."
+          "hint": "Think about what you'd have to touch in that one class to add a sixth payment type.",
+          "explain": "The interface version adds a class; the if/else version edits a class that already worked and already shipped."
         },
         {
           "type": "recap",
