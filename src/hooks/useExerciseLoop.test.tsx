@@ -2,20 +2,49 @@ import type { PropsWithChildren } from 'react'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentEnvelope, AgentName, ExercisePublic, LearnerState, RunResult } from '@/lib/contracts'
+import type { AgentEnvelope, AgentName, Clo, ExercisePublic, LearnerState, RunResult } from '@/lib/contracts'
 import { compileLearnerState } from '@/lib/learner/compile'
 import { SessionProvider } from '@/components/shell/SessionProvider'
+import { qk } from '@/lib/query/keys'
 import { useExerciseLoop } from './useExerciseLoop'
 
-const spies = vi.hoisted(() => ({ call: vi.fn(), stream: vi.fn(), run: vi.fn(), warmup: vi.fn(), abort: vi.fn(), push: vi.fn(), from: vi.fn(), progress: vi.fn() }))
+const spies = vi.hoisted(() => ({
+  call: vi.fn(), stream: vi.fn(), run: vi.fn(), warmup: vi.fn(), abort: vi.fn(), push: vi.fn(), replace: vi.fn(),
+  from: vi.fn(), progress: vi.fn(), exerciseFrom: vi.fn<(code: string, id: string) => unknown>(() => null), celebrate: vi.fn(), play: vi.fn(),
+  invalidate: vi.fn(),
+}))
 vi.mock('@/lib/agents/client', () => ({ callAgent: spies.call, streamAgent: spies.stream }))
 vi.mock('@/lib/runtimes', () => ({ getRuntime: vi.fn(() => ({ language: 'javascript', run: spies.run, warmup: spies.warmup, abort: spies.abort })), subscribeRuntimeProgress: spies.progress }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: spies.from }) }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: spies.push }) }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: spies.push, replace: spies.replace }) }))
+vi.mock('@/lib/sound/manager', () => ({ play: spies.play }))
+vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: spies.invalidate }) }))
+vi.mock('@/lib/rewards/useCelebration', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rewards/useCelebration')>()
+  return { ...actual, celebrate: spies.celebrate }
+})
 
 const current: ExercisePublic = { id: 'e1', cloId: 'c1', language: 'javascript', kind: 'code', difficulty: 3, pattern: 'scan', title: 'Find a value', prompt: 'Return the requested value.', starterCode: 'function solve() {}', origin: 'seed', tags: [], tests: [{ id: 't1', input: '[]', expected: '1', hidden: false }] }
 const candidate: ExercisePublic = { ...current, id: 'e2', pattern: 'reduce', title: 'Count the values' }
 const clo = { id: 'c1', course: 'course1', ordinal: 1, outcome: 'Use collections', topics: [], prerequisites: [], patterns: ['scan', 'reduce', 'partition'], assessable_in_code: true, draft: false }
+const mapClo = (row: Record<string, unknown>): Clo => ({ id: String(row.id), course: String(row.course), ordinal: Number(row.ordinal), outcome: String(row.outcome), topics: row.topics as string[] ?? [], prerequisites: row.prerequisites as string[] ?? [], patterns: row.patterns as string[] ?? [], assessableInCode: row.assessable_in_code === true })
+
+/**
+ * R5.1b's "memoised static course bundle" (`@/lib/curriculum`) stands in for
+ * Supabase's `clos`/`courses` tables in this suite: `tables.clos`/`tables.courses`
+ * stay the single fixture source of truth, just read through the curriculum's
+ * shape instead of a network round trip. `exerciseFrom` defaults to "not in any
+ * bundle" (`spies.exerciseFrom`, itself defaulting to `null`) so every existing
+ * test keeps exercising the `exercises_public` fallback path unchanged; only the
+ * dedicated bundle-hit test below overrides it.
+ */
+vi.mock('@/lib/curriculum', () => ({
+  courses: () => tables.courses.map((row) => ({ code: String(row.code), packages: (row.packages as string[] | undefined) ?? [] })),
+  course: (code: string) => { const row = tables.courses.find((c) => c.code === code); return row ? { code: String(row.code), packages: (row.packages as string[] | undefined) ?? [] } : null },
+  clo: (id: string) => { const row = tables.clos.find((c) => c.id === id); return row ? mapClo(row) : null },
+  closFor: (course: string) => tables.clos.filter((c) => c.course === course).map(mapClo),
+  exerciseFrom: (code: string, id: string) => spies.exerciseFrom(code, id),
+}))
 const diagnosis = { intent: 'You were finding a value.', rootCause: 'The result is absent.', mistakeLabel: 'missing-return', fixPlan: ['Read the return path.', 'Return the value.', 'Run the tests again.'] }
 const hint = { hint: 'Check the return path.', planStep: 2 }
 const review = { improvements: ['Name the result clearly.', 'Keep the return path short.'] as [string, string], quality: 90, praise: 'You followed the data.' }
@@ -27,6 +56,17 @@ let loseStateAck = false
 let store: LearnerState
 let lastOrFilter: string | null = null
 const rowOf = (e: ExercisePublic): Row => ({ ...e, clo_id: e.cloId, starter_code: e.starterCode, verified: true })
+
+/** Holds one table's next write open until released -- proves the graded verdict renders
+ *  before that write's promise ever resolves (brief acceptance: "spy on the Supabase insert
+ *  and resolve it late"). */
+let holds: Partial<Record<string, { promise: Promise<void>; release: () => void }>> = {}
+function holdWrite(table: string): () => void {
+  let release!: () => void
+  const promise = new Promise<void>((resolve) => { release = resolve })
+  holds[table] = { promise, release }
+  return () => release()
+}
 
 function query(table: string) {
   let action = 'read'; let payload: Row | Row[] | undefined; let single = false; let limit = Infinity
@@ -43,8 +83,10 @@ function query(table: string) {
     insert: (value: Row | Row[]) => { action = 'insert'; payload = value; return builder },
     upsert: (value: Row | Row[], options?: { ignoreDuplicates?: boolean }) => { action = options?.ignoreDuplicates ? 'insert' : 'upsert'; payload = value; return builder },
     update: (value: Row) => { action = 'update'; payload = value; return builder },
-    then: (resolve: (result: { data: Row | Row[] | null; error: { message: string } | null }) => unknown) => {
-      if (failWrite === table && action !== 'read') { failWrite = null; return Promise.resolve(resolve({ data: null, error: { message: 'write temporarily unavailable' } })) }
+    then: (resolve: (result: { data: Row | Row[] | null; error: { message: string } | null }) => unknown) => (async () => {
+      const hold = action !== 'read' ? holds[table] : undefined
+      if (hold) { delete holds[table]; await hold.promise }
+      if (failWrite === table && action !== 'read') { failWrite = null; return resolve({ data: null, error: { message: 'write temporarily unavailable' } }) }
       const rows = tables[table] ??= []
       let found = rows.filter(row => filters.every(filter => filter(row))).slice(0, limit)
       if (action === 'insert' || action === 'upsert') {
@@ -56,9 +98,9 @@ function query(table: string) {
         })
       } else if (action === 'update') { found.forEach(row => Object.assign(row, payload)) }
       if (table === 'learner_state' && action !== 'read' && found[0]) store = found[0].state as LearnerState
-      if (loseStateAck && table === 'learner_state' && action !== 'read') { loseStateAck = false; return Promise.resolve(resolve({ data: null, error: { message: 'acknowledgement lost' } })) }
-      return Promise.resolve(resolve({ data: single ? found[0] ?? null : found, error: null }))
-    },
+      if (loseStateAck && table === 'learner_state' && action !== 'read') { loseStateAck = false; return resolve({ data: null, error: { message: 'acknowledgement lost' } }) }
+      return resolve({ data: single ? found[0] ?? null : found, error: null })
+    })(),
   }
   return builder
 }
@@ -79,9 +121,12 @@ beforeEach(() => {
   failWrite = null
   loseStateAck = false
   lastOrFilter = null
+  holds = {}
   spies.from.mockImplementation(query)
   spies.warmup.mockResolvedValue(undefined)
   spies.progress.mockImplementation(() => () => {})
+  spies.exerciseFrom.mockReturnValue(null)
+  spies.invalidate.mockResolvedValue(undefined)
   spies.run.mockImplementation(async req => req.tests.length === 0 ? { ...resultOf(true, []), stdout: 'free output' } : resultOf(req.code.includes('fixed') || req.code.includes('reference'), req.tests))
   spies.stream.mockImplementation(async (req, partial) => { partial(req.agent === 'diagnoser' ? { rootCause: 'Unvalidated partial.' } : { hint: 'Partial hint.' }); return envelope(req.agent, req.agent === 'diagnoser' ? diagnosis : hint) })
   spies.call.mockImplementation(async req => envelope(req.agent, req.agent === 'reviewer' ? review : { path: ['c1'], nextExerciseIds: ['e2'], focus: 'Continue.' }))
@@ -117,7 +162,10 @@ describe('exercise loop triggers and durable progress', () => {
     await act(async () => { await hook.result.current.submit(); await hook.result.current.next() })
     expect(spies.call).toHaveBeenCalledTimes(1)
     expect(tables.attempts).toHaveLength(2)
-    expect(spies.push).toHaveBeenCalledWith('/exercise/e2')
+    // Step 4: advancing between exercises is a `router.replace` in place, never the
+    // `router.push` remount that used to discard the already-fetched next exercise.
+    expect(spies.replace).toHaveBeenCalledWith('/exercise/e2')
+    expect(spies.push).not.toHaveBeenCalled()
   })
 
   it('unlocks first hints at 60 seconds or edit after each failure, then requires cooldown and caps five', async () => {
@@ -348,5 +396,131 @@ describe('exercise loop triggers and durable progress', () => {
     await act(async () => { await hook.result.current.requestHint() })
     expect(spies.stream.mock.calls[0][0]).toMatchObject({ agent: 'diagnoser', code: 'wrong answer' })
     expect(spies.stream.mock.calls[1][0]).toMatchObject({ agent: 'coach', diffSinceLastHint: '', currentCode: 'edited answer' })
+  })
+})
+
+describe('the optimistic submit path (T2.2)', () => {
+  it('reaches the graded verdict before the attempts insert ever resolves', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    const release = holdWrite('attempts')
+    let settled = false
+    // Intentionally not wrapped in (or awaited by) `act()` here -- the point of this test is to
+    // observe state *while* the promise is still in flight, before the held write ever resolves;
+    // `waitFor` below does its own act-wrapped polling. The final `await act(...)` after `release()`
+    // flushes and settles everything for the assertions that follow.
+    const submission = hook.result.current.submit().then(() => { settled = true })
+    await waitFor(() => expect(hook.result.current.status).toBe('graded'))
+    expect(hook.result.current.outcome).toBe('passed')
+    expect(hook.result.current.results.every(result => result.passed)).toBe(true)
+    expect(settled).toBe(false)
+    expect(tables.attempts).toHaveLength(0)
+    release()
+    await act(async () => { await submission })
+    expect(settled).toBe(true)
+    expect(tables.attempts).toHaveLength(1)
+  })
+
+  it('reaches the graded verdict on a fail before the attempts insert resolves too', async () => {
+    const hook = await loaded()
+    const release = holdWrite('attempts')
+    let settled = false
+    const submission = hook.result.current.submit().then(() => { settled = true })
+    await waitFor(() => expect(hook.result.current.status).toBe('graded'))
+    expect(hook.result.current.outcome).toBe('failed')
+    expect(settled).toBe(false)
+    release()
+    await act(async () => { await submission })
+  })
+
+  it('renders XP at the neutral quality first, then tweens to the Reviewer real value -- including a downward case', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    let releaseReviewer!: () => void
+    spies.call.mockImplementationOnce(() => new Promise(resolve => { releaseReviewer = () => resolve(envelope('reviewer', { ...review, quality: 0 })) }))
+    const submission = hook.result.current.submit()
+    await waitFor(() => expect(hook.result.current.status).toBe('graded'))
+    expect(hook.result.current.pointsEarned).toBe(335) // pointsForPass(3, 0, 70): the optimistic neutral figure
+    expect(hook.result.current.pointsProvisional).toBe(true)
+    releaseReviewer()
+    await act(async () => { await submission })
+    expect(hook.result.current.pointsEarned).toBe(300) // pointsForPass(3, 0, 0): a genuine drop, not a bump
+    expect(hook.result.current.pointsProvisional).toBe(false)
+  })
+
+  it('leaves the graded verdict in place when the durability write fails, banner instead of rollback', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    failWrite = 'attempts'
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.outcome).toBe('passed')
+    expect(hook.result.current.status).not.toBe('error')
+    expect(hook.result.current.error).toContain('write temporarily unavailable')
+    expect(hook.result.current.controlsDisabled).toBe(true)
+  })
+
+  it('fires each celebration exactly once per verdict, even across a retry of the background sync', async () => {
+    // This first pass legitimately earns two distinct celebrations at once -- 'first-win' (the
+    // account's very first pass) and 'chain' (0 -> 1) -- spec 7.6's own table has celebrations
+    // compound this way (e.g. "clo.close layered with level.up"); the queue (T2.6) is what shows
+    // them one at a time. What this test pins is that a *retry* of the failed background sync
+    // never re-fires either one a second time.
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    failWrite = 'learner_state'
+    await act(async () => { await hook.result.current.submit() })
+    const callsAfterFirstSubmit = spies.celebrate.mock.calls.length
+    expect(callsAfterFirstSubmit).toBeGreaterThan(0)
+    expect(spies.celebrate).toHaveBeenCalledWith('first-win', undefined, expect.any(String))
+    await act(async () => { await hook.result.current.retry() })
+    expect(hook.result.current.status).toBe('passed')
+    expect(spies.celebrate).toHaveBeenCalledTimes(callsAfterFirstSubmit)
+  })
+
+  it('plays the routine pass sound and cue on a later pass, not the first-win one', async () => {
+    store.points = 500
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(spies.celebrate).toHaveBeenCalledWith('pass', undefined, expect.any(String))
+    expect(spies.play).toHaveBeenCalledWith('pass')
+  })
+
+  it('plays the fail sound and never celebrates a fail', async () => {
+    const hook = await loaded()
+    await act(async () => { await hook.result.current.submit() })
+    expect(spies.play).toHaveBeenCalledWith('fail')
+    expect(spies.celebrate).not.toHaveBeenCalled()
+  })
+
+  it('invalidates attempts, activity days, achievements and learner state once a submission settles', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    const keys = spies.invalidate.mock.calls.map(([arg]) => JSON.stringify(arg.queryKey))
+    expect(keys).toContain(JSON.stringify(qk.attempts('student')))
+    expect(keys).toContain(JSON.stringify(qk.activityDays('student')))
+    expect(keys).toContain(JSON.stringify(qk.achievements('student')))
+    expect(keys).toContain(JSON.stringify(qk.learnerState('student')))
+  })
+
+  it('resolves a bundled exercise (a well-stocked CLO) with a single attempts read', async () => {
+    spies.exerciseFrom.mockImplementation((code: string, id: string) => (code === 'course1' && id === 'e1' ? current : null))
+    const hook = await loaded()
+    expect(hook.result.current.exercise?.id).toBe('e1')
+    expect(spies.from.mock.calls.map(([table]) => table)).toEqual(['attempts'])
+  })
+
+  it('falls back to a exercises_public read plus attempts for an id no loaded bundle has (the generated case)', async () => {
+    const hook = await loaded()
+    expect(hook.result.current.exercise?.id).toBe('e1')
+    expect(spies.from.mock.calls.map(([table]) => table)).toEqual(['exercises_public', 'attempts'])
+  })
+
+  it('never touches user_achievements (schema 0005 has no such table) -- a pass can never crash on it', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.outcome).toBe('passed')
+    expect(spies.from.mock.calls.some(([table]) => table === 'user_achievements')).toBe(false)
+  })
+
+  it('attaches the exercise difficulty to the reward-shaped attempt the moment it grades', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.lastRewardAttempt).toMatchObject({ exerciseId: 'e1', difficulty: current.difficulty, passed: true })
   })
 })

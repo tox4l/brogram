@@ -13,8 +13,24 @@ import { getRuntime, judgeProviderAbsent, subscribeRuntimeProgress, type Runtime
 import { createClient } from '@/lib/supabase/client'
 import { codeDiff, exerciseRunRequest, gradeAnswer, usesAnswerForm } from '@/lib/exercise/grading'
 import { useSession } from '@/store/session'
+import { clo as staticClo, closFor, course as staticCourse, courses as staticCourses, exerciseFrom } from '@/lib/curriculum'
+import type { RewardAttempt } from '@/lib/rewards/context'
+import { celebrate, levelUpDetail, type CelebrationDetail, type CelebrationKind } from '@/lib/rewards/useCelebration'
+import { play } from '@/lib/sound/manager'
+import { useReducedMotion } from '@/lib/motion/useReducedMotion'
+import { getQueryClient } from '@/lib/query/client'
+import { qk } from '@/lib/query/keys'
 
-type Status = 'loading' | 'ready' | 'running' | 'submitting' | 'failed' | 'passed' | 'error'
+type Status = 'loading' | 'ready' | 'running' | 'graded' | 'submitting' | 'failed' | 'passed' | 'error'
+/** The durable pass/fail fact, known the instant local grading resolves. Never rolled back by a
+ *  later network failure (brief step 3) -- `status` may keep moving (`graded` -> `submitting` on a
+ *  retry -> `passed`/`failed` once the whole background chain settles), but `outcome` is set once,
+ *  at grading time, and stays put regardless of what happens to the save. */
+type Outcome = 'passed' | 'failed' | null
+/** The neutral quality used for the optimistic XP figure before the Reviewer answers (spec 5.3/7.2). */
+const NEUTRAL_QUALITY = 70
+/** R5.1b: capped, matching the window every other reward/report consumer already uses. */
+const HISTORY_CAP = 50
 type History = { id: string; exercise_id: string; passed: boolean; hint_count: number; created_at: string }
 type Submission = {
   attempt: Attempt; exercise: ExercisePublic; clo: Clo; inserted: boolean
@@ -37,7 +53,28 @@ function writeHintReceipt(userId: string, exerciseId: string, receipt: HintRecei
 }
 const messageOf = (error: unknown) => error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Something went wrong. Try again.'
 const emptyMastery = (userId: string, cloId: string): Mastery => ({ userId, cloId, score: 0, chain: 0, patternsPassed: [], closed: false, lastAttemptAt: null })
-const mapClo = (row: Record<string, unknown>): Clo => ({ id: String(row.id), course: String(row.course), ordinal: Number(row.ordinal), outcome: String(row.outcome), topics: row.topics as string[] ?? [], prerequisites: row.prerequisites as string[] ?? [], patterns: row.patterns as string[] ?? [], assessableInCode: row.assessable_in_code === true })
+
+/**
+ * R5.1b: resolve an exercise id against whatever static course bundles are
+ * already memoised (T0.3) before ever touching `exercises_public`. CLOs and
+ * course metadata are always static (never runtime-generated, unlike an
+ * exercise), so a bundle hit resolves the exercise, its CLO and the course's
+ * Pyodide packages for zero network requests. A miss -- the runtime-generated
+ * case, or a cold deep link whose course bundle was never loaded this session
+ * -- returns null and the caller falls through to a single `exercises_public`
+ * read; CLO/course still resolve from the static lookups either way, so that
+ * fallback never touches `clos` or `courses`.
+ */
+function resolveFromBundle(id: string): { exercise: ExercisePublic; clo: Clo; packages: string[] } | null {
+  for (const course of staticCourses()) {
+    const exercise = exerciseFrom(course.code, id)
+    if (!exercise) continue
+    const outcome = staticClo(exercise.cloId)
+    if (!outcome) continue
+    return { exercise, clo: outcome, packages: course.packages ?? [] }
+  }
+  return null
+}
 
 function activityStreak(state: LearnerState, at: string): LearnerState['streak'] {
   const today = at.slice(0, 10)
@@ -61,6 +98,7 @@ export function useExerciseLoop(exerciseId: string) {
   const lastCoachAt = useRef<number | null>(null); const lastHintCode = useRef('')
   const spentHints = useRef(0); const completed = useRef(false)
   const pending = useRef<Submission | null>(null)
+  const reducedMotion = useReducedMotion()
   const [exercise, setExercise] = useState<ExercisePublic | null>(null)
   const [clo, setClo] = useState<Clo | null>(null)
   const [code, updateCode] = useState(''); const [status, setStatus] = useState<Status>('loading')
@@ -69,6 +107,7 @@ export function useExerciseLoop(exerciseId: string) {
   const [partialDiagnosis, setPartialDiagnosis] = useState<Partial<DiagnoserReply> | null>(null)
   const [hints, setHints] = useState<CoachReply[]>([]); const hintsRef = useRef<CoachReply[]>([])
   const [partialHint, setPartialHint] = useState<Partial<CoachReply> | null>(null)
+  const [hintPending, setHintPending] = useState(false)
   const [review, setReview] = useState<ReviewerReply | null>(null)
   const [nextExercise, setNextExercise] = useState<ExercisePublic | null>(null)
   const [progress, setProgress] = useState<RuntimeProgress | null>(null)
@@ -80,6 +119,20 @@ export function useExerciseLoop(exerciseId: string) {
   const [duringAttempt, setDuringAttempt] = useState(false)
   const [pointsEarned, setPointsEarned] = useState(0); const [closed, setClosed] = useState(false)
   const [reload, setReload] = useState(0)
+  /** Brief step 1/3: the durable verdict, set once at grading time and never rolled back. */
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  /** Brief step 2: the XP figure is provisional (neutral quality 70) until the Reviewer answers. */
+  const [pointsProvisional, setPointsProvisional] = useState(false)
+  /** The current CLO's chain, 0-3, for the instant chain-pip indicator. */
+  const [chain, setChain] = useState(0)
+  /** T2.5's `RewardAttempt`, difficulty attached, for whichever consumer evaluates achievements next. */
+  const [lastRewardAttempt, setLastRewardAttempt] = useState<RewardAttempt | null>(null)
+
+  const fireCelebration = useCallback((kind: CelebrationKind, detail: CelebrationDetail | undefined, eventId: string) => {
+    // `celebrate()`'s own `eventId` dedupes (T2.6 fix round): a retry re-entering the
+    // background chain, or a StrictMode double-invoke, can never enqueue the same verdict twice.
+    celebrate(kind, detail, eventId)
+  }, [])
 
   useEffect(() => {
     try { sessionStorage.setItem('brogram:attempt-active', String(duringAttempt)) } catch { /* Wellness remains usable without storage. */ }
@@ -104,28 +157,37 @@ export function useExerciseLoop(exerciseId: string) {
       setResults([]); setDiagnosis(null); setPartialDiagnosis(null); setHints([]); setPartialHint(null)
       setReview(null); setNextExercise(null); setProgress(null); setStdout(''); setStderr('')
       setHintCount(0); setDuringAttempt(false); setPointsEarned(0); setClosed(false)
-      setHasPending(false)
+      setHasPending(false); setOutcome(null); setPointsProvisional(false); setChain(0)
+      setLastRewardAttempt(null); setHintPending(false)
       setHintTiming({ failureAt: null, coachAt: null, edited: false, first: true }); setClock(Date.now())
       try {
         const client = clientRef.current ??= createClient()
         const userId = sessionRef.current.user?.id
         if (!userId) throw new Error('Sign in to open an exercise.')
-        const { data: row, error: readError } = await client.from('exercises_public').select('*').eq('id', exerciseId).eq('verified', true).maybeSingle()
-        if (readError) throw readError
-        if (!row) throw new Error('This exercise is unavailable. Choose another from your dashboard.')
-        const item = toExercisePublic(row)
-        const [cloResult, attempts] = await Promise.all([
-          client.from('clos').select('*').eq('id', item.cloId).maybeSingle(),
-          client.from('attempts').select('id,exercise_id,passed,hint_count,created_at').eq('user_id', userId).order('created_at', { ascending: false }),
-        ])
-        if (cloResult.error) throw cloResult.error
+        // R5.1b: the static course bundle first (zero network); the exercises_public read
+        // (one request) only when the id is a runtime-generated exercise the bundle never
+        // shipped, or a cold deep link whose bundle was never loaded this session. CLOs and
+        // course packages are always static, so neither path ever reads `clos` or `courses`.
+        const bundled = resolveFromBundle(exerciseId)
+        let item: ExercisePublic
+        let outcome: Clo
+        let coursePackages: string[]
+        if (bundled) {
+          item = bundled.exercise; outcome = bundled.clo; coursePackages = bundled.packages
+        } else {
+          const { data: row, error: readError } = await client.from('exercises_public').select('*').eq('id', exerciseId).eq('verified', true).maybeSingle()
+          if (readError) throw readError
+          if (!row) throw new Error('This exercise is unavailable. Choose another from your dashboard.')
+          item = toExercisePublic(row)
+          const staticOutcome = staticClo(item.cloId)
+          if (!staticOutcome) throw new Error('This learning outcome is unavailable.')
+          outcome = staticOutcome
+          coursePackages = staticCourse(outcome.course)?.packages ?? []
+        }
+        const attempts = await client.from('attempts').select('id,exercise_id,passed,hint_count,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(HISTORY_CAP)
         if (attempts.error) throw attempts.error
-        if (!cloResult.data) throw new Error('This learning outcome is unavailable.')
-        const outcome = mapClo(cloResult.data)
-        const course = await client.from('courses').select('packages').eq('code', outcome.course).maybeSingle()
-        if (course.error) throw course.error
         if (!active()) return
-        packages.current = course.data?.packages ?? []; history.current = attempts.data ?? []
+        packages.current = coursePackages; history.current = attempts.data ?? []
         const receipt = readHintReceipt(userId, item.id)
         const used = Math.min(LOCKDOWN.maxHintsPerExercise, Math.max(receipt.count, ...history.current.filter(attempt => attempt.exercise_id === item.id).map(attempt => attempt.hint_count ?? 0)))
         lastCoachAt.current = receipt.calledAt; hintsRef.current = receipt.hints; setHints(receipt.hints)
@@ -203,9 +265,8 @@ export function useExerciseLoop(exerciseId: string) {
     const mastery = state.mastery[operation.exercise.cloId]
     if (mastery.closed) {
       if (!operation.planner) {
-        const { data, error: cloError } = await client.from('clos').select('*').eq('course', operation.clo.course)
-        if (cloError) throw cloError
-        const clos = (data ?? []).map(mapClo)
+        // CLOs are always static curriculum data, never runtime-generated (R5.1b) -- no `clos` read.
+        const clos = [...closFor(operation.clo.course)]
         const banks = await Promise.all(clos.map(item => fetchBank(client, { cloId: item.id })))
         if (generation.current !== token) return
         operation.planner = (await callAgent({ agent: 'planner', trigger: 'plan-refresh', state, course: operation.clo.course, clos, candidates: banks.flat().slice(0, 30).map(({ id, cloId, pattern, difficulty, title }) => ({ id, cloId, pattern, difficulty, title })) })).reply
@@ -253,9 +314,7 @@ export function useExerciseLoop(exerciseId: string) {
         console.warn('Exercise generation failed; selecting the nearest bank exercise.', authorError)
         chosen = pickFromBank({ ...query, excludeExerciseIds: [] }, bank)
         if (!chosen) {
-          const { data, error: fallbackError } = await client.from('clos').select('*').eq('course', operation.clo.course)
-          if (fallbackError) throw fallbackError
-          const nearby = (await Promise.all((data ?? []).map(item => fetchBank(client, { cloId: String(item.id) })))).flat()
+          const nearby = (await Promise.all(closFor(operation.clo.course).map(item => fetchBank(client, { cloId: item.id })))).flat()
           chosen = nearby.filter(item => item.id !== operation.exercise.id && item.pattern !== operation.exercise.pattern).sort((a, b) => Math.abs(a.difficulty - DEFAULT_DIFFICULTY) - Math.abs(b.difficulty - DEFAULT_DIFFICULTY))[0] ?? null
         }
         if (!chosen) throw new Error('You passed. The next exercise is still being prepared; return to the dashboard.')
@@ -276,11 +335,16 @@ export function useExerciseLoop(exerciseId: string) {
     }
     if (generation.current !== token) return
     const state = assertAllowed()
+    const beforePoints = state.points
     const exerciseRefForAgent = { id: operation.exercise.id, cloId: operation.exercise.cloId, pattern: operation.exercise.pattern, prompt: operation.exercise.prompt, language: operation.exercise.language }
     if (attempt.passed) {
       if (!operation.review) operation.review = (await callAgent({ agent: 'reviewer', trigger: 'attempt-passed', state, exercise: exerciseRefForAgent, code: attempt.code, hintCount: attempt.hintCount, durationMs: attempt.durationMs })).reply
       if (generation.current !== token) return
       setReview(operation.review)
+      // Step 2: the tween IS the reconciliation -- fires the instant the real quality lands,
+      // not after the slower mastery-save/queueNext chain below.
+      setPointsEarned(pointsForPass(operation.exercise.difficulty, attempt.hintCount, operation.review.quality))
+      setPointsProvisional(false)
     } else {
       if (!operation.diagnosis) {
         operation.diagnosis = (await streamAgent({ agent: 'diagnoser', trigger: 'attempt-failed', state, exercise: { ...exerciseRefForAgent, kind: operation.exercise.kind }, code: attempt.code, results: attempt.results }, partial => { if (generation.current === token) setPartialDiagnosis(partial) })).reply
@@ -325,7 +389,12 @@ export function useExerciseLoop(exerciseId: string) {
     if (attempt.passed) {
       completed.current = true
       setPointsEarned(pointsForPass(operation.exercise.difficulty, attempt.hintCount, operation.review!.quality))
-      setClosed(mastery.closed)
+      setClosed(mastery.closed); setChain(mastery.chain)
+      // Level up is a rare-event card (spec 7.6); wait for the real, saved points total rather
+      // than the optimistic one, since a Reviewer swing near a level boundary could cross it
+      // differently than the neutral-quality preview did.
+      const levelUp = levelUpDetail(beforePoints, operation.state.points)
+      if (levelUp) fireCelebration('level-up', levelUp, `${attempt.id}:level`)
       if (!operation.queued) await queueNext(operation, token)
       if (generation.current !== token) return
       setStatus('passed')
@@ -363,6 +432,35 @@ export function useExerciseLoop(exerciseId: string) {
     }, 'running')
   }
 
+  /**
+   * Step 3: once the verdict is graded, a failure in the background sync must never roll it
+   * back. Caught here rather than left to `operate()`'s generic catch, so `status`/`outcome`
+   * stay put (a "didn't save, retrying" banner via `error`, not a hidden verdict) -- `retry()`
+   * routes back through the same wrapper for the same guarantee on a second attempt.
+   */
+  async function syncInBackground(operation: Submission, token: number) {
+    try { await finishSubmission(operation, token) }
+    catch (syncError) { if (generation.current === token) { setError(messageOf(syncError)); setPartialDiagnosis(null); setPartialHint(null) } }
+    finally {
+      // A graded submission settling (pass, fail, or a background failure the retry banner
+      // covers) is exactly the moment the dashboard's streak, goal ring, points and trophy
+      // shelf go stale: `attempts` and `activityDays` change on every attempt (spec's own
+      // `activityStreak` counts a fail too), `achievements` and `learner_state` on a pass.
+      // `saveState` predates T0.4's `useOptimistic` and keeps its own version-guarded retry
+      // loop rather than being rebuilt on it this task, so unlike a `useOptimistic` mutation
+      // there is no automatic self-invalidation on the `learner-state` key -- invalidated
+      // explicitly here alongside the other three so a stale reload is never required.
+      const userId = sessionRef.current.user?.id
+      if (userId) {
+        const client = getQueryClient()
+        void client.invalidateQueries({ queryKey: qk.attempts(userId) })
+        void client.invalidateQueries({ queryKey: qk.activityDays(userId) })
+        void client.invalidateQueries({ queryKey: qk.achievements(userId) })
+        void client.invalidateQueries({ queryKey: qk.learnerState(userId) })
+      }
+    }
+  }
+
   async function submit() {
     const item = exerciseRef.current; const outcome = cloRef.current
     if (!item || !outcome || completed.current || pending.current) return
@@ -378,10 +476,40 @@ export function useExerciseLoop(exerciseId: string) {
       setResults(result.results); setStdout(''); setStderr(''); setDuringAttempt(false); startedAt.current = null
       const previousTime = history.current[0]?.created_at ? Date.parse(history.current[0].created_at) : 0
       const at = new Date(Math.max(Date.now(), Number.isFinite(previousTime) ? previousTime + 1 : 0)).toISOString()
-      const passed = result.ok && result.totalCount === item.tests.length && result.passedCount === item.tests.length
-      const operation: Submission = { exercise: item, clo: outcome, inserted: false, attempt: { id: crypto.randomUUID(), userId: state.userId, exerciseId: item.id, code: submittedCode, results: result.results, passed, hintCount: spentHints.current, durationMs, createdAt: at } }
+      const passedNow = result.ok && result.totalCount === item.tests.length && result.passedCount === item.tests.length
+      const attemptId = crypto.randomUUID()
+      // Difficulty attached (T2.5 Ruling 1): this loop already has the exercise's Difficulty in
+      // memory at pass time, so the attempt it hands downstream is `RewardAttempt`-shaped from
+      // the moment it exists, even though the `attempts` table itself carries no such column.
+      const rewardAttempt: RewardAttempt = { id: attemptId, userId: state.userId, exerciseId: item.id, code: submittedCode, results: result.results, passed: passedNow, hintCount: spentHints.current, durationMs, createdAt: at, difficulty: item.difficulty }
+      const operation: Submission = { exercise: item, clo: outcome, inserted: false, attempt: rewardAttempt }
       pending.current = operation; setHasPending(true); setDiagnosis(null); setPartialDiagnosis(null)
-      await finishSubmission(operation, token)
+
+      // Steps 1 & 3: the browser knows pass or fail the instant grading resolves, before any
+      // network call -- that is where the verdict, the optimistic XP, the chain pip and the
+      // celebration all fire. `finishSubmission` still runs, but only in the background below.
+      setStatus('graded'); setOutcome(passedNow ? 'passed' : 'failed'); setLastRewardAttempt(rewardAttempt)
+      if (passedNow) {
+        const previousMastery = state.mastery[item.cloId] ?? emptyMastery(state.userId, item.cloId)
+        const graded = applyPass(previousMastery, item.difficulty, item.pattern, NEUTRAL_QUALITY, spentHints.current)
+        setPointsEarned(graded.points); setPointsProvisional(true); setChain(graded.mastery.chain)
+        const chainIncreased = graded.mastery.chain > previousMastery.chain
+        const justClosed = graded.mastery.closed && !previousMastery.closed
+        if (justClosed) setClosed(true)
+        // The account's very first-ever pass gets the permanent full-screen moment (spec 7.6);
+        // every other pass is routine (confetti there is rate-limited to the session's first).
+        // `state.points` predates this save, so 0 here means no prior pass has ever landed --
+        // robust across a capped attempts window in a way scanning `history.current` is not.
+        fireCelebration((state.points ?? 0) === 0 ? 'first-win' : 'pass', undefined, attemptId)
+        if (justClosed) fireCelebration('clo-close', { skill: outcome.outcome }, `${attemptId}:close`)
+        else if (chainIncreased) fireCelebration('chain', { n: graded.mastery.chain }, `${attemptId}:chain`)
+        play('pass')
+      } else {
+        setChain(0)
+        play('fail')
+      }
+
+      await syncInBackground(operation, token)
     }, 'submitting')
   }
 
@@ -405,7 +533,9 @@ export function useExerciseLoop(exerciseId: string) {
       hintedFailureId.current = failureId.current
       setHintTiming(previous => ({ ...previous, coachAt: lastCoachAt.current, first: false }))
       writeHintReceipt(state.userId, item.id, { count: spentHints.current, calledAt: lastCoachAt.current, failureId: hintedFailureId.current, hints: hintsRef.current })
-      const reply = await streamAgent({ agent: 'coach', trigger: 'hint-requested', state, exercise: { id: item.id, cloId: item.cloId, pattern: item.pattern, prompt: item.prompt, language: item.language }, diffSinceLastHint: item.kind === 'code' ? codeDiff(lastHintCode.current, currentCode) : '', currentCode, fixPlan: diagnosis.fixPlan, hintsSoFar: hintsRef.current.map(previous => previous.hint) }, partial => { receivedPartial = true; if (generation.current === token) setPartialHint(partial) })
+      // Step 5: the hint card's skeleton appears on click, in the same frame as the pip decrement above.
+      setHintPending(true)
+      const reply = await streamAgent({ agent: 'coach', trigger: 'hint-requested', state, exercise: { id: item.id, cloId: item.cloId, pattern: item.pattern, prompt: item.prompt, language: item.language }, diffSinceLastHint: item.kind === 'code' ? codeDiff(lastHintCode.current, currentCode) : '', currentCode, fixPlan: diagnosis.fixPlan, hintsSoFar: hintsRef.current.map(previous => previous.hint) }, partial => { receivedPartial = true; if (generation.current === token) { setPartialHint(partial); setHintPending(false) } })
       if (generation.current !== token) return
       hintsRef.current = [...hintsRef.current, reply.reply]; setHints(hintsRef.current)
       writeHintReceipt(state.userId, item.id, { count: spentHints.current, calledAt: lastCoachAt.current, failureId: hintedFailureId.current, hints: hintsRef.current })
@@ -424,27 +554,44 @@ export function useExerciseLoop(exerciseId: string) {
         }
       }
     }
-    finally { if (generation.current === token) { setPartialHint(null); setBusy(false); gate.current = false } }
+    finally { if (generation.current === token) { setPartialHint(null); setHintPending(false); setBusy(false); gate.current = false } }
   }
 
   async function retry() {
     if (gate.current) return
     const operation = pending.current
-    if (operation) { const token = generation.current; await operate(() => finishSubmission(operation, token), 'submitting') }
+    if (operation) { const token = generation.current; await operate(() => syncInBackground(operation, token), 'submitting') }
     else if (!exerciseRef.current) setReload(value => value + 1)
     else { setError(null); setStatus(completed.current ? 'passed' : failureAt.current === null ? 'ready' : 'failed') }
   }
 
+  /**
+   * Step 4: `next()` no longer discards the already-fetched next exercise with a full
+   * `router.push` remount. It updates the URL with `router.replace` (history-replace
+   * semantics -- a chain of reps should not pile up the back stack) while this same hook
+   * instance and the mounted `Editor` survive: `exerciseId` simply changes on the next
+   * render, and the load effect above already handles that transition. Wrapped in the
+   * browser's native View Transition (feature-detected, reduced-motion-guarded) as the
+   * closest available stand-in for React's `<ViewTransition>`, which this tree's pinned
+   * React 19.2.8 does not export (see report) -- the prompt panel carries the transition
+   * name (`page.tsx`) so only it crossfades; the editor and the warm runtime never remount.
+   */
   async function next() {
     if (!completed.current || gate.current || pending.current) return
-    if (closed) router.push('/dashboard')
-    else if (nextExercise) router.push(`/exercise/${encodeURIComponent(nextExercise.id)}`)
+    if (closed) { router.push('/dashboard'); return }
+    if (!nextExercise) return
+    const advance = () => router.replace(`/exercise/${encodeURIComponent(nextExercise.id)}`)
+    if (!reducedMotion && typeof document !== 'undefined' && 'startViewTransition' in document) {
+      (document as Document & { startViewTransition: (cb: () => void) => unknown }).startViewTransition(advance)
+    } else {
+      advance()
+    }
   }
 
   const waitUntil = !hintTiming.first && hintTiming.coachAt !== null ? hintTiming.coachAt + LOCKDOWN.hintCooldownS * 1000 : hintTiming.failureAt !== null && !hintTiming.edited ? hintTiming.failureAt + LOCKDOWN.hintCooldownS * 1000 : 0
   const hintWaitSeconds = Math.max(0, Math.ceil((waitUntil - clock) / 1000))
-  const hintAvailable = !busy && status === 'failed' && diagnosis !== null && hintCount < LOCKDOWN.maxHintsPerExercise && hintWaitSeconds === 0
-  const controlsDisabled = busy || hasPending || status === 'passed' || !exercise
+  const hintAvailable = !busy && outcome === 'failed' && diagnosis !== null && hintCount < LOCKDOWN.maxHintsPerExercise && hintWaitSeconds === 0
+  const controlsDisabled = busy || hasPending || outcome === 'passed' || !exercise
   const judgeAbsent = exercise?.language === 'java' && judgeProviderAbsent()
-  return { exercise, clo, code, setCode, run, submit, status, results, diagnosis, partialDiagnosis, hints, partialHint, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, closed, judgeAbsent }
+  return { exercise, clo, code, setCode, run, submit, status, outcome, results, diagnosis, partialDiagnosis, hints, partialHint, hintPending, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, pointsProvisional, chain, closed, judgeAbsent, lastRewardAttempt }
 }
