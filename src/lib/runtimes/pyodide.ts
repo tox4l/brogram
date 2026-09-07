@@ -12,7 +12,13 @@ import { WorkerAdapter, type RunPhase, type RuntimeWorker } from './worker-adapt
 export const PYODIDE_PREPARE_BUDGET_MS = 90_000
 
 export class PyodideAdapter extends WorkerAdapter {
-  constructor(factory: () => RuntimeWorker = () => new Worker(new URL('./pyodide.worker.ts', import.meta.url))) {
+  // `type: 'module'` is requested for forward compatibility, but confirmed
+  // (by inspecting the compiled worker bootstrap chunk) to be a no-op on
+  // this Next/Turbopack version: the emitted worker still bootstraps its own
+  // chunks with `importScripts()` either way. Pyodide 314 refuses to boot in
+  // any worker where `importScripts` works (see pyodide.worker.ts for the
+  // actual fix - shadowing `importScripts` before Pyodide's own probe runs).
+  constructor(factory: () => RuntimeWorker = () => new Worker(new URL('./pyodide.worker.ts', import.meta.url), { type: 'module' })) {
     super('python', factory)
   }
 
