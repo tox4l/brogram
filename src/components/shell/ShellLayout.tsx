@@ -39,7 +39,17 @@ import { gridTemplateFor, useCachedDockPrefs } from '@/lib/wellness/dock'
  * `<Toaster/>` mounts here, once, independent of the dock's own state (C4):
  * `Dock`'s collapsed and `hidden` states render no toast host of their own
  * any more, so a course-switch notice or a queued reminder's toast always
- * has somewhere to land.
+ * has somewhere to land. Rendered as a SIBLING of the grid, never a child of
+ * it: sonner's root element is an unstyled, non-positioned `<section>` while
+ * no toast is showing (only the per-position `<ol>` it renders *conditional
+ * on having a toast* carries `position:fixed`), so when there is nothing to
+ * show, `<Toaster/>` is a perfectly ordinary block box. Inside a
+ * `display:grid` container with two explicit tracks, an extra, unaccounted
+ * grid item pushes every item after it one auto-placement slot forward:
+ * `main` was landing in the dock's own 17.5rem track and `aside` was
+ * wrapping to a second implicit row -- the swapped-looking layout a fresh
+ * account's very first paint exposed, before any toast had ever fired to
+ * hide it by accident.
  */
 export function ShellLayout({ dock, children }: { dock: ReactNode; children: ReactNode }) {
   const userId = useSession((session) => session.user?.id ?? null)
@@ -51,31 +61,33 @@ export function ShellLayout({ dock, children }: { dock: ReactNode; children: Rea
   const template = gridTemplateFor(placement)
 
   return (
-    <div
-      className={cn(
-        'mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-6 sm:px-8',
-        template === 'top-strip' && 'gap-4',
-        (template === 'left-rail' || template === 'right-rail') && 'gap-8 lg:grid lg:items-start lg:gap-10',
-        template === 'left-rail' && 'lg:grid-cols-[17.5rem_minmax(0,1fr)]',
-        template === 'right-rail' && 'lg:grid-cols-[minmax(0,1fr)_17.5rem]',
-      )}
-    >
+    <>
       <Toaster />
-      {template === 'top-strip' && (
-        <aside aria-label="Wellness" className="w-full border-b border-border pb-3">{dock}</aside>
-      )}
-      <main id="main-content" tabIndex={-1} className="min-w-0 outline-none">{children}</main>
-      {template === 'left-rail' && (
-        <aside aria-label="Wellness" className="min-w-0 border-b border-border pb-6 lg:order-first lg:sticky lg:top-20 lg:border-b-0 lg:border-r lg:pr-7 lg:pb-0">
-          {dock}
-        </aside>
-      )}
-      {template === 'right-rail' && (
-        <aside aria-label="Wellness" className="min-w-0 border-t border-border pt-6 lg:sticky lg:top-20 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-7">
-          {dock}
-        </aside>
-      )}
-      {template === 'portal' && dock}
-    </div>
+      <div
+        className={cn(
+          'mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-6 sm:px-8',
+          template === 'top-strip' && 'gap-4',
+          (template === 'left-rail' || template === 'right-rail') && 'gap-8 lg:grid lg:items-start lg:gap-10',
+          template === 'left-rail' && 'lg:grid-cols-[17.5rem_minmax(0,1fr)]',
+          template === 'right-rail' && 'lg:grid-cols-[minmax(0,1fr)_17.5rem]',
+        )}
+      >
+        {template === 'top-strip' && (
+          <aside aria-label="Wellness" className="w-full border-b border-border pb-3">{dock}</aside>
+        )}
+        <main id="main-content" tabIndex={-1} className="min-w-0 outline-none">{children}</main>
+        {template === 'left-rail' && (
+          <aside aria-label="Wellness" className="min-w-0 border-b border-border pb-6 lg:order-first lg:sticky lg:top-20 lg:border-b-0 lg:border-r lg:pr-7 lg:pb-0">
+            {dock}
+          </aside>
+        )}
+        {template === 'right-rail' && (
+          <aside aria-label="Wellness" className="min-w-0 border-t border-border pt-6 lg:sticky lg:top-20 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-7">
+            {dock}
+          </aside>
+        )}
+        {template === 'portal' && dock}
+      </div>
+    </>
   )
 }

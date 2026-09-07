@@ -7,6 +7,20 @@ import { makeQueryClient } from '@/lib/query/client'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { ShellLayout } from './ShellLayout'
 
+// jsdom never computes actual CSS grid layout (no real box model), so a test
+// asserting "the wide column is on the left" would pass even if `main` and
+// `aside` were assigned to the wrong tracks by an unaccounted extra grid
+// item -- exactly what happened here (a live capture on a fresh account
+// showed `main` squeezed into the dock's 17.5rem track and `aside` wrapped
+// onto a second row, because `<Toaster/>` -- an ordinary, non-positioned
+// `<section>` while no toast is showing -- was a third, uncounted child of
+// the `display:grid` container). What jsdom *can* verify, and what actually
+// catches that class of bug, is the real regression guard: the grid
+// container's direct children are exactly the elements the template
+// document above says they are, in that exact order, with no extra sibling
+// -- so `main` always lands in the first auto-placement slot and `aside` (or
+// the portal target) in the second, never a third item nobody accounted for.
+
 // `ShellLayout` reads `wellness.prefs.dock.placement` itself (T2.4: placement
 // is a real layout decision, so the grid has to know it), through the same
 // `useWellness()` query every other dock-aware component reads.
@@ -136,5 +150,76 @@ describe('ShellLayout', () => {
     const aside = screen.getByRole('complementary', { name: 'Wellness' })
     expect(aside.className).toContain('order-first')
     expect(grid?.className).not.toContain('lg:grid-cols-[minmax(0,1fr)_17.5rem]')
+  })
+
+  // Fix round 4 (the fresh-account /derot regression): `<Toaster/>` must
+  // never be a child of the grid container -- one per placement, asserting
+  // both the computed grid template and exactly which elements occupy the
+  // grid's own children, in what order, with nothing extra.
+  describe('grid item count -- no unaccounted grid item can steal main\'s track', () => {
+    function directChildTags(grid: Element | null): string[] {
+      return grid ? [...grid.children].map((child) => child.tagName) : []
+    }
+
+    it('right: grid children are exactly [main, aside], main first (the wide 1fr track)', async () => {
+      render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('right') })
+      const grid = await vi.waitFor(() => {
+        const el = screen.getByRole('main').parentElement
+        expect(el?.className).toContain('lg:grid-cols-[minmax(0,1fr)_17.5rem]')
+        return el
+      })
+      expect(directChildTags(grid)).toEqual(['MAIN', 'ASIDE'])
+    })
+
+    it('left: grid children are exactly [main, aside] in the DOM (order-first is CSS-only), the 17.5rem track', async () => {
+      render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('left') })
+      const grid = await vi.waitFor(() => {
+        const el = screen.getByRole('main').parentElement
+        expect(el?.className).toContain('lg:grid-cols-[17.5rem_minmax(0,1fr)]')
+        return el
+      })
+      expect(directChildTags(grid)).toEqual(['MAIN', 'ASIDE'])
+    })
+
+    it('top: grid children are exactly [aside, main], the strip before main in document order', async () => {
+      render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('top') })
+      const grid = await vi.waitFor(() => {
+        const el = screen.getByRole('main').parentElement
+        expect(el?.className).not.toContain('lg:grid-cols-')
+        return el
+      })
+      expect(directChildTags(grid)).toEqual(['ASIDE', 'MAIN'])
+    })
+
+    it('float: grid children are exactly [main, dock] -- ShellLayout renders whatever `dock` is verbatim; making it an actual portal (so it is not really a grid child in production) is WellnessSlot\'s job, not this component\'s', async () => {
+      render(<ShellLayout dock={<div>Floating dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('float') })
+      const grid = await vi.waitFor(() => {
+        const el = screen.getByRole('main').parentElement
+        expect(el?.className).not.toContain('lg:grid-cols-')
+        return el
+      })
+      expect(directChildTags(grid)).toEqual(['MAIN', 'DIV'])
+    })
+
+    it('hidden: grid children are exactly [main] -- nothing else, dock renders nothing here', async () => {
+      render(<ShellLayout dock={null}><p>Content</p></ShellLayout>, { wrapper: wrapper('hidden') })
+      const grid = await vi.waitFor(() => {
+        const el = screen.getByRole('main').parentElement
+        expect(el?.className).not.toContain('lg:grid-cols-')
+        return el
+      })
+      expect(directChildTags(grid)).toEqual(['MAIN'])
+    })
+
+    it('the toast host is never a child of the grid container, in any placement', async () => {
+      render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('right') })
+      const grid = await vi.waitFor(() => {
+        const el = screen.getByRole('main').parentElement
+        expect(el?.className).toContain('lg:grid-cols-')
+        return el
+      })
+      const toastHost = screen.getByLabelText(/Notifications/i)
+      expect(grid?.contains(toastHost)).toBe(false)
+    })
   })
 })
