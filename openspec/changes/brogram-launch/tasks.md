@@ -51,7 +51,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T2.6 Rewards: celebrations, counters and the trophy shelf (5761cf8, af54860, b3b3558)
 - [x] T2.7a The voice bank (Group A) (cc56445, c5c0189)
 - [x] T2.7b The copy sweep (Group C, serial, last) (7b7f99d, 3448f5a; exercise page via T2.2 round 3; runtime files after the web fix)
-- [ ] T2.8 Honest lockdown and the integrity receipt
+- [x] T2.8 Honest lockdown and the integrity receipt (f7c7c96, 06df17c, 5496891)
 - [x] T2.9a De-rot Arcade: the hub, the run model, score normalisation (71f8230, 3a6c344, c613543)
 - [x] T2.9b De-rot Playground: six non-coding games (5a5b509, 0d83e17, 1b7f312, 6f1197a, eddaeec)
 - [x] T2.10 Agent identity rewrites (copy only, no schema touched) (7cbe723, 37c4f16, ef54318)
