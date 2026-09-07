@@ -10,8 +10,16 @@ vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQuerie
 const celebrateMock = vi.hoisted(() => vi.fn())
 vi.mock('./useCelebration', () => ({ celebrate: celebrateMock }))
 
+// F1 (fix round 1): `recordGoalDay` now guards its invalidate on this. Mocked
+// per-test rather than left at its real (module-level, per-user-map)
+// implementation so each test controls the "is a prefs write in flight"
+// state independently of any other test's writer map.
+const hasPendingPrefsWriteMock = vi.hoisted(() => vi.fn(() => false))
+vi.mock('@/app/(app)/account/prefsMutation', () => ({ hasPendingPrefsWrite: hasPendingPrefsWriteMock }))
+
 afterEach(() => {
   vi.clearAllMocks()
+  hasPendingPrefsWriteMock.mockReturnValue(false)
 })
 
 // ---------------------------------------------------------------------------
@@ -94,6 +102,11 @@ type Call = Record<string, unknown>
 
 function fakeClient(opts: {
   upsert?: { data: unknown; error: unknown }
+  /** The read-fresh `select('prefs').eq().maybeSingle()` `recordGoalDay` now
+   *  does before building its patch (F1, fix round 1). Defaults to "no row
+   *  yet" so tests that do not care about the server's current prefs still
+   *  pass through resolveWellnessPrefs's own defaulting. */
+  read?: { data: unknown; error: unknown }
   update?: { data: unknown; error: unknown }
   insert?: { data: unknown; error: unknown }
 } = {}) {
@@ -102,6 +115,15 @@ function fakeClient(opts: {
     from(table: string) {
       calls.push({ table })
       return {
+        select(columns: string) {
+          calls.push({ readSelect: columns })
+          return {
+            eq(column: string, value: unknown) {
+              calls.push({ readEq: [column, value] })
+              return { maybeSingle: () => Promise.resolve(opts.read ?? { data: null, error: null }) }
+            },
+          }
+        },
         upsert(rows: unknown, options: unknown) {
           calls.push({ upsert: rows, options })
           return {
@@ -299,6 +321,46 @@ describe('recordGoalDay', () => {
     expect(celebrateMock).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
+  })
+
+  // F1 (fix round 1, Opus review of 4a522e2): the write used to build its
+  // patch from `ctx.prefs`, a snapshot the caller captured at submit time.
+  // If the learner changed something else (theme, sound, the dock) between
+  // that snapshot and this write landing, the whole `prefs` column got
+  // overwritten back to the stale snapshot -- a durable loss, not a visual
+  // flicker, since `wellness` has no per-field columns to merge on the server.
+  it('re-reads the server row before writing -- a stale ctx.prefs snapshot never clobbers a field the server already has fresher', async () => {
+    const { client, calls } = fakeClient({
+      read: { data: { prefs: { ...DEFAULT_WELLNESS, theme: 'amber' } }, error: null },
+      update: { data: { user_id: 'user-1' }, error: null },
+    })
+    // ctx.prefs says 'paper' -- captured before some other control (the dock,
+    // the account page) wrote 'amber' to the server.
+    const staleCtx = goalMetCtx({ prefs: { ...DEFAULT_WELLNESS, dailyGoal: 1, goalDays: [], theme: 'paper' } })
+    const result = await recordGoalDay(client, 'user-1', staleCtx)
+    expect(result).toBe(true)
+    const updateCall = calls.find((c) => 'update' in c) as { update: { prefs: Record<string, unknown> } } | undefined
+    expect(updateCall?.update.prefs.theme).toBe('amber')
+    expect(updateCall?.update.prefs.goalDays).toEqual(['2026-09-06'])
+  })
+
+  // F1: the invalidate is what visibly flips a control the learner is mid-edit
+  // on back to a stale value (X3). Skipping it while the dock/account writer
+  // has something queued or in flight is the whole fix.
+  it('skips the wellness invalidate while a prefs write is pending elsewhere, but still writes and celebrates', async () => {
+    hasPendingPrefsWriteMock.mockReturnValue(true)
+    const { client } = fakeClient({ update: { data: { user_id: 'user-1' }, error: null } })
+    const result = await recordGoalDay(client, 'user-1', goalMetCtx())
+    expect(result).toBe(true)
+    expect(invalidateMock).not.toHaveBeenCalled()
+    expect(celebrateMock).toHaveBeenCalledWith('goal', undefined, 'user-1:goal:2026-09-06')
+  })
+
+  it('invalidates the wellness key as normal when nothing else is pending', async () => {
+    hasPendingPrefsWriteMock.mockReturnValue(false)
+    const { client } = fakeClient({ update: { data: { user_id: 'user-1' }, error: null } })
+    await recordGoalDay(client, 'user-1', goalMetCtx())
+    expect(invalidateMock).toHaveBeenCalledWith({ queryKey: ['wellness', 'user-1'] })
   })
 })
 

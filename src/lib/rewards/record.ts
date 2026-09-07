@@ -15,12 +15,13 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Achievement } from '@/lib/contracts'
+import { hasPendingPrefsWrite } from '@/app/(app)/account/prefsMutation'
 import { getQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
-import { prefsPatch } from '@/lib/wellness/prefs'
+import { prefsPatch, recordGoalDay as recordGoalDayPure, resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { newlyUnlocked } from './achievements'
 import type { RewardContext } from './context'
-import { nextGoalDays, shouldRecordGoalDay } from './goal'
+import { shouldRecordGoalDay } from './goal'
 import { celebrate } from './useCelebration'
 
 /**
@@ -101,17 +102,28 @@ export async function recordAchievements(
  */
 
 /**
- * The once-per-day goal write: applies `shouldRecordGoalDay`, persists the
- * appended `goalDays` (`nextGoalDays`, already deduped and capped) onto
- * `wellness.prefs`, invalidates the cache, and fires `goal.done` -- once.
+ * The once-per-day goal write: applies `shouldRecordGoalDay`, persists
+ * today's key onto `wellness.prefs`, invalidates the cache (when safe to),
+ * and fires `goal.done` -- once.
  *
  * Naming note (deliberate, flagged for the report): `src/lib/wellness/
  * prefs.ts` already exports a pure `recordGoalDay(days, dateKey): string[]`
  * (append-dedupe-cap on a plain array, no I/O). This is a different function
- * with the same name in a different module: the brief names this helper
- * `recordGoalDay` specifically, and the two are never imported into the same
- * file today (this one calls `nextGoalDays` from `./goal`, which already
- * wraps the pure one). A file that ever needs both must alias one on import.
+ * with the same name in a different module, imported here under the alias
+ * `recordGoalDayPure`.
+ *
+ * Fix round 1, F1 (Opus review of `4a522e2`): this used to build its patch
+ * from `ctx.prefs` -- a snapshot the caller captured at submit time -- and
+ * unconditionally invalidate `qk.wellness`. Both re-opened X3's lost-update:
+ * the dock (mounted on every route) and this write share the same
+ * `wellness.prefs` column through `useWellnessPrefsMutation`'s single writer
+ * (`src/app/(app)/account/prefsMutation.ts`), and a stale `ctx.prefs`
+ * overwriting the whole column erases whatever that writer had queued or
+ * just landed. This now does the same read-fresh-then-write `prefsMutation.ts`
+ * itself uses -- select the current server row, merge only `goalDays` onto
+ * it -- and skips the invalidate entirely while that writer has a change in
+ * flight (`hasPendingPrefsWrite`), so a refetch here can never land a stale
+ * snapshot over an unflushed dock edit.
  *
  * Same update-then-insert-if-absent shape `useExerciseLoop.ts`'s local
  * `recordGoalAndStreak` uses, and the same once-per-day eventId
@@ -121,10 +133,11 @@ export async function recordAchievements(
  */
 export async function recordGoalDay(client: SupabaseClient, userId: string, ctx: RewardContext): Promise<boolean> {
   if (!shouldRecordGoalDay(ctx)) return false
-  const goalDays = nextGoalDays(ctx)
-  if (!goalDays) return false
   try {
-    const patch = prefsPatch({ ...ctx.prefs, goalDays })
+    const { data, error } = await client.from('wellness').select('prefs').eq('user_id', userId).maybeSingle()
+    if (error) throw error
+    const current = resolveWellnessPrefs((data as { prefs: unknown } | null)?.prefs)
+    const patch = prefsPatch({ ...current, goalDays: recordGoalDayPure([...current.goalDays], ctx.today) })
     const updated = await client
       .from('wellness')
       .update({ prefs: patch, updated_at: new Date().toISOString() })
@@ -136,7 +149,7 @@ export async function recordGoalDay(client: SupabaseClient, userId: string, ctx:
       const inserted = await client.from('wellness').insert({ user_id: userId, prefs: patch })
       if (inserted.error) throw inserted.error
     }
-    void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
+    if (!hasPendingPrefsWrite(userId)) void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
     celebrate('goal', undefined, `${userId}:goal:${ctx.today}`)
     return true
   } catch (err) {

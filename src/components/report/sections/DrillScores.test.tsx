@@ -54,4 +54,17 @@ describe('DrillScores', () => {
     screen.getByText('Arcade')
     screen.getByText(DRILL_META.trace.title)
   })
+
+  it('F3, fix round 3: a kind outside DRILL_META renders its raw key instead of throwing', () => {
+    // Built directly rather than through `deriveDrillScores` -- that function
+    // filters its rows through `DRILL_KIND_ORDER` (derive.ts:327-328), so an
+    // unrecognised kind never survives grouping there at all. The unguarded
+    // `DRILL_META[row.kind].title` this fixes is a render-site bug: any
+    // `LaneDrillScores` this component is handed, from any producer, must not
+    // crash on a kind it does not recognise.
+    const groups = [{ lane: 'arcade' as const, rows: [{ kind: 'not-a-real-kind' as DrillResult['kind'], best: 80, mean: 80, count: 1 }] }]
+    expect(() => render(<DrillScores groups={groups} />)).not.toThrow()
+    screen.getByText('Arcade')
+    screen.getByText('not-a-real-kind')
+  })
 })

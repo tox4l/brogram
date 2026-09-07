@@ -24,6 +24,17 @@ interface DrillScoresProps {
  * `DRILL_META[row.kind].title` directly makes a rename in the one real
  * source impossible to miss here; `Breathe.tsx` and `FollowTheDot.tsx`
  * already import `DRILL_META` the same way, so this is not a new pattern.
+ *
+ * F3, fix round 3 (Opus review of 4a522e2): `?.title ?? row.kind` -- a
+ * `DrillResult.kind` outside the twelve keys `DRILL_META` knows (a
+ * hand-edited row, a v1 client write, a future rename landing before a
+ * backfill) used to throw here (`Cannot read properties of undefined`) and
+ * take down the whole Report tab, the exact screen this component exists to
+ * keep rendering. `derive.ts` and `achievements.ts` already optional-chain
+ * the identical `DRILL_META[...]` lookup for lane grouping (W2-SCHEMA-I2);
+ * this is the render-site half of the same guard. Falling back to the raw
+ * `row.kind` string (rather than dropping the row) keeps the run visible --
+ * an odd label beats a silently missing score.
  */
 export function DrillScores({ groups }: DrillScoresProps) {
   return (
@@ -39,7 +50,7 @@ export function DrillScores({ groups }: DrillScoresProps) {
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                 {group.rows.map(row => (
                   <div key={row.kind} className="flex items-center justify-between border-b border-border pb-1.5">
-                    <span className="text-[11px] font-medium text-foreground">{DRILL_META[row.kind].title}</span>
+                    <span className="text-[11px] font-medium text-foreground">{DRILL_META[row.kind]?.title ?? row.kind}</span>
                     <span className="text-[11px] text-muted-foreground tabular-nums">
                       best {row.best} · mean {row.mean} · {row.count} run{row.count === 1 ? '' : 's'}
                     </span>
