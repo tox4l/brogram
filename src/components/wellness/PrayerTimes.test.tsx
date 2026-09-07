@@ -101,4 +101,14 @@ describe('PrayerTimes', () => {
     expect(onPendingChange).toHaveBeenCalledWith(false)
     expect(toast).toHaveBeenCalledWith(expect.stringContaining('Dhuhr time has arrived'))
   })
+
+  it('C3: still fires reminders (and reports pending) when not visible (mounted for a collapsed/hidden dock)', () => {
+    const onPendingChange = vi.fn()
+    const { container } = render(
+      <PrayerTimes prefs={DEFAULT_WELLNESS} onTogglePrayer={vi.fn()} result={result} now={dhuhrAtMs} attemptActive={false} onPendingChange={onPendingChange} visible={false} />,
+    )
+    expect(container.firstChild).toBeNull()
+    expect(toast).toHaveBeenCalledWith('Dhuhr time has arrived.')
+    expect(onPendingChange).toHaveBeenCalledWith(true)
+  })
 })

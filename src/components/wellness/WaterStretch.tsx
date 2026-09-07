@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { CupSoda, PersonStanding } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { WellnessPrefs } from '@/lib/contracts'
+import { isTickReady } from '@/components/shell/useSecondTick'
 import { dateKeyOf } from '@/lib/wellness/prayer'
 import { advanceRecurringTimer, computeLogStreak, dueRecurringTimer, startRecurringTimer, type RecurringTimerState } from '@/lib/wellness/timers'
 
@@ -17,19 +18,32 @@ export interface WellnessLogEntry {
  * Tracks a recurring reminder's next-due timestamp in a ref rather than state: nothing in
  * the UI needs to re-render off it (only a toast fires, or a queue push -- R6.4), so
  * advancing it is a plain side effect instead of a setState call inside an effect.
+ *
+ * Never seeds from `now` until `isTickReady` says the shared clock has ticked for real at
+ * least once (C2). `useSecondTick`'s sentinel (`0`) is also the value React uses for a
+ * client's *first* render during hydration, not only the server render -- seeding eagerly
+ * from `useRef(startRecurringTimer(now, intervalMin))` anchored every dock mount to
+ * 1970-01-01 00:45, which is already "due" the instant a real clock value arrives, firing a
+ * water and a stretch reminder (or, mid-attempt, lighting the badge) on every single load.
  */
 function useRecurringTimer(now: number, intervalMin: number, message: string, onDue: (message: string) => void) {
-  const timerRef = useRef<RecurringTimerState>(startRecurringTimer(now, intervalMin))
+  const timerRef = useRef<RecurringTimerState | null>(null)
   const intervalRef = useRef(intervalMin)
 
   useEffect(() => {
+    if (!isTickReady(now)) return
+    if (timerRef.current === null) {
+      timerRef.current = startRecurringTimer(now, intervalMin)
+      intervalRef.current = intervalMin
+      return
+    }
     if (intervalRef.current === intervalMin) return
     intervalRef.current = intervalMin
     timerRef.current = startRecurringTimer(now, intervalMin)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervalMin])
+  }, [intervalMin, now])
 
   useEffect(() => {
+    if (timerRef.current === null) return
     if (!dueRecurringTimer(timerRef.current, now)) return
     onDue(message)
     timerRef.current = advanceRecurringTimer(timerRef.current, now, intervalMin)
@@ -37,22 +51,31 @@ function useRecurringTimer(now: number, intervalMin: number, message: string, on
   }, [now])
 }
 
-export function WaterStretch({ prefs, now, log, onLog, attemptActive = false, onPendingChange, compact = false }: {
+export function WaterStretch({ prefs, now, log, onLog, attemptActive = false, onPendingChange, compact = false, visible = true }: {
   prefs: WellnessPrefs
   now: number
   log: WellnessLogEntry[]
   onLog: (entry: WellnessLogEntry) => void
   attemptActive?: boolean
-  /** R6.4: `true` the instant a reminder queues instead of toasting (an attempt is
-   *  active), `false` once the queue flushes -- lets the dock show a badge instead. */
+  /** R6.4/C3: `true` the instant a reminder fires -- whether it toasts right away
+   *  or queues because an attempt is active -- so the dock can show a badge on a
+   *  collapsed handle (or the header control when hidden) even where the full
+   *  card is not on screen. Cleared by whoever owns acknowledgement (expanding
+   *  the dock, or the header re-open glyph), not by this component. */
   onPendingChange?: (pending: boolean) => void
   compact?: boolean
+  /** C3: the reminder engine (this component's effects) must keep running while
+   *  the dock is collapsed or hidden -- only the UI is conditional. Mount this
+   *  component always and pass `visible={false}` rather than unmounting it. */
+  visible?: boolean
 }) {
   const queuedRef = useRef<string[]>([])
   const wasActiveRef = useRef(attemptActive)
 
   const handleDue = (message: string) => {
-    if (attemptActive) { queuedRef.current.push(message); onPendingChange?.(true) } else toast(message)
+    if (attemptActive) queuedRef.current.push(message)
+    else toast(message)
+    onPendingChange?.(true)
   }
 
   useEffect(() => {
@@ -74,6 +97,8 @@ export function WaterStretch({ prefs, now, log, onLog, attemptActive = false, on
 
   const logWater = () => onLog({ kind: 'water', at: new Date(now).toISOString() })
   const logStretch = () => onLog({ kind: 'stretch', at: new Date(now).toISOString() })
+
+  if (!visible) return null
 
   if (compact) {
     return (

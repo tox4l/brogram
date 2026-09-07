@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useSecondTick } from './useSecondTick'
+import { isTickReady, nowOrNull, useSecondTick } from './useSecondTick'
 
 function Probe() {
   return <span>{useSecondTick()}</span>
@@ -109,5 +109,18 @@ describe('useSecondTick', () => {
 
     expect(first).toBe(second)
     expect(first).toContain('>0<')
+  })
+})
+
+describe('isTickReady / nowOrNull', () => {
+  it('treats the sentinel (0) as not ready', () => {
+    expect(isTickReady(0)).toBe(false)
+    expect(nowOrNull(0)).toBeNull()
+  })
+
+  it('treats any real tick as ready', () => {
+    expect(isTickReady(1)).toBe(true)
+    expect(isTickReady(1_778_000_000_000)).toBe(true)
+    expect(nowOrNull(1_778_000_000_000)).toBe(1_778_000_000_000)
   })
 })

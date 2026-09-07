@@ -16,17 +16,22 @@ function reminderMessage(event: PrayerReminderEvent, leadMinutes: number): strin
   return event.kind === 'lead' ? `${label} in ${leadMinutes} minutes.` : `${label} time has arrived.`
 }
 
-export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive, onPendingChange, compact = false }: {
+export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive, onPendingChange, compact = false, visible = true }: {
   prefs: WellnessPrefs
   onTogglePrayer: (prayer: PrayerName) => void
   result: PrayerTimesResult | null
   now: number
   attemptActive: boolean
-  /** R6.4: called with `true` the instant a reminder queues instead of toasting (an
-   *  attempt is active) and with `false` once the queue is flushed, so the dock can
-   *  show a badge instead of interrupting the editor. */
+  /** R6.4/C3: `true` the instant a reminder fires -- whether it toasts right away
+   *  or queues because an attempt is active -- so the dock can show a badge on a
+   *  collapsed handle (or the header control when hidden) even where the full
+   *  card is not on screen. Cleared by whoever owns acknowledgement. */
   onPendingChange?: (pending: boolean) => void
   compact?: boolean
+  /** C3: the reminder engine (this component's effects) must keep running while
+   *  the dock is collapsed or hidden -- only the UI is conditional. Mount this
+   *  component always and pass `visible={false}` rather than unmounting it. */
+  visible?: boolean
 }) {
   const firedRef = useRef<Set<string>>(new Set())
   const seededDateRef = useRef<string | null>(null)
@@ -50,12 +55,9 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
     const due = dueReminders(events, now, firedRef.current)
     for (const event of due) {
       firedRef.current.add(event.firedKey)
-      if (attemptActive) {
-        queuedRef.current.push(event)
-        onPendingChange?.(true)
-      } else {
-        toast(reminderMessage(event, prefs.prayerLeadMinutes))
-      }
+      if (attemptActive) queuedRef.current.push(event)
+      else toast(reminderMessage(event, prefs.prayerLeadMinutes))
+      onPendingChange?.(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, result?.date])
@@ -70,6 +72,8 @@ export function PrayerTimes({ prefs, onTogglePrayer, result, now, attemptActive,
     wasActiveRef.current = attemptActive
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptActive])
+
+  if (!visible) return null
 
   if (!result) {
     return (

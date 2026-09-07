@@ -1,7 +1,11 @@
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { DockCorner, WellnessDockPrefs } from '@/lib/contracts'
 import { DEFAULT_WELLNESS } from '@/lib/contracts'
-import { effectiveCollapsed, gridTemplateFor, isFocusRoute, nextCorner, orientationFor, recallDockPlacement, rememberDockPlacement } from './dock'
+import {
+  effectiveCollapsed, gridTemplateFor, isFocusRoute, nextCorner, orientationFor,
+  recallDockPlacement, rememberDockPlacement, resetDockPrefsCacheForTests, useCachedDockPrefs, writeCachedDockPrefs,
+} from './dock'
 
 describe('orientationFor', () => {
   it('maps left and right to vertical', () => {
@@ -125,5 +129,33 @@ describe('rememberDockPlacement / recallDockPlacement', () => {
     rememberDockPlacement('top')
     rememberDockPlacement('hidden')
     expect(recallDockPlacement()).toBe('top')
+  })
+})
+
+describe('useCachedDockPrefs / writeCachedDockPrefs (I2, step 4\'s local tier)', () => {
+  afterEach(() => resetDockPrefsCacheForTests())
+
+  it('is null before anything has ever been cached', () => {
+    const { result } = renderHook(() => useCachedDockPrefs())
+    expect(result.current).toBeNull()
+  })
+
+  it('reflects a write immediately, in the same render pass callers observe it', () => {
+    const { result } = renderHook(() => useCachedDockPrefs())
+    const dock: WellnessDockPrefs = { placement: 'left', collapsed: true, compactOnExercise: false, corner: 'tl' }
+    act(() => writeCachedDockPrefs(dock))
+    expect(result.current).toEqual(dock)
+  })
+
+  it('a fresh subscriber (e.g. after a remount) sees a value written earlier', () => {
+    writeCachedDockPrefs({ placement: 'top', collapsed: false, compactOnExercise: true, corner: 'br' })
+    const { result } = renderHook(() => useCachedDockPrefs())
+    expect(result.current).toEqual({ placement: 'top', collapsed: false, compactOnExercise: true, corner: 'br' })
+  })
+
+  it('ignores a malformed cache entry rather than crashing', () => {
+    localStorage.setItem('brogram:wellness:dock-cache', '{"placement":"sideways"}')
+    const { result } = renderHook(() => useCachedDockPrefs())
+    expect(result.current).toBeNull()
   })
 })

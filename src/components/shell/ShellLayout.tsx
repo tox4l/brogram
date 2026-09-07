@@ -2,9 +2,11 @@
 
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { Toaster } from '@/components/ui/sonner'
 import { useWellness } from '@/lib/query/hooks'
+import { DEFAULT_WELLNESS } from '@/lib/contracts'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
-import { gridTemplateFor } from '@/lib/wellness/dock'
+import { gridTemplateFor, useCachedDockPrefs } from '@/lib/wellness/dock'
 
 /**
  * Owns the shell's content grid: `main` plus the wellness dock slot. Five
@@ -24,10 +26,26 @@ import { gridTemplateFor } from '@/lib/wellness/dock'
  * lesson screens only ever collapse the dock's *content*
  * (`effectiveCollapsed`, computed by `WellnessSlot`) -- this component never
  * reads the pathname at all.
+ *
+ * Before `useWellness()` has any data (a client render that starts ahead of
+ * the layout's own server-seeded cache -- signed-out previews, or a cache
+ * that was cleared), this falls back to the `localStorage`-cached dock prefs
+ * (I2, `src/lib/wellness/dock.ts`) instead of the bare default, so a learner
+ * who chose `left` does not see a `right`-then-reflow flash. The moment the
+ * query actually resolves (even to "no row yet"), the server value wins, per
+ * spec Step 4.
+ *
+ * `<Toaster/>` mounts here, once, independent of the dock's own state (C4):
+ * `Dock`'s collapsed and `hidden` states render no toast host of their own
+ * any more, so a course-switch notice or a queued reminder's toast always
+ * has somewhere to land.
  */
 export function ShellLayout({ dock, children }: { dock: ReactNode; children: ReactNode }) {
   const wellnessQuery = useWellness()
-  const placement = resolveWellnessPrefs(wellnessQuery.data?.prefs).dock.placement
+  const cachedDock = useCachedDockPrefs()
+  const placement = wellnessQuery.data
+    ? resolveWellnessPrefs(wellnessQuery.data.prefs).dock.placement
+    : (cachedDock?.placement ?? DEFAULT_WELLNESS.dock.placement)
   const template = gridTemplateFor(placement)
 
   return (
@@ -40,6 +58,7 @@ export function ShellLayout({ dock, children }: { dock: ReactNode; children: Rea
         template === 'right-rail' && 'lg:grid-cols-[minmax(0,1fr)_17.5rem]',
       )}
     >
+      <Toaster />
       {template === 'top-strip' && (
         <aside aria-label="Wellness" className="w-full border-b border-border pb-3">{dock}</aside>
       )}

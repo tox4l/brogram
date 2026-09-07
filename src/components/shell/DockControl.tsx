@@ -10,6 +10,7 @@ import { useWellness } from '@/lib/query/hooks'
 import { useOptimistic } from '@/lib/query/optimistic'
 import { qk } from '@/lib/query/keys'
 import { recallDockPlacement } from '@/lib/wellness/dock'
+import { clearReminderBadge, useReminderBadge } from '@/lib/wellness/reminderBadge'
 import type { DockPlacement } from '@/lib/contracts'
 import type { WellnessRow } from '@/lib/learner/compile'
 
@@ -38,12 +39,18 @@ async function persistDockPlacement(userId: string, placement: DockPlacement): P
  * before hiding it (`recallDockPlacement`, `src/lib/wellness/dock.ts`), not
  * a hardcoded default -- `right` only when nothing was ever remembered this
  * session (e.g. the row already had `dock.placement: 'hidden'` on load).
+ *
+ * Also the badge's other home (C3): a reminder can still fire while the dock
+ * is hidden (the reminder engine mounts headlessly, `WellnessSlot`), so this
+ * glyph shows the same shared indicator the collapsed dock would, and
+ * clicking it (reopening the dock) acknowledges it.
  */
 export function DockControl() {
   const { user } = useSession()
   const userId = user?.id ?? null
   const wellnessQuery = useWellness()
   const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
+  const badge = useReminderBadge()
 
   const mutation = useMutation(useOptimistic<WellnessRow, DockPlacement>({
     key: qk.wellness(userId ?? ''),
@@ -60,9 +67,15 @@ export function DockControl() {
 
   if (prefs.dock.placement !== 'hidden') return null
 
+  function handleClick() {
+    clearReminderBadge()
+    mutation.mutate(recallDockPlacement())
+  }
+
   return (
-    <Button type="button" variant="ghost" size="icon" aria-label="Show wellness dock" onClick={() => mutation.mutate(recallDockPlacement())}>
+    <Button type="button" variant="ghost" size="icon" aria-label="Show wellness dock" onClick={handleClick} className="relative">
       <PanelRightOpen aria-hidden="true" />
+      {badge && <span data-testid="dock-badge" role="status" className="absolute top-1 right-1 inline-flex size-2 rounded-full bg-emerald-300"><span className="sr-only">A reminder is waiting.</span></span>}
     </Button>
   )
 }

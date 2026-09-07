@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowUpRight, ChevronDown, ChevronUp, CupSoda, PanelRightClose, Sunrise, Timer } from 'lucide-react'
-import { Toaster } from '@/components/ui/sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { type DockCorner, type WellnessPrefs } from '@/lib/contracts'
@@ -17,9 +16,11 @@ import { qk } from '@/lib/query/keys'
 import { useSecondTick } from '@/components/shell/useSecondTick'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { nextCorner, rememberDockPlacement } from '@/lib/wellness/dock'
+import { useDockPrefsMutation } from './useDockPrefs'
+import { clearReminderBadge, setReminderPending, useReminderBadge, type ReminderSource } from '@/lib/wellness/reminderBadge'
 import type { WellnessRow } from '@/lib/learner/compile'
 import { DOHA_COORDS, dateKeyOf, fetchPrayerTimes, PRAYER_ORDER, type GeoCoordinates, type PrayerName, type PrayerTimesResult } from '@/lib/wellness/prayer'
-import { advancePomodoro, isAttemptActive, remainingPomodoroMs, resetPomodoroState } from '@/lib/wellness/timers'
+import { isAttemptActive } from '@/lib/wellness/timers'
 import { PrayerTimes } from './PrayerTimes'
 import { WaterStretch, type WellnessLogEntry } from './WaterStretch'
 import { Pomodoro, type PomodoroSession } from './Pomodoro'
@@ -31,6 +32,9 @@ import { Pomodoro, type PomodoroSession } from './Pomodoro'
 // which is what replaces the v1 rail's `mergePrefs` (a shallow spread that
 // wrote the *entire* locally-held snapshot and could revert an unrelated
 // concurrent write, e.g. the header's `SoundToggle`, on its next save).
+// Dock-sub-object changes (placement/collapsed/corner/compactOnExercise) go
+// through `useDockPrefsMutation` instead (I2): a local+localStorage tier
+// that updates the same frame, plus a 400ms-debounced network write.
 // ---------------------------------------------------------------------------
 
 async function persistPrefsChange(userId: string, change: (current: WellnessPrefs) => Partial<WellnessPrefs>): Promise<void> {
@@ -73,17 +77,6 @@ function useRowMutation(userId: string | null) {
       await persistRowPatch(userId, patch)
     },
   }))
-}
-
-function useAttemptActive(): boolean {
-  const [active, setActive] = useState(() => isAttemptActive())
-  useEffect(() => {
-    const check = () => setActive(isAttemptActive())
-    check()
-    const id = setInterval(check, 15_000)
-    return () => clearInterval(id)
-  }, [])
-  return active
 }
 
 function useDeviceCoords(enabled: boolean): GeoCoordinates | null {
@@ -130,7 +123,11 @@ const PLACEMENT_OPTIONS: { value: WellnessPrefs['dock']['placement']; label: str
   { value: 'hidden', label: 'Hidden' },
 ]
 
-function WellnessSettings({ prefs, onChange }: { prefs: WellnessPrefs; onChange: (patch: Partial<WellnessPrefs>) => void }) {
+function WellnessSettings({ prefs, onChange, onDockChange }: {
+  prefs: WellnessPrefs
+  onChange: (patch: Partial<WellnessPrefs>) => void
+  onDockChange: (patch: Partial<WellnessPrefs['dock']>) => void
+}) {
   return (
     <details className="mt-5 border-t border-border pt-5">
       <summary className="w-fit cursor-pointer rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">Settings</summary>
@@ -142,7 +139,7 @@ function WellnessSettings({ prefs, onChange }: { prefs: WellnessPrefs; onChange:
             onChange={(event) => {
               const placement = event.target.value as WellnessPrefs['dock']['placement']
               rememberDockPlacement(placement)
-              onChange({ dock: { ...prefs.dock, placement } })
+              onDockChange({ placement })
             }}
             className="rounded-md border border-input bg-background px-2 py-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -154,7 +151,7 @@ function WellnessSettings({ prefs, onChange }: { prefs: WellnessPrefs; onChange:
           <input
             type="checkbox"
             checked={prefs.dock.compactOnExercise}
-            onChange={(event) => onChange({ dock: { ...prefs.dock, compactOnExercise: event.target.checked } })}
+            onChange={(event) => onDockChange({ compactOnExercise: event.target.checked })}
             className="size-4 rounded-sm border-input outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
@@ -177,8 +174,9 @@ function WellnessSettings({ prefs, onChange }: { prefs: WellnessPrefs; onChange:
   )
 }
 
-/** A small unread-reminder indicator (R6.4): a prayer, water, stretch or pomodoro
- *  event queued instead of interrupting an active attempt. Never itself a toast. */
+/** A small unread-reminder indicator (R6.4/C3): a prayer, water, stretch or
+ *  pomodoro event fired -- whether it toasted or queued -- while the full
+ *  card that would show it was not on screen (collapsed, or hidden). */
 function PendingBadge() {
   return (
     <span data-testid="dock-badge" role="status" className="inline-flex size-2 shrink-0 rounded-full bg-emerald-300">
@@ -201,36 +199,75 @@ function todaysWaterCount(log: WellnessLogEntry[], now: number): number {
   return log.filter((entry) => entry.kind === 'water' && entry.at.slice(0, 10) === today).length
 }
 
-interface DockDataProps {
+type PendingChange = (source: ReminderSource, pending: boolean) => void
+
+/**
+ * The reminder engine (C3): prayer schedule, water/stretch cadence and the
+ * pomodoro timer, mounted unconditionally regardless of the dock's
+ * orientation or collapse state -- only `visible` (and `compact`) change
+ * what it renders. This is the ONE place that subscribes to
+ * `useSecondTick()` and derives `attemptActive` (re-read from
+ * `isAttemptActive()` on every tick -- no separate `setInterval`, I3), so
+ * re-rendering once a second never touches `Dock`'s own tree (Settings, the
+ * collapsed chrome, layout wrappers): only this small subtree, and its three
+ * children, re-render on the clock.
+ *
+ * Rendered from the SAME position in `Dock`'s returned fragment on every
+ * render, regardless of which chrome branch is active, so React never
+ * unmounts it (and loses Pomodoro's running countdown, or PrayerTimes'
+ * fired-today bookkeeping) when the learner collapses, expands, or changes
+ * placement.
+ */
+function WellnessReminderEngine({ prefs, waterLog, prayerResult, onTogglePrayer, onLog, onSessionComplete, onPendingChange, visible, compact }: {
   prefs: WellnessPrefs
   waterLog: WellnessLogEntry[]
   prayerResult: PrayerTimesResult | null
-  now: number
-  attemptActive: boolean
   onTogglePrayer: (prayer: PrayerName) => void
   onLog: (entry: WellnessLogEntry) => void
   onSessionComplete: (sessions: PomodoroSession[]) => void
-  onPrefsChange: (patch: Partial<WellnessPrefs>) => void
-  onPendingChange: (source: 'prayer' | 'wellness' | 'pomodoro', pending: boolean) => void
-}
+  onPendingChange: PendingChange
+  visible: boolean
+  compact: boolean
+}) {
+  const now = useSecondTick()
+  const attemptActive = isAttemptActive()
 
-/** The full dock content -- shared by the vertical-expanded rail and the
- *  floating pill's expanded popover, so there is exactly one place that
- *  composes prayer/water/pomodoro/settings, not two drifting copies. */
-function DockBody({ data }: { data: DockDataProps }) {
   return (
     <>
-      <PrayerTimes prefs={data.prefs} onTogglePrayer={data.onTogglePrayer} result={data.prayerResult} now={data.now} attemptActive={data.attemptActive}
-        onPendingChange={(pending) => data.onPendingChange('prayer', pending)} />
-      <div className="border-t border-border pt-5">
-        <WaterStretch prefs={data.prefs} now={data.now} log={data.waterLog} onLog={data.onLog} attemptActive={data.attemptActive}
-          onPendingChange={(pending) => data.onPendingChange('wellness', pending)} />
-      </div>
-      <div className="border-t border-border pt-5">
-        <Pomodoro prefs={data.prefs} now={data.now} attemptActive={data.attemptActive} onSessionComplete={data.onSessionComplete}
-          onPendingChange={(pending) => data.onPendingChange('pomodoro', pending)} />
-      </div>
-      <WellnessSettings prefs={data.prefs} onChange={data.onPrefsChange} />
+      <PrayerTimes prefs={prefs} onTogglePrayer={onTogglePrayer} result={prayerResult} now={now} attemptActive={attemptActive} compact={compact} visible={visible}
+        onPendingChange={(pending) => onPendingChange('prayer', pending)} />
+      {visible && !compact ? (
+        <div className="border-t border-border pt-5">
+          <WaterStretch prefs={prefs} now={now} log={waterLog} onLog={onLog} attemptActive={attemptActive} visible={visible}
+            onPendingChange={(pending) => onPendingChange('wellness', pending)} />
+        </div>
+      ) : (
+        <WaterStretch prefs={prefs} now={now} log={waterLog} onLog={onLog} attemptActive={attemptActive} compact={compact} visible={visible}
+          onPendingChange={(pending) => onPendingChange('wellness', pending)} />
+      )}
+      {visible && !compact ? (
+        <div className="border-t border-border pt-5">
+          <Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={onSessionComplete} visible={visible}
+            onPendingChange={(pending) => onPendingChange('pomodoro', pending)} />
+        </div>
+      ) : (
+        <Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={onSessionComplete} compact={compact} visible={visible}
+          onPendingChange={(pending) => onPendingChange('pomodoro', pending)} />
+      )}
+    </>
+  )
+}
+
+interface DockChromeProps {
+  prefs: WellnessPrefs
+  onPrefsChange: (patch: Partial<WellnessPrefs>) => void
+  onDockChange: (patch: Partial<WellnessPrefs['dock']>) => void
+}
+
+function SettingsAndFooter({ prefs, onPrefsChange, onDockChange }: DockChromeProps) {
+  return (
+    <>
+      <WellnessSettings prefs={prefs} onChange={onPrefsChange} onDockChange={onDockChange} />
       <div className="mt-5 border-t border-border pt-5">
         <Link href="/derot" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-emerald-200 outline-none hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300">Open de-rot<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </div>
@@ -242,28 +279,25 @@ function DockBody({ data }: { data: DockDataProps }) {
  * The 56px icon rail (spec 6.2): prayer glyph with the next-prayer time, water
  * glyph with today's count, pomodoro ring. Hover or focus reveals the full
  * label via a `group`-scoped tooltip -- keyboard-reachable, since each icon
- * is a real, focusable button that also expands the dock.
+ * is a real, focusable button that also expands the dock. Subscribes to
+ * `useSecondTick()` on its own (isolated from `Dock`'s own re-renders, and
+ * from `WellnessReminderEngine`'s -- they are siblings, not ancestor/descendant).
  */
-function VerticalCollapsed({ prefs, waterLog, now, pomodoroRemainingMs, pomodoroPhase, prayerResult, badge, onExpand }: {
-  prefs: WellnessPrefs
+function VerticalCollapsedChrome({ waterLog, prayerResult, badge, onExpand }: {
   waterLog: WellnessLogEntry[]
-  now: number
-  pomodoroRemainingMs: number
-  pomodoroPhase: string
   prayerResult: PrayerTimesResult | null
   badge: boolean
   onExpand: () => void
 }) {
-  void prefs
-  const minutesLeft = Math.ceil(pomodoroRemainingMs / 60_000)
+  const now = useSecondTick()
   const items = [
     { key: 'prayer', icon: Sunrise, label: `Next prayer: ${nextPrayerLabel(prayerResult, now)}` },
     { key: 'water', icon: CupSoda, label: `Water today: ${todaysWaterCount(waterLog, now)}` },
-    { key: 'pomodoro', icon: Timer, label: `Pomodoro: ${minutesLeft} min left, ${pomodoroPhase}` },
+    { key: 'pomodoro', icon: Timer, label: 'Pomodoro' },
   ]
   return (
-    <div className="relative flex w-14 flex-col items-center gap-3 py-2" aria-label="Wellness, collapsed">
-      {badge && <div className="absolute top-0 right-1"><PendingBadge /></div>}
+    <div className="relative flex flex-col items-center gap-3">
+      {badge && <div className="absolute top-0 right-0"><PendingBadge /></div>}
       {items.map(({ key, icon: Icon, label }) => (
         <button
           key={key}
@@ -289,62 +323,17 @@ const CORNER_CLASSES: Record<DockCorner, string> = {
   br: 'bottom-4 right-4',
 }
 
-/** The `float` placement: collapsed is a bare pill (spec 6.1's "pill then
- *  popover"); expanded adds a popover panel with the same content the
- *  vertical rail shows. `role="complementary"` with an accessible name lives
- *  here (R6.2) because this is the one placement `ShellLayout` never wraps
- *  in its own `<aside>`. */
-function PillDock({ data, collapsed, onToggleCollapse, corner, onCornerChange, reducedMotion, badge }: {
-  data: DockDataProps
-  collapsed: boolean
-  onToggleCollapse: () => void
-  corner: DockCorner
-  onCornerChange: (corner: DockCorner) => void
-  reducedMotion: boolean
-  badge: boolean
-}) {
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    const moved = nextCorner(corner, event.key)
-    if (moved !== corner) {
-      event.preventDefault()
-      onCornerChange(moved)
-    }
-  }
-
-  return (
-    <div role="complementary" aria-label="Wellness" className={cn('fixed z-40 flex flex-col items-end gap-2', CORNER_CLASSES[corner], corner.startsWith('t') && 'flex-col-reverse')}>
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        aria-label="Wellness dock"
-        onClick={onToggleCollapse}
-        onKeyDown={handleKeyDown}
-        className="relative flex h-11 items-center gap-2 rounded-full border border-border bg-popover px-4 text-sm font-medium text-popover-foreground shadow-lg outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Sunrise className="size-4" aria-hidden="true" />
-        <span>{nextPrayerLabel(data.prayerResult, data.now)}</span>
-        {badge && <PendingBadge />}
-      </button>
-      {!collapsed && (
-        <div
-          className={cn(
-            'w-[280px] max-w-[calc(100vw-2rem)] origin-bottom rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-xl',
-            !reducedMotion && 'transition-transform duration-200 ease-out motion-reduce:transition-none',
-          )}
-        >
-          <Toaster />
-          <h2 className="text-sm font-medium text-foreground">Wellness</h2>
-          <div className="mt-5 space-y-6">
-            <DockBody data={data} />
-          </div>
-        </div>
-      )}
-    </div>
-  )
+/** The next-prayer text shown on the horizontal-collapsed line and the float
+ *  pill -- its own tick subscription, isolated from `Dock`'s own re-renders
+ *  the same way `VerticalCollapsedChrome`'s is. */
+function NextPrayerLabel({ prayerResult }: { prayerResult: PrayerTimesResult | null }) {
+  const now = useSecondTick()
+  return <span>{nextPrayerLabel(prayerResult, now)}</span>
 }
 
 export interface DockProps {
-  orientation: 'vertical' | 'horizontal' | 'pill'
+  /** `headless` (placement `hidden`): mount the reminder engine invisibly and render nothing else -- the header's `DockControl` is the only visible affordance. */
+  orientation: 'vertical' | 'horizontal' | 'pill' | 'headless'
   collapsed: boolean
   onToggleCollapse: () => void
   corner: DockCorner
@@ -356,7 +345,8 @@ export interface DockProps {
  * via `orientation`/`collapsed` (computed by `WellnessSlot` from
  * `wellness.prefs.dock`, `src/lib/wellness/dock.ts`); every write here is a
  * patch through the shared optimistic mutation (`useOptimistic`), never a
- * whole resolved `WellnessPrefs` blob.
+ * whole resolved `WellnessPrefs` blob. `<Toaster/>` lives in `ShellLayout`
+ * now (C4), mounted once regardless of dock state.
  */
 export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCornerChange }: DockProps) {
   const { user } = useSession()
@@ -367,35 +357,41 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
   const pomodoroSessions = (wellnessQuery.data?.pomodoro_sessions as PomodoroSession[] | undefined) ?? []
   const [prayerResult, setPrayerResult] = useState<PrayerTimesResult | null>(null)
 
-  const now = useSecondTick()
-  const attemptActive = useAttemptActive()
   const deviceCoords = useDeviceCoords(prefs.useDeviceLocation)
   const reducedMotion = useReducedMotion(prefs.motion)
 
   const prefsMutation = usePrefsMutation(userId)
   const rowMutation = useRowMutation(userId)
+  const dockPrefsMutation = useDockPrefsMutation(userId)
 
-  const [pending, setPending] = useState({ prayer: false, wellness: false, pomodoro: false })
-  const badge = pending.prayer || pending.wellness || pending.pomodoro
-  const onPendingChange = (source: 'prayer' | 'wellness' | 'pomodoro', value: boolean) =>
-    setPending((current) => (current[source] === value ? current : { ...current, [source]: value }))
+  const badge = useReminderBadge()
+  const onPendingChange: PendingChange = (source, value) => setReminderPending(source, value)
 
+  // The prayer fetch only needs to notice a day or coordinates change, not a
+  // literal second; a coarse interval (rather than `useSecondTick`) keeps
+  // this effect -- and the `Dock` instance that owns `prayerResult` -- off
+  // the 1Hz clock entirely (I3).
   const lastFetchKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    // Re-checks every tick but only fetches when the local day or the coordinates actually
-    // change, so a long-open tab rolls over to the next day's times (or device coordinates
-    // that resolve after mount) on its own.
-    const coords = deviceCoords ?? DOHA_COORDS
-    const fetchKey = `${dateKeyOf(new Date(now))}:${coords.latitude}:${coords.longitude}`
-    if (lastFetchKeyRef.current === fetchKey) return
-    lastFetchKeyRef.current = fetchKey
-    let cancelled = false
-    void fetchPrayerTimes(new Date(now), coords).then((result) => { if (!cancelled) setPrayerResult(result) })
-    return () => { cancelled = true }
-  }, [now, deviceCoords])
+    function check() {
+      const coords = deviceCoords ?? DOHA_COORDS
+      const now = Date.now()
+      const fetchKey = `${dateKeyOf(new Date(now))}:${coords.latitude}:${coords.longitude}`
+      if (lastFetchKeyRef.current === fetchKey) return
+      lastFetchKeyRef.current = fetchKey
+      void fetchPrayerTimes(new Date(now), coords).then(setPrayerResult)
+    }
+    check()
+    const id = setInterval(check, 60_000)
+    return () => clearInterval(id)
+  }, [deviceCoords])
 
   function updatePrefs(patch: Partial<WellnessPrefs>) {
-    prefsMutation.mutate((current) => ({ ...patch, dock: patch.dock ? { ...current.dock, ...patch.dock } : current.dock }))
+    prefsMutation.mutate(() => patch)
+  }
+
+  function updateDockPrefs(patch: Partial<WellnessPrefs['dock']>) {
+    dockPrefsMutation.mutate(() => patch)
   }
 
   function handleTogglePrayer(prayer: PrayerName) {
@@ -410,78 +406,114 @@ export function Dock({ orientation, collapsed, onToggleCollapse, corner, onCorne
     rowMutation.mutate({ pomodoro_sessions: [...pomodoroSessions, ...sessions] })
   }
 
-  const data: DockDataProps = {
-    prefs, waterLog, prayerResult, now, attemptActive,
-    onTogglePrayer: handleTogglePrayer, onLog: handleLog, onSessionComplete: handleSessionComplete,
-    onPrefsChange: updatePrefs, onPendingChange,
+  function handleExpand() {
+    clearReminderBadge()
+    onToggleCollapse()
   }
 
-  const derivedPomodoro = advancePomodoro(resetPomodoroState(prefs.pomodoroWorkMin), now, prefs.pomodoroWorkMin, prefs.pomodoroBreakMin).state
-  const pomodoroRemainingMs = remainingPomodoroMs(derivedPomodoro, now)
+  const visible = orientation !== 'headless' && !collapsed
+  const compact = orientation === 'horizontal'
+
+  const engine = (
+    <WellnessReminderEngine
+      prefs={prefs} waterLog={waterLog} prayerResult={prayerResult}
+      onTogglePrayer={handleTogglePrayer} onLog={handleLog} onSessionComplete={handleSessionComplete}
+      onPendingChange={onPendingChange} visible={visible} compact={compact}
+    />
+  )
+
+  // `engine` (the reminder scheduling components) is rendered from a SINGLE,
+  // STABLE position inside each orientation's own JSX below -- never as a
+  // sibling that some branches include and others omit, and never nested one
+  // level deeper in an expanded branch than in a collapsed one. Both of those
+  // shapes read as "a different tree" to React the moment `collapsed` flips,
+  // which unmounts `engine` (and loses Pomodoro's running countdown, or
+  // PrayerTimes' fired-today bookkeeping) exactly when C3 says it must not.
+  // Each orientation therefore returns ONE wrapper element whose class names
+  // (not its type, and not `engine`'s position within it) change with
+  // `collapsed`; `engine` itself renders nothing when `visible` is false, so
+  // the wrapper is simply empty there.
+
+  if (orientation === 'headless') {
+    return engine
+  }
 
   if (orientation === 'pill') {
     return (
-      <PillDock data={data} collapsed={collapsed} onToggleCollapse={onToggleCollapse} corner={corner} onCornerChange={onCornerChange}
-        reducedMotion={reducedMotion} badge={badge} />
+      <div role="complementary" aria-label="Wellness" className={cn('fixed z-40 flex flex-col items-end gap-2', CORNER_CLASSES[corner], corner.startsWith('t') && 'flex-col-reverse')}>
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          aria-label="Wellness dock"
+          onClick={collapsed ? handleExpand : onToggleCollapse}
+          onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+            const moved = nextCorner(corner, event.key)
+            if (moved !== corner) { event.preventDefault(); onCornerChange(moved) }
+          }}
+          className="relative flex h-11 items-center gap-2 rounded-full border border-border bg-popover px-4 text-sm font-medium text-popover-foreground shadow-lg outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Sunrise className="size-4" aria-hidden="true" />
+          <NextPrayerLabel prayerResult={prayerResult} />
+          {badge && <PendingBadge />}
+        </button>
+        <div
+          className={cn(
+            !collapsed && [
+              'w-[280px] max-w-[calc(100vw-2rem)] origin-bottom rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-xl',
+              !reducedMotion && 'transition-transform duration-200 ease-out motion-reduce:transition-none',
+            ],
+          )}
+        >
+          {!collapsed && <h2 className="text-sm font-medium text-foreground">Wellness</h2>}
+          <div className={!collapsed ? 'mt-5 space-y-6' : undefined}>
+            {engine}
+          </div>
+          {!collapsed && <SettingsAndFooter prefs={prefs} onPrefsChange={updatePrefs} onDockChange={updateDockPrefs} />}
+        </div>
+      </div>
     )
   }
 
   if (orientation === 'horizontal') {
-    if (collapsed) {
-      return (
-        <div className="flex items-center justify-between gap-3" aria-label="Wellness, collapsed">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Sunrise className="size-3.5 shrink-0" aria-hidden="true" />
-            <span>{nextPrayerLabel(prayerResult, now)}</span>
-            {badge && <PendingBadge />}
-          </div>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Expand wellness dock" onClick={onToggleCollapse}>
-            <ChevronDown aria-hidden="true" />
-          </Button>
-        </div>
-      )
-    }
     return (
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <Toaster />
-          <PrayerTimes prefs={prefs} onTogglePrayer={handleTogglePrayer} result={prayerResult} now={now} attemptActive={attemptActive} compact
-            onPendingChange={(value) => onPendingChange('prayer', value)} />
-          <WaterStretch prefs={prefs} now={now} log={waterLog} onLog={handleLog} attemptActive={attemptActive} compact
-            onPendingChange={(value) => onPendingChange('wellness', value)} />
-          <Pomodoro prefs={prefs} now={now} attemptActive={attemptActive} onSessionComplete={handleSessionComplete} compact
-            onPendingChange={(value) => onPendingChange('pomodoro', value)} />
+      <div className={collapsed ? 'flex items-center justify-between gap-3' : 'flex flex-wrap items-center justify-between gap-4'}>
+        <div className={collapsed ? 'flex items-center gap-2 text-xs text-muted-foreground' : 'flex flex-wrap items-center gap-4'}>
+          {collapsed && <Sunrise className="size-3.5 shrink-0" aria-hidden="true" />}
+          {collapsed && <NextPrayerLabel prayerResult={prayerResult} />}
+          {engine}
           {badge && <PendingBadge />}
         </div>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Collapse wellness dock" onClick={onToggleCollapse}>
-          <ChevronUp aria-hidden="true" />
+        <Button
+          type="button" variant="ghost" size="icon-sm"
+          aria-label={collapsed ? 'Expand wellness dock' : 'Collapse wellness dock'}
+          onClick={collapsed ? handleExpand : onToggleCollapse}
+        >
+          {collapsed ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
         </Button>
       </div>
     )
   }
 
   // vertical (left/right rail)
-  if (collapsed) {
-    return (
-      <VerticalCollapsed prefs={prefs} waterLog={waterLog} now={now} pomodoroRemainingMs={pomodoroRemainingMs}
-        pomodoroPhase={derivedPomodoro.phase} prayerResult={prayerResult} badge={badge} onExpand={onToggleCollapse} />
-    )
-  }
   return (
-    <div className="w-full max-w-[280px]" aria-label="Wellness" data-loaded={wellnessQuery.isFetched}>
-      <Toaster />
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-foreground">Wellness</h2>
-        <div className="flex items-center gap-2">
-          {badge && <PendingBadge />}
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Collapse wellness dock" onClick={onToggleCollapse}>
-            <PanelRightClose aria-hidden="true" />
-          </Button>
+    <div className={collapsed ? 'w-14 py-2' : 'w-full max-w-[280px]'} aria-label={collapsed ? 'Wellness, collapsed' : undefined} data-loaded={wellnessQuery.isFetched}>
+      {collapsed ? (
+        <VerticalCollapsedChrome waterLog={waterLog} prayerResult={prayerResult} badge={badge} onExpand={handleExpand} />
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium text-foreground">Wellness</h2>
+          <div className="flex items-center gap-2">
+            {badge && <PendingBadge />}
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="Collapse wellness dock" onClick={onToggleCollapse}>
+              <PanelRightClose aria-hidden="true" />
+            </Button>
+          </div>
         </div>
+      )}
+      <div className={!collapsed ? 'mt-5 space-y-6' : undefined}>
+        {engine}
       </div>
-      <div className="mt-5 space-y-6">
-        <DockBody data={data} />
-      </div>
+      {!collapsed && <SettingsAndFooter prefs={prefs} onPrefsChange={updatePrefs} onDockChange={updateDockPrefs} />}
     </div>
   )
 }

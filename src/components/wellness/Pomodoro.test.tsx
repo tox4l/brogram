@@ -147,4 +147,24 @@ describe('Pomodoro', () => {
     expect(onPendingChange).toHaveBeenCalledWith(false)
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/work block complete/i))
   })
+
+  it('C3: keeps counting down and completes even after the dock collapses mid-run (visible turns false)', () => {
+    const onSessionComplete = vi.fn()
+    // Started while expanded (visible), same as a learner clicking Start...
+    const { container, rerender } = render(
+      <Pomodoro prefs={DEFAULT_WELLNESS} now={0} attemptActive={false} onSessionComplete={onSessionComplete} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /start pomodoro/i }))
+    // ...then the dock collapses (route change, or the learner's own toggle) --
+    // this component stays mounted (same instance, so its running state
+    // survives) but is no longer visible.
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={0} attemptActive={false} onSessionComplete={onSessionComplete} visible={false} />)
+    expect(container.firstChild).toBeNull()
+
+    vi.setSystemTime(workMs)
+    rerender(<Pomodoro prefs={DEFAULT_WELLNESS} now={workMs} attemptActive={false} onSessionComplete={onSessionComplete} visible={false} />)
+    expect(onSessionComplete).toHaveBeenCalledWith([{ workMinutes: DEFAULT_WELLNESS.pomodoroWorkMin, completedAt: new Date(workMs).toISOString() }])
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/work block complete/i))
+    expect(container.firstChild).toBeNull()
+  })
 })

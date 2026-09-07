@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOHA_COORDS, dateKeyOf, fetchPrayerTimes, resolveFallbackTimeZone } from './prayer'
 
@@ -144,5 +146,26 @@ describe('resolveFallbackTimeZone', () => {
   it('uses the device timezone for other coordinates', () => {
     const nonDoha = { latitude: 51.5074, longitude: -0.1278 }
     expect(resolveFallbackTimeZone(nonDoha)).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  })
+})
+
+// I5 / Step 8: `adhan` (~457 KB before minification) must never be a static
+// import -- that would put it right back in the shared client chunk every
+// route (dashboard included) pays for on load. A source-text guard here runs
+// on every `vitest run`, with no build required, so a regression is caught
+// long before someone has to go read `.next/app-build-manifest.json` by hand.
+// The build-output side of this was verified manually against a real
+// `npm run build` (T2.4's commit body, `ae16661`): the chunk carrying
+// adhan's `CalculationMethod`/`PrayerTimes` implementation (12.4 KB
+// minified) is absent from every entry in `/dashboard`'s `entryJSFiles`.
+describe('adhan stays a dynamic import (bundle-split guard)', () => {
+  const source = readFileSync(join(process.cwd(), 'src/lib/wellness/prayer.ts'), 'utf-8')
+
+  it('never statically imports from "adhan"', () => {
+    expect(source).not.toMatch(/^\s*import\s+.*from\s+['"]adhan['"]/m)
+  })
+
+  it('loads adhan only via a dynamic import, inside computeFallback', () => {
+    expect(source).toMatch(/await import\(['"]adhan['"]\)/)
   })
 })

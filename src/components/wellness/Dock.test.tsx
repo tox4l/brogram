@@ -8,6 +8,8 @@ import { makeQueryClient } from '@/lib/query/client'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { DEFAULT_WELLNESS } from '@/lib/contracts'
 import { ATTEMPT_ACTIVE_KEY } from '@/lib/wellness/timers'
+import { resetReminderBadgeForTests } from '@/lib/wellness/reminderBadge'
+import { resetDockPrefsCacheForTests } from '@/lib/wellness/dock'
 import { Dock } from './Dock'
 
 // A controllable stand-in for the shared 1Hz clock (its own tests live in
@@ -15,7 +17,11 @@ import { Dock } from './Dock'
 // to jump `now` forward by a fixed amount deterministically, which the real
 // module-singleton interval cannot do inside a test.
 const tickMocks = vi.hoisted(() => ({ now: vi.fn(() => 0) }))
-vi.mock('@/components/shell/useSecondTick', () => ({ useSecondTick: () => tickMocks.now() }))
+vi.mock('@/components/shell/useSecondTick', () => ({
+  useSecondTick: () => tickMocks.now(),
+  isTickReady: (now: number) => now > 0,
+  nowOrNull: (now: number) => (now > 0 ? now : null),
+}))
 
 // sonner's Toaster reads window.matchMedia for OS theme detection; jsdom does not have it.
 // This is the only test file exercising the real Toaster mount, so it polyfills it here
@@ -82,6 +88,8 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
   try { sessionStorage.clear() } catch { /* jsdom always has sessionStorage */ }
+  resetReminderBadgeForTests()
+  resetDockPrefsCacheForTests()
 })
 
 function wrapper(userId: string | null) {
@@ -308,16 +316,22 @@ describe('Dock', () => {
 
   describe('R6.4: reminders never interrupt an attempt', () => {
     it('shows a dock badge instead of a toast when a reminder fires during an active attempt', async () => {
-      // `useAttemptActive` reads sessionStorage once at mount (then polls), so
+      // `attemptActive` is read fresh from sessionStorage on every tick (I3), so
       // the flag has to be set before the dock ever renders.
       sessionStorage.setItem(ATTEMPT_ACTIVE_KEY, 'true')
+      // First render sees the hydration sentinel (now=0); C2 says that must
+      // never seed a timer. Seed for real on the next render, then jump past
+      // the (default 45-minute) water interval on the one after that.
+      const start = 1_000
       const { rerender } = render(<Vertical />, { wrapper: wrapper('learner-one') })
       await screen.findByText('Wellness')
       expect(screen.queryByTestId('dock-badge')).toBeNull()
 
-      // Jump the shared clock past the (default 45-minute) water interval --
-      // WaterStretch's recurring timer was seeded at `now = 0` on first render.
-      tickMocks.now.mockReturnValue(DEFAULT_WELLNESS.waterIntervalMin * 60_000)
+      tickMocks.now.mockReturnValue(start)
+      rerender(<Vertical />)
+      expect(screen.queryByTestId('dock-badge')).toBeNull()
+
+      tickMocks.now.mockReturnValue(start + DEFAULT_WELLNESS.waterIntervalMin * 60_000)
       rerender(<Vertical />)
 
       await vi.waitFor(() => expect(screen.getByTestId('dock-badge')).toBeTruthy())

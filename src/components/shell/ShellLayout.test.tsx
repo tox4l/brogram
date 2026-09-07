@@ -111,4 +111,30 @@ describe('ShellLayout', () => {
     await vi.waitFor(() => expect(screen.queryByRole('complementary', { name: 'Wellness' })).toBeNull())
     expect(screen.getByText('Content')).toBeTruthy()
   })
+
+  // R6.3 / I4: the v1 rail special-cased the exercise route directly inside
+  // this component ("dock leads, compact strip", `usePathname()`-driven).
+  // That assertion is gone because the mechanism it pinned is gone: this
+  // component no longer reads the route at all (see the header comment) --
+  // route-driven collapse now lives one level down, in `WellnessSlot`
+  // (`effectiveCollapsed`, its own R6.3 tests) and is exercised end to end in
+  // `dashboard/page.test.tsx`. What replaces the old guarantee here is the
+  // negative: the grid stays keyed on placement alone, on the exercise route
+  // exactly as everywhere else.
+  it('R6.3: the exercise route has no effect on the grid -- placement is the only input', async () => {
+    // No `usePathname()` mock is set up at all in this file (unlike
+    // `WellnessSlot.test.tsx`) because this component genuinely never calls
+    // it; the assertion here is that the grid comes out keyed on placement
+    // regardless -- there is no route-shaped input for it to react to.
+    render(<ShellLayout dock={<div>Dock</div>}><p>Content</p></ShellLayout>, { wrapper: wrapper('left') })
+
+    const grid = await vi.waitFor(() => {
+      const el = screen.getByRole('main').parentElement
+      expect(el?.className).toContain('lg:grid-cols-[17.5rem_minmax(0,1fr)]')
+      return el
+    })
+    const aside = screen.getByRole('complementary', { name: 'Wellness' })
+    expect(aside.className).toContain('order-first')
+    expect(grid?.className).not.toContain('lg:grid-cols-[minmax(0,1fr)_17.5rem]')
+  })
 })

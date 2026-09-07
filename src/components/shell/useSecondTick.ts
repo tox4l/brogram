@@ -93,3 +93,26 @@ function getServerSnapshot(): number {
 export function useSecondTick(): number {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
+
+/**
+ * `useSecondTick()`'s sentinel (`0`, 1970-01-01) is not just a server-render
+ * value -- React also uses `getServerSnapshot` for a client's *first* render
+ * during hydration, so `now === 0` is a real value a consumer can see before
+ * ever observing a real tick. A consumer that seeds durable state from `now`
+ * (a target timestamp for a recurring timer, say) must never seed from this
+ * sentinel: `startRecurringTimer(0, 45)` anchors to 1970-01-01 00:45, which
+ * is already "due" the moment a real clock value arrives, firing a reminder
+ * (and, for a `while (next <= now)` catch-up loop, spinning through decades
+ * of intervals) on every single page load. Treat the sentinel as "no time
+ * yet" and defer seeding until the first real tick.
+ */
+export function isTickReady(now: number): boolean {
+  return now > 0
+}
+
+/** `now` once the shared clock has ticked for real at least once, else
+ *  `null` -- so a consumer writes `const ready = nowOrNull(now); if (ready
+ *  === null) return` instead of quietly seeding from the sentinel. */
+export function nowOrNull(now: number): number | null {
+  return isTickReady(now) ? now : null
+}
