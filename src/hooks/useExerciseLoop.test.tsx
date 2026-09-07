@@ -754,6 +754,14 @@ describe('the optimistic submit path (T2.2)', () => {
       { id: 'win-1', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, created_at: `${today}T01:00:00.000Z` },
       { id: 'win-2', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, created_at: `${today}T02:00:00.000Z` },
     ]
+    // C1 fix round: `recordRewardsAfterSettle` now takes the just-graded attempt directly
+    // (`operation.attempt`, for its real `durationMs`/`difficulty`) and reads the REST of the
+    // window off the `qk.attempts` query cache, not `history.current` -- so the two earlier
+    // wins this test relies on for its "third win" count must be seeded there, the same way
+    // `(app)/layout.tsx`'s `QuerySeed` seeds it for real in production.
+    spies.getQueryData.mockImplementation((key: readonly unknown[]) => key[0] === 'attempts'
+      ? tables.attempts.map(row => ({ id: row.id, userId: row.user_id, exerciseId: row.exercise_id, code: '', results: [], passed: row.passed, durationMs: 0, hintCount: row.hint_count, createdAt: row.created_at }))
+      : undefined)
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     await act(async () => { await hook.result.current.submit() })
     await waitFor(() => expect(spies.celebrate).toHaveBeenCalledWith('goal', undefined, expect.any(String)))
@@ -877,5 +885,28 @@ describe('the optimistic submit path (T2.2)', () => {
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     await act(async () => { await hook.result.current.submit() })
     expect(hook.result.current.lastRewardAttempt).toMatchObject({ exerciseId: 'e1', difficulty: current.difficulty, passed: true })
+  })
+
+  it('C1 fix round: a hint-free pass that took over a minute does not unlock under-a-minute -- `recordRewardsAfterSettle` used to hard-code durationMs to 0, making this always true', async () => {
+    const hook = await loaded(); vi.useFakeTimers()
+    // Starts the clock (`startedAt.current`) on the first keystroke, same as any real attempt.
+    act(() => hook.result.current.setCode('typing'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(65_000) })
+    act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    vi.useRealTimers() // `waitFor` below polls on real timers -- restore them before using it
+    expect(hook.result.current.outcome).toBe('passed')
+    // Wait for the reward-write cycle to actually land (first-blood always fires on an
+    // account's first pass) before asserting the absence of the wrong trophy -- otherwise a
+    // "not yet written" false negative would pass for the wrong reason.
+    await waitFor(() => expect((tables.user_achievements ?? []).some(row => row.achievement_id === 'first-blood')).toBe(true))
+    expect((tables.user_achievements ?? []).some(row => row.achievement_id === 'under-a-minute')).toBe(false)
+  })
+
+  it('I1 fix round: a hint-free pass on a difficulty >= 3 exercise unlocks no-wheels -- the old rebuilt-from-history attempt never carried a difficulty at all', async () => {
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.outcome).toBe('passed')
+    await waitFor(() => expect((tables.user_achievements ?? []).some(row => row.achievement_id === 'no-wheels')).toBe(true))
   })
 })

@@ -1,4 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { EditorView } from '@codemirror/view'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Clo, ExercisePublic } from '@/lib/contracts'
@@ -16,7 +18,7 @@ vi.mock('@/store/session', () => ({ useSession: mocks.session }))
 vi.mock('@/lib/query/hooks', () => ({ useWellness: mocks.wellness }))
 
 const exercise: ExercisePublic = { id: 'exercise-one', cloId: 'clo', kind: 'predict-output', language: 'javascript', difficulty: 3, pattern: 'trace', title: 'Follow the value', prompt: 'What is printed?', starterCode: 'console.log(3)', tests: [{ id: 'one', input: '', expected: '3', hidden: false }], origin: 'seed', tags: [] }
-const model = () => ({ exercise, clo: null, code: '', setCode: vi.fn(), run: vi.fn(), submit: vi.fn(), requestHint: vi.fn(), next: vi.fn(), retry: vi.fn(), status: 'ready', outcome: null, results: [], diagnosis: null, partialDiagnosis: null, hints: [], partialHint: null, hintPending: false, review: null, nextExercise: null, progress: null, stdout: '', stderr: '', error: null, hintAvailable: false, hintWaitSeconds: 0, hintCount: 0, busy: false, duringAttempt: false, pointsEarned: 0, pointsProvisional: false, chain: 0, closed: false, canAdvance: false, controlsDisabled: false, judgeAbsent: false, lastRewardAttempt: null })
+const model = () => ({ exercise, clo: null, code: '', setCode: vi.fn(), run: vi.fn(), submit: vi.fn(), requestHint: vi.fn(), next: vi.fn(), retry: vi.fn(), status: 'ready', outcome: null, results: [], diagnosis: null, partialDiagnosis: null, hints: [], partialHint: null, hintPending: false, review: null, nextExercise: null, progress: null, stdout: '', stderr: '', error: null, hintAvailable: false, hintWaitSeconds: 0, hintCount: 0, busy: false, duringAttempt: false, pointsEarned: 0, pointsProvisional: false, chain: 0, closed: false, canAdvance: false, controlsDisabled: false, judgeAbsent: false, lastRewardAttempt: null, seededFromHandoffCode: false })
 const javaExercise: ExercisePublic = { id: 'exercise-java', cloId: 'clo', kind: 'code', language: 'java', difficulty: 2, pattern: 'loop', title: 'Sum the values', prompt: 'Return the sum of the inputs.', starterCode: 'class Solution {}', tests: [{ id: 'one', input: '1 2', expected: '3', hidden: false }], origin: 'seed', tags: [] }
 const traceExercise: ExercisePublic = { id: 'exercise-trace-bad', cloId: 'clo', kind: 'trace', language: 'javascript', difficulty: 2, pattern: 'trace', title: 'Trace it', prompt: 'What does count hold at line 2?', starterCode: 'let count = 0\ncount += 1', tests: [{ id: 'one', input: '', expected: '1', hidden: false }], origin: 'seed', tags: [] }
 const codeExercise: ExercisePublic = { id: 'exercise-code-one', cloId: 'clo', kind: 'code', language: 'javascript', difficulty: 2, pattern: 'scan', title: 'First code rep', prompt: 'Write it.', starterCode: 'function solveOne() {}', tests: [{ id: 'one', input: '', expected: '1', hidden: false }], origin: 'seed', tags: [] }
@@ -306,6 +308,59 @@ describe('exercise screen', () => {
       const heading = screen.getByRole('heading', { name: 'A different rep' })
       expect(document.activeElement).toBe(heading)
       expect(screen.getByText('Rep opened. A different rep.')).toBeTruthy()
+    })
+    it('M2 fix round: the live region is inserted empty and filled from an effect, not pre-populated in the mounting commit', async () => {
+      // Bypasses testing-library's `render()` on purpose: its `act()` wrapper flushes passive
+      // effects before returning, which makes the very thing this test pins (a node existing
+      // BEFORE its text does, as two separate DOM mutations) unobservable through it. A bare
+      // `root.render()` outside `act()` still commits the initial mount synchronously but leaves
+      // passive effects (the announcement-filling one) unflushed until awaited separately.
+      const container = document.createElement('div')
+      document.body.appendChild(container)
+      const root = createRoot(container)
+      const originalError = console.error
+      console.error = vi.fn() // suppresses React's dev-only "not wrapped in act" notice
+      try {
+        root.render(<ExercisePage />)
+        // React 19's `createRoot().render()` does not paint synchronously outside `act()` --
+        // one macrotask is enough for the initial commit (render + layout effects) to land,
+        // while a passive effect (the announcement-filling one) still needs its own explicit
+        // flush below. This is exactly the gap the fix closes: the node exists, empty, before
+        // any passive effect has had a chance to run.
+        await new Promise(resolve => setTimeout(resolve, 0))
+        const region = container.querySelector('[role="status"].sr-only')
+        expect(region).toBeTruthy()
+        expect(region?.textContent).toBe('')
+        await act(async () => {}) // flushes the queued passive effect
+        expect(region?.textContent).toBe('Rep opened. Follow the value.')
+      } finally {
+        console.error = originalError
+        act(() => { root.unmount() })
+        container.remove()
+      }
+    })
+  })
+
+  describe('M4 fix round: a remount hydrated from typed code returns focus to the editor, not the heading', () => {
+    it('sends focus to the answer control when the hook reports seededFromHandoffCode, on a genuine remount', () => {
+      cleanup() // a genuine remount: a brand-new component tree, matching next()'s real store-hydrated path
+      mocks.params.mockReturnValue({ id: 'exercise-two' })
+      const nextExercise = { ...exercise, id: 'exercise-two', title: 'A different rep' }
+      mocks.loop.mockReturnValue({ ...model(), exercise: nextExercise, seededFromHandoffCode: true })
+      render(<ExercisePage />)
+      const textarea = screen.getByRole('textbox', { name: 'Predicted output' })
+      const heading = screen.getByRole('heading', { name: 'A different rep' })
+      expect(document.activeElement).toBe(textarea)
+      expect(document.activeElement).not.toBe(heading)
+    })
+    it('still sends focus to the heading on an ordinary remount (seededFromHandoffCode false)', () => {
+      cleanup()
+      mocks.params.mockReturnValue({ id: 'exercise-two' })
+      const nextExercise = { ...exercise, id: 'exercise-two', title: 'A different rep' }
+      mocks.loop.mockReturnValue({ ...model(), exercise: nextExercise, seededFromHandoffCode: false })
+      render(<ExercisePage />)
+      const heading = screen.getByRole('heading', { name: 'A different rep' })
+      expect(document.activeElement).toBe(heading)
     })
   })
 

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Check, Play, Send, X } from 'lucide-react'
 import { line, lineWith } from '@/lib/voice/lines'
@@ -75,6 +75,17 @@ function ExerciseWorkspace({ id }: { id: string }) {
   // commits in. Fires on a genuine mount too (a fresh load, or the store-hydrated remount `next()`
   // causes), which is harmless -- the same behaviour a route change would already produce.
   const headingRef = useRef<HTMLHeadingElement>(null)
+  // M2 (wave 2 review, fix round): the sr-only announcement below used to render already
+  // populated with its text in the very same commit that inserted the node -- on the
+  // store-hydrated remount path (a brand-new subtree, not an in-place text swap) that means a
+  // live region arrives to the accessibility tree already containing content, which assistive
+  // tech is documented not to reliably announce. Starting empty and filling it from an effect
+  // keyed on the exercise's identity guarantees the node exists, empty, in one commit, and the
+  // text lands as a distinct mutation to an already-live region in the next -- announcing on
+  // every path, not only the in-place swap (which happened to work because it only ever changed
+  // existing text, never inserted the node afresh).
+  const [announcement, setAnnouncement] = useState('')
+  const announcementRef = useRef('')
   // Fix round 5 (T2.2 review of round 4, C1, belt and braces): `router.replace()` is back for the
   // in-place transition (see the hook's own comment), so the URL param genuinely does update on
   // `next()` -- but this reads the LOADED exercise, not the param, anyway: every event `logIntegrity`
@@ -85,10 +96,40 @@ function ExerciseWorkspace({ id }: { id: string }) {
   const lockdown = useLockdown(loop.exercise?.id ?? id, { duringAttempt: loop.duringAttempt, enabled: Boolean(loop.exercise) })
   const exercise = loop.exercise
   useLayoutEffect(() => {
-    if (exercise) headingRef.current?.focus()
+    // M4 (wave 2 review, fix round): this effect also fires on the store-hydrated remount
+    // `next()` causes -- including the exact window New-1 protects, where the learner typed
+    // into the about-to-be-replaced instance before the remount landed. Sending focus to the
+    // (tabIndex={-1}) heading in that specific case strands every subsequent keystroke: the
+    // text survived (New-1), but the caret did not. `loop.seededFromHandoffCode` is true only
+    // for that case (see the hook's own comment); the redirect-to-editor half lives in the
+    // SEPARATE effect below, not here, on purpose -- skipped here rather than combined.
+    if (exercise && !loop.seededFromHandoffCode) headingRef.current?.focus()
     // Keyed on the exercise's identity only: a re-render that leaves the same exercise on
-    // screen (a retry, an in-flight save reconciling) must not steal focus back to the heading
-    // a second time.
+    // screen (a retry, an in-flight save reconciling) must not steal focus back a second time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise?.id])
+  // M4: the answer-form/editor child populates `editorFocusRef.current` from its OWN plain
+  // `useEffect` (Editor.tsx, PredictOutput.tsx, SpotTheBug.tsx, Trace.tsx), not a layout effect
+  // -- React runs every layout effect in the tree before any passive effect runs, so reading
+  // `editorFocusRef.current` from a layout effect here (as the block above does for the
+  // heading) would see it still `null` on a fresh mount and silently focus nothing. A plain
+  // effect, keyed the same way, is guaranteed to run after that child's, since passive effects
+  // fire bottom-up within their own phase exactly like layout effects do within theirs.
+  useEffect(() => {
+    if (exercise && loop.seededFromHandoffCode) editorFocusRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise?.id])
+  // A11Y-05 / M2: filled from an effect, not at render time -- see the state's own comment above.
+  // `setAnnouncement(announcementRef.current)` reads the just-written ref rather than the plain
+  // composed string directly -- the React Compiler lint (`react-hooks/set-state-in-effect`, a
+  // standing project constraint) allows a setState call whose argument is ref-derived (the
+  // documented "external sync" escape hatch, the same one `ShaderField.tsx` already uses), which
+  // is exactly what this is: the announcement text is computed once per exercise and stored
+  // outside React state before being handed to it.
+  useEffect(() => {
+    if (!exercise) return
+    announcementRef.current = `Rep opened. ${exercise.title}.`
+    setAnnouncement(announcementRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise?.id])
   if (!exercise) return <section aria-label="Rep" className="mx-auto max-w-xl space-y-4 py-12">
@@ -119,8 +160,15 @@ function ExerciseWorkspace({ id }: { id: string }) {
         every browser/AT combination -- this sr-only line (mirroring `RunSummary.tsx`'s own
         "announce it, don't rely on focus alone" pattern) is the load-bearing half, since neither
         the in-place swap nor the store-hydrated remount changes `document.title` for the App
-        Router's own announcer to react to. */}
-    <p role="status" aria-live="polite" className="sr-only">{`Rep opened. ${exercise.title}.`}</p>
+        Router's own announcer to react to. M2: the text itself comes from `announcement` state,
+        filled by an effect rather than at render time, so this node exists (empty) before the
+        text does on every path, including a brand-new subtree on the store-hydrated remount --
+        not just the in-place swap, where reusing the same node made a same-commit population
+        happen to still announce. Voice-bank note: a raw composed string, not `line()`/
+        `lineWith()` -- `src/lib/voice/**` is outside this lane's owned paths and no existing key
+        fits; disclosed in the fix-round report with the one-line change the voice-bank owner
+        needs (`rep.opened` interpolating `{title}`). */}
+    <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
     <div className="space-y-3" inert={Boolean(lockdown.overlay)}>
       <Link href="/dashboard" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-3" aria-hidden="true" />Courses</Link>
       <div className="flex flex-wrap items-start justify-between gap-3"><h1 ref={headingRef} tabIndex={-1} className="min-w-0 max-w-4xl text-2xl font-medium tracking-tight outline-none">{exercise.title}</h1><p className="pt-1 font-mono text-xs text-muted-foreground">{exercise.language} · {difficultyWord(exercise.difficulty)}</p></div>

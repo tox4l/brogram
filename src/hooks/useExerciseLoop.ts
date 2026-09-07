@@ -186,7 +186,12 @@ const NEUTRAL_QUALITY = 70
 const HISTORY_CAP = 50
 type History = { id: string; exercise_id: string; passed: boolean; hint_count: number; created_at: string }
 type Submission = {
-  attempt: Attempt; exercise: ExercisePublic; clo: Clo; inserted: boolean
+  // C1/I1 (wave 2 review, fix round): typed as the full `RewardAttempt` (not the narrower
+  // `Attempt`) so `operation.attempt.durationMs` and `operation.attempt.difficulty` -- both
+  // real and already known at grading time (`submit()` builds `rewardAttempt` with both) --
+  // stay visible to the type system all the way through to `recordRewardsAfterSettle` below,
+  // instead of being widened away the moment they are stored on this field.
+  attempt: RewardAttempt; exercise: ExercisePublic; clo: Clo; inserted: boolean
   diagnosis?: DiagnoserReply; review?: ReviewerReply; state?: LearnerState
   masterySaved?: boolean; planned?: boolean; planner?: PlannerReply; queued?: boolean
   /** Captured once at grading time (fix round I3): a retry that re-enters `finishSubmission`
@@ -289,6 +294,16 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
   const [chain, setChain] = useState(0)
   /** T2.5's `RewardAttempt`, difficulty attached, for whichever consumer evaluates achievements next. */
   const [lastRewardAttempt, setLastRewardAttempt] = useState<RewardAttempt | null>(null)
+  /**
+   * M4 (wave 2 review, fix round): true exactly when this render's exercise was just hydrated
+   * from a `pendingHandoff` whose `code` field was set -- i.e. the learner typed into the
+   * about-to-be-replaced instance during the ~500ms remount window (New-1), and the fresh
+   * instance seeded from that typed code rather than the exercise's starter code. `page.tsx`
+   * reads this to decide where the post-remount layout effect sends focus: back into the
+   * editor (so the caret the learner was mid-keystroke on is not stranded on a `tabIndex={-1}`
+   * heading) rather than the heading every OTHER exercise transition correctly focuses.
+   */
+  const [seededFromHandoffCode, setSeededFromHandoffCode] = useState(false)
 
   const fireCelebration = useCallback((kind: CelebrationKind, detail: CelebrationDetail | undefined, eventId: string) => {
     // `celebrate()`'s own `eventId` dedupes (T2.6 fix round): a retry re-entering the
@@ -337,6 +352,10 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
     setHasPending(false); setError(null); setBusy(false); setHintCount(used)
     setHintTiming({ failureAt: null, coachAt: receipt.calledAt, edited: false, first: true })
     setClock(Date.now())
+    // M4: `handoffCode !== undefined` means `setCode` wrote into this exact handoff before it
+    // was consumed -- the one case this flag exists to catch. A `queueNext`/`next()`-populated
+    // handoff with no typing in the gap, a bundle hit, or a cold fetch all leave it `undefined`.
+    setSeededFromHandoffCode(handoffCode !== undefined)
     // Fix round 4: this exact user+exercise may already have a submission in flight or freshly
     // graded but not yet durably saved, in `pendingSubmissions` -- surviving a remount that
     // happened between `submit()` starting and its background chain finishing (the CPU-throttle
@@ -687,20 +706,37 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
    * could reach the dashboard's own "goal met" ring while this producer's `winsToday` never
    * agreed and `goal.done` never fired. Real cached data closes that gap for free.
    *
+   * Fix round (C1/I1): `attempts` used to be rebuilt from `history.current` -- the slim
+   * `id,exercise_id,passed,hint_count,created_at` projection this hook reads for the hint
+   * quota and bank exclusions -- with `durationMs` hard-coded to `0` and `difficulty` absent
+   * entirely. That made `under-a-minute` (`durationMs < 60_000`, and 0 is always < 60_000)
+   * permanently true on ANY hint-free pass however long it actually took, and made
+   * `no-wheels` structurally unreachable from this call site since it requires
+   * `difficulty >= 3` and nothing here ever had a difficulty to give it. `operation.attempt`
+   * is already a full `RewardAttempt` with the real `durationMs` and `difficulty` (attached at
+   * grading time in `submit()`, for exactly this purpose) -- taking it directly, and reading
+   * the rest of the window from the query cache (`qk.attempts`, the same recipe the derot call
+   * sites already use), fixes both at once with the freshest possible data for the
+   * just-graded attempt, which the cache's own invalidation (fired two lines above, in
+   * `syncInBackground`'s `finally`) has not necessarily resolved by the time this runs.
+   *
    * Degrades silently on any failure -- a missed goal day or achievement is a missed
    * celebration, never a broken pass -- and is never awaited by the caller (`syncInBackground`'s
    * `finally` calls this with `void`).
    */
-  async function recordRewardsAfterSettle(client: SupabaseClient, userId: string, state: LearnerState, createdAt: string) {
+  async function recordRewardsAfterSettle(client: SupabaseClient, userId: string, operation: Submission) {
     try {
+      const state = operation.state
+      if (!state) return
       const cache = getQueryClient()
       const wellnessRow = cache.getQueryData<WellnessRow>(qk.wellness(userId))
       const prefs = resolveWellnessPrefs(wellnessRow?.prefs)
       const drillResults = wellnessRow?.drill_results ?? []
       const lessonProgress = cache.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) ?? []
       const heldAchievementIds = (cache.getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map(row => row.achievementId)
-      const rewardAttempts: RewardAttempt[] = history.current.map(row => ({ id: row.id, userId, exerciseId: row.exercise_id, code: '', results: [], passed: row.passed, durationMs: 0, hintCount: row.hint_count, createdAt: row.created_at }))
-      const ctx = buildRewardContext({ state, attempts: rewardAttempts, activityDays: [], lessonProgress, drillResults, prefs, courseLessonCounts: {}, now: new Date(createdAt) })
+      const cachedAttempts = cache.getQueryData<Attempt[]>(qk.attempts(userId)) ?? []
+      const attempts: RewardAttempt[] = [operation.attempt, ...cachedAttempts.filter(row => row.id !== operation.attempt.id)]
+      const ctx = buildRewardContext({ state, attempts, activityDays: [], lessonProgress, drillResults, prefs, courseLessonCounts: {}, now: new Date(operation.attempt.createdAt) })
       void recordGoalDay(client, userId, ctx)
       void recordAchievements(client, userId, ctx, heldAchievementIds)
     } catch (rewardsError) {
@@ -888,7 +924,7 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
         // `operation.state` exists once `finishSubmission`'s state write lands, pass or fail
         // (`applyFail` scores a fail too); a background failure before that point never sets it,
         // and there is nothing yet to evaluate a reward context against.
-        if (operation.state) void recordRewardsAfterSettle(clientRef.current!, userId, operation.state, operation.attempt.createdAt)
+        if (operation.state) void recordRewardsAfterSettle(clientRef.current!, userId, operation)
       }
     }
   }
@@ -1119,5 +1155,5 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
   // guard honestly so the button is disabled exactly when clicking it would do nothing.
   const canAdvance = outcome === 'passed' && (closed || nextExercise !== null) && !hasPending
   const judgeAbsent = exercise?.language === 'java' && judgeProviderAbsent()
-  return { exercise, clo, code, setCode, run, submit, status, outcome, results, diagnosis, partialDiagnosis, hints, partialHint, hintPending, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, pointsProvisional, chain, closed, canAdvance, judgeAbsent, lastRewardAttempt }
+  return { exercise, clo, code, setCode, run, submit, status, outcome, results, diagnosis, partialDiagnosis, hints, partialHint, hintPending, requestHint, next, review, nextExercise, progress, stdout, stderr, error, hintAvailable, hintWaitSeconds, hintCount, busy, controlsDisabled, retry, duringAttempt, pointsEarned, pointsProvisional, chain, closed, canAdvance, judgeAbsent, lastRewardAttempt, seededFromHandoffCode }
 }
