@@ -26,8 +26,11 @@ import type { PropsWithChildren, ReactElement } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { dirname, join, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type {
-  AgentEnvelope, Clo, CourseCode, DrillResult, ExercisePublic, LearnerState, LessonPublic, RunResult,
+  AgentEnvelope, Clo, CourseCode, ExercisePublic, LearnerState, LessonPublic, RunResult,
 } from '@/lib/contracts'
 import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
@@ -42,6 +45,7 @@ import { useExerciseLoop } from '@/hooks/useExerciseLoop'
 import { compileLearnerState } from '@/lib/learner/compile'
 import DerotArcadeRunnerPage from '@/app/(app)/derot/arcade/[kind]/page'
 import DerotPlayRunnerPage from '@/app/(app)/derot/play/[game]/page'
+import type { PlayGameId } from '@/components/derot/play/types'
 import CoursesPage from '@/app/(app)/courses/page'
 import CoursePage from '@/app/(app)/course/[code]/page'
 import Dashboard from '@/app/(app)/dashboard/page'
@@ -139,34 +143,11 @@ vi.mock('@/components/exercise/Editor', () => ({
   ),
 }))
 
-vi.mock('@/components/derot', () => ({
-  DrillRunner: ({ item, onResult }: { item: { id: string; kind: string; lane: string }; onResult: (result: DrillResult) => void }) => (
-    <div>
-      <p>Item: {item.id}</p>
-      <button onClick={() => onResult({ drillId: item.id, kind: item.kind as DrillResult['kind'], correct: true, timeMs: 500, score: 90, at: '2026-09-06T12:00:00.000Z', lane: item.lane as DrillResult['lane'] })}>
-        Correct for {item.id}
-      </button>
-    </div>
-  ),
-}))
-
-const playStubs = vi.hoisted(() => ({
-  makeStub: (id: string, raw: number, payload: Record<string, unknown>) =>
-    function StubGame(props: { onComplete: (r: { raw: number; payload: Record<string, unknown> }) => void; onAbort: () => void }) {
-      return (
-        <div>
-          <p>{id} mounted</p>
-          <button onClick={() => props.onComplete({ raw, payload })}>Complete {id}</button>
-        </div>
-      )
-    },
-}))
-vi.mock('@/components/derot/play/FollowTheDot', () => ({ default: playStubs.makeStub('follow-the-dot', 0.5, {}) }))
-vi.mock('@/components/derot/play/ColorBack', () => ({ default: playStubs.makeStub('color-nback', 500, { hits: 6, falseAlarms: 1, plantedMatches: 8 }) }))
-vi.mock('@/components/derot/play/Twitch', () => ({ default: playStubs.makeStub('reaction', 842, {}) }))
-vi.mock('@/components/derot/play/KeepTime', () => ({ default: playStubs.makeStub('rhythm', 150, {}) }))
-vi.mock('@/components/derot/play/Breathe', () => ({ default: playStubs.makeStub('breathe', 100, {}) }))
-vi.mock('@/components/derot/play/MemoryGrid', () => ({ default: playStubs.makeStub('memory-grid', 750, { roundsCleared: 3 }) }))
+// `@/components/derot` (DrillRunner and its six per-kind children) and the
+// six `@/components/derot/play/*` games are deliberately left UNMOCKED here
+// (fix round 1, F1): the Arcade and Playground blocks below drive the real
+// components, not stand-ins, exactly per the review criterion that every
+// listed surface is genuinely exercised, not merely rendered.
 
 // The Celebration surface: same partial mocks `rewards.test.tsx` already
 // proved necessary for this component to mount cleanly under jsdom.
@@ -563,28 +544,46 @@ describe('surface: lesson walkthrough', () => {
 // =============================================================================
 
 describe('surface: de-rot Arcade', () => {
-  function drillRow(overrides: Partial<Row> = {}): Row {
-    return { id: 'd1', kind: 'trace', difficulty: 3, time_limit_s: 60, payload: {}, ...overrides }
+  // Real PredictOutput mounts (fix round 1, F1) -- six distinct items so a
+  // six-item run never repeats one, each identified by its own rendered
+  // snippet so `answerCurrent` can find the right answer for whichever item
+  // the run model actually served next.
+  const PREDICT_FIXTURES = [
+    { id: 'd1', snippet: 'print(1)', expected: '1' },
+    { id: 'd2', snippet: 'print(2)', expected: '2' },
+    { id: 'd3', snippet: 'print(3)', expected: '3' },
+    { id: 'd4', snippet: 'print(4)', expected: '4' },
+    { id: 'd5', snippet: 'print(5)', expected: '5' },
+    { id: 'd6', snippet: 'print(6)', expected: '6' },
+  ]
+
+  function drillRow(fixture: (typeof PREDICT_FIXTURES)[number]): Row {
+    return {
+      id: fixture.id, kind: 'predict-output', difficulty: 3, time_limit_s: 60,
+      payload: { language: 'python', snippet: fixture.snippet, expectedOutput: fixture.expected },
+    }
   }
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-06T12:00:00.000Z'))
-    nav.params.mockReturnValue({ kind: 'trace' })
-    db.drillsRows = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6'].map((id) => drillRow({ id }))
+    nav.params.mockReturnValue({ kind: 'predict-output' })
+    db.drillsRows = PREDICT_FIXTURES.map(drillRow)
     db.wellnessRow = { drill_results: [] }
   })
 
   async function answerCurrent() {
-    const itemLabel = await screen.findByText(/^Item: /)
-    const id = itemLabel.textContent!.replace('Item: ', '')
-    fireEvent.click(screen.getByRole('button', { name: `Correct for ${id}` }))
+    const textarea = await screen.findByPlaceholderText(/type the exact output/i)
+    const snippet = document.querySelector('pre code')?.textContent ?? ''
+    const fixture = PREDICT_FIXTURES.find((entry) => entry.snippet === snippet)
+    if (!fixture) throw new Error(`no fixture for the rendered snippet "${snippet}"`)
+    fireEvent.change(textarea, { target: { value: fixture.expected } })
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
     await new Promise((resolve) => setTimeout(resolve, 650))
   }
 
-  it('runs a full six-item Arcade run without ever calling an agent', async () => {
+  it('runs a full six-item Arcade run through the real PredictOutput drill without ever calling an agent', async () => {
     renderWith(<DerotArcadeRunnerPage />, withSession())
-    await waitFor(() => expect(screen.getByText('Item: d1')).toBeTruthy())
     for (let i = 0; i < 6; i++) await answerCurrent()
     await waitFor(() => expect(screen.getAllByText(/run complete/i).length).toBeGreaterThan(0))
     noAgentCalls()
@@ -596,21 +595,56 @@ describe('surface: de-rot Arcade', () => {
 // =============================================================================
 
 describe('surface: de-rot Playground', () => {
-  beforeEach(() => {
+  it('runs a full follow-the-dot Playground game to completion through the real game component, without ever calling an agent', async () => {
+    // Only `Date` is faked here (matching the Arcade block above), never
+    // `setTimeout`/`setInterval`: the 3-2-1 start and the game's own 100ms
+    // countdown tick stay on REAL timers, so testing-library's own
+    // `findBy`/`waitFor` polling keeps working. Jumping the frozen clock
+    // forward by the game's own time limit is what makes the next real
+    // countdown tick see the run as expired, instead of waiting 75 real
+    // seconds for it.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const startedAt = new Date('2026-09-06T12:00:00.000Z')
+    vi.setSystemTime(startedAt)
     nav.params.mockReturnValue({ game: 'follow-the-dot' })
     db.wellnessRow = { prefs: {}, drill_results: [] }
-    db.rpcData = [{ drillId: 'play-follow-the-dot', kind: 'follow-the-dot', correct: true, timeMs: 500, score: 50, at: '2026-01-01T00:00:00.000Z', lane: 'play' }]
-  })
 
-  it('runs a full Playground game without ever calling an agent', async () => {
     renderWith(<DerotPlayRunnerPage />, withSession())
     await screen.findByText('Follow the Dot')
-    const mounted = await screen.findByText(/follow-the-dot mounted/, {}, { timeout: 5000 })
-    expect(mounted).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /complete follow-the-dot/i }))
-    await waitFor(() => expect(db.rpcSpy).toHaveBeenCalled())
+    // The real 3-2-1 start (700ms x3 + 500ms of real waiting).
+    const area = await screen.findByTestId('follow-the-dot-area', {}, { timeout: 5000 })
+
+    // A real interaction: track the pointer inside the play area a few times.
+    fireEvent.pointerMove(area, { clientX: 160, clientY: 160 })
+    fireEvent.pointerMove(area, { clientX: 150, clientY: 170 })
+
+    // Expire the game's own 75s countdown (PLAY_TIME_LIMIT_S['follow-the-dot'])
+    // by jumping the frozen clock forward -- the next real 100ms tick notices.
+    vi.setSystemTime(new Date(startedAt.getTime() + 75_000))
+
+    await waitFor(() => expect(db.rpcSpy).toHaveBeenCalled(), { timeout: 5000 })
     noAgentCalls()
   }, 15000)
+
+  it('mounts each of the other five real Playground games and exercises the real Quit control on each, without ever calling an agent', async () => {
+    // Reduced motion (fix round 1, F1) skips the 3-2-1 start instantly on every one of these five
+    // games -- none of them substitutes a different surface under reduced motion the way Follow the
+    // Dot does, so this is a real mount of each real component, not a workaround.
+    db.wellnessRow = { prefs: { motion: 'reduced' }, drill_results: [] }
+    const otherGames: PlayGameId[] = ['color-nback', 'reaction', 'rhythm', 'breathe', 'memory-grid']
+
+    for (const game of otherGames) {
+      nav.params.mockReturnValue({ game })
+      const { unmount } = renderWith(<DerotPlayRunnerPage />, withSession())
+      const quit = await screen.findByRole('button', { name: 'Quit' }, { timeout: 5000 })
+      fireEvent.click(quit)
+      await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/derot'))
+      unmount()
+      nav.push.mockClear()
+    }
+
+    noAgentCalls()
+  }, 20000)
 })
 
 // =============================================================================
@@ -626,6 +660,43 @@ describe('surface: theme switch', () => {
     for (const radio of radios) fireEvent.click(radio)
     noAgentCalls()
   })
+
+  // Fix round 1, F3: `next-themes` is mocked at the top of this file, so the
+  // test above only proves ThemeQuickSwitch's own click handler runs, never
+  // the applied-theme path downstream of it. This one test un-mocks
+  // `next-themes` for real (a fresh module graph via resetModules, matching
+  // the celebration block's own established pattern below) and wraps the
+  // real component in the real `ThemeProvider`, so a callAgent planted
+  // anywhere downstream of an actually-applied theme would be caught too.
+  it('applies the chosen theme for real -- next-themes unmocked -- and still calls no agent', async () => {
+    vi.resetModules()
+    vi.doUnmock('next-themes')
+    const { ThemeProvider } = await import('next-themes')
+    const { ThemeQuickSwitch: RealThemeQuickSwitch } = await import('@/components/shell/ThemeQuickSwitch')
+    const { THEMES: realThemes, THEME_STORAGE_KEY } = await import('@/lib/theme/themes')
+
+    render(
+      <ThemeProvider
+        attribute="data-theme"
+        themes={realThemes.map((entry) => entry.id)}
+        defaultTheme="midnight"
+        enableSystem={false}
+        storageKey={THEME_STORAGE_KEY}
+        disableTransitionOnChange
+      >
+        <RealThemeQuickSwitch />
+      </ThemeProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose theme' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Amber' }))
+
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('amber'))
+    noAgentCalls()
+
+    document.documentElement.removeAttribute('data-theme')
+    document.documentElement.removeAttribute('data-theme-switching')
+  })
 })
 
 // =============================================================================
@@ -633,13 +704,19 @@ describe('surface: theme switch', () => {
 // =============================================================================
 
 describe('surface: wellness dock placement', () => {
-  it('moves the dock through right, left, top, floating and hidden without ever calling an agent', () => {
+  it('moves the dock through every placement it offers without ever calling an agent', async () => {
     const { Wrapper } = withProviders()
     renderWith(<Dock orientation="vertical" collapsed={false} onToggleCollapse={() => {}} corner="br" onCornerChange={() => {}} />, Wrapper)
     fireEvent.click(screen.getByText('Settings'))
     const select = screen.getByLabelText('Dock position') as HTMLSelectElement
-    for (const placement of ['left', 'top', 'float', 'hidden', 'right']) {
-      fireEvent.change(select, { target: { value: placement } })
+    // Derived from the select's own rendered options (fix round 1, F2), the
+    // same discipline the theme block already applies with THEMES.length --
+    // a renamed placement id can never make this loop silently move nothing.
+    const values = Array.from(select.options).map((option) => option.value)
+    expect(values).toHaveLength(5)
+    for (const value of values) {
+      fireEvent.change(select, { target: { value } })
+      await waitFor(() => expect(select.value).toBe(value))
     }
     noAgentCalls()
   })
@@ -907,5 +984,46 @@ describe('surface & trigger: buddy drawer (buddy-message)', () => {
     await waitFor(() => expect(agentSpies.stream).toHaveBeenCalledTimes(1))
     expect(agentSpies.stream).toHaveBeenCalledWith(expect.objectContaining({ agent: 'buddy', trigger: 'buddy-message' }), expect.any(Function))
     expect(agentSpies.call).not.toHaveBeenCalled()
+  })
+})
+
+// =============================================================================
+// Static guard (fix round 1, F1 point 2): every describe block above proves
+// its OWN surface calls no agent, but none of that stops a brand-new surface
+// from shipping with no describe block here at all -- the header comment
+// asks the next author to extend this file, it cannot enforce it. This is
+// the one assertion a new surface cannot walk past: the choke point
+// (`@/lib/agents/client`) may only ever be imported by the four modules that
+// already hold the seven frozen triggers. A fifth importer fails this test
+// immediately, before anyone has to remember to add a describe block for it.
+// =============================================================================
+
+const ROOT = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))))
+const SRC_DIR = join(ROOT, 'src')
+
+function walkSourceFiles(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name)
+    const stat = statSync(full)
+    if (stat.isDirectory()) walkSourceFiles(full, out)
+    else if (/\.(ts|tsx)$/.test(name) && !name.endsWith('.test.ts') && !name.endsWith('.test.tsx')) out.push(full)
+  }
+  return out
+}
+
+describe('static guard: @/lib/agents/client has exactly four importers', () => {
+  it('the frozen choke point is imported only by the four modules that hold the seven triggers', () => {
+    const importPattern = /from ['"]@\/lib\/agents\/client['"]/
+    const importers = walkSourceFiles(SRC_DIR)
+      .filter((file) => importPattern.test(readFileSync(file, 'utf8')))
+      .map((file) => `src${file.slice(SRC_DIR.length)}`.split(sep).join('/'))
+      .sort()
+
+    expect(importers).toEqual([
+      'src/app/(app)/courses/lib.ts',
+      'src/app/(app)/onboarding/page.tsx',
+      'src/components/buddy/Drawer.tsx',
+      'src/hooks/useExerciseLoop.ts',
+    ])
   })
 })
