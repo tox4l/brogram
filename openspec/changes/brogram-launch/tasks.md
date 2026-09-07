@@ -66,9 +66,9 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 
 ## v2 Wave 4 (premium presentation, plan 2026-09-07-brogram-wave4-plan.md)
 - [x] T4.0 Tokens, five palettes, two faces, and the contrast gate (serial, first, alone) (cead31c, fixes 8435e72, 2302209, eeded2e, approved 2026-09-07)
-- [ ] T4.1 The design-discipline gates
-- [ ] T4.2 Motion primitives: eases, Reveal, useFlipIndicator, the motion attribute
-- [ ] T4.3 ShaderSurface and the settle-and-freeze field
+- [x] T4.1 The design-discipline gates (94de544, fix 6e9266a, approved 2026-09-07)
+- [x] T4.2 Motion primitives: eases, Reveal, useFlipIndicator, the motion attribute (e360f74, fix 1d1b91c, approved 2026-09-07)
+- [x] T4.3 ShaderSurface and the settle-and-freeze field (e2bf740, fix 5b5415e, approved 2026-09-07)
 - [ ] T4.4 CodeGuide, the lesson reading surface, and the verifier
 - [ ] T4.5 Shell, dock, Buddy, shared UI, Account
 - [ ] T4.6 Dashboard, Courses, Course home
