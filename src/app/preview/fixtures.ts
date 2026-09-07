@@ -207,20 +207,23 @@ export const fixtureSpotBugExercise: ExercisePublic = {
   tags: infs1101SpotTheBug.tags,
 }
 
-const infs1101Trace = infs1101Seed.exercises.find((exercise) => exercise.kind === 'trace')!
+// The shipped bank holds no trace exercise any more (the three single-value ones became
+// predict-output), so the gallery carries its own: a real variables map, as the validator now
+// requires for the kind, borrowing the CLO and language from the first INFS1101 exercise.
+const infs1101First = infs1101Seed.exercises[0]!
 export const fixtureTraceExercise: ExercisePublic = {
   id: 'infs1101-trace-1',
-  cloId: infs1101Trace.cloId,
-  language: infs1101Trace.language as ExercisePublic['language'],
+  cloId: infs1101First.cloId,
+  language: infs1101First.language as ExercisePublic['language'],
   kind: 'trace',
-  difficulty: infs1101Trace.difficulty as ExercisePublic['difficulty'],
-  pattern: infs1101Trace.pattern,
-  title: infs1101Trace.title,
-  prompt: infs1101Trace.prompt,
-  starterCode: infs1101Trace.starterCode,
-  tests: infs1101Trace.tests as ExercisePublic['tests'],
+  difficulty: 2,
+  pattern: 'trace',
+  title: 'Drone Battery Checkpoint',
+  prompt: 'Trace the loop and write the final value of each variable.',
+  starterCode: 'battery = 100\ncheckpoint = 0\nfor leg in [10, 15, 5]:\n    battery -= leg\n    checkpoint += 1\n',
+  tests: [{ id: 't1', input: '', expected: '{"battery": 70, "checkpoint": 3}', hidden: false }],
   origin: 'seed',
-  tags: infs1101Trace.tags,
+  tags: ['loops', 'variables'],
 }
 export const fixtureTraceVariables = ['battery', 'checkpoint']
 
