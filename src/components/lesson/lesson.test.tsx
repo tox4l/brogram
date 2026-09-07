@@ -5,7 +5,7 @@ import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { SessionProvider } from '@/components/shell/SessionProvider'
-import type { CourseCode, LessonPublic } from '@/lib/contracts'
+import type { CourseCode, LearnerState, LessonPublic } from '@/lib/contracts'
 import goldenLessonFile from '../../../seed/lessons/INFS1101.json'
 import { LessonView } from './LessonView'
 
@@ -110,6 +110,7 @@ const mocks = vi.hoisted(() => ({
   callAgent: vi.fn(),
   streamAgent: vi.fn(),
   play: vi.fn(),
+  recordGoalDay: vi.fn(),
 }))
 
 const db = vi.hoisted(() => ({
@@ -140,6 +141,15 @@ vi.mock('@/lib/sound/manager', () => ({
   play: mocks.play,
 }))
 
+// X7: `recordGoalDay`'s own internal logic (`shouldRecordGoalDay`, the write,
+// the once-per-day celebration) is already covered by `record.test.ts`
+// (W2FIX-F2) -- this suite only needs to prove the walkthrough completion
+// path calls it, exactly once, which is what mocking it down to a plain spy
+// isolates.
+vi.mock('@/lib/rewards/record', () => ({
+  recordGoalDay: mocks.recordGoalDay,
+}))
+
 // The Editor's own CodeMirror behaviour is exercised by
 // `src/components/exercise/Editor.test.tsx`; this suite only needs to prove
 // its own integration point (lazy load, props threaded through), so a light
@@ -166,6 +176,14 @@ vi.mock('@/lib/supabase/client', () => ({
             return { error: null }
           },
         }
+      }
+      // X7: `LessonView` now also reads `useAttempts()` to build the reward
+      // context it hands `recordGoalDay` -- an empty, always-succeeding
+      // result here, distinct from `wellness`/`lesson_progress`, so every
+      // test in this file (not only the goal-day ones) never trips the
+      // catch-all below just from mounting.
+      if (table === 'attempts') {
+        return { select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) }
       }
       throw new Error(`lesson.test.tsx: unexpected table "${table}"`)
     },
@@ -197,16 +215,35 @@ function setCurriculum(lesson: LessonPublic, coursePackages?: string[]) {
   mocks.lessonFor.mockReturnValue(lesson)
 }
 
-function wrapper(userId = 'learner-1') {
+function wrapper(userId = 'learner-1', learnerState: LearnerState | null = null) {
   const client = makeQueryClient()
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={client}>
-        <SessionProvider initialState={{ user: { id: userId } as User, profile: null, learnerState: null }}>
+        <SessionProvider initialState={{ user: { id: userId } as User, profile: null, learnerState }}>
           {children}
         </SessionProvider>
       </QueryClientProvider>
     )
+  }
+}
+
+/** X7: `recordGoalDay`'s call site needs a real `LearnerState` in the
+ *  session store -- `buildRewardContext` requires the field structurally,
+ *  even though `recordGoalDay`'s own logic never reads it. */
+function learnerStateFixture(userId: string): LearnerState {
+  return {
+    userId,
+    profile: {
+      displayName: 'Test learner', learningStyle: 'mixed',
+      styleVector: { visual: 0.5, verbal: 0.5, example: 0.5, theory: 0.5 },
+      tone: 'supportive', verbosity: 'short',
+      motivation: { why: '', beyondCourses: false, depth: 'understand', wantsAgenticCoding: false },
+      onboardingComplete: true,
+    },
+    currentCourse: null, path: [], nextExerciseIds: [], mastery: {}, recentMistakes: [],
+    streak: { exerciseDays: 0, derotDays: 0, lastExerciseDate: null, lastDerotDate: null },
+    points: 0, integrityScore: 0, accountStatus: 'active', version: 1, updatedAt: '2026-09-01T00:00:00.000Z',
   }
 }
 
@@ -267,7 +304,7 @@ describe('LessonView', () => {
     expect(within(section).queryByText(check.hint)).toBeNull()
   })
 
-  it('announces the verdict through an aria-live region, right after which the reveal follows in DOM order', async () => {
+  it('A11Y-15: the hint announces through an aria-live region the focused verdict does not sit inside, in DOM order after it', async () => {
     setCurriculum(ALL_KINDS_LESSON)
     render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
     await screen.findByText(ALL_KINDS_LESSON.title)
@@ -277,15 +314,19 @@ describe('LessonView', () => {
     fireEvent.change(textbox, { target: { value: 'wrong' } })
     fireEvent.click(within(section).getByRole('button', { name: /check answer/i }))
 
-    const live = await within(section).findByText('Not yet')
-    const liveRegion = live.closest('[aria-live]')
-    expect(liveRegion).not.toBeNull()
-    expect(liveRegion?.getAttribute('aria-live')).toBe('polite')
+    const verdict = await within(section).findByText('Not yet')
+    // The focus target (I3) must NOT sit inside an aria-live region -- doing
+    // so announces the same text twice: once as new live content, once as
+    // the newly focused element.
+    expect(verdict.closest('[aria-live]')).toBeNull()
 
     const hint = within(section).getByText('Add them.')
+    const liveRegion = hint.closest('[aria-live]')
+    expect(liveRegion).not.toBeNull()
+    expect(liveRegion?.getAttribute('aria-live')).toBe('polite')
     // The hint must not be injected above the learner's position -- it comes
-    // after the live region in document order.
-    const position = liveRegion!.compareDocumentPosition(hint)
+    // after the verdict in document order.
+    const position = verdict.compareDocumentPosition(liveRegion!)
     expect(Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 
@@ -450,14 +491,18 @@ describe('LessonView', () => {
     fireEvent.change(textbox, { target: { value: 'nonsense' } })
     submit()
     await within(section).findByText('Not yet')
-    const liveRegion = within(section).getByText('Not yet').closest('[aria-live]') as HTMLElement
+    // A11Y-15: the verdict ("Not yet") itself no longer lives inside the
+    // aria-live region (it is the focus target instead) -- the region now
+    // holds only the hint/explain swap, queried directly rather than off
+    // the verdict text.
+    const liveRegion = section.querySelector('[aria-live]') as HTMLElement
     const firstAnnouncement = liveRegion.textContent
 
     fireEvent.change(textbox, { target: { value: 'still wrong' } })
     submit()
-    // Same visible word ("Not yet") both times -- the region's full announced
-    // text (hint swapped for explain, plus the sr-only attempt count) must
-    // still differ, or a screen-reader learner hears nothing on this attempt.
+    // Same visible word ("Not yet") both times -- the region's announced
+    // text (hint swapped for explain) must still differ, or a
+    // screen-reader learner hears nothing on this attempt.
     await waitFor(() => expect(liveRegion.textContent).not.toBe(firstAnnouncement))
   })
 
@@ -493,6 +538,131 @@ describe('LessonView', () => {
     fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
     const link = await screen.findByRole('link', { name: /back to your path/i })
     await waitFor(() => expect(document.activeElement).toBe(link))
+  })
+
+  it('X7: completing a walkthrough records a goal day exactly once', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    const state = learnerStateFixture('learner-goal')
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper('learner-goal', state) })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+    await screen.findByRole('link', { name: /back to your path/i })
+
+    expect(mocks.recordGoalDay).toHaveBeenCalledTimes(1)
+    const [, userId, ctx] = mocks.recordGoalDay.mock.calls[0] as [unknown, string, { lessonProgress: { lessonId: string; status: string }[] }]
+    expect(userId).toBe('learner-goal')
+    // The reward context built for this call carries the just-completed
+    // lesson (X7's actual defect: this used to be permanently `[]`).
+    expect(ctx.lessonProgress).toContainEqual(expect.objectContaining({ lessonId: ALL_KINDS_LESSON.cloId, status: 'completed' }))
+  })
+
+  it('X7: a lesson that is only skipped, never completed, never calls recordGoalDay', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    const state = learnerStateFixture('learner-skip')
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper('learner-skip', state) })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    fireEvent.click(screen.getByRole('button', { name: /i've got this/i }))
+    await screen.findByText(/marked as skipped/i)
+
+    expect(mocks.recordGoalDay).not.toHaveBeenCalled()
+  })
+
+  it('A11Y-06: the progress rail block-count line is not a live region', async () => {
+    setCurriculum(GOLDEN_LESSON)
+    render(<LessonView cloId={GOLDEN_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(GOLDEN_LESSON.title)
+
+    const rail = screen.getByRole('navigation', { name: /walkthrough progress/i })
+    const label = within(rail).getByText(/block \d+ of \d+/i)
+    expect(label.getAttribute('role')).not.toBe('status')
+    expect(label.closest('[aria-live]')).toBeNull()
+  })
+
+  it('A11Y-06 + A11Y-15: a screen-reader-style mutation observer counts exactly one live-region announcement per graded attempt, and none from the rail', async () => {
+    setCurriculum(ALL_KINDS_LESSON)
+    render(<LessonView cloId={ALL_KINDS_LESSON.cloId} />, { wrapper: wrapper() })
+    await screen.findByText(ALL_KINDS_LESSON.title)
+
+    const rail = screen.getByRole('navigation', { name: /walkthrough progress/i })
+    const railLabel = within(rail).getByText(/block \d+ of \d+/i)
+
+    // Counted per OBSERVER CALLBACK (one microtask's worth of DOM changes),
+    // not per individual `MutationRecord` -- a real screen reader treats a
+    // single synchronous DOM update (React's one commit swapping the hint
+    // `<p>` for the explain `<p>` is two child-list operations, one remove
+    // and one add) as one announcement, not two.
+    const railMutations: string[] = []
+    const liveMutations: string[] = []
+    const observer = new MutationObserver((records) => {
+      let touchedRail = false
+      let touchedLive = false
+      for (const record of records) {
+        if (record.target === railLabel || railLabel.contains(record.target)) touchedRail = true
+        const node = record.target
+        const el: Element | null = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
+        if (el?.closest('[aria-live]')) touchedLive = true
+      }
+      if (touchedRail) railMutations.push(railLabel.textContent ?? '')
+      if (touchedLive) liveMutations.push('announced')
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+
+    // Every check kind, wrong then right (the same sequence the "never calls
+    // an agent" test already exercises) -- five checks, each graded twice.
+    const predict = checkSection('What prints?')
+    const predictBox = within(predict).getByRole('textbox')
+    fireEvent.change(predictBox, { target: { value: 'wrong' } })
+    fireEvent.click(within(predict).getByRole('button', { name: /check answer/i }))
+    await within(predict).findByText('Not yet')
+    fireEvent.change(predictBox, { target: { value: '2' } })
+    fireEvent.click(within(predict).getByRole('button', { name: /check answer/i }))
+    await within(predict).findByText('Right')
+
+    const choose = checkSection('Pick one.')
+    fireEvent.click(within(choose).getByRole('radio', { name: 'A' }))
+    await within(choose).findByText('Not yet')
+    fireEvent.click(within(choose).getByRole('radio', { name: 'B' }))
+    await within(choose).findByText('Right')
+
+    const bug = checkSection('Find the bug.')
+    const bugLines = within(bug).getAllByRole('checkbox')
+    fireEvent.click(bugLines[0])
+    fireEvent.click(within(bug).getByRole('button', { name: /check answer/i }))
+    await within(bug).findByText('Not yet')
+    fireEvent.click(bugLines[0])
+    fireEvent.click(bugLines[2])
+    fireEvent.click(within(bug).getByRole('button', { name: /check answer/i }))
+    await within(bug).findByText('Right')
+
+    const blank = checkSection('Fill it in.')
+    const blankBox = within(blank).getByRole('textbox')
+    fireEvent.change(blankBox, { target: { value: 'wrong' } })
+    fireEvent.click(within(blank).getByRole('button', { name: /check answer/i }))
+    await within(blank).findByText('Not yet')
+    fireEvent.change(blankBox, { target: { value: '5' } })
+    fireEvent.click(within(blank).getByRole('button', { name: /check answer/i }))
+    await within(blank).findByText('Right')
+
+    const micro = checkSection('Write a function.')
+    mocks.run.mockResolvedValueOnce({ ok: false, results: [{ testId: 't1', passed: false, actual: '0', expected: '1', stdout: '', stderr: '', durationMs: 1 }], passedCount: 0, totalCount: 1, runtime: 'python' })
+    fireEvent.click(within(micro).getByRole('button', { name: /run tests/i }))
+    await within(micro).findByText('Not yet')
+    mocks.run.mockResolvedValueOnce({ ok: true, results: [{ testId: 't1', passed: true, actual: '1', expected: '1', stdout: '', stderr: '', durationMs: 1 }], passedCount: 1, totalCount: 1, runtime: 'python' })
+    fireEvent.click(within(micro).getByRole('button', { name: /run tests/i }))
+    await within(micro).findByText('Right')
+
+    observer.disconnect()
+
+    // A11Y-06: scrolling/answering through the whole lesson never queues a
+    // rail announcement -- it carries no `aria-live` at all any more.
+    expect(railMutations).toEqual([])
+    // A11Y-15: exactly one live-region mutation per graded attempt (the
+    // hint/explain swap) -- five checks x two attempts each. Never two for
+    // the same attempt, which is what the verdict's own now-removed
+    // `aria-live` wrapper used to add on top of this.
+    expect(liveMutations.length).toBe(10)
   })
 
   it('I4: a failed write is queued in localStorage without ever reverting the answered check locally', async () => {

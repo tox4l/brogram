@@ -282,24 +282,24 @@ export function CheckBlock({ block, reduced, onAnswered, packages }: {
         </div>
       )}
 
-      {/* I2: hint/explain live inside the same aria-live region as the verdict,
-          in DOM order right after it, so a second wrong attempt's swap from
-          hint to explain is itself an announced mutation -- not silence.
-          The sr-only attempt suffix additionally guarantees the announced
-          text changes attempt to attempt even on the rare lesson where an
-          author's `hint` and `explain` strings happen to read the same. */}
+      {/* A11Y-15: the verdict paragraph is the focus target (I3, below) -- a
+          screen reader already announces it as the newly focused content, so
+          it must not also sit inside an `aria-live` region, or the same text
+          is announced twice. The hint/explain swap (I2) is new content the
+          learner is NOT moved to, so it keeps its own `aria-live` region,
+          entirely separate from the focused paragraph. */}
+      {verdict && (
+        <p
+          ref={verdictRef}
+          tabIndex={-1}
+          className={`flex items-center gap-2 text-sm font-medium outline-none ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}
+        >
+          {verdict.right ? <Check aria-hidden="true" className="size-4" /> : <X aria-hidden="true" className="size-4" />}
+          {verdict.right ? line('lesson.verdict.right') : line('lesson.verdict.notYet')}
+          {!verdict.right && <span className="sr-only"> — attempt {attempts}</span>}
+        </p>
+      )}
       <div aria-live="polite">
-        {verdict && (
-          <p
-            ref={verdictRef}
-            tabIndex={-1}
-            className={`flex items-center gap-2 text-sm font-medium outline-none ${verdict.right ? 'text-success' : 'text-warning'} ${shaking ? 'lesson-shake' : ''}`}
-          >
-            {verdict.right ? <Check aria-hidden="true" className="size-4" /> : <X aria-hidden="true" className="size-4" />}
-            {verdict.right ? line('lesson.verdict.right') : line('lesson.verdict.notYet')}
-            {!verdict.right && <span className="sr-only"> — attempt {attempts}</span>}
-          </p>
-        )}
         {verdict?.reveal === 'hint' && <p className="text-sm text-muted-foreground">{block.hint}</p>}
         {verdict?.reveal === 'explain' && <p className="text-sm text-muted-foreground">{block.explain}</p>}
       </div>

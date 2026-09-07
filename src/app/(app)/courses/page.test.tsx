@@ -96,9 +96,19 @@ function session() {
 
 type Row = { state: LearnerState; version: number }
 
-function fakeSupabase(row: Row) {
+/** Every test's client also needs to answer `useWellness()`'s `.from('wellness')`
+ *  read (V4: `CoursesClient` now resolves the learner's own motion preference off
+ *  it) alongside whichever `learner_state` behaviour the test is exercising. */
+function wellnessBranch(table: string, prefs: unknown): { select: () => { eq: () => { maybeSingle: () => Promise<{ data: { prefs: unknown }; error: null }> } } } | null {
+  if (table !== 'wellness') return null
+  return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { prefs }, error: null }) }) }) }
+}
+
+function fakeSupabase(row: Row, wellnessPrefs: unknown = {}) {
   return {
     from: (table: string) => {
+      const wellness = wellnessBranch(table, wellnessPrefs)
+      if (wellness) return wellness
       expect(table).toBe('learner_state')
       return {
         select: () => ({
@@ -127,6 +137,8 @@ function fakeSupabase(row: Row) {
 function failingSupabase(message = 'Database unavailable') {
   return {
     from: (table: string) => {
+      const wellness = wellnessBranch(table, {})
+      if (wellness) return wellness
       expect(table).toBe('learner_state')
       return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message } }) }) }) }
     },
@@ -351,5 +363,66 @@ describe('/courses — the optimistic switch', () => {
       pending.resolve(envelope({ path: ['C1-1', 'C1-2'], nextExerciseIds: ['e1', 'e2'], focus: '' }))
       await pending.promise
     })
+  })
+
+  it('V4: a learner who set the in-app motion preference to reduced never gets the card entrance stagger, even on a full-motion OS', async () => {
+    // The OS reports NO preference for reduced motion (common on Windows,
+    // and the exact case `useReducedMotion`'s own contract calls out) --
+    // only the in-app preference below should decide the outcome.
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+
+    const row: Row = { state: learnerState(), version: 1 }
+    mocks.createClient.mockReturnValue(fakeSupabase(row, { motion: 'reduced' }))
+    const client = makeQueryClient()
+    client.setQueryData(qk.learnerState('student'), learnerState())
+    // Seeded synchronously, matching `(app)/layout.tsx`'s real `QuerySeed` --
+    // an unseeded query would leave the very first render on the 'system'
+    // default (an async fetch still pending) before flipping to 'reduced',
+    // by which point the entrance animation this test checks has already
+    // started under the wrong preference.
+    client.setQueryData(qk.wellness('student'), { prefs: { motion: 'reduced' } })
+    render(<QueryClientProvider client={client}><CoursesPage /></QueryClientProvider>)
+
+    const link = await screen.findByRole('link', { name: /Course One/ })
+    // `CourseCard`'s entrance animation lives on the `motion.div` one level
+    // up from the link (`entranceProps` -- `initial`/`animate`/`transition`
+    // under full motion, `{}` under reduced -- with no `initial`, the motion
+    // library never touches the element's inline style at all). A learner
+    // who explicitly asked for reduced motion must never see the card start
+    // invisible and fade in, regardless of what the OS itself reports; the
+    // opacity style is checked for presence rather than an exact value,
+    // since the full-motion case is a live, timing-dependent animation.
+    const wrapperDiv = link.parentElement as HTMLElement
+    expect(wrapperDiv.style.opacity).toBe('')
+
+    // @ts-expect-error test-only cleanup of a global we own for this test
+    delete window.matchMedia
+  })
+
+  it('V4: with no in-app motion preference set, a full-motion OS still gets the card entrance stagger', async () => {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+
+    const row: Row = { state: learnerState(), version: 1 }
+    renderPage(learnerState(), row) // default wellness prefs: {} -> motion 'system'
+
+    const link = await screen.findByRole('link', { name: /Course One/ })
+    const wrapperDiv = link.parentElement as HTMLElement
+    // Full motion: the entrance animation IS running, so the motion library
+    // has set an inline opacity style (its exact value is timing-dependent
+    // and not asserted here -- only that it exists at all).
+    expect(wrapperDiv.style.opacity).not.toBe('')
+
+    // @ts-expect-error test-only cleanup of a global we own for this test
+    delete window.matchMedia
   })
 })

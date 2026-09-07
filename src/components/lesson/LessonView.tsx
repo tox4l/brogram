@@ -4,15 +4,18 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import type { CloId, CourseCode, LessonProgress, LessonPublic } from '@/lib/contracts'
+import type { CloId, CourseCode, DrillResult, LessonProgress, LessonPublic, WellnessPrefs } from '@/lib/contracts'
 import { clo, course as findCourse, lessonFor, loadCourseBundle } from '@/lib/curriculum'
 import { nextProgress, isStale, type LessonEvent } from '@/lib/lesson/progress'
-import { useLessonProgress, useWellness } from '@/lib/query/hooks'
+import { useAttempts, useLessonProgress, useWellness } from '@/lib/query/hooks'
 import { optimistic } from '@/lib/query/optimistic'
 import { qk } from '@/lib/query/keys'
+import { buildRewardContext } from '@/lib/rewards/context'
+import { recordGoalDay } from '@/lib/rewards/record'
 import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { play } from '@/lib/sound/manager'
+import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/store/session'
 import { clearQueuedProgress, persistLessonProgressRow, queueProgress, readQueuedProgress } from './progressSync'
 import { RevealBlock } from './RevealBlock'
@@ -40,9 +43,10 @@ const SHAKE_STYLE = '@keyframes lesson-shake{0%,100%{transform:translateX(0)}25%
  * that back on a failed write is correct for THEM, and invisible to this
  * screen).
  */
-function useLessonRunner(cloId: CloId) {
+function useLessonRunner(cloId: CloId, prefs: WellnessPrefs, drillResults: readonly DrillResult[]) {
   const session = useSession()
   const userId = session.user?.id ?? null
+  const attemptsQuery = useAttempts()
   const cloRecord = clo(cloId)
   const course: CourseCode | null = cloRecord?.course ?? null
 
@@ -131,11 +135,12 @@ function useLessonRunner(cloId: CloId) {
 
   const progress = state?.progress ?? null
 
-  function dispatch(event: LessonEvent) {
-    if (!state) return
+  function dispatch(event: LessonEvent): LessonProgress | null {
+    if (!state) return null
     const next = nextProgress(state.progress, event, new Date().toISOString())
     setState({ ...state, progress: next })
     mutation.mutate(next)
+    return next
   }
 
   function advanceBlock(index: number) {
@@ -158,8 +163,34 @@ function useLessonRunner(cloId: CloId) {
   }
 
   function complete() {
-    dispatch({ type: 'completed' })
+    const next = dispatch({ type: 'completed' })
     play('pass', { volumeScale: 0.7 })
+    // X7: a walkthrough is one of the three win sources (spec 7.4) but had no
+    // goal-day producer at all. `next` is the just-completed row -- merged in
+    // here rather than read back off `progressQuery.data` (a snapshot from
+    // this render, before the mutation's cache write has been committed) so
+    // today's completion counts toward `winsToday` on the very call that
+    // caused it. `attempts`/`courseLessonCounts` are structurally required by
+    // `buildRewardContext` but unread by `recordGoalDay`'s own logic
+    // (goal.ts touches only `attempts`, `lessonProgress`, `drillResults`,
+    // `prefs` and `today` -- `state` and `courseLessonCounts` feed the
+    // achievement predicates this call site does not invoke); real attempts
+    // are still threaded through so a mixed day (a walkthrough plus an
+    // exercise pass) sums correctly from this call alone.
+    if (userId && session.learnerState && next) {
+      const lessonProgress = [...(progressQuery.data ?? []).filter((row) => row.lessonId !== next.lessonId), next]
+      const ctx = buildRewardContext({
+        state: session.learnerState,
+        attempts: attemptsQuery.data ?? [],
+        activityDays: [],
+        lessonProgress,
+        drillResults,
+        prefs,
+        courseLessonCounts: {},
+        now: new Date(),
+      })
+      void recordGoalDay(createClient(), userId, ctx)
+    }
   }
 
   return {
@@ -172,7 +203,7 @@ export function LessonView({ cloId }: { cloId: CloId }) {
   const wellnessQuery = useWellness()
   const prefs = resolveWellnessPrefs(wellnessQuery.data?.prefs)
   const reducedMotion = useReducedMotion(prefs.motion)
-  const runner = useLessonRunner(cloId)
+  const runner = useLessonRunner(cloId, prefs, wellnessQuery.data?.drill_results ?? [])
   const { course, lesson, bundleQuery, progress, staleNotice, packages, skip, complete, advanceBlock, answerCheck } = runner
 
   if (!clo(cloId)) {
