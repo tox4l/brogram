@@ -69,7 +69,7 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [x] T4.1 The design-discipline gates (94de544, fix 6e9266a, approved 2026-09-07)
 - [x] T4.2 Motion primitives: eases, Reveal, useFlipIndicator, the motion attribute (e360f74, fix 1d1b91c, approved 2026-09-07)
 - [x] T4.3 ShaderSurface and the settle-and-freeze field (e2bf740, fix 5b5415e, approved 2026-09-07)
-- [ ] T4.4 CodeGuide, the lesson reading surface, and the verifier
+- [x] T4.4 CodeGuide, the lesson reading surface, and the verifier (a14a3a8, fixes 0068251, f51a92b, d922130, approved 2026-09-07)
 - [ ] T4.5 Shell, dock, Buddy, shared UI, Account
 - [ ] T4.6 Dashboard, Courses, Course home
 - [ ] T4.7 Exercise and the editor theme
