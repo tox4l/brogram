@@ -78,6 +78,16 @@
   --success-foreground: oklch(0.15 0.02 150);
   --warning: oklch(0.58 0.11 85);
   --warning-foreground: oklch(0.99 0.004 85);
+  /* T4.0 fix round 2 (I1/I2, WCAG 1.4.3): `--warning`/`--destructive` are
+     fill tokens (correctly gated as fills) and unreadable as small text on
+     their own surfaces -- Lc 25-32 measured. The ruling is to leave the
+     fill direction alone and add dedicated text-role tokens instead, gated
+     at the body tier (WCAG >= 4.5, APCA Lc >= 75) on both `--background`
+     and `--card` in contrast.test.ts. `text-warning`/`text-destructive`
+     resolve to these, not to the fill tokens -- see the `@layer utilities`
+     override near the bottom of this file. */
+  --warning-text: oklch(0.86 0.15 85);
+  --destructive-text: oklch(0.86 0.07 25);
   --celebration: oklch(0.84 0.17 95);
   --celebration-foreground: oklch(0.16 0.02 95);
   --streak: oklch(0.80 0.11 40);
@@ -315,6 +325,16 @@ body {
   --success-foreground: oklch(0.15 0.02 150);
   --warning: oklch(0.58 0.11 85);
   --warning-foreground: oklch(0.99 0.004 85);
+  /* T4.0 fix round 2 (I1/I2, WCAG 1.4.3): `--warning`/`--destructive` are
+     fill tokens (correctly gated as fills) and unreadable as small text on
+     their own surfaces -- Lc 25-32 measured. The ruling is to leave the
+     fill direction alone and add dedicated text-role tokens instead, gated
+     at the body tier (WCAG >= 4.5, APCA Lc >= 75) on both `--background`
+     and `--card` in contrast.test.ts. `text-warning`/`text-destructive`
+     resolve to these, not to the fill tokens -- see the `@layer utilities`
+     override near the bottom of this file. */
+  --warning-text: oklch(0.86 0.15 85);
+  --destructive-text: oklch(0.86 0.07 25);
   --celebration: oklch(0.84 0.17 95);
   --celebration-foreground: oklch(0.16 0.02 95);
   --streak: oklch(0.80 0.11 40);
@@ -381,6 +401,16 @@ body {
   --success-foreground: oklch(0.16 0.02 145);
   --warning: oklch(0.58 0.11 85);
   --warning-foreground: oklch(0.99 0.004 85);
+  /* T4.0 fix round 2 (I1/I2, WCAG 1.4.3): `--warning`/`--destructive` are
+     fill tokens (correctly gated as fills) and unreadable as small text on
+     their own surfaces -- Lc 25-32 measured. The ruling is to leave the
+     fill direction alone and add dedicated text-role tokens instead, gated
+     at the body tier (WCAG >= 4.5, APCA Lc >= 75) on both `--background`
+     and `--card` in contrast.test.ts. `text-warning`/`text-destructive`
+     resolve to these, not to the fill tokens -- see the `@layer utilities`
+     override near the bottom of this file. */
+  --warning-text: oklch(0.86 0.15 85);
+  --destructive-text: oklch(0.86 0.07 25);
   --celebration: oklch(0.86 0.13 80);
   --celebration-foreground: oklch(0.16 0.02 80);
   --streak: oklch(0.80 0.11 40);
@@ -445,6 +475,16 @@ body {
   --success-foreground: oklch(0.13 0.02 152);
   --warning: oklch(0.58 0.11 85);
   --warning-foreground: oklch(0.99 0.004 85);
+  /* T4.0 fix round 2 (I1/I2, WCAG 1.4.3): `--warning`/`--destructive` are
+     fill tokens (correctly gated as fills) and unreadable as small text on
+     their own surfaces -- Lc 25-32 measured. The ruling is to leave the
+     fill direction alone and add dedicated text-role tokens instead, gated
+     at the body tier (WCAG >= 4.5, APCA Lc >= 75) on both `--background`
+     and `--card` in contrast.test.ts. `text-warning`/`text-destructive`
+     resolve to these, not to the fill tokens -- see the `@layer utilities`
+     override near the bottom of this file. */
+  --warning-text: oklch(0.86 0.15 85);
+  --destructive-text: oklch(0.86 0.07 25);
   --celebration: oklch(0.84 0.09 305);
   --celebration-foreground: oklch(0.12 0.02 305);
   --streak: oklch(0.80 0.11 40);
@@ -477,8 +517,10 @@ body {
   --code-operator: oklch(0.86 0.05 20);
   --code-punct: oklch(0.85 0.008 285);
   /* §3.1: the wide, flat-sided display face. Archivo is Integral CF's
-     stand-in (Ruling W4.7) -- swap only this line if the owner buys it. */
-  --font-display-face: var(--font-archivo);
+     stand-in (Ruling W4.7) -- swap only this line if the owner buys it.
+     Fix round 2: self-hosted latin-subset static instances via
+     next/font/local, see src/lib/fonts/index.ts. */
+  --font-display-face: var(--font-archivo-display);
   --font-prose-face: var(--font-sans);
 
   --elevation-xs: inset 0 1px 0 0 oklch(1 0 0 / 3%), 0 1px 2px oklch(0 0 0 / 34%);
@@ -512,6 +554,9 @@ body {
   --success-foreground: oklch(0.99 0.003 85);
   --warning: oklch(0.58 0.11 75);
   --warning-foreground: oklch(0.99 0.003 85);
+  /* T4.0 fix round 2 (I1/I2): see :root's comment on `--warning-text`. */
+  --warning-text: oklch(0.47 0.10 75);
+  --destructive-text: oklch(0.465 0.19 27);
   --celebration: oklch(0.48 0.11 60);
   --celebration-foreground: oklch(0.99 0.003 85);
   --streak: oklch(0.50 0.14 40);
@@ -542,10 +587,13 @@ body {
   --code-variable: oklch(0.24 0.012 60);
   --code-operator: oklch(0.40 0.11 25);
   --code-punct: oklch(0.40 0.012 70);
-  /* §3.1: Newsreader's `opsz` axis covers both the display masthead and,
-     in Folio only, prose -- one file, two roles. */
-  --font-display-face: var(--font-newsreader);
-  --font-prose-face: var(--font-newsreader);
+  /* §3.1: Newsreader covers both the display masthead and, in Folio only,
+     prose. Fix round 2: self-hosted latin-subset static instances at
+     opsz 56 (display) and opsz 18 (prose) via next/font/local, two
+     separate faces since a static font can't vary `opsz` at runtime --
+     see src/lib/fonts/index.ts. */
+  --font-display-face: var(--font-newsreader-display);
+  --font-prose-face: var(--font-newsreader-prose);
 
   /* Elevation via a conventional soft shadow (§8.5): this is the one theme
      where a plain shadow reads correctly. Mandatory on every resting card
@@ -581,6 +629,9 @@ body {
   --success-foreground: oklch(0.12 0 0);
   --warning: oklch(0.52 0.11 75);
   --warning-foreground: oklch(0.99 0 0);
+  /* T4.0 fix round 2 (I1/I2): see :root's comment on `--warning-text`. */
+  --warning-text: oklch(0.86 0.12 75);
+  --destructive-text: oklch(0.86 0.07 25);
   --celebration: oklch(0.88 0.15 95);
   --celebration-foreground: oklch(0.12 0 0);
   --streak: oklch(0.80 0.11 40);
@@ -696,5 +747,29 @@ body {
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* T4.0 fix round 2 (I1/I2, WCAG 1.4.3): `text-warning`/`text-destructive`
+ * are live at small body-text call sites (a lesson verdict, a form error)
+ * where `--warning`/`--destructive` (dark fill tokens) measure Lc 25-32 --
+ * unreadable as text. The fill tokens are correct and untouched: borders,
+ * rings and `bg-warning`/`bg-destructive` still read them via `--color-
+ * warning`/`--color-destructive`. This overrides only the `text-*`
+ * utility to resolve to `--warning-text`/`--destructive-text` instead (new
+ * tokens gated at the body tier in contrast.test.ts), with no call site
+ * edited. A `@utility text-warning { ... }` override was tried first and
+ * lost to Tailwind's auto-generated `text-{theme-color}` utility of the
+ * same name (verified live: `getComputedStyle(...).color` on a probe
+ * element still matched `bg-warning`'s fill colour) -- a later rule in the
+ * same `utilities` cascade layer, which this is, wins instead. Proof of
+ * both (the computed colours per palette) is in the T4.0 fix round 2
+ * report. */
+@layer utilities {
+  .text-warning {
+    color: var(--warning-text);
+  }
+  .text-destructive {
+    color: var(--destructive-text);
   }
 }

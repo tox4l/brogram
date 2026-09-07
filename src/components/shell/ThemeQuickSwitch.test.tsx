@@ -26,7 +26,7 @@ function renderSwitch() {
   return render(
     <ThemeProvider
       attribute="data-theme"
-      themes={['midnight', 'amber', 'paper', 'arcade']}
+      themes={['midnight', 'amber', 'eclipse', 'paper', 'arcade']}
       defaultTheme="midnight"
       enableSystem={false}
       storageKey={STORAGE_KEY}
@@ -49,15 +49,15 @@ afterEach(() => {
 })
 
 describe('ThemeQuickSwitch', () => {
-  it('opens on the trigger and exposes a radiogroup of all four themes', () => {
+  it('opens on the trigger and exposes a radiogroup of all five themes', () => {
     renderSwitch()
     fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
     const group = screen.getByRole('radiogroup', { name: /theme/i })
-    expect(within(group).getAllByRole('radio')).toHaveLength(4)
+    expect(within(group).getAllByRole('radio')).toHaveLength(5)
     expect(screen.getByRole('radio', { name: 'Midnight' }).getAttribute('aria-checked')).toBe('true')
   })
 
-  it('keyboard-only traversal cycles through all four and selects each one', () => {
+  it('keyboard-only traversal cycles through all five and selects each one', () => {
     renderSwitch()
     fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
 
@@ -70,7 +70,12 @@ describe('ThemeQuickSwitch', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('amber')
 
     fireEvent.keyDown(activeRadio, { key: 'ArrowRight' })
-    activeRadio = screen.getByRole('radio', { name: 'Paper' })
+    activeRadio = screen.getByRole('radio', { name: 'Eclipse' })
+    expect(activeRadio.getAttribute('aria-checked')).toBe('true')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('eclipse')
+
+    fireEvent.keyDown(activeRadio, { key: 'ArrowRight' })
+    activeRadio = screen.getByRole('radio', { name: 'Folio' })
     expect(activeRadio.getAttribute('aria-checked')).toBe('true')
     expect(document.documentElement.getAttribute('data-theme')).toBe('paper')
 
@@ -97,7 +102,7 @@ describe('ThemeQuickSwitch', () => {
   it('choosing a theme writes data-theme on <html> and persists it to storage', () => {
     renderSwitch()
     fireEvent.click(screen.getByRole('button', { name: /choose theme/i }))
-    fireEvent.click(screen.getByRole('radio', { name: 'Paper' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Folio' }))
     expect(document.documentElement.getAttribute('data-theme')).toBe('paper')
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe('paper')
   })

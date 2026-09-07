@@ -209,6 +209,18 @@ const BODY_TIER: [string, string][] = [
   // shape as card-foreground/card, untested until now.
   ['dock-foreground', 'dock'],
   ['lesson-foreground', 'lesson-surface'],
+  // T4.0 fix round 2 (I1/I2): `--warning`/`--destructive` are fill tokens
+  // (correctly gated above, in UI_TIER, as fills) and are also used as
+  // *text* at live call sites (a lesson verdict, a form error) where they
+  // measure Lc 25-32 -- a WCAG 1.4.3 failure. The fill tokens stay
+  // untouched; these are the dedicated text-role tokens `text-warning`/
+  // `text-destructive` resolve to instead (globals.css's `@layer
+  // utilities` override), gated at the same body tier as any other small
+  // text on `--background` and `--card`.
+  ['warning-text', 'background'],
+  ['warning-text', 'card'],
+  ['destructive-text', 'background'],
+  ['destructive-text', 'card'],
 ]
 
 const UI_TIER: [string, string][] = [

@@ -223,7 +223,7 @@ describe('Account page', () => {
       mocks.useTheme.mockReturnValue({ theme: undefined, setTheme: mocks.setTheme })
       render(<AccountPage />, { wrapper: wrapper().Wrapper })
 
-      for (const name of ['Midnight', 'Amber', 'Paper', 'Arcade']) {
+      for (const name of ['Midnight', 'Amber', 'Eclipse', 'Folio', 'Arcade']) {
         expect(screen.getByRole('radio', { name }).getAttribute('aria-checked')).toBe('false')
       }
 

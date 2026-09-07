@@ -40,7 +40,7 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
 }
 
-const THEME_NAMES: ThemeName[] = ['midnight', 'amber', 'paper', 'arcade']
+const THEME_NAMES: ThemeName[] = ['midnight', 'amber', 'eclipse', 'paper', 'arcade']
 const DOCK_PLACEMENTS: DockPlacement[] = ['left', 'right', 'top', 'float', 'hidden']
 const DOCK_CORNERS: DockCorner[] = ['tl', 'tr', 'bl', 'br']
 const MOTION_PREFERENCES: MotionPreference[] = ['system', 'full', 'reduced']

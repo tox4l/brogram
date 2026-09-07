@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Archivo, Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { THEME_SEED_SCRIPT } from "@/lib/theme/themes";
+import { archivoDisplay, newsreaderDisplay, newsreaderProse } from "@/lib/fonts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,28 +19,12 @@ const geistMono = Geist_Mono({
   fallback: ["Consolas", "Courier New", "monospace"],
 });
 
-// Wave 4 §3.1/§3.4: the two display/prose faces, both OFL 1.1 and fetched
-// only on a theme switch (`preload: false` -- they are not on the critical
-// path for the seeded Midnight default). `axes` is required explicitly:
-// next/font excludes every variable axis but weight by default, and Eclipse
-// needs Archivo's `wdth` while Folio needs Newsreader's `opsz`.
-const archivo = Archivo({
-  variable: "--font-archivo",
-  subsets: ["latin"],
-  axes: ["wdth"],
-  display: "swap",
-  preload: false,
-  fallback: ["Arial", "Helvetica", "sans-serif"],
-});
-
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
-  subsets: ["latin"],
-  axes: ["opsz"],
-  display: "swap",
-  preload: false,
-  fallback: ["Times New Roman", "serif"],
-});
+// Wave 4 §3.1/§3.4, fix round 2: the two display/prose faces, self-hosted
+// as latin-subset static instances through next/font/local (plan §8
+// ruling, 12:05 Doha) -- see src/lib/fonts/index.ts for why, and
+// docs/build-log.md for the measured before/after sizes. Both are fetched
+// only on a theme switch (`preload: false`), never on the critical path
+// for the seeded Midnight default.
 
 export const metadata: Metadata = {
   title: "BroGram",
@@ -61,7 +46,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       // no-flash mechanism itself.
       data-theme="midnight"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${archivo.variable} ${newsreader.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${archivoDisplay.variable} ${newsreaderDisplay.variable} ${newsreaderProse.variable} h-full antialiased`}
     >
       <body className="flex min-h-dvh flex-col">
         {/* §8.2 critic addendum: seeds an empty `brogram:theme` from the OS's
