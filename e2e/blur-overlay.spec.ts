@@ -52,6 +52,30 @@ test('blur → overlay → focus → overlay gone, event row exists', async ({ p
       if (events.error) throw events.error
       expect(events.data.length).toBeGreaterThan(0)
     }).toPass({ timeout: 20_000 })
+
+    // R9.1/R9.2: PrintScreen gets no overlay of its own, ever -- a screenshot is already
+    // captured by the OS before this `keyup` even fires, so a full-screen cover would only ever
+    // punish a learner for an unrelated reason (useLockdown.ts's own module doc). What it does
+    // get is one honest, non-blocking line, exactly once, on the third press in this exercise
+    // (`PRINTSCREEN_NOTE_AT`). Presses are spaced a beat past `logIntegrity`'s 1s same-type
+    // coalescing window so all three genuinely count, not just the first.
+    const printscreenNote = page.getByText(LINE_BANK['guard.printscreen'].variants[0], { exact: true })
+    await expect(printscreenNote).toHaveCount(0)
+    for (let press = 1; press <= 3; press++) {
+      await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'PrintScreen' })))
+      await expect(overlay).toHaveCount(0)
+      if (press < 3) {
+        await expect(printscreenNote).toHaveCount(0)
+        await page.waitForTimeout(1_100)
+      }
+    }
+    await expect(printscreenNote).toBeVisible()
+
+    await expect(async () => {
+      const events = await service.from('integrity_events').select('id').eq('user_id', userId).eq('exercise_id', exerciseId).eq('type', 'printscreen')
+      if (events.error) throw events.error
+      expect(events.data.length).toBe(3)
+    }).toPass({ timeout: 20_000 })
   } finally {
     await resetLearnerData(service, userId)
   }

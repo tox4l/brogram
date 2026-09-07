@@ -73,12 +73,23 @@ export async function createOrReuseInvitedUser(service: SupabaseClient, email: s
 /**
  * Clears everything a prior run of the shared-account specs may have left behind, so the reused
  * `.edu.qa` test account always starts a spec from a blank learner state.
+ *
+ * `profiles.account_status` is reset too (T3.3): the integrity trigger (`supabase/migrations/
+ * 0003_integrity.sql`/`0004_admin_users.sql`) writes `warned`/`restricted`/`banned` onto this
+ * column as a side effect of an `integrity_events` insert, and never writes it back down on its
+ * own -- deleting the events above does not undo it. `blur-overlay.spec.ts`'s three PrintScreen
+ * presses (weight 3 each) plus its one blur event cross the 10-point `warned` threshold on this
+ * shared account by design (proving the escalation is real), so without this the very next spec
+ * to reuse the account would open under a stale `AccountNotice` banner that has nothing to do
+ * with anything it did itself.
  */
 export async function resetLearnerData(service: SupabaseClient, userId: string) {
   for (const table of ['learner_state', 'attempts', 'integrity_events'] as const) {
     const { error } = await service.from(table).delete().eq('user_id', userId)
     if (error) throw error
   }
+  const profile = await service.from('profiles').update({ account_status: 'active', restricted_until: null }).eq('id', userId)
+  if (profile.error) throw profile.error
 }
 
 /** Full teardown for a one-off test account (fail-fix-pass mints a fresh `.edu.qa` email per run). */

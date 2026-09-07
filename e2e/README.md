@@ -1,22 +1,34 @@
 # E2E (Playwright)
 
-Three flows from spec §15, run against `npm run dev` with `AGENT_DRY_RUN=true` and a test user minted
-through the Supabase service key. No Supabase project is wired up in this sandbox, so these specs are
-written and type-checked here but not executed — every test starts with `test.skip(...)` when the
-required env vars are missing.
+The v2 flows from spec §15 and Wave 3's own acceptance block, run against `npm run dev` with
+`AGENT_DRY_RUN=true` and a test user minted through the Supabase service key. Every test starts with
+`test.skip(...)` when the required env vars are missing, so the suite is safe to run without a project
+wired up — it simply reports every Supabase-backed spec as skipped.
 
 ## Specs
 
-- `fail-fix-pass.spec.ts` — fail a submit, get a fix plan, ask for a hint, pass, chain continues. Mints
-  its own one-off `.edu.qa` account per run (random email, full teardown).
-- `invite-to-first-exercise.spec.ts` — invite exists → session minted → onboarding (Profiler dry-run
-  cards, both phases) → pick a live course → dashboard → open the first exercise.
+- `invite-to-first-exercise.spec.ts` — sign-in → the six onboarding questions (no loading state between
+  cards) → course picker → course home → a walkthrough (when one leads) → the first rep.
+- `fail-fix-pass.spec.ts` — fail a submit, get a fix plan, ask for a hint, pass, chain continues. The
+  `graded` verdict paints before each `attempts` save lands, not after. Mints its own one-off `.edu.qa`
+  account per run (random email, full teardown).
 - `blur-overlay.spec.ts` — open a smoke exercise, blur the window, assert the lockdown overlay, focus
-  back, assert it's gone and an `integrity_events` row was written.
+  back, assert it's gone and an `integrity_events` row was written; then three PrintScreen presses,
+  which never draw an overlay and surface one honest line on the third press.
+- `onboarding-once.spec.ts` — the six questions once, then two course switches that call the Planner in
+  the background but never reach the Profiler again (R4.4's named assertion).
+- `walkthrough.spec.ts` — open a walkthrough, run its snippet, miss a check then get it right, finish,
+  land on the rep for the same CLO.
+- `dock-and-theme.spec.ts` — the wellness dock through all five placements plus a collapse, all four
+  themes, reload — every choice survives.
+- `consecutive-runs.spec.ts` / `python-run.spec.ts` — pre-v2 runtime-loop coverage, owned by the
+  exercise-loop lane, not this task.
 
 `invite-to-first-exercise` and `blur-overlay` share one reused `.edu.qa` account (`E2E_TEST_EMAIL`) since
 `playwright.config.ts` runs with `workers: 1`; each resets that account's `learner_state`, `attempts`,
-and `integrity_events` before and after it runs, so order between them doesn't matter.
+`integrity_events` and `profiles.account_status` before and after it runs, so order between them doesn't
+matter. `onboarding-once`, `walkthrough` and `dock-and-theme` each mint their own one-off `.edu.qa`
+account instead (fresh learner state per run, full teardown).
 
 ## Run locally
 

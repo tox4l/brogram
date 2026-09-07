@@ -54,7 +54,27 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     }
     await typeCode('export function validateUsername(name) { return false }')
     expect(agents).toEqual([])
+
+    // T2.2's submit() sets `status: 'graded'` (and the verdict) synchronously off the local
+    // grading result, before `finishSubmission`'s network round trip to `attempts` even starts
+    // (src/hooks/useExerciseLoop.ts:597-652 -- "the browser knows pass or fail the instant
+    // grading resolves, before any network call"; the same ordering `useExerciseLoop.test.tsx`
+    // proves at the unit level: "reaches the graded verdict before the attempts insert ever
+    // resolves"). The verdict banner is the real, user-visible proof of that ordering. Race the
+    // actual network response for the attempts save against the verdict actually painting: the
+    // banner must already be up and reading the right thing while that request is still open.
+    const verdict = page.getByTestId('verdict-banner')
+    let firstAttemptSaved = false
+    const firstAttemptSave = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith('/rest/v1/attempts') && response.request().method() === 'POST')
+    void firstAttemptSave.then(() => { firstAttemptSaved = true })
+
     await page.getByRole('button', { name: 'Submit', exact: true }).click()
+    await expect(verdict).toBeVisible()
+    await expect(verdict).toContainText('Needs work')
+    expect(firstAttemptSaved, 'the graded verdict must paint before the attempts save lands, not after').toBe(false)
+    await firstAttemptSave
+
     await expect(page.getByRole('region', { name: 'Fix plan' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled()
     expect(agents.filter((agent) => agent === 'diagnoser')).toHaveLength(1)
@@ -64,7 +84,19 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     expect(agents.filter((agent) => agent === 'coach')).toHaveLength(1)
     await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled()
     await typeCode(smoke.referenceSolution)
+
+    // Same race, on the pass: the banner reads "Passed" while the second attempts upsert is
+    // still in flight, not after.
+    let secondAttemptSaved = false
+    const secondAttemptSave = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith('/rest/v1/attempts') && response.request().method() === 'POST')
+    void secondAttemptSave.then(() => { secondAttemptSaved = true })
+
     await page.getByRole('button', { name: 'Submit', exact: true }).click()
+    await expect(verdict).toContainText('Passed')
+    expect(secondAttemptSaved, 'the graded verdict must paint before the second attempts save lands, not after').toBe(false)
+    await secondAttemptSave
+
     await expect(page.getByRole('region', { name: 'Results' })).toContainText('6 / 6 passed')
     // T2.2 round 3 (f703e81): the advance button now reads with the bank's rep wording
     // (src/lib/voice/glossary.ts's `repWord()` -> 'rep'; src/app/(app)/exercise/[id]/page.tsx:
