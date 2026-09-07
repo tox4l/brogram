@@ -380,25 +380,20 @@ describe('verify-lesson.mjs', () => {
       expect(fileNames.some((f) => f.includes('by-clo'))).toBe(false)
     })
 
-    // Wave 4 ruling W4.23 surfaced a real, pre-existing gap this task's
-    // ownership (scripts/verify-lesson.mjs, lesson.schema.json) cannot
-    // close: seed/lessons/INFS2201.json's INFS2201-3 lesson steps its
-    // worked-1 block through lines [6, 4, 10, 14] -- deliberately, to teach
-    // SQL clause evaluation order -- but the content itself (not owned by
-    // this task) has never carried the `readingOrder: 'semantic'` marker
-    // this wave adds. Documented here rather than silenced so the one-field
-    // content fix (adding `"readingOrder": "semantic"` to that block in
+    // Fix round 2: seed/lessons/INFS2201.json's INFS2201-3 lesson steps its
+    // worked-1 block through lines [6, 4, 10, 14] -- deliberately. Step 1
+    // reads the composite primary key (line 6) and states the rule "every
+    // column above must depend on both parts of this key together"; step 2
+    // then walks back to line 4 to show product_name/product_price violate
+    // that rule -- the key is explained before the earlier column that
+    // breaks it, the same shape as a return explained before the loop that
+    // feeds it. That is a deliberate semantic order, not a content mistake,
+    // so the block now carries `readingOrder: 'semantic'` (in both
     // seed/lessons/INFS2201.json and its seed/lessons/by-clo/INFS2201-3.json
-    // duplicate) is a visible, deliberate follow-up, not a quietly-passing
-    // gap. See the T4.4 report for the full writeup.
-    it('surfaces the one known gap: INFS2201-3 worked-1 needs the readingOrder marker', () => {
+    // duplicate) and every seed lesson passes the W4.23 checks.
+    it('every seed lesson passes the W4.23 checks', () => {
       const report = JSON.parse(defaultRun.stdout)
-      expect(report.failed).toBe(1)
-      const infs2201 = report.files.find((f) => f.file.replaceAll('\\', '/').endsWith('seed/lessons/INFS2201.json'))
-      const lesson = infs2201.lessons.find((l) => l.id === 'INFS2201-3')
-      expect(lesson.failures).toEqual([
-        { lessonId: 'INFS2201-3', checkId: 'worked-1', reason: expect.stringContaining('non-decreasing line order') },
-      ])
+      expect(report.failed).toBe(0)
     })
   })
 })

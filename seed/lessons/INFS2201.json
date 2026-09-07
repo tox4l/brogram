@@ -283,6 +283,7 @@
               "say": "order_lines keeps only facts about the order, linked back through product_id."
             }
           ],
+          "readingOrder": "semantic",
           "caption": "One split, and the update problem disappears."
         },
         {

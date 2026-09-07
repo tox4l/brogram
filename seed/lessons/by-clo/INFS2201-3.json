@@ -38,6 +38,7 @@
             { "line": [10, 13], "say": "Giving products its own key means a price fix lands in exactly one row." },
             { "line": [14, 16], "say": "order_lines keeps only facts about the order, linked back through product_id." }
           ],
+          "readingOrder": "semantic",
           "caption": "One split, and the update problem disappears."
         },
         {
