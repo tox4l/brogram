@@ -245,7 +245,12 @@ export default function Dashboard() {
       {!learnerState?.currentCourse ? (
         <section aria-labelledby="resume-heading" className="rounded-xl border border-rule bg-card p-6 shadow-xs">
           <h2 id="resume-heading" className="text-lede font-medium text-foreground">Pick a course</h2>
-          <p className="mt-2 max-w-[68ch] text-body text-foreground">A course gives your practice a direction. You can change it anytime.</p>
+          {/* Fix round 2 (recheck I1a): 68ch on this 16px face renders far wider
+           *  than its ch-count suggests (~721px, ~96 rendered characters) --
+           *  same rem cap T4.4 recorded and this round's own NodeItem fix
+           *  already uses for the same text-body face. Measured at 1280x800:
+           *  first line stays inside the 55-80 character band. */}
+          <p className="mt-2 max-w-[34rem] text-body text-foreground">A course gives your practice a direction. You can change it anytime.</p>
           <Link href="/onboarding" className={cn(primaryButtonClassName, 'mt-4 h-9')}>
             Choose a course<ArrowUpRight aria-hidden="true" />
           </Link>
@@ -261,17 +266,17 @@ export default function Dashboard() {
           ) : resumeWalkthrough && currentTitle ? (
             <>
               <p className="mt-2 text-lede font-medium text-foreground">Continue the walkthrough</p>
-              <p className="mt-2 max-w-[68ch] text-body text-muted-foreground">You were partway through {currentTitle}.</p>
+              <p className="mt-2 max-w-[34rem] text-body text-muted-foreground">You were partway through {currentTitle}.</p>
             </>
           ) : resumeChain && currentTitle ? (
             <>
               <p className="mt-2 text-lede font-medium text-foreground">Pick up where you left off</p>
-              <p className="mt-2 max-w-[68ch] text-body text-muted-foreground">You were {resumeChain} of {CHAIN_TARGET} into {currentTitle}.</p>
+              <p className="mt-2 max-w-[34rem] text-body text-muted-foreground">You were {resumeChain} of {CHAIN_TARGET} into {currentTitle}.</p>
             </>
           ) : (
             <>
               <p className="mt-2 text-lede font-medium text-foreground">Ready when you are</p>
-              <p className="mt-2 max-w-[68ch] text-body text-muted-foreground">{lockedIn} of {nodes.length} skills locked in.</p>
+              <p className="mt-2 max-w-[34rem] text-body text-muted-foreground">{lockedIn} of {nodes.length} skills locked in.</p>
             </>
           )}
           <div className="mt-4 flex flex-wrap gap-3">

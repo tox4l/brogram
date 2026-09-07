@@ -150,12 +150,15 @@ export function NodeItem({
         // Fix round (review I4): the /70 alpha failed AA in Folio (3.31:1) --
         // plain text-muted-foreground is already the quieter tier and clears
         // AA in all five palettes.
-        <span key={title} aria-hidden="true" className="mt-1 block text-small text-muted-foreground">
+        // Fix round 2 (recheck I1b): same 34rem cap as the title span above,
+        // so the sub-line's right edge lines up with the CLO title's instead
+        // of running the full column width past it.
+        <span key={title} aria-hidden="true" className="mt-1 block max-w-[34rem] text-small text-muted-foreground">
           Builds on {title}.
         </span>
       ))}
       {node.externalPrerequisites.length > 0 && (
-        <span aria-hidden="true" className="mt-1 block text-small text-muted-foreground">
+        <span aria-hidden="true" className="mt-1 block max-w-[34rem] text-small text-muted-foreground">
           Also builds on a skill from another course.
         </span>
       )}
