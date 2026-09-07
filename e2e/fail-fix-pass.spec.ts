@@ -70,7 +70,15 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     // regressed, or let a slow `finishSubmission` fake the ordering without proving anything.
     // Holding the request open for 3s forces the banner to paint while the save is demonstrably
     // still in flight, with margin to spare.
-    await page.route('**/rest/v1/attempts', async (route) => {
+    // A glob route ('**/rest/v1/attempts') compiles to an anchored regex matched against the
+    // full URL, and supabase-js's upsert appends `?on_conflict=id` -- the literal '?' in the glob
+    // never matches that query string, so the handler never fires and this stall never runs. Match
+    // by pathname instead, the same way this spec's own waitForResponse calls already do below.
+    await page.route((url) => url.pathname.endsWith('/rest/v1/attempts'), async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue()
+        return
+      }
       await new Promise((resolve) => setTimeout(resolve, 3_000))
       await route.continue()
     })
@@ -106,7 +114,9 @@ test('failed submit → fix plan → hint → pass → a different pattern', asy
     await expect(verdict).toContainText('Passed')
     expect(secondAttemptSaved, 'the graded verdict must paint before the second attempts save lands, not after').toBe(false)
     await secondAttemptSave
-    await page.unroute('**/rest/v1/attempts')
+    // A predicate route (not a glob/string pattern) can't be removed by pattern with unroute();
+    // clear every route registered on the page instead.
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
 
     await expect(page.getByRole('region', { name: 'Results' })).toContainText('6 / 6 passed')
     // T2.2 round 3 (f703e81): the advance button now reads with the bank's rep wording
