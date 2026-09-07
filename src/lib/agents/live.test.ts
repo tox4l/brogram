@@ -27,11 +27,13 @@ import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { deepseek } from '@ai-sdk/deepseek'
 import { generateObject, streamObject } from 'ai'
-import type { Clo, CoachRequest, PlannerRequest, ProfilerRequest } from '@/lib/contracts'
+import type { BuddyRequest, Clo, CoachRequest, DiagnoserRequest, PlannerRequest, ProfilerRequest } from '@/lib/contracts'
 import { buildMessages } from './shared'
 import { profiler } from './profiler'
 import { planner } from './planner'
 import { coach } from './coach'
+import { diagnoser } from './diagnoser'
+import { buddy } from './buddy'
 import closSeed from '../../../seed/clos.json'
 
 function loadDotEnvLocal() {
@@ -174,6 +176,87 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('live DeepSeek JSON mode', () => 
     console.info('coach partial count:', partials.length)
     console.info('coach reply:', JSON.stringify(reply))
     logUsage('coach', usage)
+    expect(usage.outputTokens).toBeGreaterThan(0)
+  }, 60000)
+
+  it('diagnoser explains a failed "First late train" attempt', async () => {
+    const req: DiagnoserRequest = {
+      agent: 'diagnoser',
+      trigger: 'attempt-failed',
+      state: { userId: 'live-check-1', version: 1 },
+      exercise: {
+        id: 'ex_c3',
+        cloId: 'INFS1101-3',
+        pattern: 'early-return',
+        prompt: 'Given a list of train departure times and a limit, return the first time strictly after limit, or -1 if none exists. Example: first_late([8, 9, 13], 10) returns 13.',
+        language: 'python',
+        kind: 'code',
+      },
+      code: 'def first_late(times, limit):\n    return -1\n',
+      results: [
+        { testId: 't1', passed: false, actual: '-1', expected: '13', stdout: '', stderr: '', durationMs: 2, failureKind: 'wrong-answer' },
+      ],
+    }
+    const hydrated = {
+      tests: [{ id: 't1', input: '[[8,9,13],10]', expected: '13', hidden: false }],
+      referenceSolution: 'def first_late(times, limit):\n    for t in times:\n        if t > limit:\n            return t\n    return -1\n',
+    }
+    const { messages } = buildMessages(diagnoser, req, hydrated)
+    const result = streamObject({ model: MODEL, schema: diagnoser.schema, messages, temperature: diagnoser.temperature, maxOutputTokens: diagnoser.maxTokens, allowSystemInMessages: true, providerOptions: NO_THINKING })
+
+    const partials: unknown[] = []
+    for await (const partial of result.partialObjectStream) partials.push(partial)
+    const object = await result.object
+    const usage = await result.usage
+
+    let reply: unknown = object
+    if (diagnoser.repair) reply = diagnoser.repair(req, reply as never)
+    expect(() => diagnoser.schema.parse(reply)).not.toThrow()
+
+    console.info('diagnoser partial count:', partials.length)
+    console.info('diagnoser reply:', JSON.stringify(reply))
+    logUsage('diagnoser', usage)
+    expect(usage.outputTokens).toBeGreaterThan(0)
+  }, 60000)
+
+  it('buddy answers a real question about failing loops on the tightest streaming budget', async () => {
+    const req: BuddyRequest = {
+      agent: 'buddy',
+      trigger: 'buddy-message',
+      state: {
+        userId: 'live-check-1',
+        version: 1,
+        profile: { tone: 'playful', verbosity: 'short' } as never,
+        mastery: {
+          'INFS1101-1': { userId: 'live-check-1', cloId: 'INFS1101-1', score: 90, chain: 3, patternsPassed: ['accumulate'], closed: true, lastAttemptAt: '2026-09-01T09:00:00.000Z' },
+          'INFS1101-3': { userId: 'live-check-1', cloId: 'INFS1101-3', score: 24, chain: 0, patternsPassed: [], closed: false, lastAttemptAt: '2026-09-05T09:00:00.000Z' },
+        },
+        recentMistakes: [
+          { exerciseId: 'ex_1', cloId: 'INFS1101-3', pattern: 'early-return', label: 'off-by-one in range', at: '2026-09-05T10:00:00.000Z' },
+          { exerciseId: 'ex_2', cloId: 'INFS1101-3', pattern: 'early-return', label: 'off-by-one in range', at: '2026-09-05T11:00:00.000Z' },
+        ],
+        streak: { exerciseDays: 4, derotDays: 1, lastExerciseDate: '2026-09-05', lastDerotDate: '2026-09-04' },
+        integrityScore: 0,
+        accountStatus: 'active',
+        nextExerciseIds: ['ex_10', 'ex_11', 'ex_12'],
+      },
+      messages: [{ role: 'user', content: 'why do i keep failing loops' }],
+    }
+    const { messages } = buildMessages(buddy, req, {})
+    const result = streamObject({ model: MODEL, schema: buddy.schema, messages, temperature: buddy.temperature, maxOutputTokens: buddy.maxTokens, allowSystemInMessages: true, providerOptions: NO_THINKING })
+
+    const partials: unknown[] = []
+    for await (const partial of result.partialObjectStream) partials.push(partial)
+    const object = await result.object
+    const usage = await result.usage
+
+    let reply: unknown = object
+    if (buddy.repair) reply = buddy.repair(req, reply as never)
+    expect(() => buddy.schema.parse(reply)).not.toThrow()
+
+    console.info('buddy partial count:', partials.length)
+    console.info('buddy reply:', JSON.stringify(reply))
+    logUsage('buddy', usage)
     expect(usage.outputTokens).toBeGreaterThan(0)
   }, 60000)
 })
