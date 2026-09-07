@@ -1,11 +1,14 @@
 import type { PropsWithChildren } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, AgentError, BuddyReply, LearnerState } from '@/lib/contracts'
+import { makeQueryClient } from '@/lib/query/client'
+import { line } from '@/lib/voice/lines'
 import { SessionProvider } from '@/components/shell/SessionProvider'
 import { BuddyDrawer } from './Drawer'
-import { REFUSAL } from './state'
+import { buddyMessagesKey, REFUSAL, type BuddyMessage } from './state'
 
 const spies = vi.hoisted(() => ({ stream: vi.fn(), from: vi.fn(), pathname: vi.fn(() => '/dashboard') }))
 vi.mock('@/lib/agents/client', () => ({ streamAgent: spies.stream }))
@@ -57,10 +60,15 @@ function envelope(reply: BuddyReply): AgentEnvelope<BuddyReply> {
   return { ok: true, agent: 'buddy', reply, fallback: false, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 } }
 }
 
-function setup(onOpenChange = vi.fn()) {
-  const initial = { user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState }
-  const wrapper = ({ children }: PropsWithChildren) => <SessionProvider initialState={initial}>{children}</SessionProvider>
-  return { ...render(<BuddyDrawer open={true} onOpenChange={onOpenChange} />, { wrapper }), onOpenChange }
+function setup(onOpenChange = vi.fn(), options?: { open?: boolean; queryClient?: QueryClient; learnerState?: LearnerState }) {
+  const initial = { user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState: options?.learnerState ?? learnerState }
+  const queryClient = options?.queryClient ?? makeQueryClient()
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider initialState={initial}>{children}</SessionProvider>
+    </QueryClientProvider>
+  )
+  return { ...render(<BuddyDrawer open={options?.open ?? true} onOpenChange={onOpenChange} />, { wrapper }), onOpenChange, queryClient }
 }
 
 async function typeAndSend(text: string) {
@@ -99,7 +107,11 @@ describe('buddy drawer', () => {
 
   it('loads history only when opened and calls no agent on mount', async () => {
     rows = [{ id: 'r1', role: 'user', content: 'hello there', created_at: '2026-09-05T00:00:00.000Z' }]
-    const wrapper = ({ children }: PropsWithChildren) => <SessionProvider initialState={{ user: { id: 'student' } as User, profile: null, learnerState }}>{children}</SessionProvider>
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={makeQueryClient()}>
+        <SessionProvider initialState={{ user: { id: 'student' } as User, profile: null, learnerState }}>{children}</SessionProvider>
+      </QueryClientProvider>
+    )
     const onOpenChange = vi.fn()
     const { rerender } = render(<BuddyDrawer open={false} onOpenChange={onOpenChange} />, { wrapper })
     expect(spies.from).not.toHaveBeenCalled()
@@ -221,5 +233,74 @@ describe('buddy drawer', () => {
     expect(screen.queryByText('m0')).toBeNull()
     expect(screen.queryByText('m1')).toBeNull()
     expect(screen.getByText('one more')).toBeTruthy()
+  })
+
+  it('marks a failed send "didn\'t send" without deleting it, and resends the same content on retry', async () => {
+    const rateLimited: AgentError = { ok: false, agent: 'buddy', error: 'rate-limited', message: 'buddy is limited to 20 per hour' }
+    spies.stream.mockRejectedValueOnce(rateLimited)
+    spies.stream.mockResolvedValueOnce(envelope({ onTopic: true, reply: 'Got it now.' }))
+    setup()
+    await typeAndSend('why does this loop fail')
+    const failedLine = line('buddy.failed')
+    await screen.findByText(failedLine)
+    expect(screen.getByText('why does this loop fail')).toBeTruthy()
+    expect(spies.stream).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText(failedLine))
+    await screen.findByText('Got it now.')
+    expect(spies.stream).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(failedLine)).toBeNull()
+    expect(screen.getByText('why does this loop fail')).toBeTruthy()
+  })
+
+  it('locks the auto-scroll once the learner scrolls away from the bottom mid-stream', async () => {
+    let deliverPartial!: (partial: Partial<BuddyReply>) => void
+    spies.stream.mockImplementationOnce((_req, onPartial) => {
+      deliverPartial = onPartial
+      onPartial({ onTopic: true, reply: 'first chunk' })
+      return new Promise<AgentEnvelope<BuddyReply>>(() => {})
+    })
+    setup()
+    await typeAndSend('why do i keep failing loops')
+    await screen.findByText('first chunk')
+    const scrollEl = screen.getByTestId('buddy-scroll')
+    Object.defineProperty(scrollEl, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(scrollEl, 'clientHeight', { configurable: true, value: 300 })
+    scrollEl.scrollTop = 0 // the learner scrolled all the way up to read back
+    fireEvent.scroll(scrollEl)
+    act(() => { deliverPartial({ onTopic: true, reply: 'first chunk continues streaming further' }) })
+    await screen.findByText('first chunk continues streaming further')
+    expect(scrollEl.scrollTop).toBe(0)
+  })
+
+  it('paints a cached conversation with no fetch before first paint on a reopened drawer', () => {
+    const client = makeQueryClient()
+    const cached: BuddyMessage[] = [{ id: 'cached-1', role: 'assistant', content: 'cached reply from a prior open', createdAt: '2026-09-05T00:00:00.000Z' }]
+    client.setQueryData(buddyMessagesKey('student'), cached)
+    setup(vi.fn(), { queryClient: client })
+    expect(screen.getByText('cached reply from a prior open')).toBeTruthy()
+    expect(spies.from).not.toHaveBeenCalled()
+  })
+
+  it('frames a hard-failure derot suggestion as a Playground card linking straight at the runner', async () => {
+    const hardFailureState: LearnerState = {
+      ...learnerState,
+      recentMistakes: Array.from({ length: 3 }, (_, i) => ({ exerciseId: `e${i}`, cloId: 'INFS1101-1' as const, pattern: 'scan' as const, label: 'off-by-one in range', at: '2026-09-05T00:00:00.000Z' })),
+    }
+    spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'Rough one.', suggestion: { kind: 'derot', ref: 'trace' } }))
+    setup(vi.fn(), { learnerState: hardFailureState })
+    await typeAndSend('i keep failing this one')
+    const link = await screen.findByRole('link')
+    expect(link.getAttribute('href')).toBe('/derot/play/breathe')
+    expect(link.textContent).toBe(line('buddy.suggest.play'))
+  })
+
+  it('frames a long-idle-gap derot suggestion as an Arcade card, keeping the existing deep-link redirect', async () => {
+    const idleGapState: LearnerState = { ...learnerState, recentMistakes: [], updatedAt: '2000-01-01T00:00:00.000Z' }
+    spies.stream.mockResolvedValue(envelope({ onTopic: true, reply: 'Been a while.', suggestion: { kind: 'derot', ref: 'trace' } }))
+    setup(vi.fn(), { learnerState: idleGapState })
+    await typeAndSend('what should i do next')
+    const link = await screen.findByRole('link')
+    expect(link.getAttribute('href')).toBe('/derot?drill=trace')
+    expect(link.textContent).toBe(line('buddy.suggest.arcade'))
   })
 })
