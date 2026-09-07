@@ -1,16 +1,23 @@
 import { Fragment } from 'react'
 import type { Clo, ExercisePublic } from '@/lib/contracts'
 
+// Fix round M2 (Ruling W4.12): the editor kills ligatures on `.cm-scroller`, but this file's own
+// `<pre>`/`<code>` sites render Geist Mono on the same code surface with no feature-settings --
+// a Python brief containing `!=` rendered it as a ligature glyph in the brief while the editor
+// beside it renders the two characters the learner must type. Not a shared `globals.css` utility
+// (that file is outside this task's owned paths); the arbitrary-value class is self-contained.
+const NO_LIGATURES = "[font-feature-settings:'liga'_0,_'calt'_0]"
+
 function inline(text: string) {
   return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, index) => part.startsWith('`')
-    ? <code key={index} className="rounded-lg bg-muted px-1 font-mono text-code text-foreground">{part.slice(1, -1)}</code>
+    ? <code key={index} className={`rounded-lg bg-muted px-1 font-mono text-code text-foreground ${NO_LIGATURES}`}>{part.slice(1, -1)}</code>
     : part.startsWith('**') ? <strong key={index}>{part.slice(2, -2)}</strong> : <Fragment key={index}>{part}</Fragment>)
 }
 
 /** Render the bank's text as React nodes; never execute HTML supplied by an agent. */
 function PromptText({ text }: { text: string }) {
   return text.split(/(```[\s\S]*?```)/g).map((part, index) => {
-    if (part.startsWith('```')) return <pre key={index} className="overflow-x-auto rounded-xl bg-lesson-code-surface p-3 font-mono text-code text-code-variable"><code>{part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</code></pre>
+    if (part.startsWith('```')) return <pre key={index} className={`overflow-x-auto rounded-xl bg-lesson-code-surface p-3 font-mono text-code text-code-variable ${NO_LIGATURES}`}><code>{part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</code></pre>
     return part.split(/\n\s*\n/).filter(Boolean).map((paragraph, paragraphIndex) => (
       // T4.7 / spec section 9: "brief prose is Geist Sans at --text-body in every palette" --
       // this is the primary task description, so it reads in `--foreground`, not the muted

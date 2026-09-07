@@ -182,10 +182,25 @@ function ExerciseWorkspace({ id }: { id: string }) {
     {loop.error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-rule p-3 text-small"><TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive" /><p className="min-w-0 flex-1 text-muted-foreground">{loop.error}</p><Button variant="outline" disabled={loop.busy} onClick={() => void loop.retry()} className="transition-none">Try again</Button></div>}
     {lockdown.loggingError && <p role="alert" className="text-small text-muted-foreground">{lockdown.loggingError}</p>}
 
-    <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 items-start gap-6 xl:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
+    {/* Fix round C1: the three-column template used to gate on the viewport (`xl:`, >=1280px),
+        but the editor's actual box is whatever the shell's main column leaves once the dock rail
+        (280px + its gap on the default 'right' placement, ShellLayout.tsx -- not owned here) is
+        subtracted -- 888px at a 1280px viewport, which the old template read as "plenty of room"
+        and rendered a 168px editor. `@container` measures the box this grid itself actually gets,
+        not the viewport, so the three-column template only fires once that box can truly afford
+        it: 22rem + 20rem fixed columns + two 1.5rem (gap-6) gutters + the 480px editor floor =
+        1200px = 75rem. Below that this is a plain single-column grid, so the brief, the work
+        panel and the results column stack full-width in DOM order -- the plan's own fallback
+        shape -- rather than being squeezed into a three-column template with no room for one of
+        the three. The `@container` context and the `@[75rem]:` grid it gates live on two
+        DIFFERENT elements on purpose: a size container query can never match the element that
+        establishes the containment context itself (only its descendants), so `@container` sits
+        on this outer wrapper and the responsive grid is the child inside it. */}
+    <div className="@container">
+    <div inert={Boolean(lockdown.overlay)} className="grid min-w-0 items-start gap-6 @[75rem]:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
       {/* Step 4: named so an in-place `next()` crossfades only this panel; the editor and its
           warm runtime sit outside it and never re-enter a transition. */}
-      <div className="min-w-0 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1" style={{ viewTransitionName: 'exercise-prompt' }}><PromptPanel exercise={exercise} clo={loop.clo} /></div>
+      <div className="min-w-0 @[75rem]:max-h-[calc(100dvh-17rem)] @[75rem]:overflow-y-auto @[75rem]:pr-1" style={{ viewTransitionName: 'exercise-prompt' }}><PromptPanel exercise={exercise} clo={loop.clo} /></div>
       <section aria-label="Work" className="min-w-0 self-start overflow-hidden rounded-xl border border-rule bg-background">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-3"><h2 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">{exercise.kind === 'code' || exercise.kind === 'schema' ? 'Code' : 'Answer'}</h2></div>
         {exercise.kind === 'predict-output' || (exercise.kind === 'trace' && traceUnanswerable) ? <PredictOutput snippet={exercise.starterCode} {...answerProps} focusRef={editorFocusRef} />
@@ -210,7 +225,7 @@ function ExerciseWorkspace({ id }: { id: string }) {
               </div>}
         </div>
       </section>
-      <div ref={resultsRef} className="min-w-0 space-y-4 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1">
+      <div ref={resultsRef} className="min-w-0 space-y-4 @[75rem]:max-h-[calc(100dvh-17rem)] @[75rem]:overflow-y-auto @[75rem]:pr-1">
         {/* Steps 1, 2 & 8: the verdict, the XP figure and the chain pip render the instant
             grading resolves -- `loop.outcome` flips before any network call, not after the
             eight-stage background chain. The hairline under the number marks it provisional
@@ -225,7 +240,10 @@ function ExerciseWorkspace({ id }: { id: string }) {
                   ring colour changed. A distinct glyph per outcome, not a shared one. */}
               {loop.outcome === 'passed' ? <Check className="size-4" strokeWidth={3} /> : <X className="size-4" strokeWidth={3} />}
             </span>
-            <span className={`text-small font-medium ${loop.outcome === 'passed' ? 'text-success' : 'text-muted-foreground'}`}>{loop.outcome === 'passed' ? 'Passed' : 'Needs work'}</span>
+            {/* Fix round M1: spec 3.3's Verdict row is font-sans 600 at --text-body, one tier
+                above the surrounding meta text -- it was shipping at text-small font-medium,
+                the same size as the language/difficulty line above it. */}
+            <span className={`text-body font-semibold ${loop.outcome === 'passed' ? 'text-success' : 'text-muted-foreground'}`}>{loop.outcome === 'passed' ? 'Passed' : 'Needs work'}</span>
           </div>
           {loop.outcome === 'passed' && <div className="flex items-center gap-4">
             <ChainPips count={loop.chain} motionPref={motionPref} />
@@ -266,6 +284,7 @@ function ExerciseWorkspace({ id }: { id: string }) {
           <Button onClick={() => void loop.next()} disabled={!loop.canAdvance} className="w-full transition-none active:translate-y-0">{loop.closed ? 'Back to your path' : `Next ${repWord()}`}<ArrowRight aria-hidden="true" /></Button>
         </div>}
       </div>
+    </div>
     </div>
     {/* T2.8's rotating paste explanation and once-only PrintScreen note (pasteWhy/printscreenNote)
         were built and tested but never threaded through this page -- wired here so the "Why?"

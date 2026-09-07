@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ExercisePublic } from '@/lib/contracts'
+import { PredictOutput } from './PredictOutput'
 import { PromptPanel } from './PromptPanel'
 import { ResultsPanel } from './ResultsPanel'
 import { SpotTheBug } from './SpotTheBug'
@@ -45,6 +46,46 @@ describe('exercise panels', () => {
     rerender(<SpotTheBug snippet={exercise.starterCode} value="[2]" onChange={changed} />)
     fireEvent.click(screen.getByRole('button', { name: 'Line 2' }))
     expect(changed).toHaveBeenLastCalledWith('[]')
+  })
+  // Fix round I2: hover/focus-visible were `bg-muted`, byte-identical to this list's own
+  // `bg-lesson-code-surface` ground in Folio -- a Folio learner got no hover response at all.
+  it('puts the line hover/focus-visible state on --rule, not --muted (fix round I2)', () => {
+    render(<SpotTheBug snippet={exercise.starterCode} value="[]" onChange={vi.fn()} />)
+    const line = screen.getByRole('button', { name: 'Line 1' })
+    expect(line.className).toContain('hover:bg-rule')
+    expect(line.className).toContain('focus-visible:bg-rule')
+    expect(line.className).not.toContain('hover:bg-muted')
+    expect(line.className).not.toContain('focus-visible:bg-muted')
+  })
+  // Fix round M2 (Ruling W4.12): the editor kills ligatures on `.cm-scroller`; every other place
+  // this screen renders Geist Mono on the code surface needs the same fix, or `!=` renders as a
+  // glyph in the brief that is not on the learner's keyboard while the editor beside it shows the
+  // real two characters.
+  describe('ligatures stay off everywhere code renders (fix round M2)', () => {
+    const noLigatures = "[font-feature-settings:'liga'_0,_'calt'_0]"
+    it('on the brief\'s fenced code blocks and inline code chips', () => {
+      const { container } = render(<PromptPanel exercise={{ ...exercise, prompt: 'Check `a != b`.\n\n```\na != b\n```' }} />)
+      expect(container.querySelector('pre')?.className).toContain(noLigatures)
+      expect(container.querySelector('code')?.className).toContain(noLigatures)
+    })
+    it('on the predict-output snippet', () => {
+      const { container } = render(<PredictOutput snippet="a != b" value="" onChange={vi.fn()} />)
+      expect(container.querySelector('pre')?.className).toContain(noLigatures)
+    })
+    it('on the trace snippet', () => {
+      const { container } = render(<Trace snippet="a != b" variables={[]} value="{}" onChange={vi.fn()} />)
+      expect(container.querySelector('pre')?.className).toContain(noLigatures)
+    })
+    it('on both run-output blocks', () => {
+      const { container } = render(<ResultsPanel exercise={exercise} results={[]} stdout="a != b" stderr="c != d" status="ready" />)
+      const blocks = container.querySelectorAll('pre')
+      expect(blocks.length).toBe(2)
+      blocks.forEach((block) => expect(block.className).toContain(noLigatures))
+    })
+    it('on the spot-the-bug line list', () => {
+      render(<SpotTheBug snippet="a != b" value="[]" onChange={vi.fn()} />)
+      expect(screen.getByRole('button', { name: 'Line 1' }).className).toContain(noLigatures)
+    })
   })
   it('renders empty trace cells and serializes the typed values', () => {
     const changed = vi.fn()

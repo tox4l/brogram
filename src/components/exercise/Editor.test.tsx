@@ -7,7 +7,7 @@ import { HighlightStyle, highlightingFor, syntaxHighlighting } from '@codemirror
 import { tags } from '@lezer/highlight'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LINE_BANK } from '@/lib/voice/lines'
-import { CODE_HIGHLIGHT_SPECS, Editor } from './Editor'
+import { CODE_HIGHLIGHT_SPECS, EDITOR_THEME_SPEC, Editor } from './Editor'
 import { LockdownOverlay, type Focusable } from './LockdownOverlay'
 import { SchemaEditor } from './SchemaEditor'
 
@@ -76,6 +76,13 @@ describe('exercise editor', () => {
     const editor = screen.getByRole('textbox', { name: 'Schema editor' })
     expect(fireEvent.paste(editor)).toBe(false)
     expect(logIntegrity).toHaveBeenCalledWith('paste-blocked')
+  })
+
+  // Fix round I2: `--muted` and `--lesson-code-surface` are byte-identical in Folio
+  // (`oklch(0.955 0.008 85)` both), so an active-line band on `--muted` disappeared entirely on
+  // that palette. `--rule` steps against the code surface in all five.
+  it('puts the active-line band on --rule, not --muted (fix round I2)', () => {
+    expect(EDITOR_THEME_SPEC['.cm-activeLine, .cm-activeLineGutter'].backgroundColor).toBe('var(--rule)')
   })
 
   it('populates focusRef with an imperative focus() that lands on the CodeMirror content (fix round 3)', () => {

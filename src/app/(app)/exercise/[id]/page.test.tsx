@@ -167,6 +167,39 @@ describe('exercise screen', () => {
     expect(verdict.querySelector('svg.lucide-x')).toBeTruthy()
     expect(verdict.textContent).toContain('Needs work')
   })
+  // Fix round M1: spec 3.3's Verdict row is font-sans 600 at --text-body -- it was shipping at
+  // text-small font-medium, one tier under the surrounding language/difficulty line.
+  it('renders the verdict word at the body tier, not the small meta tier (fix round M1)', () => {
+    mocks.loop.mockReturnValue({ ...model(), status: 'graded', outcome: 'passed' })
+    render(<ExercisePage />)
+    const verdict = screen.getByTestId('verdict-banner')
+    const word = screen.getByText('Passed', { selector: 'span' })
+    expect(verdict.contains(word)).toBe(true)
+    expect(word.className).toContain('text-body')
+    expect(word.className).toContain('font-semibold')
+    expect(word.className).not.toContain('text-small')
+  })
+  // Fix round C1: the three-column template must gate on the box this grid actually gets
+  // (`@container`/`@[75rem]:`), never the viewport (`xl:`) -- a viewport query reads "1280px
+  // wide" as room for three columns even when the default 'right' dock placement (ShellLayout,
+  // not owned here) has already taken 280px plus its gap out of that width, which is exactly how
+  // the reviewed commit shipped a 168px editor at 1280x800.
+  it('gates the three-column workspace grid on a container query, not a viewport breakpoint (fix round C1)', () => {
+    render(<ExercisePage />)
+    const workspace = screen.getByTestId('exercise-workspace')
+    const grid = workspace.querySelector('[class*="grid-cols-\\[22rem_minmax\\(0"]')
+    expect(grid).toBeTruthy()
+    expect(grid?.className).toContain('@[75rem]:grid-cols-[22rem_minmax(0,1.6fr)_20rem]')
+    expect(grid?.className).not.toMatch(/(?:^|\s)xl:grid-cols-/)
+    // A container query can never match the element that establishes the containment context --
+    // only its descendants -- so `@container` must sit on a DIFFERENT (ancestor) element than the
+    // one carrying `@[75rem]:grid-cols-...`, never the same node.
+    expect(grid?.className).not.toContain('@container')
+    const container = grid?.closest('.\\@container')
+    expect(container).toBeTruthy()
+    expect(container?.contains(grid as Node)).toBe(true)
+    expect(container).not.toBe(grid)
+  })
   it('does not remount the workspace when the exercise id changes in place (next())', () => {
     const { rerender } = render(<ExercisePage />)
     const before = screen.getByTestId('exercise-workspace')

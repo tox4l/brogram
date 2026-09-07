@@ -16,7 +16,14 @@ export default function ExerciseLoading() {
           <div className="h-3 w-24 animate-pulse rounded-full bg-muted" />
         </div>
       </div>
-      <div className="grid gap-6 xl:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
+      {/* Fix round C1: matches page.tsx's own container-query breakpoint (`@[75rem]`, not the
+          viewport `xl:`) so the skeleton never promises a three-column layout the real page then
+          declines to render once the dock rail is subtracted from the available width. The
+          `@container` context and the `@[75rem]:` grid it gates are two different elements on
+          purpose -- see page.tsx's matching comment: a size container query can never match the
+          element that establishes its own containment context. */}
+      <div className="@container">
+      <div className="grid gap-6 @[75rem]:grid-cols-[22rem_minmax(0,1.6fr)_20rem]">
         <div className="space-y-4">
           <div className="h-4 w-24 animate-pulse rounded-full bg-muted" />
           <div className="space-y-2">
@@ -48,6 +55,7 @@ export default function ExerciseLoading() {
           <div className="h-16 animate-pulse rounded-lg bg-muted/40" />
           <div className="h-16 animate-pulse rounded-lg bg-muted/40" />
         </div>
+      </div>
       </div>
     </div>
   )

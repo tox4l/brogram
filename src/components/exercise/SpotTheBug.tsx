@@ -26,7 +26,13 @@ export function SpotTheBug({ snippet, value, onChange, disabled = false, focusRe
     <div className="overflow-x-auto rounded-lg border border-rule bg-lesson-code-surface py-2">
       {snippet.split('\n').map((line, index) => <button key={index} ref={index === 0 ? firstButtonRef : undefined} type="button" aria-label={`Line ${index + 1}`} aria-describedby={`${snippetId}-${index}`} aria-pressed={selected.includes(index + 1)} disabled={disabled}
         onClick={() => onChange(JSON.stringify(selected.includes(index + 1) ? selected.filter((item) => item !== index + 1) : [...selected, index + 1].sort((a, b) => a - b)))}
-        className="flex min-w-full items-baseline gap-4 px-3 py-2 text-left font-mono text-code text-code-variable outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-primary/10 aria-pressed:text-primary disabled:opacity-60">
+        // Fix round I2: hover/focus-visible were `bg-muted`, which in Folio equals
+        // `bg-lesson-code-surface` (this list's own ground) byte for byte -- a Folio learner got
+        // no hover response at all on this kind's primary interaction. `bg-rule` steps against
+        // the code surface in all five palettes; see Editor.tsx's matching fix for the same bug.
+        // Fix round M2 (Ruling W4.12): same ligature kill as Editor.tsx's `.cm-scroller` -- this
+        // is the one place in the app a learner reads code they did not type themselves.
+        className="flex min-w-full items-baseline gap-4 px-3 py-2 text-left font-mono text-code text-code-variable outline-none hover:bg-rule focus-visible:bg-rule focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-primary/10 aria-pressed:text-primary disabled:opacity-60 [font-feature-settings:'liga'_0,_'calt'_0]">
         <span aria-hidden="true" className="w-6 shrink-0 text-right text-micro text-code-comment">{index + 1}</span><code id={`${snippetId}-${index}`} className="whitespace-pre">{line || ' '}</code>
       </button>)}
     </div><p className="text-small text-muted-foreground">{selected.length} {selected.length === 1 ? 'line' : 'lines'} selected</p>

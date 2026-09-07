@@ -34,18 +34,29 @@ export interface EditorProps {
 // the surface is the same "wherever code renders" bundle Lesson blocks already sit on. Ruling
 // W4.12: `liga 0, calt 0` on `.cm-scroller` so `!=`/`=>` never render as a ligature glyph that
 // is not on the learner's own keyboard.
-const theme = EditorView.theme({
+// Exported (mirroring `CODE_HIGHLIGHT_SPECS` below) so a test can assert on the plain spec object
+// -- `.cm-activeLine`'s token is only visible dynamically inside a live, focused CodeMirror view,
+// which a unit test should not need to reconstruct just to check which custom property a rule
+// reads.
+export const EDITOR_THEME_SPEC = {
   '&': { backgroundColor: 'var(--lesson-code-surface)', color: 'var(--code-variable)', fontSize: '14px' },
   '&.cm-focused': { outline: '2px solid var(--ring)', outlineOffset: '-2px' },
   '.cm-scroller': { fontFamily: 'var(--font-mono)', minHeight: '360px', maxHeight: 'calc(100dvh - 18rem)', overflow: 'auto', fontFeatureSettings: "'liga' 0, 'calt' 0" },
   '.cm-content': { padding: '16px 0', caretColor: 'var(--code-variable)' },
   '.cm-line': { padding: '0 16px' },
   '.cm-gutters': { backgroundColor: 'var(--lesson-code-surface)', color: 'var(--code-comment)', borderRight: '1px solid var(--border)' },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--muted)' },
+  // Fix round I2: was `--muted`, which in Folio is byte-identical to `--lesson-code-surface`
+  // (both `oklch(0.955 0.008 85)`), so the active-line band vanished entirely on that palette.
+  // `--rule` steps against the code surface by 0.09-0.20 L in all five palettes (it is also the
+  // token this file's own `.cm-gutters` border and every code-adjacent decorative edge use), so
+  // the band stays visible everywhere without borrowing a role (`--accent`) already spoken for by
+  // the selection background two lines below.
+  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--rule)' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--code-variable)' },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'var(--accent)' },
   '.cm-tooltip': { backgroundColor: 'var(--popover)', color: 'var(--popover-foreground)', borderColor: 'var(--border)' },
-}, { dark: true })
+}
+const theme = EditorView.theme(EDITOR_THEME_SPEC, { dark: true })
 
 /**
  * T4.7 / spec 2.6: the nine `--code-*` tokens ship as one `HighlightStyle.define()` mapping

@@ -9,7 +9,9 @@ export function ResultsPanel({ exercise, results, stdout, stderr, status, review
       {results.length > 0 && <p role="status" className="font-mono text-small text-muted-foreground">{results.filter((result) => result.passed).length} / {results.length} passed</p>}
     </div>
     {results.length === 0 && !stdout && !stderr && <p className="font-normal text-body text-muted-foreground">{status === 'running' || status === 'submitting' ? 'Running your work. Results will appear here.' : 'Run to explore your output, or submit when you are ready to check your work.'}</p>}
-    {(stdout || stderr) && <div className="space-y-2"><h3 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">Run output</h3>{stdout && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-lesson-code-surface p-3 font-mono text-code text-code-variable">{stdout}</pre>}{stderr && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-rule bg-lesson-code-surface p-3 font-mono text-code text-destructive">{stderr}</pre>}</div>}
+    {/* Fix round M2 (Ruling W4.12): both run-output blocks sit on the code surface in Geist
+        Mono and need the same ligature kill Editor.tsx's `.cm-scroller` carries. */}
+    {(stdout || stderr) && <div className="space-y-2"><h3 className="text-micro uppercase tracking-[0.06em] text-muted-foreground">Run output</h3>{stdout && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-lesson-code-surface p-3 font-mono text-code text-code-variable [font-feature-settings:'liga'_0,_'calt'_0]">{stdout}</pre>}{stderr && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-rule bg-lesson-code-surface p-3 font-mono text-code text-destructive [font-feature-settings:'liga'_0,_'calt'_0]">{stderr}</pre>}</div>}
     {/* T4.7: results rows sit on `--rule`, per the exercise screen's own spec line. */}
     <ul className="divide-y divide-rule">
       {results.map((result, index) => {

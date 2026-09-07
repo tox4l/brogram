@@ -24,7 +24,8 @@ export function Trace({ snippet, variables, value, onChange, disabled = false, f
   let cells: Record<string, string> = {}
   try { const parsed: unknown = JSON.parse(value); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) cells = parsed as Record<string, string> } catch { /* Empty answer. */ }
   return <div ref={containerRef} className="space-y-4 p-4">
-    <pre className="overflow-x-auto rounded-xl bg-lesson-code-surface p-4 font-mono text-code text-code-variable"><code>{snippet}</code></pre>
+    {/* Fix round M2 (Ruling W4.12): same fix as Editor.tsx's `.cm-scroller`. */}
+    <pre className="overflow-x-auto rounded-xl bg-lesson-code-surface p-4 font-mono text-code text-code-variable [font-feature-settings:'liga'_0,_'calt'_0]"><code>{snippet}</code></pre>
     <p className="text-small text-muted-foreground">Enter each variable’s value at the step described in the task.</p>
     <div className="grid gap-4 sm:grid-cols-2">{variables.map((variable) => <label key={variable} className="space-y-2"><span className="block font-mono text-small">{variable}</span>
       <Input aria-label={variable} value={typeof cells[variable] === 'string' ? cells[variable] : ''} disabled={disabled} spellCheck={false} autoComplete="off" className="font-mono transition-none"
