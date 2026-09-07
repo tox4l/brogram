@@ -63,3 +63,17 @@ Both lanes tick this file. Task text lives in `docs/superpowers/plans/2026-09-05
 - [ ] T3.5 Openness: the work items that make a fork real
 - [ ] T3.6 Whole-branch review (Group B)
 - [ ] T3.7 Deploy and the ten-minute acceptance run (Group C)
+
+## v2 Wave 4 (premium presentation, plan 2026-09-07-brogram-wave4-plan.md)
+- [ ] T4.0 Tokens, five palettes, two faces, and the contrast gate (serial, first, alone)
+- [ ] T4.1 The design-discipline gates
+- [ ] T4.2 Motion primitives: eases, Reveal, useFlipIndicator, the motion attribute
+- [ ] T4.3 ShaderSurface and the settle-and-freeze field
+- [ ] T4.4 CodeGuide, the lesson reading surface, and the verifier
+- [ ] T4.5 Shell, dock, Buddy, shared UI, Account
+- [ ] T4.6 Dashboard, Courses, Course home
+- [ ] T4.7 Exercise and the editor theme
+- [ ] T4.8 De-rot, Playground and the reward surfaces
+- [ ] T4.9 Reports, Login, Onboarding, landing
+- [ ] T4.10 The bundle budget script and the e2e battery (after Wave 3 Group A)
+- [ ] T4.11 Wave review, build log, ledger
