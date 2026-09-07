@@ -751,18 +751,22 @@ describe('the optimistic submit path (T2.2)', () => {
   it('I5 fix round: fires goal.done and records the goal day once the third win of the day lands', async () => {
     const today = new Date().toISOString().slice(0, 10)
     tables.attempts = [
-      { id: 'win-1', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, created_at: `${today}T01:00:00.000Z` },
-      { id: 'win-2', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, created_at: `${today}T02:00:00.000Z` },
+      { id: 'win-1', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, duration_ms: 1000, created_at: `${today}T01:00:00.000Z` },
+      { id: 'win-2', user_id: 'student', exercise_id: 'e1', passed: true, hint_count: 0, duration_ms: 1000, created_at: `${today}T02:00:00.000Z` },
     ]
-    // C1 fix round: `recordRewardsAfterSettle` now takes the just-graded attempt directly
-    // (`operation.attempt`, for its real `durationMs`/`difficulty`) and reads the REST of the
-    // window off the `qk.attempts` query cache, not `history.current` -- so the two earlier
-    // wins this test relies on for its "third win" count must be seeded there, the same way
-    // `(app)/layout.tsx`'s `QuerySeed` seeds it for real in production.
-    spies.getQueryData.mockImplementation((key: readonly unknown[]) => key[0] === 'attempts'
-      ? tables.attempts.map(row => ({ id: row.id, userId: row.user_id, exerciseId: row.exercise_id, code: '', results: [], passed: row.passed, durationMs: 0, hintCount: row.hint_count, createdAt: row.created_at }))
-      : undefined)
-    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    // Fix round 2 (Opus re-check of `cf179c7`, new Important): `recordRewardsAfterSettle` no
+    // longer reads the rest of its window off `qk.attempts`'s query cache -- a key nothing
+    // observes on the exercise route, GC'd five minutes after `QuerySeed` seeds it -- but off
+    // this hook's own `history.current`, a real per-user projection it fetches on load and
+    // never garbage collects. No `getQueryData` seed for the 'attempts' key is needed any more
+    // (the default mock already returns `undefined` for it). Advancing fake timers past the
+    // cache's five-minute `gcTime` with no observer, before the third win ever lands, proves the
+    // fix does not merely happen to still work inside that window.
+    const hook = await loaded()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000 + 1_000) })
+    vi.useRealTimers()
+    act(() => hook.result.current.setCode('fixed'))
     await act(async () => { await hook.result.current.submit() })
     await waitFor(() => expect(spies.celebrate).toHaveBeenCalledWith('goal', undefined, expect.any(String)))
     const savedPrefs = (tables.wellness.find(row => row.user_id === 'student')?.prefs) as { goalDays?: string[] } | undefined

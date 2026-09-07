@@ -4,7 +4,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Attempt, BankQuery, Clo, CoachReply, DiagnoserReply, ExercisePublic, LearnerState, LessonProgress, Mastery, MotionPreference, PlannerReply, ReviewerReply, RunResult, TestResult, UserAchievement } from '@/lib/contracts'
+import type { BankQuery, Clo, CoachReply, DiagnoserReply, ExercisePublic, LearnerState, LessonProgress, Mastery, MotionPreference, PlannerReply, ReviewerReply, RunResult, TestResult, UserAchievement } from '@/lib/contracts'
 import { LOCKDOWN, pointsForPass } from '@/lib/contracts'
 import { callAgent, streamAgent } from '@/lib/agents/client'
 import { DEFAULT_DIFFICULTY, fetchBank, pickFromBank, toExercisePublic } from '@/lib/learner/bank'
@@ -27,6 +27,10 @@ import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { getQueryClient, onUserChange } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { line } from '@/lib/voice/lines'
+// T3.2 cross-lane delta (controller-granted, this round): the GRADED mark's one call site, at
+// every place a verdict becomes visible to the learner -- `submit()`'s own grading moment and
+// the two `applyLoadedExercise` paths that adopt an already-graded verdict on a (re)mount.
+import { GRADED, markPerf } from '@/lib/perf/marks'
 
 /**
  * Fix round (web-runtime hang investigation): `next()`'s own comment originally assumed
@@ -184,7 +188,11 @@ type Outcome = 'passed' | 'failed' | null
 const NEUTRAL_QUALITY = 70
 /** R5.1b: capped, matching the window every other reward/report consumer already uses. */
 const HISTORY_CAP = 50
-type History = { id: string; exercise_id: string; passed: boolean; hint_count: number; created_at: string }
+// Fix round 2 (re-check of `cf179c7`): `duration_ms` was added so `recordRewardsAfterSettle`
+// below can rebuild its reward window from this real, ungated-by-any-other-route's-observer
+// projection instead of the query cache (see that function's own comment for why the cache read
+// was wrong).
+type History = { id: string; exercise_id: string; passed: boolean; hint_count: number; duration_ms: number; created_at: string }
 type Submission = {
   // C1/I1 (wave 2 review, fix round): typed as the full `RewardAttempt` (not the narrower
   // `Attempt`) so `operation.attempt.durationMs` and `operation.attempt.difficulty` -- both
@@ -368,7 +376,7 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
       if (submissionRecord.graded) {
         const { graded } = submissionRecord
         codeRef.current = graded.code; updateCode(graded.code)
-        setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
+        setStatus('graded'); markPerf(GRADED); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
         setPointsProvisional(graded.pointsProvisional); setChain(graded.chain); setClosed(graded.closed)
         // Fix round 5, C2: restored here too, in case `queueNext` already chose one before this
         // mount happened -- the settle handler below is the guaranteed-final source, this is best
@@ -395,7 +403,7 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
         if (generation.current !== token || !submissionRecord.graded) return
         const { graded } = submissionRecord
         codeRef.current = graded.code; updateCode(graded.code)
-        setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
+        setStatus('graded'); markPerf(GRADED); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
         setPointsProvisional(graded.pointsProvisional); setChain(graded.chain); setClosed(graded.closed)
         if (submissionRecord.nextExercise) setNextExercise(submissionRecord.nextExercise)
       })
@@ -428,7 +436,7 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
     if (userId) {
       void (async () => {
         const client = clientRef.current ??= createClient()
-        const result = await client.from('attempts').select('id,exercise_id,passed,hint_count,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(HISTORY_CAP)
+        const result = await client.from('attempts').select('id,exercise_id,passed,hint_count,duration_ms,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(HISTORY_CAP)
         if (generation.current !== token || result.error) return
         history.current = result.data ?? []
         const refreshed = Math.min(LOCKDOWN.maxHintsPerExercise, Math.max(spentHints.current, ...history.current.filter(row => row.exercise_id === item.id).map(row => row.hint_count ?? 0)))
@@ -712,13 +720,29 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
    * entirely. That made `under-a-minute` (`durationMs < 60_000`, and 0 is always < 60_000)
    * permanently true on ANY hint-free pass however long it actually took, and made
    * `no-wheels` structurally unreachable from this call site since it requires
-   * `difficulty >= 3` and nothing here ever had a difficulty to give it. `operation.attempt`
-   * is already a full `RewardAttempt` with the real `durationMs` and `difficulty` (attached at
-   * grading time in `submit()`, for exactly this purpose) -- taking it directly, and reading
-   * the rest of the window from the query cache (`qk.attempts`, the same recipe the derot call
-   * sites already use), fixes both at once with the freshest possible data for the
-   * just-graded attempt, which the cache's own invalidation (fired two lines above, in
-   * `syncInBackground`'s `finally`) has not necessarily resolved by the time this runs.
+   * `difficulty >= 3` and nothing here ever had a difficulty to give it.
+   *
+   * Fix round 2 (Opus re-check of `cf179c7`, new Important): that round's own fix moved the
+   * REST of the window to `cache.getQueryData<Attempt[]>(qk.attempts(userId))` -- a key nothing
+   * observes while the learner is on the exercise route (the dashboard's `useAttempts()` and a
+   * deliberately inert `enabled: false` observer in `LessonView.tsx` are the only ones in the
+   * tree). `useAttempts()` declares `gcTime: FIVE_MINUTES`; five minutes after the last observer
+   * detaches, TanStack drops the query and `getQueryData` silently returns `undefined` --
+   * exactly the shape of a session that opens the dashboard, clicks into a rep, and keeps
+   * passing reps via `next()` without ever revisiting a route that re-observes the key. Past
+   * that point `ctx.attempts` held only the just-graded attempt, so `goalMet`/`comeback` could
+   * never fire again from this producer -- regressing X7 (an Important brief item) to a
+   * five-minute-conditional.
+   *
+   * The fix stays self-contained in this hook's own state: `history.current` is a real,
+   * per-user attempts window (`HISTORY_CAP` rows, re-fetched on every exercise load, `unshift`ed
+   * on every insert) that nothing garbage-collects and no other route's cache needs to observe.
+   * `duration_ms` was added to its projection (the `History` type and the read above) so mapping
+   * it back to a `RewardAttempt` carries a real duration, not `0` -- keeping C1/I1 closed without
+   * depending on the query cache at all. `operation.attempt` is still taken directly and
+   * de-duplicated against `history.current` by id, since `finishSubmission`'s own `unshift` (a
+   * few lines above this call, inside the same `finally`) may or may not have already landed the
+   * just-graded attempt into `history.current` by the time this runs.
    *
    * Degrades silently on any failure -- a missed goal day or achievement is a missed
    * celebration, never a broken pass -- and is never awaited by the caller (`syncInBackground`'s
@@ -734,8 +758,10 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
       const drillResults = wellnessRow?.drill_results ?? []
       const lessonProgress = cache.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) ?? []
       const heldAchievementIds = (cache.getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map(row => row.achievementId)
-      const cachedAttempts = cache.getQueryData<Attempt[]>(qk.attempts(userId)) ?? []
-      const attempts: RewardAttempt[] = [operation.attempt, ...cachedAttempts.filter(row => row.id !== operation.attempt.id)]
+      const older: RewardAttempt[] = history.current
+        .filter(row => row.id !== operation.attempt.id)
+        .map(row => ({ id: row.id, userId, exerciseId: row.exercise_id, code: '', results: [], passed: row.passed, durationMs: row.duration_ms, hintCount: row.hint_count, createdAt: row.created_at }))
+      const attempts: RewardAttempt[] = [operation.attempt, ...older]
       const ctx = buildRewardContext({ state, attempts, activityDays: [], lessonProgress, drillResults, prefs, courseLessonCounts: {}, now: new Date(operation.attempt.createdAt) })
       void recordGoalDay(client, userId, ctx)
       void recordAchievements(client, userId, ctx, heldAchievementIds)
@@ -752,7 +778,7 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
       if (insertError) throw insertError
       operation.inserted = true
       if (!isCurrent(key, attemptId)) return
-      history.current.unshift({ id: attempt.id, exercise_id: attempt.exerciseId, passed: attempt.passed, hint_count: attempt.hintCount, created_at: attempt.createdAt })
+      history.current.unshift({ id: attempt.id, exercise_id: attempt.exerciseId, passed: attempt.passed, hint_count: attempt.hintCount, duration_ms: attempt.durationMs, created_at: attempt.createdAt })
     }
     if (!isCurrent(key, attemptId)) return
     const state = assertAllowed()
@@ -989,7 +1015,7 @@ export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreferenc
       // Steps 1 & 3: the browser knows pass or fail the instant grading resolves, before any
       // network call -- that is where the verdict, the optimistic XP, the chain pip and the
       // celebration all fire. `finishSubmission` still runs, but only in the background below.
-      setStatus('graded'); setOutcome(passedNow ? 'passed' : 'failed'); setLastRewardAttempt(rewardAttempt)
+      setStatus('graded'); markPerf(GRADED); setOutcome(passedNow ? 'passed' : 'failed'); setLastRewardAttempt(rewardAttempt)
       let snapshot: GradedSnapshot
       if (passedNow) {
         const previousMastery = state.mastery[item.cloId] ?? emptyMastery(state.userId, item.cloId)
