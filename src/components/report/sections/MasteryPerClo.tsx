@@ -11,7 +11,7 @@ const GRID_COLS = 'grid-cols-[2.5rem_1fr_6rem_3.5rem_5rem]'
 export function MasteryPerClo({ rows }: MasteryPerCloProps) {
   return (
     <section className="flex flex-1 flex-col gap-2" data-section="mastery-per-clo">
-      <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Mastery per learning outcome</h2>
+      <h2 className="text-h2 text-foreground">Mastery per learning outcome</h2>
       {rows.length === 0 ? (
         <p className="text-small text-muted-foreground">No course selected yet. Mastery appears here once a course starts.</p>
       ) : (

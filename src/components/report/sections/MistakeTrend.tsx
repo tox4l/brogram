@@ -11,7 +11,7 @@ export function MistakeTrend({ data }: MistakeTrendProps) {
   return (
     <section className="flex flex-col gap-3" data-section="mistake-trend">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Mistake trend</h2>
+        <h2 className="text-h2 text-foreground">Mistake trend</h2>
         <span className="text-micro text-muted-foreground">{data.totalMistakes} in the last 12 weeks</span>
       </div>
       {data.totalMistakes === 0 ? (

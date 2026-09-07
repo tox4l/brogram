@@ -11,7 +11,7 @@ export function TimeSpent({ data }: TimeSpentProps) {
   return (
     <section className="flex flex-col gap-3" data-section="time-spent">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Time spent</h2>
+        <h2 className="text-h2 text-foreground">Time spent</h2>
         <span className="text-micro text-muted-foreground">
           {data.totalLabel} total · {data.daysActive} active day{data.daysActive === 1 ? '' : 's'}
         </span>

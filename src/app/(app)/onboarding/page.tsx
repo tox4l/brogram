@@ -217,7 +217,7 @@ export default function Onboarding() {
         <p className="text-micro text-muted-foreground">Question {index + 1} of {QUESTIONS.length}</p>
         <div aria-hidden="true" className="h-px w-full bg-rule">
           <div
-            className="h-px bg-primary transition-transform duration-200 ease-out motion-reduce:transition-none"
+            className={`h-px bg-primary ${reducedMotion ? '' : 'transition-transform duration-200 ease-out'}`}
             style={{ transform: `scaleX(${(index + 1) / QUESTIONS.length})`, transformOrigin: 'left' }}
           />
         </div>

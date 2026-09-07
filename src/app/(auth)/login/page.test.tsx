@@ -94,6 +94,21 @@ describe('email and password login', () => {
     expect(mocks.replace).not.toHaveBeenCalled()
   })
 
+  // Spec section 9: "Error text is flat and unanimated." The role="alert" node
+  // must never carry a transition/animation class, and must sit outside the
+  // <Reveal> subtree (the wordmark's masked-line reveal) rather than share its
+  // motion treatment.
+  it('renders the error text flat and unanimated, outside the wordmark reveal', async () => {
+    const message = 'Invalid login credentials'
+    mocks.signInWithPassword.mockResolvedValue({ data: { user: null }, error: { message } })
+    await submitPassword()
+    const alert = await screen.findByRole('alert')
+    expect(alert.className).not.toMatch(/transition-|animate-/)
+    // The wordmark's <Reveal> lives inside the page's <h1>; the error text must
+    // sit entirely outside that subtree rather than share its motion treatment.
+    expect(screen.getByRole('heading', { level: 1 }).contains(alert)).toBe(false)
+  })
+
   it('renders a retryable error when the request throws', async () => {
     mocks.signInWithPassword.mockRejectedValue(new Error('connection refused'))
     await submitPassword()

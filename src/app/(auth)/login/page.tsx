@@ -215,7 +215,9 @@ export default function LoginPage() {
       <ShaderSurface motionPref="system" className="z-0" />
       <div className="relative z-10 w-full max-w-[34rem] rounded-2xl border border-rule bg-card/95 p-8 shadow-xs">
         <h1 className="font-display text-hero text-foreground">
-          <Reveal mode="lines" reduced={reducedMotion}>BroGram.</Reveal>
+          <Link href="/">
+            <Reveal mode="lines" reduced={reducedMotion}>BroGram.</Reveal>
+          </Link>
         </h1>
         <p className="mt-3 text-lede text-muted-foreground">Sign in to your coding space.</p>
         <div className="mt-8">

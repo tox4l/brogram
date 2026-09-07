@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 
 export default function Home() {
@@ -9,7 +10,10 @@ export default function Home() {
           BroGram<span className="text-primary">.</span>
         </h1>
         <p className="text-lede text-muted-foreground">Learn by writing code, graded where you write it.</p>
-        <Link href="/login" className={buttonVariants({ variant: "default", size: "lg" })}>
+        <Link
+          href="/login"
+          className={cn(buttonVariants({ variant: "default", size: "lg" }), "h-11 px-6 text-body")}
+        >
           Sign in
         </Link>
       </div>

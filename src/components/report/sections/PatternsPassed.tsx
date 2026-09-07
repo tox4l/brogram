@@ -10,7 +10,7 @@ export function PatternsPassed({ data }: PatternsPassedProps) {
   return (
     <section className="flex flex-col gap-3" data-section="patterns-passed">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-micro tracking-[0.06em] text-muted-foreground uppercase">Patterns passed</h2>
+        <h2 className="text-h2 text-foreground">Patterns passed</h2>
         <span className="text-micro text-muted-foreground">
           {data.totalDistinctPatterns} distinct pattern{data.totalDistinctPatterns === 1 ? '' : 's'}
         </span>

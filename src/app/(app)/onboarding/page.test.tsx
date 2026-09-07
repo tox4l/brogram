@@ -7,6 +7,7 @@ import { qk } from '@/lib/query/keys'
 import { QUESTIONS } from '@/lib/onboarding/questions'
 import { readQueuedCompletion } from '@/lib/onboarding/completionQueue'
 import Onboarding from './page'
+import OnboardingLoading from './loading'
 
 /**
  * Rewritten for T1.5: the flow this file tested (up to 13 questions, one blocking Profiler call
@@ -376,5 +377,14 @@ describe('onboarding', () => {
     const heading = screen.getByRole('heading', { name: QUESTIONS[0].text })
     expect(heading.textContent).toBe(QUESTIONS[0].text)
     expect(splitTextMocks.create).not.toHaveBeenCalled()
+  })
+
+  // Fix round (I4): pins loading.tsx's shape as a single hairline `--rule`
+  // track, not the old six-pill-dot row, so a later lane cannot silently
+  // restore the pill row -- nothing else in the repo renders this file.
+  it('renders loading.tsx as one hairline track, never a row of pill dots', () => {
+    const { container } = render(<OnboardingLoading />)
+    expect(container.querySelectorAll('.bg-rule')).toHaveLength(1)
+    expect(container.querySelectorAll('.rounded-full')).toHaveLength(1) // the eyebrow skeleton only
   })
 })

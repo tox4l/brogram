@@ -92,7 +92,7 @@ function ReportTab({ userId, courseCode, learnerState }: { userId: string | null
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <p className="max-w-[68ch] text-small text-muted-foreground">Mastery per outcome, patterns passed, mistakes over time, time spent, and de-rot scores. Rendered in the browser; nothing is generated on the server.</p>
+        <p className="max-w-[26rem] text-small text-muted-foreground">Mastery per outcome, patterns passed, mistakes over time, time spent, and de-rot scores. Rendered in the browser; nothing is generated on the server.</p>
         {report.data && <DownloadReportButton containerRef={downloadSourceRef} fileName={fileName} />}
       </div>
 
@@ -167,7 +167,7 @@ export default function ReportsPage() {
     return (
       <div className="space-y-8">
         <h1 className="text-h1 text-foreground">Progress</h1>
-        <div className="max-w-[68ch] space-y-3">
+        <div className="max-w-[34rem] space-y-3">
           <p className="text-lede text-foreground">Choose a course to see progress.</p>
           <p className="text-body text-muted-foreground">A progress report is built from a course&apos;s outcomes, mastery, and de-rot scores, so pick a course first.</p>
           <Link href="/onboarding" className="inline-flex rounded-lg text-small font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">Choose a course</Link>

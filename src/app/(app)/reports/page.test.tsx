@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeQueryClient } from '@/lib/query/client'
 import { ACHIEVEMENTS, type Attempt, type Clo, type DrillResult, type LearnerState } from '@/lib/contracts'
 import ReportsPage from './page'
+import ReportsLoading from './loading'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -249,5 +250,30 @@ describe('reports page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await screen.findByTestId('report-preview')
     expect(mocks.fetchReportData).toHaveBeenCalledTimes(2)
+  })
+
+  // Spec section 8: "a --destructive glyph on a --rule panel -- never a
+  // destructive fill". This page owns nothing about ErrorRetry's own border
+  // (T4.4's file), but it does own passing the right message into the shared
+  // component, and no other state on this screen (this is the closest thing
+  // /reports has to a "restricted-adjacent" state) may ever carry a solid
+  // destructive fill either.
+  it('never fills the error state with a destructive colour (spec section 8)', async () => {
+    mocks.fetchReportData.mockReset().mockRejectedValueOnce(new Error('offline'))
+    const { container } = render(<ReportsPage />, { wrapper: wrapperNoRetry() })
+    await openReportTab()
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(container.querySelector('[class*="bg-destructive"]')).toBeNull()
+  })
+})
+
+// Fix round (I4): pins loading.tsx's shape -- a real tab bar plus a card
+// grid, never a dashed skeleton -- so a later lane cannot silently
+// reintroduce the dashed border-input/p-[3px] treatment this fix round
+// removed. Nothing else in the repo imports this file.
+describe('reports loading', () => {
+  it('renders no dashed skeleton', () => {
+    const { container } = render(<ReportsLoading />)
+    expect(container.querySelector('.border-dashed')).toBeNull()
   })
 })
