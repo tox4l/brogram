@@ -97,7 +97,9 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
       // WorkedBlock, CheckBlock, RecapBlock or BridgeBlock — src/components/lesson/**); whichever
       // paints first is this lesson's first block. ProgressRail is the "nav Lesson progress" rail.
       await expect(page.getByRole('region', { name: /Concept|Code example|Worked example|Check|Recap|Next/ }).first()).toBeVisible()
-      await expect(page.getByRole('navigation', { name: 'Lesson progress' })).toBeVisible()
+      // src/components/lesson/ProgressRail.tsx's nav is now "Walkthrough progress" (was "Lesson
+      // progress" — renamed alongside the voice-bank sweep's glossary survivors, commit 3448f5a).
+      await expect(page.getByRole('navigation', { name: 'Walkthrough progress' })).toBeVisible()
 
       // Back to the course home, then open the first actual exercise card. nextUp() always puts the
       // walkthrough at index 0 and appends exercises after it (src/lib/course/map.ts: "for (const id
@@ -120,7 +122,7 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
     // useLockdown's 15s idle guard (src/hooks/useLockdown.ts, LOCKDOWN.idleBlurAfterS) marks the
     // workspace's two inner panels `inert` the moment nothing has moved the mouse or pressed a key
     // for that long (src/app/(app)/exercise/[id]/page.tsx: `inert={Boolean(lockdown.overlay)}`) —
-    // `inert` drops both "Exercise prompt" and the editor out of the accessibility tree entirely,
+    // `inert` drops both "Rep prompt" and the editor out of the accessibility tree entirely,
     // not just visually. This flow's own waits have nothing for a real learner's mouse to do in
     // between and can outlast 15s, and a single nudge only buys 15 more seconds, which a slow retry
     // window can still exceed — so nudge the mouse on every retry instead, the way a present learner
@@ -143,7 +145,9 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
     await expect(async () => {
       await page.mouse.move(200 + Math.random() * 20, 200 + Math.random() * 20)
       await expect(page.getByTestId('exercise-workspace')).toBeVisible({ timeout: 2_000 })
-      await expect(page.getByRole('region', { name: 'Exercise prompt' })).toBeVisible({ timeout: 2_000 })
+      // PromptPanel's aria-label is now "Rep prompt" (was "Exercise prompt" — renamed in the same
+      // glossary-survivors pass as the walkthrough progress rail above, commit 3448f5a).
+      await expect(page.getByRole('region', { name: 'Rep prompt' })).toBeVisible({ timeout: 2_000 })
       await expect(workRegion.getByRole('textbox').first()).toBeVisible({ timeout: 2_000 })
     }).toPass({ timeout: 30_000 })
   } finally {
