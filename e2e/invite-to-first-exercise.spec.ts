@@ -65,7 +65,9 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
     // card renders inside the "Live courses" group; pick whichever sorts first. Live cards are real
     // `<Link>`s (src/components/course/CourseCard.tsx's `MotionLink = motion.create(Link)`) so the
     // route actually gets prefetched — not buttons with a `router.push` in their `onClick`.
-    await expect(page.getByRole('heading', { name: 'Your courses' })).toBeVisible()
+    // The copy sweep (commit 7b7f99d) dropped every "Your" opener from headings this spec locates
+    // by text — "Your courses" is now plain "Courses".
+    await expect(page.getByRole('heading', { name: 'Courses' })).toBeVisible()
     const courseGroup = page.getByRole('group', { name: 'Live courses' })
     const firstCourseLink = courseGroup.getByRole('link').first()
     await expect(firstCourseLink).toBeVisible()
@@ -74,7 +76,9 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
     // selectCourse (src/app/(app)/courses/page.tsx) navigates optimistically to /course/{code} in
     // the same frame the tap happens in — there is no "Building your path" wait in v2.
     await page.waitForURL('**/course/**')
-    const pathMap = page.getByRole('region', { name: 'Your path' })
+    // Copy sweep: the path-map section's heading is now "Path map", not "Your path"
+    // (src/app/(app)/course/[code]/page.tsx: `<h2 id="path-heading">Path map</h2>`).
+    const pathMap = page.getByRole('region', { name: 'Path map' })
     const nextUp = page.getByRole('region', { name: 'Next up' })
     await expect(pathMap).toBeVisible()
     await expect(nextUp).toBeVisible()
@@ -100,7 +104,9 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
       // of nextExerciseIds) { ...; addExerciseById(id, { caption: 'After the walkthrough, or skip
       // it.' }) }"), so card index 1 is the first exercise — a text filter is not reliable here since
       // that very caption itself contains the word "walkthrough".
-      await page.getByRole('link', { name: 'Your path' }).click()
+      // Copy sweep: LessonView's back link reads "Path map" now too
+      // (src/components/lesson/LessonView.tsx: `<ArrowLeft/>Path map`).
+      await page.getByRole('link', { name: 'Path map' }).click()
       await page.waitForURL('**/course/**')
       await expect(nextUp).toBeVisible()
       const exerciseCard = nextUp.getByRole('listitem').nth(1)
@@ -127,10 +133,13 @@ test('invite → magic link → onboarding → first exercise', async ({ page, c
     // predict-output (src/components/exercise/PredictOutput.tsx: one `<textarea>` labelled
     // "Predicted output" by its wrapping `<label>`), or trace (src/components/exercise/Trace.tsx: one
     // `<Input aria-label={variable}>` per traced variable, so no single fixed name covers it). All
-    // four open a workspace that accepts the learner's work inside the "Your work" region
-    // (`<section aria-label="Your work">`) — the contract this flow guards — so check for any
-    // textbox there rather than one fixed accessible name.
-    const workRegion = page.getByRole('region', { name: 'Your work' })
+    // four open a workspace that accepts the learner's work inside the "Work" region (copy sweep:
+    // `<section aria-label="Work">` in src/app/(app)/exercise/[id]/page.tsx, was "Your work") — the
+    // contract this flow guards — so check for any textbox there rather than one fixed accessible
+    // name. `exact: true` because Playwright's default name match is substring/case-insensitive and
+    // this single common word would otherwise also match a "Worked example" lesson block if one were
+    // ever mounted alongside it.
+    const workRegion = page.getByRole('region', { name: 'Work', exact: true })
     await expect(async () => {
       await page.mouse.move(200 + Math.random() * 20, 200 + Math.random() * 20)
       await expect(page.getByTestId('exercise-workspace')).toBeVisible({ timeout: 2_000 })
