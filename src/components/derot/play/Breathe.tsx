@@ -169,15 +169,22 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
         <CardDescription>A four-seven-eight pace. This one cannot be failed -- tap along or just watch.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-6 py-10">
+        {/* Fix round 1 (B-I2): announce phase transitions only (3x per 19s
+            cycle) plus completion -- not the count, which changed every
+            second and queued roughly ninety announcements across a run. This
+            one element stays mounted through submit so the swap to "Run
+            complete." is itself announced. */}
+        <p aria-live="polite" className="sr-only">
+          {submitted ? 'Run complete.' : `${phase.label}.`}
+        </p>
         {!submitted ? (
           <>
-            <p aria-live="polite" className="sr-only">
-              {phase.label}, {secondsLeft} seconds left.
-            </p>
             {reducedMotion ? (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <p className="text-xl font-medium">{phase.label}</p>
-                <p className="font-mono text-4xl font-semibold tabular-nums text-primary">{secondsLeft}</p>
+                <p role="timer" aria-live="off" className="font-mono text-4xl font-semibold tabular-nums text-primary">
+                  {secondsLeft}
+                </p>
               </div>
             ) : (
               <div
@@ -191,7 +198,9 @@ export default function Breathe({ timeLimitS, reducedMotion, onComplete, onAbort
               >
                 <div className="flex flex-col items-center gap-1 rounded-full bg-primary/25 px-6 py-6 text-center">
                   <span className="text-sm font-medium text-primary-foreground">{phase.label}</span>
-                  <span className="font-mono text-2xl font-semibold tabular-nums text-primary-foreground">{secondsLeft}</span>
+                  <span role="timer" aria-live="off" className="font-mono text-2xl font-semibold tabular-nums text-primary-foreground">
+                    {secondsLeft}
+                  </span>
                 </div>
               </div>
             )}

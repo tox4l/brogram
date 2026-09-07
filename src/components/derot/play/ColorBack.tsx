@@ -17,8 +17,12 @@ import type { PlayGameProps } from './types'
  * the game is completely playable on shape alone -- around 1 in 12 men
  * cannot reliably separate the palette. Never described by colour anywhere
  * in copy or aria text; colour is a purely visual bonus channel, shape is
- * the ground truth. A soft tone (mapped to the same fixed pairing) plays on
- * every new stimulus when `soundOn`, giving a third, audio-only channel.
+ * the ground truth. A soft tone plays on every new stimulus when `soundOn`,
+ * giving a third, audio-only channel -- routed through the shared sound
+ * manager (fix round 1: a hand-rolled AudioContext tone here bypassed the
+ * header mute and the volume preference, since neither is reachable outside
+ * that module; `play()` already applies both, for free, plus the interface
+ * tier gate the same way the hit/miss feedback below does).
  */
 
 const N_BACK = 2
@@ -29,16 +33,15 @@ interface Kind {
   id: string
   Icon: LucideIcon
   swatch: string
-  freq: number
 }
 
 const KINDS: readonly Kind[] = [
-  { id: 'circle', Icon: Circle, swatch: 'bg-primary text-primary-foreground', freq: 261.63 },
-  { id: 'square', Icon: Square, swatch: 'bg-accent text-accent-foreground', freq: 293.66 },
-  { id: 'triangle', Icon: Triangle, swatch: 'bg-success text-success-foreground', freq: 329.63 },
-  { id: 'diamond', Icon: Diamond, swatch: 'bg-warning text-warning-foreground', freq: 349.23 },
-  { id: 'star', Icon: Star, swatch: 'bg-destructive text-destructive-foreground', freq: 392.0 },
-  { id: 'hexagon', Icon: Hexagon, swatch: 'bg-celebration text-celebration-foreground', freq: 440.0 },
+  { id: 'circle', Icon: Circle, swatch: 'bg-primary text-primary-foreground' },
+  { id: 'square', Icon: Square, swatch: 'bg-accent text-accent-foreground' },
+  { id: 'triangle', Icon: Triangle, swatch: 'bg-success text-success-foreground' },
+  { id: 'diamond', Icon: Diamond, swatch: 'bg-warning text-warning-foreground' },
+  { id: 'star', Icon: Star, swatch: 'bg-destructive text-destructive-foreground' },
+  { id: 'hexagon', Icon: Hexagon, swatch: 'bg-celebration text-celebration-foreground' },
 ]
 
 /** True while an element with focus is a text-entry field elsewhere on the page (buddy drawer, wellness rail). */
@@ -56,28 +59,6 @@ function generateSequence(count: number, n: number, rng: () => number): number[]
     else seq.push(Math.floor(rng() * KINDS.length))
   }
   return seq
-}
-
-/** A short, best-effort sine beep. Never throws (no AudioContext in test/old-browser environments is a silent no-op), and reuses one lazily-created context rather than one per tone. This is decorative-only audio local to this game, separate from the shared sound manager's sprite (Howler owns every catalogued reward/interface cue; this is a synesthetic bonus channel unique to Colour Back). */
-let toneCtx: AudioContext | null = null
-function playTone(freq: number) {
-  try {
-    if (typeof window === 'undefined' || typeof window.AudioContext !== 'function') return
-    if (!toneCtx) toneCtx = new window.AudioContext()
-    const ctx = toneCtx
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = 'sine'
-    osc.frequency.value = freq
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.01)
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22)
-    osc.connect(gain).connect(ctx.destination)
-    osc.start()
-    osc.stop(ctx.currentTime + 0.24)
-  } catch {
-    // best-effort only; a beep must never crash the game
-  }
 }
 
 export interface ColorBackProps extends PlayGameProps {
@@ -146,7 +127,10 @@ export default function ColorBack({ timeLimitS, soundOn, reducedMotion, onComple
       return
     }
     respondedRef.current = false
-    if (soundOn) playTone(KINDS[sequence[index]].freq)
+    // The new-stimulus tone (fix round 1): routed through the shared manager
+    // so the header mute and the volume preference both apply automatically,
+    // the same way the hit/miss feedback in `respond` already does.
+    if (soundOn) withInterfaceSounds(() => play('ui.tap'))
 
     let id: ReturnType<typeof setTimeout> | null = null
     function schedule() {

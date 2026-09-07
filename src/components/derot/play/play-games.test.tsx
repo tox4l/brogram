@@ -94,6 +94,23 @@ describe('ColorBack (Colour Back / color-nback)', () => {
     expect(onAbort).toHaveBeenCalledTimes(1)
     expect(onComplete).not.toHaveBeenCalled()
   })
+
+  // Fix round 1 (B-I3 / ruling 1): the stimulus tone used to be a hand-rolled
+  // AudioContext gain node, invisible to the header mute and the volume
+  // preference. It now plays only through the shared sound manager's
+  // `play()`, which already applies both -- so silence is simply "never
+  // called `play`" when `soundOn` is false.
+  it('plays no tone through the sound manager when soundOn is false', () => {
+    render(<ColorBack timeLimitS={8} soundOn={false} reducedMotion={false} onComplete={noop} onAbort={noop} now={() => 0} />)
+    expect(mocks.play).not.toHaveBeenCalled()
+    expect(mocks.withInterfaceSounds).not.toHaveBeenCalled()
+  })
+
+  it('plays the new-stimulus tone through the shared sound manager when soundOn is true', () => {
+    render(<ColorBack timeLimitS={8} soundOn reducedMotion={false} onComplete={noop} onAbort={noop} now={() => 0} />)
+    expect(mocks.withInterfaceSounds).toHaveBeenCalled()
+    expect(mocks.play).toHaveBeenCalledWith('ui.tap')
+  })
 })
 
 describe('Breathe', () => {
@@ -141,6 +158,37 @@ describe('Breathe', () => {
 
     expect(onAbort).toHaveBeenCalledTimes(1)
     expect(onComplete).not.toHaveBeenCalled()
+  })
+
+  // Fix round 1 (B-I2): the live region used to re-announce the count every
+  // second (~90 announcements across a 90s run). It must now change only on
+  // a phase transition -- three times across one full 4-7-8 (19s) cycle --
+  // plus once more for completion, asserted in a separate test below.
+  it('announces only phase transitions over one full cycle, not the per-second count', () => {
+    render(<Breathe timeLimitS={25} soundOn={false} reducedMotion={false} onComplete={noop} onAbort={noop} />)
+    const live = document.querySelector('p[aria-live="polite"].sr-only') as HTMLElement
+    expect(live).toBeTruthy()
+
+    const seen: string[] = [live.textContent ?? '']
+    for (let i = 0; i < 76; i++) {
+      // 76 * 250ms = 19000ms, exactly one inhale(4s)+hold(7s)+exhale(8s) cycle.
+      advance(250)
+      const text = live.textContent ?? ''
+      if (text !== seen[seen.length - 1]) seen.push(text)
+    }
+
+    expect(seen).toEqual(['Breathe in.', 'Hold.', 'Breathe out.', 'Breathe in.'])
+  })
+
+  it('announces completion once the run ends', () => {
+    const onComplete = vi.fn()
+    render(<Breathe timeLimitS={5} soundOn={false} reducedMotion={false} onComplete={onComplete} onAbort={noop} />)
+    const live = document.querySelector('p[aria-live="polite"].sr-only') as HTMLElement
+
+    advance(5000)
+
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    expect(live.textContent).toBe('Run complete.')
   })
 })
 
@@ -221,5 +269,37 @@ describe('MemoryGrid (Grid / memory-grid)', () => {
 
     expect(onAbort).toHaveBeenCalledTimes(1)
     expect(onComplete).not.toHaveBeenCalled()
+  })
+
+  // Fix round 1 (B-I1 / ruling 2): a wrong cell used to end the whole run
+  // (Twitch's "an early tap voids that round" precedent applies here too --
+  // the round is penalised, not the run). It must no longer call onComplete;
+  // only the time-limit safety net may end the run.
+  it('a wrong cell ends the round, not the run -- the time limit ends the run', () => {
+    const onComplete = vi.fn()
+    render(<MemoryGrid timeLimitS={2} soundOn={false} reducedMotion={false} onComplete={onComplete} onAbort={noop} rng={() => 0.5} />)
+
+    const grid = screen.getByRole('group', { name: /memory grid/i })
+
+    // Let round 1's flash play out fully (three steps) without reading it,
+    // then deliberately click a cell that cannot be first in the pattern.
+    const lit = grid.querySelector('[data-cell-index].bg-primary') as HTMLElement
+    const correctFirst = Number(lit.getAttribute('data-cell-index'))
+    advance(600)
+    advance(600)
+    advance(600) // -> phase 'input'
+
+    const wrongIndex = correctFirst === 0 ? 1 : 0
+    fireEvent.click(grid.querySelector(`[data-cell-index="${wrongIndex}"]`) as HTMLElement)
+
+    // The round ended, not the run: no result yet, and the game re-flashes.
+    expect(onComplete).not.toHaveBeenCalled()
+    expect(screen.getByText('Not quite. Watch it again.')).toBeTruthy()
+
+    // The 2s time limit has long since elapsed; the run ends with nothing cleared.
+    advance(6000)
+
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    expect(onComplete.mock.calls[0][0]).toMatchObject({ raw: 0, payload: { roundsCleared: 0 } })
   })
 })

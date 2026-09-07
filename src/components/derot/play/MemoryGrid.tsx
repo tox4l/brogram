@@ -52,12 +52,21 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
   const [selected, setSelected] = useState<number[]>([])
   const [focusedIndex, setFocusedIndex] = useState(5)
   const [submitted, setSubmitted] = useState(false)
+  // Bumped (never the round number) on a miss so the pattern is re-drawn at
+  // the same length instead of replaying byte-for-byte (fix round 1, B-I1):
+  // a wrong cell used to end the whole run; now it only ends the round.
+  const [roundAttempt, setRoundAttempt] = useState(0)
+  const [justMissed, setJustMissed] = useState(false)
   // Refs are the timing source of truth (mutated in the interval callback,
   // read in `finish`); render never touches them directly -- only this
   // state snapshot, copied from the ref once per tick, drives the display.
   const [elapsedMs, setElapsedMs] = useState(0)
 
-  const pattern = useMemo(() => generatePattern(round, rng), [round, rng])
+  // `roundAttempt` is not read inside `generatePattern` -- it exists purely
+  // to force a fresh shuffle at the same length after a miss (`missRound`),
+  // since otherwise this memo would replay byte-for-byte on an unchanged `round`.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pattern = useMemo(() => generatePattern(round, rng), [round, rng, roundAttempt])
   const cellRefs = useRef<(HTMLButtonElement | null)[]>([])
   const submittedRef = useRef(false)
   const roundsClearedRef = useRef(0)
@@ -134,8 +143,12 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
         // Whether this step reveals the next cell or opens the grid for
         // input is decided here, inside the timer callback, never
         // synchronously in the effect body.
-        if (flashIndex + 1 >= pattern.length) setPhase('input')
-        else setFlashIndex((i) => i + 1)
+        if (flashIndex + 1 >= pattern.length) {
+          setPhase('input')
+          setJustMissed(false)
+        } else {
+          setFlashIndex((i) => i + 1)
+        }
       }, FLASH_STEP_MS)
     }
     function handleVisibility() {
@@ -161,8 +174,21 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
     setRoundsCleared(roundsClearedRef.current)
     setSelected([])
     setFlashIndex(0)
+    setJustMissed(false)
     setPhase('flashing')
     setRound((r) => r + 1)
+  }, [])
+
+  // Fix round 1 (B-I1 / ruling 2): the Twitch precedent -- "an early tap
+  // voids that round" -- not the run. A wrong cell scores nothing for this
+  // attempt, re-flashes the same pattern length (a fresh draw, not a
+  // replay), and the overall `timeLimitS` safety net is what ends the run.
+  const missRound = useCallback(() => {
+    setSelected([])
+    setFlashIndex(0)
+    setJustMissed(true)
+    setPhase('flashing')
+    setRoundAttempt((n) => n + 1)
   }, [])
 
   const selectCell = useCallback(
@@ -170,14 +196,14 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
       if (phase !== 'input' || submittedRef.current) return
       const expected = pattern[selected.length]
       if (index !== expected) {
-        finish()
+        missRound()
         return
       }
       const nextSelected = [...selected, index]
       if (nextSelected.length === pattern.length) completeRound()
       else setSelected(nextSelected)
     },
-    [phase, pattern, selected, finish, completeRound]
+    [phase, pattern, selected, missRound, completeRound]
   )
 
   useEffect(() => {
@@ -207,7 +233,14 @@ export default function MemoryGrid({ timeLimitS, reducedMotion, onComplete, onAb
   }
 
   const percentRemaining = totalMs === 0 ? 0 : Math.max(0, 100 - (elapsedMs / totalMs) * 100)
-  const statusText = phase === 'flashing' ? 'Watch the pattern.' : phase === 'input' ? 'Repeat it, in order.' : 'Run complete.'
+  const statusText =
+    phase === 'flashing'
+      ? justMissed
+        ? 'Not quite. Watch it again.'
+        : 'Watch the pattern.'
+      : phase === 'input'
+        ? 'Repeat it, in order.'
+        : 'Run complete.'
 
   return (
     <Card className="mx-auto w-full max-w-2xl">
