@@ -22,7 +22,8 @@
     "db:apply": "node scripts/db-apply.mjs",
     "perf:bundle": "node scripts/check-bundle-budget.mjs",
     "perf:timings": "playwright test e2e/perf.spec.ts --project=chromium",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "design:check": "node scripts/check-design-tokens.mjs"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.39",
