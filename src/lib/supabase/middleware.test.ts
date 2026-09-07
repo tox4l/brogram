@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { CookieMethodsServer } from '@supabase/ssr'
+import { encodeProfileCache, PROFILE_CACHE_COOKIE, PROFILE_CACHE_TTL_MS } from './profile-cache'
 
 const mocks = vi.hoisted(() => ({
   createServerClient: vi.fn(),
@@ -226,5 +227,142 @@ describe('Supabase request proxy', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '')
     expect((await visit('/login')).headers.get('location')).toBeNull()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
+  })
+
+  // W2FIX-P: the ban/restrict gate used to cost every proxy-matched request a
+  // fresh `rpc('lift_expired_restriction')` + `profiles` select, in series
+  // (T3.2 report N2-1, ~500ms measured on a course-tile click). These tests
+  // cover the signed cache cookie that buys that cost back everywhere except
+  // the exercise route, and the security rulings that must survive it.
+  describe('the signed profile-cache cookie', () => {
+    const SERVICE_KEY = 'test-service-role-key'
+    function cacheCookieHeader(account: { account_status: string; restricted_until: string | null }, opts?: { userId?: string; issuedAt?: number }) {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY
+      const value = encodeProfileCache(
+        opts?.userId ?? 'student',
+        account as never,
+        opts?.issuedAt ?? Date.now(),
+      )
+      return `${PROFILE_CACHE_COOKIE}=${value}`
+    }
+
+    beforeEach(() => {
+      vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SERVICE_KEY)
+    })
+
+    it('serves a cached account status with no Supabase round trip at all, on a non-exercise page', async () => {
+      const cookie = cacheCookieHeader({ account_status: 'active', restricted_until: null })
+      const response = await visit('/dashboard', { cookie })
+      expect(response.headers.get('location')).toBeNull()
+      expect(response.headers.get('x-middleware-request-x-brogram-account-status')).toBe('active')
+      expect(mocks.rpc).not.toHaveBeenCalled()
+      expect(mocks.from).not.toHaveBeenCalled()
+    })
+
+    it('keeps a restricted-but-cached account on the dashboard, the same as a fresh restricted read would', async () => {
+      const cookie = cacheCookieHeader({ account_status: 'restricted', restricted_until: '2099-09-06T00:00:00Z' })
+      const dashboard = await visit('/dashboard', { cookie })
+      expect(dashboard.headers.get('location')).toBeNull()
+      expect(dashboard.headers.get('x-middleware-request-x-brogram-account-status')).toBe('restricted')
+      expect(mocks.from).not.toHaveBeenCalled()
+    })
+
+    it('never trusts the cache on the exercise route, even when the cookie is fresh and says active', async () => {
+      // The cookie says "active" (cached moments ago); the real account has
+      // since been restricted. A restriction must bite immediately on
+      // /exercise, so the stale-favorable cookie must never be read there.
+      mocks.maybeSingle.mockResolvedValue({
+        data: { id: 'student', account_status: 'restricted', restricted_until: '2099-09-06T00:00:00Z' }, error: null,
+      })
+      const cookie = cacheCookieHeader({ account_status: 'active', restricted_until: null })
+      const response = await visit('/exercise/ex_1', { cookie })
+      expect(response.headers.get('location')).toBe('https://brogram.test/dashboard')
+      expect(mocks.from).toHaveBeenCalledTimes(1)
+      expect(mocks.rpc).toHaveBeenCalledWith('lift_expired_restriction')
+    })
+
+    it('falls back to a fresh read when the cache cookie signature is tampered', async () => {
+      const cookie = cacheCookieHeader({ account_status: 'active', restricted_until: null })
+      const tampered = cookie.slice(0, -1) + (cookie.at(-1) === 'a' ? 'b' : 'a')
+      mocks.maybeSingle.mockResolvedValue({
+        data: { id: 'student', account_status: 'banned', restricted_until: null }, error: null,
+      })
+      const response = await visit('/dashboard', { cookie: tampered })
+      // A tampered cookie can never win: the real (worse) status is used.
+      expect(response.headers.get('location')).toBe('https://brogram.test/auth/signout')
+      expect(mocks.from).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to a fresh read when the cache cookie belongs to a different user id', async () => {
+      const cookie = cacheCookieHeader({ account_status: 'active', restricted_until: null }, { userId: 'someone-else' })
+      const response = await visit('/dashboard', { cookie })
+      expect(response.headers.get('location')).toBeNull()
+      expect(mocks.from).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to a fresh read when the cache cookie has expired', async () => {
+      const cookie = cacheCookieHeader(
+        { account_status: 'active', restricted_until: null },
+        { issuedAt: Date.now() - PROFILE_CACHE_TTL_MS - 1 },
+      )
+      const response = await visit('/dashboard', { cookie })
+      expect(response.headers.get('location')).toBeNull()
+      expect(mocks.from).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to a fresh read when no cache cookie is present', async () => {
+      const response = await visit('/dashboard')
+      expect(response.headers.get('location')).toBeNull()
+      expect(mocks.from).toHaveBeenCalledTimes(1)
+    })
+
+    it('writes a fresh signed cache cookie, httpOnly, after a cache miss', async () => {
+      const response = await visit('/dashboard')
+      const cookie = response.cookies.get(PROFILE_CACHE_COOKIE)
+      expect(cookie).toBeDefined()
+      expect(cookie?.httpOnly).toBe(true)
+      expect(cookie?.maxAge).toBe(PROFILE_CACHE_TTL_MS / 1000)
+    })
+
+    it('never writes a cache cookie when SUPABASE_SERVICE_ROLE_KEY is not configured', async () => {
+      vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '')
+      const response = await visit('/dashboard')
+      expect(response.cookies.get(PROFILE_CACHE_COOKIE)).toBeUndefined()
+    })
+
+    it('starts the profile select without waiting for the lift rpc to settle (concurrent, not serial)', async () => {
+      let resolveRpc: (value: { data: null; error: null }) => void = () => {}
+      mocks.rpc.mockImplementation(() => new Promise((resolve) => { resolveRpc = resolve }))
+      const pending = visit('/dashboard')
+      // A serial implementation would never call `maybeSingle` until the rpc
+      // promise above settles -- it never does in this test, so this only
+      // resolves under a concurrent (Promise.all) implementation.
+      await vi.waitFor(() => expect(mocks.maybeSingle).toHaveBeenCalled())
+      resolveRpc({ data: null, error: null })
+      const response = await pending
+      expect(response.headers.get('location')).toBeNull()
+    })
+
+    it('clears the cache cookie on a signed-out visit', async () => {
+      mocks.getClaims.mockResolvedValue({ data: null, error: null })
+      const cookie = cacheCookieHeader({ account_status: 'active', restricted_until: null })
+      const response = await visit('/login', { cookie })
+      expect(response.cookies.get(PROFILE_CACHE_COOKIE)?.value).toBe('')
+    })
+
+    it('clears the cache cookie when a fresh read discovers the account banned', async () => {
+      mocks.maybeSingle.mockResolvedValue({
+        data: { id: 'student', account_status: 'banned', restricted_until: null }, error: null,
+      })
+      const response = await visit('/dashboard')
+      expect(response.headers.get('location')).toBe('https://brogram.test/auth/signout')
+      expect(response.cookies.get(PROFILE_CACHE_COOKIE)?.value).toBe('')
+    })
+
+    it('clears the cache cookie on a direct visit to the sign-out handler', async () => {
+      const cookie = cacheCookieHeader({ account_status: 'active', restricted_until: null })
+      const response = await visit('/auth/signout', { cookie })
+      expect(response.cookies.get(PROFILE_CACHE_COOKIE)?.value).toBe('')
+    })
   })
 })

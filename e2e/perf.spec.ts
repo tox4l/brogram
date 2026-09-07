@@ -115,25 +115,19 @@ const env = readEnv()
 // traceable to the one place its number came from.
 // ---------------------------------------------------------------------------------------
 const PAINT = { lcpMsStandard: 1500, lcpMsExercise: 1800, clsMax: 0.05, inpMaxMs: 200 } as const
-// Fix round 3 (N2-1, controller-granted amendment): the plan's original 100ms row assumed
-// `/course/[code]`'s own render was the cost to cut -- it reads zero Supabase rows itself
-// (`useCourseBundle` reads only the static curriculum bundle already warm from the dashboard
-// load), so there was nothing left to move client-side or stream behind a Suspense boundary.
-// The real, measured cost is upstream of this task's file grant: `src/proxy.ts` ->
-// `src/lib/supabase/middleware.ts`'s `updateSession` runs `rpc('lift_expired_restriction')`
-// then a `profiles` select **in series**, both real network round trips against the production
-// Supabase project, on every request the proxy matches -- before `(app)/layout.tsx`'s own
-// six-way `Promise.all` even starts. Adding `prefetch` to the dashboard's course link (tried
-// first) made this *worse* (857ms, 863ms across two production runs) by racing a second,
-// concurrent full-route prefetch against that same serial path instead of moving it off the
-// critical path; reverted (`src/app/(app)/dashboard/page.tsx`'s own comment carries the
-// numbers). Three production runs at the honest baseline (no prefetch, `next build` + `next
-// start`, real Supabase): 503.8ms, 697.1ms, 503.9ms -- worst of three, 697.1, rounded up to the
-// next 50ms is 700. `docs/superpowers/plans/2026-09-06-brogram-v2-plan.md`'s Wave-3 T3.2 row is
-// amended to match. The real fix is parallelizing (or otherwise shortening) the two serial
-// round trips in `src/lib/supabase/middleware.ts` -- out of this task's file grant; flagged in
-// the T3.2 report, Fix round 3, for whoever owns that file next.
-const INTERACTION = { courseTileClickToPaintMs: 700, submitToVerdictMs: 300, lessonCheckToVerdictMs: 120 } as const
+// W2FIX-P (paid the IOU N2-1 left here): the 700ms row above was never the real fix -- it
+// only amended the budget around a cost the T3.2 fix round could not touch, `src/proxy.ts` ->
+// `src/lib/supabase/middleware.ts`'s `updateSession` running `rpc('lift_expired_restriction')`
+// then a `profiles` select **in series** on every proxy-matched request. That request now
+// checks a signed, httpOnly cache cookie first (`src/lib/supabase/profile-cache.ts`, TTL
+// 60s) and skips both Supabase calls entirely on a hit -- true everywhere except `/exercise`,
+// which always re-reads fresh so a restriction still bites immediately, the two calls now run
+// concurrently rather than serially. Three production runs (`next build` + `next start`, real
+// Supabase, scratch worktree) of this exact flow -- dashboard loaded first, same as every
+// real click into a course -- measured 118.3ms, 132.0ms, 125.9ms: worst of three, 132.0,
+// rounded up to the next 50ms is 150. `docs/superpowers/plans/2026-09-06-brogram-v2-plan.md`'s
+// Wave-3 T3.2 row is amended to match.
+const INTERACTION = { courseTileClickToPaintMs: 150, submitToVerdictMs: 300, lessonCheckToVerdictMs: 120 } as const
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
