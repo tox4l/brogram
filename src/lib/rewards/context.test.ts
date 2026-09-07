@@ -149,4 +149,8 @@ describe('XP arithmetic (spec R7.1/R7.2/R7.3, critic-corrected)', () => {
     expect(best - neutral).toBe(15)
     expect(worst - neutral).toBe(-35)
   })
+
+  it('is idempotent: the same (difficulty, hintCount, quality) always yields the same XP (Minor 9)', () => {
+    expect(pointsForPass(3, 2, 55)).toBe(pointsForPass(3, 2, 55))
+  })
 })

@@ -2,8 +2,9 @@
  * Flame states and milestones (spec section 7.4). Pure and total: every
  * input is a plain number or boolean the caller already has (the streak
  * count from `LearnerState.streak`, whether today is already counted, the
- * learner's local hour, and whether this evaluation follows a fresh
- * qualifying action) -- nothing here reads a clock or a calendar itself.
+ * learner's local hour, the same instant's UTC hour, and whether this
+ * evaluation follows a fresh transition) -- nothing here reads a clock or a
+ * calendar itself.
  *
  * Streak copy always frames keeping something good, never impending loss
  * (spec 7.4): no state here is a countdown, and nothing about "at risk" ever
@@ -15,30 +16,60 @@ export type FlameState = 'cold' | 'lit' | 'at-risk' | 'ignite' | 'milestone' | '
 /** Streak lengths that get the bigger burst plus a milestone card (spec 7.4). */
 export const MILESTONES: readonly number[] = [3, 7, 14, 30, 50, 100]
 
-/** The hour (local, 24h) after which an uncounted streak reads as "at risk". */
+/** The hour (24h, either clock -- see `flameState`) after which an uncounted
+ *  streak reads as "at risk". */
 const AT_RISK_LOCAL_HOUR = 18
 
 /**
- * `justCounted` means this evaluation follows a transition worth flagging --
- * either a qualifying action that was just recorded, or the on-load check
- * that discovered the streak already broke since the last visit. The two
- * are told apart by the resulting `streak` value alone: landing on a
- * positive count means a win just landed (`ignite`, or `milestone` if that
- * count is one of `MILESTONES`); landing on zero means the streak just died
- * (`reset`). Outside of that transition, the state is a plain read of where
- * the streak already stands: `cold` at zero, `at-risk` once the local hour
- * has passed `AT_RISK_LOCAL_HOUR` with nothing counted yet today, and `lit`
- * otherwise -- including a positive streak earlier in the day that has not
- * yet been extended, which is not yet urgent and never rendered as if it
- * were (spec 7.4: no countdown, no guilt trip before there is a real risk).
+ * `justTransitioned` (fix round 1: renamed from `justCounted`, which said
+ * nothing about the on-load call and shipped `reset` untested and
+ * unreachable -- Important 2 / Ruling 3) means this evaluation follows a
+ * transition worth flagging. The caller passes `true` from its **own**
+ * before/after comparison, in exactly two circumstances -- never as a
+ * blanket "this is the mount render" or "this is the post-action render"
+ * flag:
+ *
+ *  - **A fresh win**: immediately after recording a qualifying action that
+ *    took the streak from not-yet-counted-today to counted -- the day's
+ *    first qualifying action. `streak` is the count *after* that action, so
+ *    it is always positive here -- this produces `ignite` (or `milestone`
+ *    when the new count is one of `MILESTONES`).
+ *  - **A fresh death**: the one on-load check that compares the freshly
+ *    loaded streak against what the caller last knew and finds it dropped to
+ *    zero since the last visit. `streak` is 0 here and this produces `reset`.
+ *
+ * Every other evaluation passes `false` -- including a mount that finds the
+ * streak still alive (nothing transitioned; it is read exactly like any
+ * other quiet render, below), and every same-day action *after* the first
+ * (so `ignite` never replays on a learner's second or third rep of the day).
+ * A plain (`false`) evaluation is: `cold` at zero streak, `at-risk` once
+ * either clock has passed `AT_RISK_LOCAL_HOUR` with nothing counted yet
+ * today (see the two-clock note below), and `lit` otherwise -- including a
+ * positive streak earlier in the day that has not yet been extended, which
+ * is not yet urgent and never rendered as if it were (spec 7.4: no
+ * countdown, no guilt trip before there is a real risk).
+ *
+ * `localHour` and `utcHour` are both read for "at risk" (Important 4, fix
+ * round 1): the streak day itself rolls on a UTC date key (spec 7.4's
+ * server-clock ruling; `RewardContext.today` is a UTC key), so the real
+ * deadline is the UTC roll, not the learner's local evening. A learner east
+ * of UTC (Doha, UTC+3) can be two hours from losing the streak at 01:00
+ * local -- `localHour` alone would read `lit` right up to the moment it
+ * dies. Either clock crossing the hour is enough, so the cue still reads as
+ * "your evening" for a learner near UTC while never staying quiet for one
+ * whose local clock rolled into a new day before the streak's UTC day did.
  */
-export function flameState(streak: number, countedToday: boolean, localHour: number, justCounted: boolean): FlameState {
-  if (justCounted) {
-    if (streak <= 0) return 'reset'
-    return MILESTONES.includes(streak) ? 'milestone' : 'ignite'
-  }
+export function flameState(
+  streak: number,
+  countedToday: boolean,
+  localHour: number,
+  utcHour: number,
+  justTransitioned: boolean,
+): FlameState {
+  if (justTransitioned && streak <= 0) return 'reset'
   if (streak <= 0) return 'cold'
-  if (!countedToday && localHour >= AT_RISK_LOCAL_HOUR) return 'at-risk'
+  if (justTransitioned) return MILESTONES.includes(streak) ? 'milestone' : 'ignite'
+  if (!countedToday && (localHour >= AT_RISK_LOCAL_HOUR || utcHour >= AT_RISK_LOCAL_HOUR)) return 'at-risk'
   return 'lit'
 }
 

@@ -11,7 +11,7 @@
 import type { Achievement, CloId, DrillResult, Language, Mastery } from '@/lib/contracts'
 import { ACHIEVEMENTS, levelForXp } from '@/lib/contracts'
 import { clo, course } from '@/lib/curriculum'
-import type { RewardContext } from './context'
+import type { RewardAttempt, RewardContext } from './context'
 
 export type AchievementPredicate = (ctx: RewardContext) => boolean
 
@@ -23,11 +23,23 @@ function masteryValues(ctx: RewardContext): Mastery[] {
   return Object.values(ctx.state.mastery)
 }
 
-/** A CLO counts as "touched" the moment it has any recorded progress -- a
- *  chain in progress, a closed skill, a pattern ever passed, or a recorded
- *  attempt -- not only once it closes. */
+/**
+ * A CLO counts as "touched" the moment it has any recorded **pass** -- a
+ * chain in progress, a closed skill, or a pattern ever passed -- not only
+ * once it closes.
+ *
+ * Fix round 1 (Critical 1): this used to also count `lastAttemptAt !== null`,
+ * which `applyFail` sets on every failure too (`src/lib/learner/score.ts`),
+ * not only on a pass. That let `two-tongues` unlock on two *failed* reps in
+ * two different-language courses -- a permanent, unrecoverable wrong unlock,
+ * since migration 0007 grants `user_achievements` insert-only, no update, no
+ * delete. Every remaining clause here (`closed`, `chain > 0`,
+ * `patternsPassed.length > 0`) is pass-derived only, so a pass always leaves
+ * a trace here and a fail never does (`src/lib/learner/score.ts`'s
+ * `applyFail` zeroes `chain` and leaves `patternsPassed` untouched).
+ */
 function isTouched(mastery: Mastery): boolean {
-  return mastery.closed || mastery.chain > 0 || mastery.patternsPassed.length > 0 || mastery.lastAttemptAt !== null
+  return mastery.closed || mastery.chain > 0 || mastery.patternsPassed.length > 0
 }
 
 const MEDIUM_OR_HARDER = 3
@@ -79,7 +91,13 @@ const readTheManual: AchievementPredicate = (ctx) =>
  *  curriculum's own CLO lookup (`clo(id).course`) -- pure, static, bundled
  *  data, the same lookup `src/lib/course/map.ts` already keys off of `Clo`
  *  objects for. Fires for the first course where every counted lesson
- *  (`courseLessonCounts`) has a completed row. */
+ *  (`courseLessonCounts`) has a completed row.
+ *
+ *  `courseLessonCounts` is trusted as the authoritative denominator (Minor
+ *  2): this predicate never re-derives it from the curriculum, so the
+ *  caller building `RewardContext` owns the "non-draft, shipped lessons
+ *  only" rule -- `Clo.draft` CLOs (e.g. every INFS1201 CLO today) must not
+ *  be counted toward a total this predicate can actually complete. */
 const fullRead: AchievementPredicate = (ctx) => {
   const completedByCourse = new Map<string, number>()
   for (const progress of ctx.lessonProgress) {
@@ -105,16 +123,30 @@ const COMEBACK_FAIL_THRESHOLD = 3
  * that scrolled out of the last 50 attempts cannot fire this, and pretending
  * otherwise would make it a silently-broken achievement instead of an honest
  * one (spec 7.5 #8 critic).
+ *
+ * Order-aware (Minor 1, fix round 1): `ctx.attempts` arrives most-recent-
+ * first (`context.ts`'s documented convention), so for each exercise this
+ * walks newest-to-oldest and, for every pass found, counts only the fails
+ * *older* than it (later in the array). A pass that came before three fails
+ * (chronologically) -- the fails are newer, not older -- must not fire this;
+ * the achievement is "you came back", not "you happened to fail after".
  */
 const comeback: AchievementPredicate = (ctx) => {
-  const byExercise = new Map<string, { passed: number; failed: number }>()
+  const byExercise = new Map<string, RewardAttempt[]>()
   for (const attempt of ctx.attempts) {
-    const bucket = byExercise.get(attempt.exerciseId) ?? { passed: 0, failed: 0 }
-    if (attempt.passed) bucket.passed += 1
-    else bucket.failed += 1
-    byExercise.set(attempt.exerciseId, bucket)
+    const list = byExercise.get(attempt.exerciseId)
+    if (list) list.push(attempt)
+    else byExercise.set(attempt.exerciseId, [attempt])
   }
-  return [...byExercise.values()].some((bucket) => bucket.passed >= 1 && bucket.failed >= COMEBACK_FAIL_THRESHOLD)
+
+  for (const attempts of byExercise.values()) {
+    for (let i = 0; i < attempts.length; i += 1) {
+      if (!attempts[i].passed) continue
+      const olderFails = attempts.slice(i + 1).filter((a) => !a.passed).length
+      if (olderFails >= COMEBACK_FAIL_THRESHOLD) return true
+    }
+  }
+  return false
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +173,11 @@ const TWO_TONGUES_TARGET = 2
  * (`clo(id).course` then `course(code).language`, both pure static lookups),
  * so the language set only grows and is never subject to a rolling cap
  * (spec 7.5 #10 critic).
+ *
+ * Reads `course(code).language` only, never `secondaryLanguage` (e.g.
+ * INFS2201's `mongo`) -- a mongo-only rep never counts as a second language
+ * here. Under-fires only, which is the safe direction for an honesty-first
+ * achievement (Minor 4).
  */
 const twoTongues: AchievementPredicate = (ctx) => {
   const languages = new Set<Language>()
@@ -193,6 +230,16 @@ const keptThePromise: AchievementPredicate = (ctx) => ctx.prefs.goalDays.length 
 // ---------------------------------------------------------------------------
 
 const LANE_RUN_TARGET = 10
+
+/**
+ * "Finish ten Arcade / Playground runs." Counts `drillResults` rows directly
+ * for the lane -- see `RewardContext.drillResults`'s doc comment (Important
+ * 5, fix round 1): this is correct once one row is one completed run, which
+ * is already true for Playground but not yet true for Arcade (still one row
+ * per drill item as shipped). `sharp` will fire roughly 6x too early for
+ * Arcade until T2.9a's run model lands; that gap is T2.9a's obligation, not
+ * a bug in this count.
+ */
 const sharp: AchievementPredicate = (ctx) => ctx.drillResults.filter((d) => d.lane === 'arcade').length >= LANE_RUN_TARGET
 const touchGrass: AchievementPredicate = (ctx) => ctx.drillResults.filter((d) => d.lane === 'play').length >= LANE_RUN_TARGET
 

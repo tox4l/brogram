@@ -220,23 +220,37 @@ describe('full-read', () => {
   it('does not fire while a lesson in that course is still incomplete', () => {
     expect(PREDICATES['full-read'](ctx({ lessonProgress: allFour.slice(0, 3), courseLessonCounts: { INFS1101: 4 } }))).toBe(false)
   })
+
+  it('trusts courseLessonCounts as the authoritative denominator, whatever the caller decided to count (Minor 2)', () => {
+    // The caller's contract is to exclude draft-only lessons before handing
+    // this a total; the predicate itself never re-derives the count from the
+    // curriculum, so a denominator of 1 is satisfied by exactly one completed row.
+    const oneNonDraftLesson = [lessonProgress({ lessonId: 'INFS1101-1', cloId: 'INFS1101-1', status: 'completed' })]
+    expect(PREDICATES['full-read'](ctx({ lessonProgress: oneNonDraftLesson, courseLessonCounts: { INFS1101: 1 } }))).toBe(true)
+  })
 })
 
 describe('comeback', () => {
-  it('fires on a pass after three or more fails on the same exercise', () => {
+  // ctx.attempts is documented as most-recent-first (context.ts), so a real
+  // fail-fail-fail-then-pass sequence is stored newest (the pass) first,
+  // oldest (the first fail) last -- exactly the reverse of how someone would
+  // naturally list them out.
+
+  it('fires on a pass after three or more OLDER fails on the same exercise', () => {
     const attempts = [
+      attempt({ exerciseId: 'ex-1', passed: true }), // newest: the comeback pass
       attempt({ exerciseId: 'ex-1', passed: false }),
       attempt({ exerciseId: 'ex-1', passed: false }),
-      attempt({ exerciseId: 'ex-1', passed: false }),
-      attempt({ exerciseId: 'ex-1', passed: true }),
+      attempt({ exerciseId: 'ex-1', passed: false }), // oldest
     ]
     expect(PREDICATES.comeback(ctx({ attempts }))).toBe(true)
   })
-  it('does not fire on only two fails, or fails spread across different exercises', () => {
+
+  it('does not fire on only two older fails, or fails spread across different exercises', () => {
     const twoFails = [
+      attempt({ exerciseId: 'ex-1', passed: true }), // newest
       attempt({ exerciseId: 'ex-1', passed: false }),
-      attempt({ exerciseId: 'ex-1', passed: false }),
-      attempt({ exerciseId: 'ex-1', passed: true }),
+      attempt({ exerciseId: 'ex-1', passed: false }), // oldest
     ]
     expect(PREDICATES.comeback(ctx({ attempts: twoFails }))).toBe(false)
 
@@ -247,6 +261,19 @@ describe('comeback', () => {
       attempt({ exerciseId: 'ex-1', passed: true }),
     ]
     expect(PREDICATES.comeback(ctx({ attempts: spread }))).toBe(false)
+  })
+
+  it('does not fire when the fails come AFTER the pass -- order matters (Minor 1)', () => {
+    // Chronologically the learner passed first, then failed three times --
+    // that is not "came back", and must not be confused with it just
+    // because the same three-fails-plus-a-pass counts are present.
+    const attempts = [
+      attempt({ exerciseId: 'ex-1', passed: false }), // newest
+      attempt({ exerciseId: 'ex-1', passed: false }),
+      attempt({ exerciseId: 'ex-1', passed: false }),
+      attempt({ exerciseId: 'ex-1', passed: true }), // oldest: the pass came first
+    ]
+    expect(PREDICATES.comeback(ctx({ attempts }))).toBe(false)
   })
 
   it('only reads the given attempts window -- a fail-heavy exercise that scrolled out never fires (spec 7.5 #8 critic)', () => {
@@ -293,6 +320,21 @@ describe('two-tongues', () => {
     expect(PREDICATES['two-tongues'](ctx({ state: untouched }))).toBe(false)
   })
 
+  it('does not fire on two FAILED reps in two different-language courses (Critical 1)', () => {
+    // applyFail (src/lib/learner/score.ts) sets lastAttemptAt on every
+    // failure too, not only on a pass -- chain stays 0, patternsPassed stays
+    // empty, closed stays false. A permanent, unrecoverable wrong unlock
+    // (migration 0007 grants user_achievements insert-only) if this ever
+    // regresses.
+    const twoFailedCourses = learnerState({
+      mastery: {
+        'INFS1101-1': mastery({ cloId: 'INFS1101-1', chain: 0, patternsPassed: [], closed: false, lastAttemptAt: '2026-09-06T10:00:00.000Z' }),
+        'INFS2101-1': mastery({ cloId: 'INFS2101-1', chain: 0, patternsPassed: [], closed: false, lastAttemptAt: '2026-09-06T11:00:00.000Z' }),
+      },
+    })
+    expect(PREDICATES['two-tongues'](ctx({ state: twoFailedCourses }))).toBe(false)
+  })
+
   it('survives a 50-row-aged-out attempts window because it reads mastery, not attempts (spec 7.5 #10 critic)', () => {
     const state = learnerState({
       mastery: {
@@ -311,11 +353,11 @@ describe('pattern-hunter', () => {
     const state = learnerState({ mastery: { 'INFS1101-1': mastery({ patternsPassed: patterns }) } })
     expect(PREDICATES['pattern-hunter'](ctx({ state }))).toBe(true)
   })
-  it('does not fire below ten, even split across skills', () => {
+  it('does not fire at nine, even split across skills (Minor 8: the n-1 boundary)', () => {
     const state = learnerState({
       mastery: {
-        'INFS1101-1': mastery({ cloId: 'INFS1101-1', patternsPassed: ['a', 'b', 'c'] }),
-        'INFS1101-2': mastery({ cloId: 'INFS1101-2', patternsPassed: ['d', 'e'] }),
+        'INFS1101-1': mastery({ cloId: 'INFS1101-1', patternsPassed: ['a', 'b', 'c', 'd', 'e'] }),
+        'INFS1101-2': mastery({ cloId: 'INFS1101-2', patternsPassed: ['f', 'g', 'h', 'i'] }),
       },
     })
     expect(PREDICATES['pattern-hunter'](ctx({ state }))).toBe(false)
@@ -361,6 +403,20 @@ describe('sharp / touch-grass', () => {
     expect(PREDICATES.sharp(ctx({ drillResults: playRuns }))).toBe(false)
     const nineArcade = Array.from({ length: 9 }, () => drillResult({ lane: 'arcade' }))
     expect(PREDICATES.sharp(ctx({ drillResults: nineArcade }))).toBe(false)
+  })
+})
+
+describe('invariant: one DrillResult row is one completed run (spec 7.9, Important 5)', () => {
+  it('sharp counts run-shaped rows directly -- ten rows is ten runs', () => {
+    // This is the contract `sharp` / `touch-grass` / `winsToday`'s de-rot
+    // term all rely on. It already holds for Playground (one DrillResult per
+    // 60-120s game). It does NOT yet hold for Arcade, which as shipped still
+    // writes one row per drill item, not per six-item run (spec 7.9) --
+    // T2.9a's run model is what makes this literally true for both lanes.
+    // Named here so a future change to either side of the contract has a
+    // test to fail against.
+    const tenRunShapedRows = Array.from({ length: 10 }, () => drillResult({ lane: 'arcade' }))
+    expect(PREDICATES.sharp(ctx({ drillResults: tenRunShapedRows }))).toBe(true)
   })
 })
 

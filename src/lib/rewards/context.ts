@@ -45,9 +45,26 @@ export interface RewardContext {
   attempts: readonly RewardAttempt[]
   activityDays: readonly ActivityDay[]
   lessonProgress: readonly LessonProgress[]
-  /** The capped 300-row drill_results window (spec R7.6b). Oldest first. */
+  /**
+   * The capped 300-row drill_results window (spec R7.6b). Oldest first.
+   *
+   * Invariant this module assumes but does not itself enforce (Important 5,
+   * fix round 1): one row is one *completed run*. That is already true for
+   * every Playground game (one `DrillResult` per 60-120s game) but not yet
+   * true for Arcade, which as shipped still writes one row per drill *item*
+   * -- a run is meant to be six items (spec 7.9). `sharp`, `touch-grass` and
+   * `winsToday`'s de-rot term all count rows directly and will over-count
+   * Arcade "runs" by roughly 6x until T2.9a lands the run model that makes
+   * one row equal one run for both lanes. See achievements.test.ts's
+   * "invariant: one DrillResult row is one completed run" block.
+   */
   drillResults: readonly DrillResult[]
   prefs: WellnessPrefs
+  /** Per-course total of *countable* walkthroughs -- non-draft, shipped
+   *  lessons only (Minor 2). `full-read` (achievements.ts) trusts this
+   *  number as the authoritative denominator and never re-derives it from
+   *  the curriculum; a caller that includes a draft CLO's lesson in this
+   *  count hands `full-read` a target it can never actually reach. */
   courseLessonCounts: Readonly<Record<CourseCode, number>>
   /** UTC date key ("YYYY-MM-DD"), read from the server clock the caller supplies. */
   today: string

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_WELLNESS, type DrillResult, type LearnerState, type LessonProgress } from '@/lib/contracts'
 import type { RewardAttempt, RewardContext } from './context'
-import { goalMet, levelBand, winsToday } from './goal'
+import { goalMet, levelBand, levelsCrossed, nextGoalDays, shouldRecordGoalDay, winsToday } from './goal'
 
 function learnerState(over: Partial<LearnerState> = {}): LearnerState {
   return {
@@ -157,6 +157,47 @@ describe('goalMet', () => {
   })
 })
 
+describe('shouldRecordGoalDay / nextGoalDays', () => {
+  it('is false, and returns null, when the goal is not met today', () => {
+    const context = ctx({ prefs: { ...DEFAULT_WELLNESS, dailyGoal: 3, goalDays: [] }, attempts: [] })
+    expect(shouldRecordGoalDay(context)).toBe(false)
+    expect(nextGoalDays(context)).toBeNull()
+  })
+
+  it('same-day repeat: is false once today is already recorded, even though the goal is met', () => {
+    const context = ctx({
+      today: '2026-09-06',
+      prefs: { ...DEFAULT_WELLNESS, dailyGoal: 1, goalDays: ['2026-09-06'] },
+      attempts: [attempt({ passed: true })],
+    })
+    expect(shouldRecordGoalDay(context)).toBe(false)
+    expect(nextGoalDays(context)).toBeNull()
+  })
+
+  it('next day: is true and appends today once the goal is met and today is not yet recorded', () => {
+    const context = ctx({
+      today: '2026-09-06',
+      prefs: { ...DEFAULT_WELLNESS, dailyGoal: 1, goalDays: ['2026-09-05'] },
+      attempts: [attempt({ passed: true, createdAt: '2026-09-06T10:00:00.000Z' })],
+    })
+    expect(shouldRecordGoalDay(context)).toBe(true)
+    expect(nextGoalDays(context)).toEqual(['2026-09-05', '2026-09-06'])
+  })
+
+  it('caps the appended result at 120, dropping the oldest', () => {
+    const goalDays = Array.from({ length: 120 }, (_, i) => `2026-01-${String((i % 28) + 1).padStart(2, '0')}-${i}`)
+    const context = ctx({
+      today: '2026-09-06',
+      prefs: { ...DEFAULT_WELLNESS, dailyGoal: 1, goalDays },
+      attempts: [attempt({ passed: true, createdAt: '2026-09-06T10:00:00.000Z' })],
+    })
+    const next = nextGoalDays(context)
+    expect(next).toHaveLength(120)
+    expect(next?.[next.length - 1]).toBe('2026-09-06')
+    expect(next).not.toContain(goalDays[0])
+  })
+})
+
 describe('levelBand', () => {
   it('matches every table boundary from spec 7.3', () => {
     expect(levelBand(1)).toBe('Fresh')
@@ -177,5 +218,31 @@ describe('levelBand', () => {
     expect(levelBand(0)).toBe('Fresh')
     expect(levelBand(-5)).toBe('Fresh')
     expect(levelBand(40)).toBe('Machine')
+  })
+})
+
+describe('levelsCrossed', () => {
+  it('returns nothing when no threshold was crossed', () => {
+    // 4 medium passes = 1,340 XP, still short of level 3's 1,400 (spec R7.1/R7.2).
+    expect(levelsCrossed(1340, 1399)).toEqual([])
+  })
+
+  it('returns nothing when XP did not move forward', () => {
+    expect(levelsCrossed(1400, 1340)).toEqual([])
+    expect(levelsCrossed(1400, 1400)).toEqual([])
+  })
+
+  it('returns exactly one level for a single-threshold crossing', () => {
+    // xpToReach(2) === 500 (spec 7.3 table).
+    expect(levelsCrossed(0, 500)).toEqual([2])
+  })
+
+  it('returns every level crossed, in order, for a jump that skips more than one threshold', () => {
+    // 1,340 XP (level 2) to 2,600 XP crosses both level 3 (1,400) and level 4 (2,600).
+    expect(levelsCrossed(1340, 2600)).toEqual([3, 4])
+  })
+
+  it('is capped at MAX_LEVEL -- nothing past level 30 (spec 7.3: "the level stays 30")', () => {
+    expect(levelsCrossed(78_100, 200_000)).toEqual([])
   })
 })
