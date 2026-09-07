@@ -2,13 +2,15 @@
 
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Check, Play, Send, X } from 'lucide-react'
 import { line, lineWith } from '@/lib/voice/lines'
 import { angleWord, difficultyWord, repWord } from '@/lib/voice/glossary'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { useSession } from '@/store/session'
+import { useWellness } from '@/lib/query/hooks'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useExerciseLoop } from '@/hooks/useExerciseLoop'
 import { useLockdown } from '@/hooks/useLockdown'
 import { PromptPanel } from '@/components/exercise/PromptPanel'
@@ -45,13 +47,34 @@ const DynamicEditor = dynamic(() => import('@/components/exercise/Editor').then(
 const DynamicSchemaEditor = dynamic(() => import('@/components/exercise/SchemaEditor').then((mod) => mod.SchemaEditor), { ssr: false, loading: EditorSkeleton })
 
 function ExerciseWorkspace({ id }: { id: string }) {
-  const loop = useExerciseLoop(id)
+  // V4 / A11Y-03 (wave 2 review): a bare `useReducedMotion()` call means 'system' -- it can never
+  // see a learner who set Reduced (or Full) in the app on an OS reporting no preference either
+  // way, which is exactly the load-bearing case the pass-moment celebration exists to respect.
+  // `(app)/layout.tsx` already seeds the resolved wellness row into the query cache (the same
+  // pattern `ThemeQuickSwitch`/the dashboard already use), so this costs zero extra requests.
+  const wellnessQuery = useWellness()
+  const motionPref = resolveWellnessPrefs(wellnessQuery.data?.prefs).motion
+  const loop = useExerciseLoop(id, motionPref)
   const router = useRouter()
   const resultsRef = useRef<HTMLDivElement>(null)
   // Fix round 3 (T2.8's returnFocusRef, previously wired nowhere): the same ref goes into the
   // editor (which populates it once its CodeMirror view exists) and into LockdownOverlay (which
   // calls `.focus()` on it the instant the overlay lifts or the paste "why" panel closes).
+  // X6 (wave 2 review): the three answer-form kinds below now populate it too -- it used to stay
+  // permanently null on `predict-output`/`spot-the-bug`/`trace`, making both of LockdownOverlay's
+  // return-focus effects silent no-ops on those kinds.
   const editorFocusRef = useRef<Focusable | null>(null)
+  // X6: the floor `LockdownOverlay` falls back to when `returnFocusRef` has nothing to focus --
+  // focus never lands on `<body>` regardless of the exercise kind on screen.
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  // A11Y-05 (wave 2 review): the heading is a focus target for every exercise transition -- an
+  // in-place `next()` swap unmounts the "Next rep" button the learner just activated (`outcome`
+  // resets to null) with no route change and no `document.title` change for the App Router's own
+  // announcer to react to, so without this focus drops to `<body>` on the single most repeated
+  // action in the product. A layout effect keeps the move inside the same paint the swap itself
+  // commits in. Fires on a genuine mount too (a fresh load, or the store-hydrated remount `next()`
+  // causes), which is harmless -- the same behaviour a route change would already produce.
+  const headingRef = useRef<HTMLHeadingElement>(null)
   // Fix round 5 (T2.2 review of round 4, C1, belt and braces): `router.replace()` is back for the
   // in-place transition (see the hook's own comment), so the URL param genuinely does update on
   // `next()` -- but this reads the LOADED exercise, not the param, anyway: every event `logIntegrity`
@@ -61,6 +84,13 @@ function ExerciseWorkspace({ id }: { id: string }) {
   // back to `id` only covers the instant before the very first exercise has loaded.
   const lockdown = useLockdown(loop.exercise?.id ?? id, { duringAttempt: loop.duringAttempt, enabled: Boolean(loop.exercise) })
   const exercise = loop.exercise
+  useLayoutEffect(() => {
+    if (exercise) headingRef.current?.focus()
+    // Keyed on the exercise's identity only: a re-render that leaves the same exercise on
+    // screen (a retry, an in-flight save reconciling) must not steal focus back to the heading
+    // a second time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise?.id])
   if (!exercise) return <section aria-label="Rep" className="mx-auto max-w-xl space-y-4 py-12">
     <h1 className="text-2xl font-medium tracking-tight">{loop.status === 'loading' ? 'Opening your rep' : 'This rep could not open'}</h1>
     <p role={loop.error ? 'alert' : 'status'} className="text-sm leading-relaxed text-muted-foreground">{loop.error ?? 'Loading your prompt and starting code.'}</p>
@@ -83,10 +113,17 @@ function ExerciseWorkspace({ id }: { id: string }) {
     } catch { traceUnanswerable = true }
   }
 
-  return <div {...lockdown.containerProps} className="relative min-w-0 space-y-5" data-testid="exercise-workspace" data-exercise-id={exercise.id} data-pattern={exercise.pattern}>
+  return <div {...lockdown.containerProps} ref={workspaceRef} tabIndex={-1} className="relative min-w-0 space-y-5 outline-none" data-testid="exercise-workspace" data-exercise-id={exercise.id} data-pattern={exercise.pattern}>
+    {/* A11Y-05: the visible heading (focused above) already carries the new title, but a
+        screen-reader user is not guaranteed to hear a plain focused heading read out reliably in
+        every browser/AT combination -- this sr-only line (mirroring `RunSummary.tsx`'s own
+        "announce it, don't rely on focus alone" pattern) is the load-bearing half, since neither
+        the in-place swap nor the store-hydrated remount changes `document.title` for the App
+        Router's own announcer to react to. */}
+    <p role="status" aria-live="polite" className="sr-only">{`Rep opened. ${exercise.title}.`}</p>
     <div className="space-y-3" inert={Boolean(lockdown.overlay)}>
       <Link href="/dashboard" className="inline-flex items-center gap-1.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-3" aria-hidden="true" />Courses</Link>
-      <div className="flex flex-wrap items-start justify-between gap-3"><h1 className="min-w-0 max-w-4xl text-2xl font-medium tracking-tight">{exercise.title}</h1><p className="pt-1 font-mono text-xs text-muted-foreground">{exercise.language} · {difficultyWord(exercise.difficulty)}</p></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><h1 ref={headingRef} tabIndex={-1} className="min-w-0 max-w-4xl text-2xl font-medium tracking-tight outline-none">{exercise.title}</h1><p className="pt-1 font-mono text-xs text-muted-foreground">{exercise.language} · {difficultyWord(exercise.difficulty)}</p></div>
     </div>
 
     {loop.error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-3 text-sm"><p className="min-w-0 flex-1">{loop.error}</p><Button variant="outline" disabled={loop.busy} onClick={() => void loop.retry()} className="transition-none">Try again</Button></div>}
@@ -98,9 +135,9 @@ function ExerciseWorkspace({ id }: { id: string }) {
       <div className="min-w-0 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:pr-1" style={{ viewTransitionName: 'exercise-prompt' }}><PromptPanel exercise={exercise} clo={loop.clo} /></div>
       <section aria-label="Work" className="min-w-0 self-start overflow-hidden rounded-xl border border-border bg-background">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><h2 className="text-sm font-medium">{exercise.kind === 'code' || exercise.kind === 'schema' ? 'Code' : 'Answer'}</h2></div>
-        {exercise.kind === 'predict-output' || (exercise.kind === 'trace' && traceUnanswerable) ? <PredictOutput snippet={exercise.starterCode} {...answerProps} />
-          : exercise.kind === 'spot-the-bug' ? <SpotTheBug snippet={exercise.starterCode} {...answerProps} />
-          : exercise.kind === 'trace' ? <Trace snippet={exercise.starterCode} variables={variables} {...answerProps} />
+        {exercise.kind === 'predict-output' || (exercise.kind === 'trace' && traceUnanswerable) ? <PredictOutput snippet={exercise.starterCode} {...answerProps} focusRef={editorFocusRef} />
+          : exercise.kind === 'spot-the-bug' ? <SpotTheBug snippet={exercise.starterCode} {...answerProps} focusRef={editorFocusRef} />
+          : exercise.kind === 'trace' ? <Trace snippet={exercise.starterCode} variables={variables} {...answerProps} focusRef={editorFocusRef} />
           : exercise.kind === 'schema' ? <DynamicSchemaEditor {...answerProps} logIntegrity={lockdown.logIntegrity} focusRef={editorFocusRef} />
           : <DynamicEditor {...answerProps} language={exercise.language} logIntegrity={lockdown.logIntegrity} focusRef={editorFocusRef} />}
         <div className="space-y-3 border-t border-border p-3">
@@ -130,9 +167,9 @@ function ExerciseWorkspace({ id }: { id: string }) {
             <span className="text-sm font-medium">{loop.outcome === 'passed' ? 'Passed' : 'Needs work'}</span>
           </div>
           {loop.outcome === 'passed' && <div className="flex items-center gap-4">
-            <ChainPips count={loop.chain} />
+            <ChainPips count={loop.chain} motionPref={motionPref} />
             <span className={loop.pointsProvisional ? 'border-b border-dashed border-muted-foreground/50' : undefined}>
-              <XpCounter value={loop.pointsEarned} label="points earned" className="font-mono text-sm" />
+              <XpCounter value={loop.pointsEarned} label="points earned" className="font-mono text-sm" motionPref={motionPref} />
             </span>
           </div>}
         </div>}
@@ -173,9 +210,11 @@ function ExerciseWorkspace({ id }: { id: string }) {
         were built and tested but never threaded through this page -- wired here so the "Why?"
         toggle and the note are actually visible, not just logged underneath. `returnFocusRef`
         (fix round 3) is the same ref the editor above populates, so focus comes back to it the
-        instant the overlay lifts or the "why" explanation closes, instead of staying lost. */}
-    <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} pasteMessage={lockdown.pasteMessage} pasteWhy={lockdown.pasteWhy} printscreenNote={lockdown.printscreenNote} returnFocusRef={editorFocusRef} />
-    <Celebration onOpenShelf={() => router.push('/account#trophies')} resultsAnchorRef={resultsRef} />
+        instant the overlay lifts or the "why" explanation closes, instead of staying lost.
+        `fallbackFocusRef` (X6) is the workspace container itself, tried only when a kind never
+        populated `returnFocusRef` -- focus never lands on `<body>` for any kind. */}
+    <LockdownOverlay reason={lockdown.overlay} onResume={lockdown.resume} pasteMessage={lockdown.pasteMessage} pasteWhy={lockdown.pasteWhy} printscreenNote={lockdown.printscreenNote} returnFocusRef={editorFocusRef} fallbackFocusRef={workspaceRef} />
+    <Celebration motionPref={motionPref} onOpenShelf={() => router.push('/account#trophies')} resultsAnchorRef={resultsRef} />
   </div>
 }
 

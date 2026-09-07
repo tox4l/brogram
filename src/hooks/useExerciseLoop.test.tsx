@@ -11,7 +11,7 @@ import { __resetExerciseLoopModuleStateForTests, useExerciseLoop } from './useEx
 const spies = vi.hoisted(() => ({
   call: vi.fn(), stream: vi.fn(), run: vi.fn(), warmup: vi.fn(), abort: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(),
   from: vi.fn(), progress: vi.fn(), exerciseFrom: vi.fn<(code: string, id: string) => unknown>(() => null), celebrate: vi.fn(), play: vi.fn(),
-  invalidate: vi.fn(),
+  invalidate: vi.fn(), getQueryData: vi.fn(),
 }))
 vi.mock('@/lib/agents/client', () => ({ callAgent: spies.call, streamAgent: spies.stream }))
 vi.mock('@/lib/runtimes', () => ({ getRuntime: vi.fn(() => ({ language: 'javascript', run: spies.run, warmup: spies.warmup, abort: spies.abort })), subscribeRuntimeProgress: spies.progress }))
@@ -23,7 +23,10 @@ vi.mock('@/lib/sound/manager', () => ({ play: spies.play }))
 // Fix round 5: `onUserChange` is a real, top-level side effect this hook now runs at module load
 // (registering its own cleanup with `src/lib/query/client.ts`'s registry) -- mocked as a no-op
 // here since this file tests the hook, not the registry (that lives in `client.test.ts`).
-vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: spies.invalidate }), onUserChange: () => {} }))
+// `getQueryData` is new (X1/X7): `recordRewardsAfterSettle` reads `lessonProgress`/`wellness`/
+// `achievements` straight from the cache -- `spies.getQueryData` defaults to "nothing cached"
+// (below) so every existing test keeps exercising the honest cold-cache path unless it opts in.
+vi.mock('@/lib/query/client', () => ({ getQueryClient: () => ({ invalidateQueries: spies.invalidate, getQueryData: spies.getQueryData }), onUserChange: () => {} }))
 vi.mock('@/lib/rewards/useCelebration', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rewards/useCelebration')>()
   return { ...actual, celebrate: spies.celebrate }
@@ -57,6 +60,10 @@ const envelope = (agent: AgentName, reply: unknown): AgentEnvelope<unknown> => (
 type Row = Record<string, unknown>
 let tables: Record<string, Row[]>
 let failWrite: string | null
+/** X1: simulates schema 0005, where `user_achievements` does not exist yet -- a real Postgres
+ *  "relation does not exist" carries `code: '42P01'`, which `record.ts`'s `isMissingObjectError`
+ *  checks for to no-op instead of throwing. */
+let missingTable: string | null = null
 let loseStateAck = false
 let store: LearnerState
 let lastOrFilter: string | null = null
@@ -89,16 +96,17 @@ function query(table: string) {
     insert: (value: Row | Row[]) => { action = 'insert'; payload = value; return builder },
     upsert: (value: Row | Row[], options?: { ignoreDuplicates?: boolean }) => { action = options?.ignoreDuplicates ? 'insert' : 'upsert'; payload = value; return builder },
     update: (value: Row) => { action = 'update'; payload = value; return builder },
-    then: (resolve: (result: { data: Row | Row[] | null; error: { message: string } | null }) => unknown) => (async () => {
+    then: (resolve: (result: { data: Row | Row[] | null; error: { message: string; code?: string } | null }) => unknown) => (async () => {
       const hold = holds[table]
       if (hold) { delete holds[table]; await hold.promise }
+      if (missingTable === table) return resolve({ data: null, error: { code: '42P01', message: `relation "${table}" does not exist` } })
       if (failWrite === table && action !== 'read') { failWrite = null; return resolve({ data: null, error: { message: 'write temporarily unavailable' } }) }
       const rows = tables[table] ??= []
       let found = rows.filter(row => filters.every(filter => filter(row))).slice(0, limit)
       if (action === 'insert' || action === 'upsert') {
         const batch = Array.isArray(payload) ? payload : [payload!]
         found = batch.map(value => {
-          const old = rows.find(row => table === 'attempts' ? row.id === value.id : table === 'mastery' ? row.user_id === value.user_id && row.clo_id === value.clo_id : row.user_id === value.user_id)
+          const old = rows.find(row => table === 'attempts' ? row.id === value.id : table === 'mastery' ? row.user_id === value.user_id && row.clo_id === value.clo_id : table === 'user_achievements' ? row.user_id === value.user_id && row.achievement_id === value.achievement_id : row.user_id === value.user_id)
           if (old) { if (action === 'upsert' && table !== 'attempts') Object.assign(old, value); return old }
           rows.push({ ...value }); return rows[rows.length - 1]
         })
@@ -114,12 +122,12 @@ function query(table: string) {
 function resultOf(ok: boolean, tests = current.tests): RunResult {
   return { ok, results: tests.map(test => ({ testId: test.id, passed: ok, actual: ok ? test.expected : 'undefined', expected: test.expected, stdout: '', stderr: '', durationMs: 2, ...(ok ? {} : { failureKind: 'wrong-answer' as const }) })), passedCount: ok ? tests.length : 0, totalCount: tests.length, runtime: 'browser' }
 }
-function setup(id = 'e1') {
+function setup(id = 'e1', motionPref?: 'system' | 'reduced' | 'full') {
   const initial = { user: { id: 'student' } as User, profile: { id: 'student', account_status: 'active' as const, restricted_until: null }, learnerState: store }
   const wrapper = ({ children }: PropsWithChildren) => <SessionProvider initialState={initial}>{children}</SessionProvider>
-  return renderHook(() => useExerciseLoop(id), { wrapper })
+  return renderHook(() => useExerciseLoop(id, motionPref), { wrapper })
 }
-async function loaded() { const hook = setup(); await waitFor(() => expect(hook.result.current.status).toBe('ready')); return hook }
+async function loaded(id = 'e1', motionPref?: 'system' | 'reduced' | 'full') { const hook = setup(id, motionPref); await waitFor(() => expect(hook.result.current.status).toBe('ready')); return hook }
 beforeEach(() => {
   vi.clearAllMocks()
   // Fix round 4: `pendingHandoff`/`pendingSubmissions` are real module-scope singletons (the
@@ -130,6 +138,7 @@ beforeEach(() => {
   store = { ...compileLearnerState({ id: 'student' }, [], [], [], null), version: 1 }
   tables = { exercises_public: [rowOf(current), rowOf(candidate)], clos: [clo], courses: [{ code: 'course1', packages: [] }], attempts: [], mastery: [], learner_state: [{ user_id: 'student', state: store, version: 1 }] }
   failWrite = null
+  missingTable = null
   loseStateAck = false
   lastOrFilter = null
   holds = {}
@@ -138,6 +147,7 @@ beforeEach(() => {
   spies.progress.mockImplementation(() => () => {})
   spies.exerciseFrom.mockReturnValue(null)
   spies.invalidate.mockResolvedValue(undefined)
+  spies.getQueryData.mockReturnValue(undefined)
   spies.run.mockImplementation(async req => req.tests.length === 0 ? { ...resultOf(true, []), stdout: 'free output' } : resultOf(req.code.includes('fixed') || req.code.includes('reference'), req.tests))
   spies.stream.mockImplementation(async (req, partial) => { partial(req.agent === 'diagnoser' ? { rootCause: 'Unvalidated partial.' } : { hint: 'Partial hint.' }); return envelope(req.agent, req.agent === 'diagnoser' ? diagnosis : hint) })
   spies.call.mockImplementation(async req => envelope(req.agent, req.agent === 'reviewer' ? review : { path: ['c1'], nextExerciseIds: ['e2'], focus: 'Continue.' }))
@@ -435,6 +445,42 @@ describe('the optimistic submit path (T2.2)', () => {
     release()
   })
 
+  it("V4 / A11Y-03 fix round: honours an in-app reduced motion preference for next()'s view transition, even on a full-motion OS", async () => {
+    // jsdom in this suite reports no `matchMedia` at all (never stubbed here), which
+    // `useReducedMotion`'s own OS reader treats as "no preference either way" -- exactly the
+    // full-motion-OS case this fix exists for. A bare `useReducedMotion()` would resolve to
+    // `false` here; passing `'reduced'` as this hook's own second argument must still win.
+    const startViewTransition = vi.fn((cb: () => void) => cb())
+    const doc = document as unknown as { startViewTransition?: typeof startViewTransition }
+    doc.startViewTransition = startViewTransition
+    try {
+      const hook = await loaded('e1', 'reduced'); act(() => hook.result.current.setCode('fixed'))
+      await act(async () => { await hook.result.current.submit() })
+      expect(hook.result.current.nextExercise?.id).toBe('e2')
+      act(() => { void hook.result.current.next() })
+      expect(hook.result.current.exercise?.id).toBe('e2') // the swap still lands either way
+      expect(startViewTransition).not.toHaveBeenCalled()
+    } finally {
+      delete doc.startViewTransition
+    }
+  })
+
+  it("V4 / A11Y-03 fix round: still takes the view transition for a 'full' preference on the same OS", async () => {
+    const startViewTransition = vi.fn((cb: () => void) => cb())
+    const doc = document as unknown as { startViewTransition?: typeof startViewTransition }
+    doc.startViewTransition = startViewTransition
+    try {
+      const hook = await loaded('e1', 'full'); act(() => hook.result.current.setCode('fixed'))
+      await act(async () => { await hook.result.current.submit() })
+      expect(hook.result.current.nextExercise?.id).toBe('e2')
+      act(() => { void hook.result.current.next() })
+      expect(hook.result.current.exercise?.id).toBe('e2')
+      expect(startViewTransition).toHaveBeenCalledTimes(1)
+    } finally {
+      delete doc.startViewTransition
+    }
+  })
+
   it('N1 fix round 2: next() takes the CLO from the target exercise, not the CLO the learner just left', async () => {
     // The exact cross-CLO fallback scenario from "uses the nearest course fallback..." above:
     // the bank/Author path both come up empty for c1, so `queueNext` widens to every CLO in the
@@ -529,6 +575,24 @@ describe('the optimistic submit path (T2.2)', () => {
     expect(hook2.result.current.exercise?.id).toBe('e2') // synchronous -- no waitFor needed
     expect(hook2.result.current.status).not.toBe('loading')
     expect(spies.from.mock.calls.some(([table]) => table === 'exercises_public')).toBe(false)
+  })
+
+  it('T2.2 round 5 re-check, New-1: code typed in the ~500ms remount window survives, carried on the handoff', async () => {
+    // Same shape as the zero-fetch hydration test above -- the fix is that `pendingHandoff` now
+    // also carries whatever `setCode` wrote for the exercise on screen, and the remounted
+    // instance seeds from it instead of silently reseeding the exercise's own starter code.
+    const hook1 = await loaded(); act(() => hook1.result.current.setCode('fixed'))
+    await act(async () => { await hook1.result.current.submit() })
+    expect(hook1.result.current.nextExercise?.id).toBe('e2')
+    act(() => { void hook1.result.current.next() }) // the local, synchronous paint of e2
+    expect(hook1.result.current.exercise?.id).toBe('e2')
+    expect(hook1.result.current.code).toBe(candidate.starterCode) // nothing typed yet
+    // A keystroke landing on the still-displayed (about to be destroyed) old instance, in the
+    // window before the real router-driven remount lands.
+    act(() => { hook1.result.current.setCode('typed while the router caught up') })
+    const hook2 = setup('e2') // the remount: a fresh instance for the same target exercise
+    expect(hook2.result.current.exercise?.id).toBe('e2') // synchronous -- no waitFor needed
+    expect(hook2.result.current.code).toBe('typed while the router caught up')
   })
 
   it('reaches the graded verdict before the attempts insert ever resolves', async () => {
@@ -655,6 +719,19 @@ describe('the optimistic submit path (T2.2)', () => {
     expect(spies.push).toHaveBeenCalledWith('/dashboard')
   })
 
+  it('W2-SCHEMA-I3 fix round: a failed submission leaves state.streak byte-identical -- a streak day is a pass', async () => {
+    // Binding ruling: migration 0008's `my_activity_days()` counts passes only, so a fail
+    // bumping the client's own `streak.exerciseDays` (the pre-fix behaviour) would disagree with
+    // the server the moment 0008 applies. The starter code never contains 'fixed', so submitting
+    // it as-is fails without any `setCode` first (same shape as the "plays the fail sound" test).
+    const before = { exerciseDays: 4, derotDays: 0, lastExerciseDate: '2020-01-01', lastDerotDate: null }
+    store.streak = before
+    const hook = await loaded()
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.outcome).toBe('failed')
+    expect(store.streak).toBe(before) // reference-identical, not merely deep-equal
+  })
+
   it("I5 fix round: fires streak-ignite on the day's first qualifying action", async () => {
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     await act(async () => { await hook.result.current.submit() })
@@ -687,6 +764,29 @@ describe('the optimistic submit path (T2.2)', () => {
     // even though the write above genuinely landed.
     const wellnessInvalidations = spies.invalidate.mock.calls.filter(([arg]) => JSON.stringify(arg.queryKey) === JSON.stringify(qk.wellness('student')))
     expect(wellnessInvalidations.length).toBeGreaterThan(0)
+  })
+
+  it('X7 fix round: a goal met by a walkthrough and a de-rot run (not only exercise attempts) still records the goal day', async () => {
+    // The bug this replaces: the old local `recordGoalAndStreak` hardcoded `lessonProgress`/
+    // `drillResults` to `[]`, so a learner who met today's goal through a walkthrough and a
+    // de-rot run (plus this one exercise pass) never got `goal.done` from THIS producer even
+    // though the dashboard's own ring, built from the real cache, already read 3/3. The shared
+    // `recordGoalDay` (record.ts) reads the same cache this hook now feeds it.
+    const today = new Date().toISOString().slice(0, 10)
+    spies.getQueryData.mockImplementation((key: readonly unknown[]) => {
+      if (key[0] === 'lesson-progress') return [{ userId: 'student', lessonId: 'l1', cloId: 'c1', status: 'completed', blockIndex: 5, checksPassed: 3, checksFailed: 0, lessonVersion: 1, startedAt: `${today}T00:30:00.000Z`, completedAt: `${today}T00:45:00.000Z`, updatedAt: `${today}T00:45:00.000Z` }]
+      if (key[0] === 'wellness') return { drill_results: [{ drillId: 'd1', kind: 'reaction', correct: true, timeMs: 400, score: 10, at: `${today}T01:00:00.000Z`, lane: 'play' }] }
+      return undefined
+    })
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed')) // the third win: this exercise pass
+    await act(async () => { await hook.result.current.submit() })
+    await waitFor(() => expect(spies.celebrate).toHaveBeenCalledWith('goal', undefined, expect.any(String)))
+    const savedPrefs = (tables.wellness.find(row => row.user_id === 'student')?.prefs) as { goalDays?: string[] } | undefined
+    expect(savedPrefs?.goalDays).toContain(today)
+    // Once, not per source: `shouldRecordGoalDay` is a today-key membership check, and the same
+    // context evaluated a second time (the settle handler's own `finally` runs once per settle
+    // regardless) must not append a duplicate.
+    expect(savedPrefs?.goalDays?.filter(day => day === today)).toHaveLength(1)
   })
 
   it('I5 fix round: does not fire goal.done before the daily goal is actually met', async () => {
@@ -735,11 +835,42 @@ describe('the optimistic submit path (T2.2)', () => {
     expect(spies.from.mock.calls.map(([table]) => table)).toEqual(['exercises_public', 'attempts'])
   })
 
-  it('never touches user_achievements (schema 0005 has no such table) -- a pass can never crash on it', async () => {
+  it('TI-4 fix round: pins the verified filter on the single-id read -- an unverified row for this id never resolves', async () => {
+    tables.exercises_public = [{ ...rowOf(current), verified: false }, rowOf(candidate)]
+    const hook = setup()
+    await waitFor(() => expect(hook.result.current.status).toBe('error'))
+    expect(hook.result.current.exercise).toBeNull()
+  })
+
+  it('X1 fix round: evaluates a context whose first-blood is true off the first pass, and never blocks the optimistic pass on the write', async () => {
+    const release = holdWrite('user_achievements')
+    const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
+    // `submit()` (and the durability chain it awaits) resolves on its own -- `recordAchievements`
+    // is called with `void` from `syncInBackground`'s `finally` block, so a slow write to a table
+    // this pass does not otherwise touch can never strand the optimistic verdict.
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.outcome).toBe('passed')
+    expect(hook.result.current.status).toBe('passed')
+    expect((tables.user_achievements ?? []).length).toBe(0) // the held write has not landed yet
+    release()
+    // `firstBlood` (achievements.ts) is `ctx.attempts.some(a => a.passed)` -- true the instant this,
+    // the account's very first pass, lands in `history.current`. The persisted row is the
+    // black-box proof that the context handed to `recordAchievements` satisfied it.
+    await waitFor(() => expect((tables.user_achievements ?? []).some(row => row.achievement_id === 'first-blood')).toBe(true))
+  })
+
+  it('X1 fix round: calls user_achievements, and degrades silently at schema 0005 (no such table yet) -- a pass can never crash on it', async () => {
+    missingTable = 'user_achievements'
     const hook = await loaded(); act(() => hook.result.current.setCode('fixed'))
     await act(async () => { await hook.result.current.submit() })
     expect(hook.result.current.outcome).toBe('passed')
-    expect(spies.from.mock.calls.some(([table]) => table === 'user_achievements')).toBe(false)
+    // `recordAchievements` (record.ts) is fire-and-forget from `syncInBackground`'s `finally`
+    // block -- it genuinely calls the table now (X1's whole point), unlike before this fix
+    // round, and unlike a missing-table error anywhere else in the chain, this one is caught and
+    // swallowed rather than surfaced as a save-failure banner.
+    await waitFor(() => expect(spies.from.mock.calls.some(([table]) => table === 'user_achievements')).toBe(true))
+    expect(hook.result.current.error).toBeNull()
+    expect(hook.result.current.status).toBe('passed')
   })
 
   it('attaches the exercise difficulty to the reward-shaped attempt the moment it grades', async () => {

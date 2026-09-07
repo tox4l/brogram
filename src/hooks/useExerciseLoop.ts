@@ -4,24 +4,25 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Attempt, BankQuery, Clo, CoachReply, DiagnoserReply, ExercisePublic, LearnerState, Mastery, PlannerReply, ReviewerReply, RunResult, TestResult } from '@/lib/contracts'
+import type { Attempt, BankQuery, Clo, CoachReply, DiagnoserReply, ExercisePublic, LearnerState, LessonProgress, Mastery, MotionPreference, PlannerReply, ReviewerReply, RunResult, TestResult, UserAchievement } from '@/lib/contracts'
 import { LOCKDOWN, pointsForPass } from '@/lib/contracts'
 import { callAgent, streamAgent } from '@/lib/agents/client'
 import { DEFAULT_DIFFICULTY, fetchBank, pickFromBank, toExercisePublic } from '@/lib/learner/bank'
 import { nextInChain } from '@/lib/learner/chain'
 import { applyFail, applyPass } from '@/lib/learner/score'
 import { provisionalPlan } from '@/lib/learner/provisional'
+import type { WellnessRow } from '@/lib/learner/compile'
 import { getRuntime, judgeProviderAbsent, subscribeRuntimeProgress, type RuntimeProgress } from '@/lib/runtimes'
 import { createClient } from '@/lib/supabase/client'
 import { codeDiff, exerciseRunRequest, gradeAnswer, usesAnswerForm } from '@/lib/exercise/grading'
 import { useSession } from '@/store/session'
 import { clo as staticClo, closFor, course as staticCourse, courses as staticCourses, exerciseFrom } from '@/lib/curriculum'
 import { buildRewardContext, type RewardAttempt } from '@/lib/rewards/context'
-import { nextGoalDays, shouldRecordGoalDay } from '@/lib/rewards/goal'
+import { recordAchievements, recordGoalDay } from '@/lib/rewards/record'
 import { crossedMilestone } from '@/lib/rewards/streaks'
 import { celebrate, levelUpDetail, type CelebrationDetail, type CelebrationKind } from '@/lib/rewards/useCelebration'
 import { play } from '@/lib/sound/manager'
-import { prefsPatch, resolveWellnessPrefs } from '@/lib/wellness/prefs'
+import { resolveWellnessPrefs } from '@/lib/wellness/prefs'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
 import { getQueryClient, onUserChange } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
@@ -64,8 +65,17 @@ import { line } from '@/lib/voice/lines'
  * with its already-fetched public content right then too, well before the learner ever clicks
  * "Next rep" -- so the remounted instance's very first render hydrates synchronously, with no
  * loading state and no `exercises_public` refetch.
+ *
+ * T2.2 round 5 re-check, New-1: `code` is the learner's typed answer for THIS exercise, carried
+ * across the remount the same way the exercise/CLO/packages already are. Without it, the ~500ms
+ * between `next()`'s local synchronous paint and the router's own remount landing was a window in
+ * which anything typed into the (about to be destroyed) old instance's editor was silently
+ * discarded -- the fresh instance's own `applyLoadedExercise` always reseeded from the exercise's
+ * starter code, having no way to know a keystroke happened on an instance it never saw. `setCode`
+ * (below) keeps this in sync on every keystroke while a handoff for the CURRENT exercise exists;
+ * `applyLoadedExercise` seeds from it instead of the starter code when a handoff is consumed.
  */
-let pendingHandoff: { id: string; exercise: ExercisePublic; clo: Clo; packages: string[] } | null = null
+let pendingHandoff: { id: string; exercise: ExercisePublic; clo: Clo; packages: string[]; code?: string } | null = null
 
 /** The subset of a graded verdict a freshly (re)mounted instance needs to look right the instant
  *  it hydrates, before the durable background chain (which may have started on a now-gone
@@ -230,28 +240,10 @@ function activityStreak(state: LearnerState, at: string): LearnerState['streak']
 }
 
 /** Stateful orchestration only: runtimes, agent clients and learner math remain frozen. */
-export function useExerciseLoop(exerciseId: string) {
+export function useExerciseLoop(exerciseId: string, motionPref?: MotionPreference) {
   const session = useSession(); const router = useRouter()
   const sessionRef = useRef(session)
   useEffect(() => { sessionRef.current = session }, [session])
-  // Fix round 5 (review Mi2): a dedicated "is this component instance still mounted" flag, on its
-  // own empty-deps effect just below -- narrower and clearer than relying solely on
-  // `generation.current !== token`, which several other code paths also bump for reasons other
-  // than a true unmount (a `next()` on a surviving instance, a `retry()`-driven reload). The load
-  // effect's own cleanup (`[exerciseId, reload]`) fires on those too, so it cannot tell "this
-  // instance re-ran its effect" apart from "this instance is gone" -- only an effect with no
-  // dependencies at all fires its cleanup exclusively on true unmount.
-  //
-  // The setup function MUST also set `mounted.current = true`, not only rely on `useRef(true)`'s
-  // initial value -- reproduced live (not in jsdom, which does not run effects twice by default):
-  // React's dev-mode Strict Mode double-invokes every effect once per real mount (mount -> cleanup
-  // -> mount again) specifically to catch exactly this class of bug. Without the reset here, that
-  // diagnostic cleanup permanently latches `mounted.current` to `false` the instant a page loads,
-  // silently discarding every `settle`/`ready` reconciliation (`nextExercise`, `canAdvance`, the
-  // final Reviewer quality) for the rest of that instance's real lifetime -- this exact mechanism
-  // reproduced the review's own C2 symptom on every live `next()`, not only under a forced remount.
-  const mounted = useRef(true)
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const clientRef = useRef<SupabaseClient | null>(null)
   const generation = useRef(0); const gate = useRef(false)
   const exerciseRef = useRef<ExercisePublic | null>(null); const cloRef = useRef<Clo | null>(null)
@@ -263,7 +255,12 @@ export function useExerciseLoop(exerciseId: string) {
   const lastCoachAt = useRef<number | null>(null); const lastHintCode = useRef('')
   const spentHints = useRef(0); const completed = useRef(false)
   const pending = useRef<Submission | null>(null)
-  const reducedMotion = useReducedMotion()
+  // V4 / A11Y-03 (wave 2 review): a bare `useReducedMotion()` call means 'system' -- it can never
+  // see a learner who chose Reduced (or Full) in the app on an OS that reports no preference
+  // either way. `motionPref` is the caller's own resolved `wellness.prefs.motion` (the exercise
+  // page reads it the same way `ThemeQuickSwitch`/the dashboard already do); this hook's only
+  // internal use of it gates the `next()` view transition below.
+  const reducedMotion = useReducedMotion(motionPref)
   const [exercise, setExercise] = useState<ExercisePublic | null>(null)
   const [clo, setClo] = useState<Clo | null>(null)
   const [code, updateCode] = useState(''); const [status, setStatus] = useState<Status>('loading')
@@ -311,8 +308,13 @@ export function useExerciseLoop(exerciseId: string) {
    * to sit in front of it is now a background refresh kicked off from here: it only refines
    * `history.current` and the hint quota (already seeded below from the local receipt and
    * whatever `history.current` already holds), so it can never block the editor or the prompt.
+   *
+   * `handoffCode` (T2.2 round 5 re-check, New-1): when this call is consuming a module-level
+   * `pendingHandoff`, its `code` field -- kept live by every `setCode` while that handoff still
+   * matched the exercise on screen -- wins over the exercise's own starter code, so a keystroke
+   * made in the remount window is not silently thrown away in favour of a blank/starter slate.
    */
-  function applyLoadedExercise(item: ExercisePublic, cloRow: Clo, coursePackages: string[], token: number) {
+  function applyLoadedExercise(item: ExercisePublic, cloRow: Clo, coursePackages: string[], token: number, handoffCode?: string) {
     gate.current = false; completed.current = false; pending.current = null
     failureAt.current = null; lastCoachAt.current = null; editedAfterFailure.current = false
     failureId.current = null; startedAt.current = null
@@ -324,7 +326,7 @@ export function useExerciseLoop(exerciseId: string) {
     hintedFailureId.current = receipt.failureId
     spentHints.current = used
     exerciseRef.current = item; cloRef.current = cloRow
-    const initialCode = usesAnswerForm(item) ? item.kind === 'spot-the-bug' ? '[]' : item.kind === 'trace' ? '{}' : '' : item.starterCode
+    const initialCode = handoffCode ?? (usesAnswerForm(item) ? item.kind === 'spot-the-bug' ? '[]' : item.kind === 'trace' ? '{}' : '' : item.starterCode)
     codeRef.current = initialCode
     updateCode(initialCode)
     setExercise(item); setClo(cloRow); setStatus('ready')
@@ -357,13 +359,21 @@ export function useExerciseLoop(exerciseId: string) {
         // Grading itself (the runtime call) is still running on whatever instance started it.
         setStatus('submitting')
       }
-      // Fix round 5 (review Mi2): `mounted` is a dedicated flag for THIS effect run, set false in
-      // its own cleanup below -- a clearer, narrower signal than reusing `generation.current`
-      // alone (which the comment above `generation` explains is bumped by several unrelated
-      // paths). Native promises have no `off()`; this is the idiomatic React substitute for
-      // detaching a `.then` continuation once its effect has torn down.
+      // T2.2 round 5 re-check, New-2: `generation.current !== token` alone is the guard here now --
+      // no separate `mounted` ref. A true unmount always runs the load effect's own cleanup, which
+      // bumps `generation.current` past every token this instance ever handed out (see the
+      // cleanup below), so it already catches "this instance is gone" with no extra latch; the
+      // other paths that bump it (a `next()` on a surviving instance, a `retry()`-driven reload)
+      // are cases where a stale `ready`/`settle` reconciliation should also be skipped. A `mounted`
+      // ref was tried here and measured to add a real hazard for no real protection: under React's
+      // dev Strict Mode double-invoke, its own reset-on-setup step is easy to omit (as fix round 4
+      // originally did, live-reproducing the review's C2 symptom), and no test in this suite's
+      // `renderHook`/jsdom environment can catch a regression of it either way (re-verified with a
+      // `<StrictMode>`-wrapped copy of the mid-grade remount test with the reset removed -- it
+      // still passed). Native promises have no `off()`; this generation check is the idiomatic
+      // React substitute for detaching a `.then` continuation once its effect has torn down.
       void submissionRecord.ready.then(() => {
-        if (!mounted.current || generation.current !== token || !submissionRecord.graded) return
+        if (generation.current !== token || !submissionRecord.graded) return
         const { graded } = submissionRecord
         codeRef.current = graded.code; updateCode(graded.code)
         setStatus('graded'); setOutcome(graded.outcome); setPointsEarned(graded.pointsEarned)
@@ -371,7 +381,7 @@ export function useExerciseLoop(exerciseId: string) {
         if (submissionRecord.nextExercise) setNextExercise(submissionRecord.nextExercise)
       })
       void submissionRecord.settle.then(() => {
-        if (!mounted.current || generation.current !== token) return
+        if (generation.current !== token) return
         if (submissionRecord.error) { setError(submissionRecord.error); return } // pending.current stays -- retry() can recover it
         pending.current = null; setHasPending(false)
         const finalOp = submissionRecord.operation
@@ -435,7 +445,7 @@ export function useExerciseLoop(exerciseId: string) {
       if (active() && loaded && event.language === (loaded.kind === 'schema' ? 'sql' : loaded.language)) setProgress(event)
     })
     if (handoff) {
-      applyLoadedExercise(handoff.exercise, handoff.clo, handoff.packages, token)
+      applyLoadedExercise(handoff.exercise, handoff.clo, handoff.packages, token, handoff.code)
     } else {
       void (async () => {
         await Promise.resolve()
@@ -493,6 +503,13 @@ export function useExerciseLoop(exerciseId: string) {
   const setCode = useCallback((value: string) => {
     if (completed.current || gate.current || pending.current || value === codeRef.current) return
     codeRef.current = value; updateCode(value)
+    // T2.2 round 5 re-check, New-1: keep the module-level handoff's own code in sync with every
+    // keystroke while it still refers to the exercise on screen -- this is what the remounted
+    // instance seeds from (`applyLoadedExercise`'s `handoffCode` parameter) instead of silently
+    // reseeding the starter code the instant the real navigation lands, ~500ms after `next()`'s
+    // own local, synchronous paint.
+    const handoff = pendingHandoff
+    if (handoff && handoff.id === exerciseRef.current?.id) handoff.code = value
     if (failureAt.current !== null) { editedAfterFailure.current = true; setHintTiming(previous => ({ ...previous, edited: true })) }
     startedAt.current ??= Date.now(); setDuringAttempt(true); setClock(Date.now())
   }, [])
@@ -651,42 +668,43 @@ export function useExerciseLoop(exerciseId: string) {
   }
 
   /**
-   * Fix round I5: `shouldRecordGoalDay`/`nextGoalDays` (src/lib/rewards/goal.ts) had no
-   * producer anywhere in the tree, so `goal.done` could never fire. The pass path is the only
-   * place that advances a win count, so it is the only place that can decide this -- but
-   * `wellness.prefs` has no shared mutation exported outside `src/components/wellness/Dock.tsx`
-   * (T2.4's file, not in this task's Files list this wave). Rather than reach into that
-   * component or add a new file outside this fix round's committed paths, this mirrors its
-   * read-merge-write shape locally: a fresh read (never the possibly-stale query cache, since
-   * this decides whether to *write*), `prefsPatch` to keep the row diff-shaped, and the same
-   * update-then-insert-if-absent fallback. Degrades silently on any failure -- a missed goal
-   * day is a missed celebration, never a broken pass -- and never awaited by the caller.
+   * X1 / X7 (wave 2 review): the shared writers from `src/lib/rewards/record.ts` (W2FIX-F2),
+   * called from `syncInBackground`'s `finally` block once a submission's durability chain
+   * settles -- pass or fail (`operation.state` exists either way once `finishSubmission`'s state
+   * write lands; a fail scores through `applyFail`, not only a pass), since an achievement or a
+   * goal day can legitimately already be earned by the time a fail lands (a streak milestone hit
+   * earlier today, a goal met by two walkthroughs and this exercise being the third action of the
+   * day regardless of its own verdict). Both writers are self-gating and pure-checked before any
+   * write (`shouldRecordGoalDay`, `newlyUnlocked`), so calling this after every settle costs
+   * nothing extra on the common "nothing new to record" case.
    *
-   * `lessonProgress`/`drillResults` are empty here (this hook only ever sees exercise
-   * attempts), so `winsToday` under-counts a learner who also finished a walkthrough or a
-   * de-rot run today; the exercise-only count it still gets is honest, just partial, and never
-   * over-fires (an under-count can only delay `goalMet`, never fake it early).
+   * Reads `lessonProgress` and the wellness row (`prefs`, `drill_results`) straight from the
+   * query cache -- already seeded by `(app)/layout.tsx`'s `QuerySeed` before this page ever
+   * mounts, so this is zero extra network requests, not a fresh read the way the old local
+   * `recordGoalAndStreak` this replaces used to do for `prefs` alone. Critically, this is also
+   * the X7 fix itself: the old version hardcoded `lessonProgress`/`drillResults` to `[]` ("this
+   * hook only ever sees exercise attempts"), which meant a walkthrough-only or de-rot-only day
+   * could reach the dashboard's own "goal met" ring while this producer's `winsToday` never
+   * agreed and `goal.done` never fired. Real cached data closes that gap for free.
+   *
+   * Degrades silently on any failure -- a missed goal day or achievement is a missed
+   * celebration, never a broken pass -- and is never awaited by the caller (`syncInBackground`'s
+   * `finally` calls this with `void`).
    */
-  async function recordGoalAndStreak(client: SupabaseClient, userId: string, state: LearnerState, createdAt: string) {
+  async function recordRewardsAfterSettle(client: SupabaseClient, userId: string, state: LearnerState, createdAt: string) {
     try {
-      const { data } = await client.from('wellness').select('prefs').eq('user_id', userId).maybeSingle()
-      const prefs = resolveWellnessPrefs((data as { prefs: unknown } | null)?.prefs)
+      const cache = getQueryClient()
+      const wellnessRow = cache.getQueryData<WellnessRow>(qk.wellness(userId))
+      const prefs = resolveWellnessPrefs(wellnessRow?.prefs)
+      const drillResults = wellnessRow?.drill_results ?? []
+      const lessonProgress = cache.getQueryData<LessonProgress[]>(qk.lessonProgress(userId)) ?? []
+      const heldAchievementIds = (cache.getQueryData<UserAchievement[]>(qk.achievements(userId)) ?? []).map(row => row.achievementId)
       const rewardAttempts: RewardAttempt[] = history.current.map(row => ({ id: row.id, userId, exerciseId: row.exercise_id, code: '', results: [], passed: row.passed, durationMs: 0, hintCount: row.hint_count, createdAt: row.created_at }))
-      const ctx = buildRewardContext({ state, attempts: rewardAttempts, activityDays: [], lessonProgress: [], drillResults: [], prefs, courseLessonCounts: {}, now: new Date(createdAt) })
-      if (!shouldRecordGoalDay(ctx)) return
-      const goalDays = nextGoalDays(ctx)
-      if (!goalDays) return
-      const patch = prefsPatch({ ...prefs, goalDays })
-      const updated = await client.from('wellness').update({ prefs: patch, updated_at: new Date().toISOString() }).eq('user_id', userId).select('user_id').maybeSingle()
-      if (!updated.data) await client.from('wellness').insert({ user_id: userId, prefs: patch })
-      // Fix round 2, N2: the dock's goal ring, `SoundToggle` and `DockControl` all read
-      // `qk.wellness` from the shared query cache (seeded once by `QuerySeed`, never refetched
-      // on focus) -- without this, the ring silently stops moving for the rest of the session
-      // the moment the learner actually hits their goal.
-      void getQueryClient().invalidateQueries({ queryKey: qk.wellness(userId) })
-      fireCelebration('goal', undefined, `${userId}:goal:${ctx.today}`)
-    } catch (goalError) {
-      console.warn("Could not record today's goal; the pass itself is unaffected.", goalError)
+      const ctx = buildRewardContext({ state, attempts: rewardAttempts, activityDays: [], lessonProgress, drillResults, prefs, courseLessonCounts: {}, now: new Date(createdAt) })
+      void recordGoalDay(client, userId, ctx)
+      void recordAchievements(client, userId, ctx, heldAchievementIds)
+    } catch (rewardsError) {
+      console.warn('Could not evaluate goal/achievement rewards after this save; the pass itself is unaffected.', rewardsError)
     }
   }
 
@@ -733,7 +751,12 @@ export function useExerciseLoop(exerciseId: string) {
         const scored = attempt.passed ? applyPass(previous, operation.exercise.difficulty, operation.exercise.pattern, operation.review!.quality, attempt.hintCount) : { mastery: applyFail(previous, operation.exercise.difficulty), points: 0 }
         const mastery = { ...scored.mastery, lastAttemptAt: attempt.createdAt }
         const mistakes = operation.diagnosis ? [{ exerciseId: attempt.exerciseId, cloId: operation.exercise.cloId, pattern: operation.exercise.pattern, label: operation.diagnosis.mistakeLabel, at: attempt.createdAt }, ...base.recentMistakes].slice(0, 10) : base.recentMistakes
-        return { ...base, currentCourse: operation.clo.course, mastery: { ...base.mastery, [operation.exercise.cloId]: mastery }, points: base.points + scored.points, recentMistakes: mistakes, streak: activityStreak(base, attempt.createdAt) }
+        // W2-SCHEMA-I3 (wave 2 review), binding ruling: a streak day is a PASS. Migration 0008's
+        // `my_activity_days()` filters `where ... and passed`, so a fail bumping this client-side
+        // streak (the pre-existing behaviour) diverges from what the server counts the moment 0008
+        // is applied -- the header flips between two numbers on a single reload for a learner who
+        // fails before passing on a given day. `base.streak` on a fail is therefore left untouched.
+        return { ...base, currentCourse: operation.clo.course, mastery: { ...base.mastery, [operation.exercise.cloId]: mastery }, points: base.points + scored.points, recentMistakes: mistakes, streak: attempt.passed ? activityStreak(base, attempt.createdAt) : base.streak }
       }, key, attemptId)
     }
     if (!isCurrent(key, attemptId)) return
@@ -775,9 +798,9 @@ export function useExerciseLoop(exerciseId: string) {
       const milestone = crossedMilestone(beforeStreak.exerciseDays, afterStreak.exerciseDays)
       if (milestone !== null) fireCelebration('streak-milestone', { n: milestone }, `${attempt.id}:streak-milestone`)
       else if (beforeStreak.lastExerciseDate !== afterStreak.lastExerciseDate) fireCelebration('streak-ignite', { n: afterStreak.exerciseDays }, `${attempt.id}:streak-ignite`)
-      // Goal-day + `goal.done`: best-effort, fire-and-forget -- never blocks the pass or the
-      // save above. See `recordGoalAndStreak`'s own comment for the ownership note.
-      void recordGoalAndStreak(client, attempt.userId, operation.state, attempt.createdAt)
+      // Goal-day and achievement evaluation moved to `syncInBackground`'s `finally` block
+      // (`recordRewardsAfterSettle`, X1/X7) -- best-effort, fire-and-forget either way, but now
+      // run once per settle regardless of pass/fail rather than only from this pass branch.
       if (!operation.queued) await queueNext(operation)
       if (!isCurrent(key, attemptId)) return
       setStatus('passed')
@@ -845,12 +868,15 @@ export function useExerciseLoop(exerciseId: string) {
     finally {
       // A graded submission settling (pass, fail, or a background failure the retry banner
       // covers) is exactly the moment the dashboard's streak, goal ring, points and trophy
-      // shelf go stale: `attempts` and `activityDays` change on every attempt (spec's own
-      // `activityStreak` counts a fail too), `achievements` and `learner_state` on a pass.
-      // `saveState` predates T0.4's `useOptimistic` and keeps its own version-guarded retry
-      // loop rather than being rebuilt on it this task, so unlike a `useOptimistic` mutation
-      // there is no automatic self-invalidation on the `learner-state` key -- invalidated
-      // explicitly here alongside the other three so a stale reload is never required.
+      // shelf go stale: `attempts` and `activityDays` change on every attempt -- the latter is
+      // invalidated regardless of `attempt.passed` (W2-SCHEMA-I3's binding ruling only changed
+      // what the client's OWN `state.streak` counts; the server-side `my_activity_days()` a fail
+      // does not touch stays worth a cheap refetch here since over-invalidating a read is
+      // harmless) -- `achievements` and `learner_state` on a pass. `saveState` predates T0.4's
+      // `useOptimistic` and keeps its own version-guarded retry loop rather than being rebuilt on
+      // it this task, so unlike a `useOptimistic` mutation there is no automatic self-invalidation
+      // on the `learner-state` key -- invalidated explicitly here alongside the other three so a
+      // stale reload is never required.
       const userId = sessionRef.current.user?.id
       if (userId) {
         const client = getQueryClient()
@@ -858,6 +884,11 @@ export function useExerciseLoop(exerciseId: string) {
         void client.invalidateQueries({ queryKey: qk.activityDays(userId) })
         void client.invalidateQueries({ queryKey: qk.achievements(userId) })
         void client.invalidateQueries({ queryKey: qk.learnerState(userId) })
+        // X1 / X7 (wave 2 review): evaluated off whatever state this settle actually reached --
+        // `operation.state` exists once `finishSubmission`'s state write lands, pass or fail
+        // (`applyFail` scores a fail too); a background failure before that point never sets it,
+        // and there is nothing yet to evaluate a reward context against.
+        if (operation.state) void recordRewardsAfterSettle(clientRef.current!, userId, operation.state, operation.attempt.createdAt)
       }
     }
   }
@@ -1004,30 +1035,29 @@ export function useExerciseLoop(exerciseId: string) {
   }
 
   /**
-   * Fix round C1: `next()` no longer routes through the load effect's reset-then-refetch cycle
-   * at all -- `nextExercise` is already a complete `ExercisePublic` (fetched by `queueNext`'s
-   * bank query or Author generation), so `applyLoadedExercise` swaps it in directly and
-   * synchronously.
+   * How this is actually built, as of T2.2 round 5 (not the round 4 mechanism -- see the T2.2
+   * round 5 re-check, New-3, which flagged the prior version of this comment as stale):
    *
-   * Fix round 4: the URL update below is `window.history.replaceState`, not `router.replace`.
-   * The web-runtime CPU-throttle investigation proved this hook's instance really does get
-   * remounted on an in-place `next()` in the live App Router, despite this comment's own
-   * (now-corrected) prior claim otherwise. Root cause, confirmed by reading this tree's own docs
-   * (`node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md`):
-   * `router.replace()` always goes through the App Router's RSC-aware navigation pipeline, and a
-   * dynamic segment (`[id]`) resolving to a NEW value is exactly the case that pipeline treats as
-   * a fresh segment -- remounting this hook along with everything under it. The docs' own
-   * prescribed fix for "update the URL without a route re-render" is the raw History API, called
-   * directly; that bypasses the App Router's navigation machinery entirely, so nothing ever asks
-   * it to remount this segment. `useParams()`'s reported `id` will not track this (only
-   * `usePathname`/`useSearchParams` are documented to sync with a raw history mutation), but
-   * nothing here or in `page.tsx` reads it again after the initial `useExerciseLoop(id)` call --
-   * the exercise on screen is `exerciseRef.current`, not the URL param. A genuine full reload or
-   * deep link still resolves correctly from the URL the normal way.
-   *
-   * `pendingHandoff` (see its own comment) and `pendingSubmissions` (the durability chain's own
-   * remount-proofing) both stay in place regardless, as insurance against a remount from any
-   * OTHER cause this fix does not anticipate -- Fast Refresh in dev, a future upstream change.
+   * 1. `nextExercise` is already a complete `ExercisePublic` (fetched by `queueNext`'s bank query
+   *    or Author generation), so `commit()` calls `applyLoadedExercise` directly and
+   *    synchronously -- no load-effect reset-then-refetch cycle for the exercise painted here.
+   * 2. The URL update is a real `router.replace(url)`, wrapped in React's `startTransition`, not
+   *    the raw History API a since-reverted round used. A navigation to a new dynamic-segment
+   *    (`[id]`) value genuinely remounts this hook and everything under it in the live App
+   *    Router (confirmed with a DOM-identity probe) -- there is no supported way to avoid that
+   *    remount short of bypassing the router entirely, which round 4 tried and which broke
+   *    `useParams()`, integrity logging and Back navigation instead (see the module's own C1/I1
+   *    history). `startTransition` marks the resulting remount as low priority, so React keeps
+   *    showing this instance's already-updated (optimistic) UI instead of yanking to
+   *    `loading.tsx` while the navigation resolves -- the remount is real, but invisible.
+   * 3. Invisible because `pendingHandoff` (populated by `queueNext` the moment the exercise was
+   *    chosen, and refreshed again just below as cheap insurance against staleness) is what the
+   *    remounted instance's very first render hydrates from, synchronously -- no loading state,
+   *    no `exercises_public` refetch, and (T2.2 round 5 re-check, New-1) the learner's own typed
+   *    code if `setCode` wrote any into it since. `pendingSubmissions` is the parallel
+   *    remount-proofing for the durability chain itself; both exist independent of *why* a
+   *    remount might happen, as insurance against any cause this fix does not anticipate too
+   *    (Fast Refresh in dev, a future upstream change).
    *
    * Fix round I1: the browser's native View Transition needs the DOM change to happen
    * *synchronously inside* its callback, or it captures old-to-old and crossfades nothing.
@@ -1035,7 +1065,8 @@ export function useExerciseLoop(exerciseId: string) {
    * returns, which is the documented way to pair React with this API absent React's own
    * `<ViewTransition>` component (not exported by this tree's pinned React 19.2.8 -- see report).
    * The prompt panel carries the transition name (`page.tsx`) so only it crossfades; the editor
-   * and the warm runtime never remount either way.
+   * and the warm runtime never remount either way -- until the real router-driven remount above,
+   * which they do survive, just invisibly.
    */
   async function next() {
     if (!completed.current || gate.current || pending.current) return

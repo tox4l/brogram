@@ -45,6 +45,41 @@ describe('LockdownOverlay — full-screen overlay (blur / idle)', () => {
     const { rerender } = render(<LockdownOverlay reason="idle" />)
     expect(() => rerender(<LockdownOverlay reason={null} />)).not.toThrow()
   })
+
+  // X6 (wave 2 review): a kind whose own component never populated `returnFocusRef` (the gap
+  // this finding closed for predict-output/spot-the-bug/trace) must still not drop focus to
+  // `<body>` -- the floor is the exercise workspace container.
+  it('falls back to fallbackFocusRef when returnFocusRef has nothing to focus, the instant the overlay lifts', () => {
+    const emptyRef = { current: null }
+    const fallback: Focusable = { focus: vi.fn() }
+    const fallbackRef = { current: fallback }
+    const { rerender } = render(<LockdownOverlay reason="blur" returnFocusRef={emptyRef} fallbackFocusRef={fallbackRef} />)
+    expect(fallback.focus).not.toHaveBeenCalled()
+    rerender(<LockdownOverlay reason={null} returnFocusRef={emptyRef} fallbackFocusRef={fallbackRef} />)
+    expect(fallback.focus).toHaveBeenCalledTimes(1)
+  })
+
+  it('prefers returnFocusRef over fallbackFocusRef when both are populated', () => {
+    const primary: Focusable = { focus: vi.fn() }
+    const primaryRef = { current: primary }
+    const fallback: Focusable = { focus: vi.fn() }
+    const fallbackRef = { current: fallback }
+    const { rerender } = render(<LockdownOverlay reason="idle" returnFocusRef={primaryRef} fallbackFocusRef={fallbackRef} />)
+    rerender(<LockdownOverlay reason={null} returnFocusRef={primaryRef} fallbackFocusRef={fallbackRef} />)
+    expect(primary.focus).toHaveBeenCalledTimes(1)
+    expect(fallback.focus).not.toHaveBeenCalled()
+  })
+
+  it('falls back to fallbackFocusRef the instant the "why" panel closes too, when returnFocusRef has nothing to focus', () => {
+    const emptyRef = { current: null }
+    const fallback: Focusable = { focus: vi.fn() }
+    const fallbackRef = { current: fallback }
+    render(<LockdownOverlay reason={null} pasteMessage="Type it out." pasteWhy="Because typing is the exercise." returnFocusRef={emptyRef} fallbackFocusRef={fallbackRef} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Why?' }))
+    expect(fallback.focus).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide why' }))
+    expect(fallback.focus).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('LockdownOverlay — paste toast (R9.3)', () => {

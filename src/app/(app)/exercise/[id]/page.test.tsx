@@ -5,17 +5,23 @@ import type { Clo, ExercisePublic } from '@/lib/contracts'
 import { LINE_BANK } from '@/lib/voice/lines'
 import ExercisePage from './page'
 
-const mocks = vi.hoisted(() => ({ loop: vi.fn(), session: vi.fn(), lockdown: vi.fn(), push: vi.fn(), params: vi.fn() }))
+const mocks = vi.hoisted(() => ({ loop: vi.fn(), session: vi.fn(), lockdown: vi.fn(), push: vi.fn(), params: vi.fn(), wellness: vi.fn() }))
 vi.mock('next/navigation', () => ({ useParams: mocks.params, useRouter: () => ({ push: mocks.push }) }))
 vi.mock('@/hooks/useExerciseLoop', () => ({ useExerciseLoop: mocks.loop }))
 vi.mock('@/hooks/useLockdown', () => ({ useLockdown: mocks.lockdown }))
 vi.mock('@/store/session', () => ({ useSession: mocks.session }))
+// V4 / A11Y-03: `useWellness()` needs a `QueryClientProvider` this file's other mocks don't set
+// up (it renders `ExercisePage` directly, not the full `(app)` shell) -- mocked at the hook level
+// like every other data source here, defaulting to "no row yet" (motion resolves to 'system').
+vi.mock('@/lib/query/hooks', () => ({ useWellness: mocks.wellness }))
 
 const exercise: ExercisePublic = { id: 'exercise-one', cloId: 'clo', kind: 'predict-output', language: 'javascript', difficulty: 3, pattern: 'trace', title: 'Follow the value', prompt: 'What is printed?', starterCode: 'console.log(3)', tests: [{ id: 'one', input: '', expected: '3', hidden: false }], origin: 'seed', tags: [] }
 const model = () => ({ exercise, clo: null, code: '', setCode: vi.fn(), run: vi.fn(), submit: vi.fn(), requestHint: vi.fn(), next: vi.fn(), retry: vi.fn(), status: 'ready', outcome: null, results: [], diagnosis: null, partialDiagnosis: null, hints: [], partialHint: null, hintPending: false, review: null, nextExercise: null, progress: null, stdout: '', stderr: '', error: null, hintAvailable: false, hintWaitSeconds: 0, hintCount: 0, busy: false, duringAttempt: false, pointsEarned: 0, pointsProvisional: false, chain: 0, closed: false, canAdvance: false, controlsDisabled: false, judgeAbsent: false, lastRewardAttempt: null })
 const javaExercise: ExercisePublic = { id: 'exercise-java', cloId: 'clo', kind: 'code', language: 'java', difficulty: 2, pattern: 'loop', title: 'Sum the values', prompt: 'Return the sum of the inputs.', starterCode: 'class Solution {}', tests: [{ id: 'one', input: '1 2', expected: '3', hidden: false }], origin: 'seed', tags: [] }
 const traceExercise: ExercisePublic = { id: 'exercise-trace-bad', cloId: 'clo', kind: 'trace', language: 'javascript', difficulty: 2, pattern: 'trace', title: 'Trace it', prompt: 'What does count hold at line 2?', starterCode: 'let count = 0\ncount += 1', tests: [{ id: 'one', input: '', expected: '1', hidden: false }], origin: 'seed', tags: [] }
 const codeExercise: ExercisePublic = { id: 'exercise-code-one', cloId: 'clo', kind: 'code', language: 'javascript', difficulty: 2, pattern: 'scan', title: 'First code rep', prompt: 'Write it.', starterCode: 'function solveOne() {}', tests: [{ id: 'one', input: '', expected: '1', hidden: false }], origin: 'seed', tags: [] }
+const spotTheBugExercise: ExercisePublic = { id: 'exercise-spot-one', cloId: 'clo', kind: 'spot-the-bug', language: 'javascript', difficulty: 2, pattern: 'debug', title: 'Find the bug', prompt: 'Select every buggy line.', starterCode: 'let x = 1\nx = x + 1', tests: [{ id: 'one', input: '', expected: '[]', hidden: false }], origin: 'seed', tags: [] }
+const objectTraceExercise: ExercisePublic = { ...traceExercise, id: 'exercise-trace-object', tests: [{ id: 'one', input: '', expected: '{"count":1}', hidden: false }] }
 
 beforeEach(() => {
   vi.resetAllMocks()
@@ -23,6 +29,7 @@ beforeEach(() => {
   mocks.session.mockReturnValue({ profile: { account_status: 'active' } })
   mocks.loop.mockReturnValue(model())
   mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+  mocks.wellness.mockReturnValue({ data: undefined })
 })
 afterEach(cleanup)
 
@@ -245,5 +252,81 @@ describe('exercise screen', () => {
     expect(screen.queryByText('Pass saved.')).toBeNull()
     expect(screen.queryByText('Preparing your next rep.')).toBeNull()
     expect((screen.getByRole('button', { name: /Next rep/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  describe('X6 fix round: focus returns to the answer control after the lockdown overlay lifts, per kind', () => {
+    it('predict-output: returns focus to the predicted-output textarea', () => {
+      mocks.loop.mockReturnValue({ ...model(), exercise })
+      mocks.lockdown.mockReturnValue({ overlay: 'idle', logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+      const { rerender } = render(<ExercisePage />)
+      const textarea = screen.getByRole('textbox', { name: 'Predicted output' })
+      expect(document.activeElement).not.toBe(textarea)
+      mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+      rerender(<ExercisePage />)
+      expect(document.activeElement).toBe(textarea)
+    })
+    it('spot-the-bug: returns focus to the first line button', () => {
+      mocks.loop.mockReturnValue({ ...model(), exercise: spotTheBugExercise, code: '[]' })
+      mocks.lockdown.mockReturnValue({ overlay: 'idle', logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+      const { rerender } = render(<ExercisePage />)
+      const firstLine = screen.getByRole('button', { name: 'Line 1' })
+      expect(document.activeElement).not.toBe(firstLine)
+      mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+      rerender(<ExercisePage />)
+      expect(document.activeElement).toBe(firstLine)
+    })
+    it('trace: returns focus to the first variable input', () => {
+      mocks.loop.mockReturnValue({ ...model(), exercise: objectTraceExercise, code: '{}' })
+      mocks.lockdown.mockReturnValue({ overlay: 'idle', logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+      const { rerender } = render(<ExercisePage />)
+      const input = screen.getByRole('textbox', { name: 'count' })
+      expect(document.activeElement).not.toBe(input)
+      mocks.lockdown.mockReturnValue({ overlay: null, logIntegrity: vi.fn(), containerProps: {}, resume: vi.fn(), pasteMessage: '', pasteWhy: '', printscreenNote: null, loggingError: null })
+      rerender(<ExercisePage />)
+      expect(document.activeElement).toBe(input)
+    })
+  })
+
+  describe('A11Y-05 fix round: advancing to the next rep moves focus and announces the new title', () => {
+    it('in-place path: an in-place next() moves focus to the new heading and announces its title', () => {
+      const { rerender } = render(<ExercisePage />)
+      const nextExercise = { ...exercise, id: 'exercise-two', title: 'A different rep' }
+      mocks.params.mockReturnValue({ id: 'exercise-two' })
+      mocks.loop.mockReturnValue({ ...model(), exercise: nextExercise })
+      rerender(<ExercisePage />)
+      const heading = screen.getByRole('heading', { name: 'A different rep' })
+      expect(document.activeElement).toBe(heading)
+      expect(screen.getByText('Rep opened. A different rep.')).toBeTruthy()
+    })
+    it('store-hydrated remount path: a fresh mount landing directly on the new exercise also moves focus and announces it', () => {
+      cleanup() // a genuine remount: a brand-new component tree, not a rerender of this one
+      mocks.params.mockReturnValue({ id: 'exercise-two' })
+      mocks.loop.mockReturnValue({ ...model(), exercise: { ...exercise, id: 'exercise-two', title: 'A different rep' } })
+      render(<ExercisePage />)
+      const heading = screen.getByRole('heading', { name: 'A different rep' })
+      expect(document.activeElement).toBe(heading)
+      expect(screen.getByText('Rep opened. A different rep.')).toBeTruthy()
+    })
+  })
+
+  describe('V4 / A11Y-03 fix round: the resolved wellness motion preference reaches the exercise page', () => {
+    it("threads the resolved preference into useExerciseLoop's own second argument", () => {
+      mocks.wellness.mockReturnValue({ data: { prefs: { motion: 'reduced' } } })
+      render(<ExercisePage />)
+      expect(mocks.loop).toHaveBeenCalledWith('exercise-one', 'reduced')
+    })
+    it("defaults to 'system' when the wellness row has not resolved yet, rather than a bare/omitted argument", () => {
+      mocks.wellness.mockReturnValue({ data: undefined })
+      render(<ExercisePage />)
+      expect(mocks.loop).toHaveBeenCalledWith('exercise-one', 'system')
+    })
+    it('reaches the chain pip -- no CSS transition under an in-app reduced preference, even with no OS preference stubbed', () => {
+      mocks.wellness.mockReturnValue({ data: { prefs: { motion: 'reduced' } } })
+      const state = { ...model(), status: 'graded', outcome: 'passed', chain: 1 }
+      mocks.loop.mockReturnValue(state)
+      render(<ExercisePage />)
+      const pip = screen.getByRole('img', { name: '1 of 3 in a row' }).querySelector('span')
+      expect(pip?.getAttribute('style') ?? '').not.toContain('transition')
+    })
   })
 })

@@ -47,9 +47,18 @@ export interface LockdownOverlayProps {
    * the caller supplies one. Left unset, this is a no-op: today's behaviour.
    */
   returnFocusRef?: RefObject<Focusable | null>
+  /**
+   * X6 (wave 2 review): a floor for the two effects below, tried only when
+   * `returnFocusRef` itself has nothing to focus (a kind whose own component
+   * never populated it, a future kind that forgets to). Intended for the
+   * exercise workspace container (`page.tsx`'s own `data-testid="exercise-workspace"`,
+   * given a `tabIndex={-1}`) so focus never lands on `<body>` for any kind,
+   * even one this component has no specific knowledge of.
+   */
+  fallbackFocusRef?: RefObject<Focusable | null>
 }
 
-export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessage, pasteWhy, returnFocusRef }: LockdownOverlayProps) {
+export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessage, pasteWhy, returnFocusRef, fallbackFocusRef }: LockdownOverlayProps) {
   const [toastMessage, setToastMessage] = useState('')
   const [toastSeenMessage, setToastSeenMessage] = useState('')
   const [toastDismissed, setToastDismissed] = useState(false)
@@ -94,19 +103,21 @@ export function LockdownOverlay({ reason, onResume, printscreenNote, pasteMessag
     return () => clearTimeout(timer)
   }, [toastVisible, whyOpen, toastMessage, pasteWhy])
 
-  // Fix round 1, I4: return focus once the "why" panel closes.
+  // Fix round 1, I4: return focus once the "why" panel closes. X6 (wave 2 review): falls back to
+  // `fallbackFocusRef` when `returnFocusRef` has nothing to focus (a kind whose own component
+  // never populated it), so focus never lands on `<body>` regardless of which kind is on screen.
   const wasWhyOpen = useRef(false)
   useEffect(() => {
-    if (wasWhyOpen.current && !whyOpen) returnFocusRef?.current?.focus()
+    if (wasWhyOpen.current && !whyOpen) (returnFocusRef?.current ?? fallbackFocusRef?.current)?.focus()
     wasWhyOpen.current = whyOpen
-  }, [whyOpen, returnFocusRef])
+  }, [whyOpen, returnFocusRef, fallbackFocusRef])
 
-  // Fix round 1, I4: return focus once the full-screen overlay lifts.
+  // Fix round 1, I4: return focus once the full-screen overlay lifts. X6: same fallback as above.
   const wasShowingOverlay = useRef(false)
   useEffect(() => {
-    if (wasShowingOverlay.current && !reason) returnFocusRef?.current?.focus()
+    if (wasShowingOverlay.current && !reason) (returnFocusRef?.current ?? fallbackFocusRef?.current)?.focus()
     wasShowingOverlay.current = Boolean(reason)
-  }, [reason, returnFocusRef])
+  }, [reason, returnFocusRef, fallbackFocusRef])
 
   // Fix round 1, I1: the bank's own honest line, picked once per transition
   // -- not on every re-render while the overlay stays up -- via `useMemo`
