@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { redirect, useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
+import { toast } from 'sonner'
 import type { LearnerProfile, LearnerState } from '@/lib/contracts'
 import { callAgent } from '@/lib/agents/client'
 import { createClient } from '@/lib/supabase/client'
+import { clearQueuedCompletion, queueCompletion, readQueuedCompletion } from '@/lib/onboarding/completionQueue'
 import { provisionalProfile } from '@/lib/onboarding/derive'
 import { QUESTIONS } from '@/lib/onboarding/questions'
 import { useReducedMotion } from '@/lib/motion/useReducedMotion'
@@ -27,6 +29,11 @@ const MOVE_EASE: [number, number, number, number] = [0.25, 1, 0.5, 1]
 const STANDARD_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 const CARD_DURATION = 0.2 // DUR.base, in seconds
 
+/** Wave 1 gate finding I3: one short pause before retrying a failed completing write. */
+const COMPLETION_RETRY_DELAY_MS = 1500
+const COMPLETION_SYNC_NOTICE = 'Saved on this device. We will sync when the connection is back.'
+const delay = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms) })
+
 type Answer = { questionId: string; answer: string }
 
 export default function Onboarding() {
@@ -34,6 +41,14 @@ export default function Onboarding() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const reducedMotion = useReducedMotion()
+
+  const userId = session.user?.id ?? null
+  // A locally-queued completion means a previous session's completing write never confirmed as
+  // landed (Wave 1 gate I3): this account is not re-asked and the Profiler is not asked again
+  // regardless of what the server row currently says. Read during render — synchronous,
+  // side-effect-free from React's own perspective — so the question flow never paints even for a
+  // frame; the actual retry happens in the effect below.
+  const queuedProfile = userId ? readQueuedCompletion(userId) : null
 
   const [index, setIndex] = useState(0)
   const [answers, setAnswers] = useState<Answer[]>([])
@@ -53,6 +68,34 @@ export default function Onboarding() {
   useEffect(() => {
     cardRef.current?.focus()
   }, [question.id])
+
+  // Retries a queued completion on the next time this page mounts, before any redirect decision
+  // is acted on — never calls the Profiler; only re-attempts the write (Wave 1 gate I3).
+  useEffect(() => {
+    if (!userId || !queuedProfile) return
+    const learnerState = session.learnerState
+    if (!learnerState) return
+    router.push('/courses')
+    void (async () => {
+      try {
+        const supabase = createClient()
+        const nextState = await writeLearnerState(supabase, learnerState, (base) => ({
+          ...base,
+          profile: { ...base.profile, ...queuedProfile, onboardingComplete: true },
+        }))
+        session.setLearnerState(nextState)
+        queryClient.setQueryData(qk.learnerState(userId), nextState)
+        clearQueuedCompletion(userId)
+      } catch {
+        // still queued; the next mount tries again. No notice here — the learner already saw
+        // one, if the original session's own retry also failed.
+      }
+    })()
+    // Runs once per mount against whatever queue entry existed when this component first
+    // rendered; a queue that appears later (this session's own failure path, below) is handled
+    // by that path directly, not by this effect re-firing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // The only irreducible wait in this flow is the background Profiler refinement, and it never
   // blocks the UI: the course picker is already showing by the time it starts (spec R4.3).
@@ -77,17 +120,35 @@ export default function Onboarding() {
 
       // Persist onboardingComplete now, started in parallel with the Profiler call below rather
       // than after it settles: a non-streamed DeepSeek round trip can take 5-30s, and gating the
-      // write on it left a long window where a reload or tab close lost the whole profile.
-      const persisted = writeLearnerState(supabase, learnerState, (base) => ({ ...base, profile: completeProfile(base.profile) }))
-        .then((nextState) => {
+      // write on it left a long window where a reload or tab close lost the whole profile. On
+      // failure, retry once after a short delay (Wave 1 gate I3); if that also fails, the session
+      // flag set above is never reverted (so this session is never re-asked), and the compiled
+      // profile is queued to localStorage so the next time this page mounts — even after a
+      // reload that lost everything above — the write is retried before any redirect decision,
+      // and the Profiler is never asked again for this account.
+      const attemptCompletionWrite = () =>
+        writeLearnerState(supabase, learnerState, (base) => ({ ...base, profile: completeProfile(base.profile) }))
+      const persisted = (async () => {
+        let nextState: LearnerState | null = null
+        try {
+          nextState = await attemptCompletionWrite()
+        } catch {
+          await delay(COMPLETION_RETRY_DELAY_MS)
+          try {
+            nextState = await attemptCompletionWrite()
+          } catch (secondError) {
+            console.error('[onboarding] could not persist onboardingComplete after a retry:', messageOf(secondError))
+          }
+        }
+        if (nextState) {
           session.setLearnerState(nextState)
           queryClient.setQueryData(qk.learnerState(learnerState.userId), nextState)
-        })
-        .catch((writeError: unknown) => {
-          // Nothing left on screen to show this to — the learner already moved on to /courses,
-          // and the store/cache above already carry the completed profile either way.
-          console.error('[onboarding] could not persist onboardingComplete:', messageOf(writeError))
-        })
+          clearQueuedCompletion(learnerState.userId)
+        } else {
+          queueCompletion(learnerState.userId, optimisticState.profile)
+          toast(COMPLETION_SYNC_NOTICE)
+        }
+      })()
 
       try {
         const envelope = await callAgent({
@@ -110,6 +171,7 @@ export default function Onboarding() {
           })
           session.setLearnerState(nextState)
           queryClient.setQueryData(qk.learnerState(learnerState.userId), nextState)
+          clearQueuedCompletion(learnerState.userId)
         }
       } catch {
         // network failure, timeout, or rate-limited: the completed provisional profile stands.
@@ -135,11 +197,14 @@ export default function Onboarding() {
     fillTimeout.current = setTimeout(commit, OPTION_FILL_MS)
   }, [answers, finishOnboarding, index, question.id, reducedMotion, selected])
 
-  if (!session.user?.id) return null
+  if (!userId) return null
   if (session.learnerState?.profile.onboardingComplete) {
     redirect('/courses')
     return null
   }
+  // A queued completion from a previous session: the retry effect above navigates and retries
+  // the write; never render a question while one exists (Wave 1 gate I3).
+  if (queuedProfile) return null
 
   const slideVariants = reducedMotion
     ? { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }

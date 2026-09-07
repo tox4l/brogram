@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEnvelope, LearnerState } from '@/lib/contracts'
 import { qk } from '@/lib/query/keys'
 import { QUESTIONS } from '@/lib/onboarding/questions'
+import { readQueuedCompletion } from '@/lib/onboarding/completionQueue'
 import Onboarding from './page'
 
 /**
@@ -27,13 +28,14 @@ import Onboarding from './page'
  */
 
 const mocks = vi.hoisted(() => ({
-  session: vi.fn(), call: vi.fn(), from: vi.fn(), push: vi.fn(), redirect: vi.fn(), setLearnerState: vi.fn(),
+  session: vi.fn(), call: vi.fn(), from: vi.fn(), push: vi.fn(), redirect: vi.fn(), setLearnerState: vi.fn(), toast: vi.fn(),
 }))
 
 vi.mock('@/store/session', () => ({ useSession: () => mocks.session() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), redirect: mocks.redirect }))
 vi.mock('@/lib/agents/client', () => ({ callAgent: mocks.call }))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: mocks.from }) }))
+vi.mock('sonner', () => ({ toast: mocks.toast }))
 
 const envelope = (reply: unknown, fallback = false): AgentEnvelope<unknown> => ({
   ok: true, agent: 'profiler', reply, fallback, usage: { promptTokens: 1, completionTokens: 1, cacheHitTokens: 0 },
@@ -42,6 +44,8 @@ const envelope = (reply: unknown, fallback = false): AgentEnvelope<unknown> => (
 type Row = Record<string, unknown>
 let learnerStateRows: Row[]
 let queryClient: QueryClient
+/** Consumed one at a time by the next `insert`/`update` call, to simulate a transient write failure (Wave 1 gate I3). */
+let failNextWrites = 0
 
 function baseLearnerState(overrides: Partial<{ version: number; onboardingComplete: boolean }> = {}): LearnerState {
   return {
@@ -89,7 +93,13 @@ function learnerStateBuilder() {
     maybeSingle: () => builder,
     insert: (value: Row) => { action = 'insert'; payload = value; return builder },
     update: (value: Row) => { action = 'update'; payload = value; return builder },
-    then: (resolve: (result: { data: unknown; error: null }) => unknown) => {
+    then: (resolve: (result: { data: unknown; error: { message: string } | null }) => unknown) => {
+      if (action === 'insert' || action === 'update') {
+        if (failNextWrites > 0) {
+          failNextWrites -= 1
+          return Promise.resolve(resolve({ data: null, error: { message: 'network blip' } }))
+        }
+      }
       if (action === 'insert') {
         const row = { ...payload! }
         learnerStateRows.push(row)
@@ -126,12 +136,17 @@ async function answerFirstFive() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
+  failNextWrites = 0
   learnerStateRows = [{ user_id: 'student', state: baseLearnerState(), version: 4 }]
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   mocks.session.mockReturnValue(session())
   mocks.from.mockImplementation(() => learnerStateBuilder())
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  window.localStorage.clear()
+})
 
 describe('onboarding', () => {
   it('shows exactly the first of six local questions on mount and calls no agent', () => {
@@ -203,6 +218,67 @@ describe('onboarding', () => {
     expect(mocks.call).toHaveBeenCalledTimes(1) // still just the one call from before the "reload"
 
     resolveCall(envelope({ nextQuestion: null, done: true, profileDelta: {} }))
+  })
+
+  it('retries a completing write that fails once and succeeds on the retry: no re-ask, exactly one Profiler call (Wave 1 gate I3)', async () => {
+    mocks.call.mockRejectedValueOnce(new Error('upstream unavailable'))
+    failNextWrites = 1
+    renderPage()
+    await answerFirstFive()
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
+
+    // The first attempt failed (consuming the one queued failure); the retry after the short
+    // delay succeeds, so this must be waited past.
+    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true), { timeout: 3000 })
+    expect(currentRow().version).toBe(5) // one successful write landed; the failed attempt cost no version
+    expect(readQueuedCompletion('student')).toBeNull() // never had to fall back to the local queue
+    expect(mocks.toast).not.toHaveBeenCalled()
+    expect(mocks.call).toHaveBeenCalledTimes(1) // still exactly one Profiler call in the whole flow
+
+    cleanup()
+    mocks.session.mockReturnValue({ ...session(), learnerState: currentRow() })
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderPage()
+    expect(mocks.redirect).toHaveBeenCalledWith('/courses')
+    expect(screen.queryByText(QUESTIONS[0].text)).toBeNull()
+    expect(mocks.call).toHaveBeenCalledTimes(1) // remounting never re-asks or re-calls
+  })
+
+  it('queues locally and shows a plain notice when a completing write fails twice, and never re-asks or re-calls on remount (Wave 1 gate I3)', async () => {
+    mocks.call.mockRejectedValueOnce(new Error('upstream unavailable'))
+    failNextWrites = 2
+    renderPage()
+    await answerFirstFive()
+    fireEvent.click(screen.getByRole('radio', { name: QUESTIONS[5].options[0].label }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/courses'))
+
+    // Both attempts fail; only after the retry's delay does this fall back to the local queue.
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('Saved on this device. We will sync when the connection is back.'), { timeout: 3000 })
+    const queued = readQueuedCompletion('student')
+    expect(queued?.onboardingComplete).toBe(true)
+    expect(queued?.motivation.why).toBe('To pass my courses') // the compiled profile, not just a bare flag
+    // Nothing landed in Postgres: the row is exactly as it started.
+    expect(currentRow().profile.onboardingComplete).toBe(false)
+    expect(currentRow().version).toBe(4)
+    // The session flag is never reverted, so this session itself is never re-asked either.
+    expect(mocks.setLearnerState).toHaveBeenCalledWith(expect.objectContaining({ profile: expect.objectContaining({ onboardingComplete: true }) }))
+
+    // Remount, backed by the still-incomplete server row (nothing persisted) but the local queue
+    // from above intact — exactly a reload after both writes failed.
+    cleanup()
+    mocks.session.mockReturnValue(session()) // fresh session: server truth is still onboardingComplete: false
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderPage()
+
+    expect(mocks.redirect).not.toHaveBeenCalled() // server truth says false, but the queue still wins
+    expect(mocks.push).toHaveBeenCalledWith('/courses') // the retry-on-mount effect navigates away
+    expect(screen.queryByText(QUESTIONS[0].text)).toBeNull() // never re-asked
+    expect(mocks.call).toHaveBeenCalledTimes(1) // never re-called
+
+    // The retry-on-mount effect's own write now succeeds (failNextWrites is back to 0).
+    await waitFor(() => expect(currentRow().profile.onboardingComplete).toBe(true))
+    expect(readQueuedCompletion('student')).toBeNull() // cleared once it actually lands
   })
 
   it('completes onboarding with the provisional profile and onboardingComplete: true when the Profiler call rejects', async () => {
