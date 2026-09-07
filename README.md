@@ -71,6 +71,7 @@ npm install
 cp .env.example .env.local   # fill in Supabase and DeepSeek credentials; Java runs in the browser (NEXT_PUBLIC_JUDGE_PROVIDER=browser)
 supabase db push             # apply migrations to your Supabase project
 node scripts/seed-load.mjs   # load courses, CLOs, patterns, exercises, and drills
+npm run curriculum:build     # writes public/curriculum/ (gitignored); npm run dev does not
 npm run dev
 ```
 
