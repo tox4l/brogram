@@ -61,6 +61,13 @@ test.beforeAll(async () => {
   if (!existsSync(resolve(ROOT, '.next', 'BUILD_ID'))) {
     throw new Error('No production build found. Run "npm run build" before "npm run perf:timings" (this file starts its own "next start", not "next dev").')
   }
+  // Fix round I-1: every test below opens with `test.skip(!hasEnv(env), ...)`, so a runner
+  // with no Supabase env exported gets "5 skipped" and exit 0 having asserted nothing --
+  // indistinguishable from a green, meaningful gate. Throw here instead, unless the caller
+  // opts in explicitly.
+  if (!hasEnv(env) && process.env.PERF_GATE_OPTIONAL !== '1') {
+    throw new Error('No Supabase env: perf:timings cannot measure anything (every test would be skipped and this run would exit 0 without asserting anything). Export .env.local (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY) or set PERF_GATE_OPTIONAL=1 to skip on purpose.')
+  }
   // AGENT_DRY_RUN=true must win over .env.local's own `false` (spec's "no model latency
   // pollutes the numbers"). Next only skips a `.env.local` value already present in
   // `process.env` when it loads env files, so setting it here on the *child's* env — before
@@ -80,6 +87,14 @@ test.beforeAll(async () => {
     await waitForServer(`${PERF_BASE_URL}/login`, 60_000)
   } catch (error) {
     throw new Error(`"next start" on port ${PERF_PORT} did not come up.\n${startupOutput.join('')}`, { cause: error })
+  }
+  // Fix round m-6: `waitForServer` is satisfied by *any* server already answering on this
+  // port, including a stale one left behind by a killed prior run -- in which case our own
+  // freshly spawned child dies of EADDRINUSE right after, and every budget below would then
+  // measure a different, possibly stale build with no error reported. Confirm the child we
+  // spawned is still the one running.
+  if (server.exitCode !== null) {
+    throw new Error(`"next start" on port ${PERF_PORT} exited (code ${server.exitCode}) right after answering -- port ${PERF_PORT} was likely already bound by a stale server, so this run would otherwise measure that build instead.\n${startupOutput.join('')}`)
   }
 })
 
@@ -135,12 +150,25 @@ function requireMark(value: number | null, name: string): number {
  *  `src/app/(app)/account/diagnostics.ts`'s own local collector, so a green run here means
  *  the same signal Diagnostics would show). Must run before `page.goto`, since `addInitScript`
  *  only applies going forward. */
+interface PaintMetrics {
+  lcp: number | null
+  cls: number
+  inp: number | null
+  /** Whether this browser's `PerformanceObserver` supports the entry type each metric needs
+   *  (fix round I-3/m-1) — an assertion is skipped only when the type itself is unsupported,
+   *  never merely because no entry happened to arrive yet. */
+  lcpSupported: boolean
+  inpSupported: boolean
+}
+
 async function armPaintObservers(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const perf = { lcp: null as number | null, cls: 0, inp: null as number | null }
+    const perf = { lcp: null as number | null, cls: 0, inp: null as number | null, lcpSupported: false, inpSupported: false }
     ;(window as unknown as { __perf: typeof perf }).__perf = perf
     if (typeof PerformanceObserver === 'undefined') return
     const supported = new Set(PerformanceObserver.supportedEntryTypes ?? [])
+    perf.lcpSupported = supported.has('largest-contentful-paint')
+    perf.inpSupported = supported.has('event')
     function observe(type: string, onEntries: (list: PerformanceObserverEntryList) => void) {
       if (!supported.has(type)) return
       try { new PerformanceObserver(onEntries).observe({ type, buffered: true }) } catch { /* best-effort */ }
@@ -162,8 +190,19 @@ async function armPaintObservers(page: Page): Promise<void> {
   })
 }
 
-async function readPaintMetrics(page: Page): Promise<{ lcp: number | null; cls: number; inp: number | null }> {
-  return page.evaluate(() => (window as unknown as { __perf: { lcp: number | null; cls: number; inp: number | null } }).__perf)
+async function readPaintMetrics(page: Page): Promise<PaintMetrics> {
+  return page.evaluate(() => (window as unknown as { __perf: PaintMetrics }).__perf)
+}
+
+/** Asserts LCP and CLS against one budget, failing loudly (not silently passing) when LCP is
+ *  supported but no entry ever arrived — a regression that suppresses LCP entirely used to be
+ *  indistinguishable from a pass here (fix round m-1). */
+function assertPaint(paint: PaintMetrics, lcpMaxMs: number): void {
+  if (paint.lcpSupported) {
+    expect(paint.lcp, 'LCP is supported in this browser but no entry was recorded').not.toBeNull()
+    expect(paint.lcp).toBeLessThanOrEqual(lcpMaxMs)
+  }
+  expect(paint.cls).toBeLessThanOrEqual(PAINT.clsMax)
 }
 
 // ---------------------------------------------------------------------------------------
@@ -171,6 +210,12 @@ async function readPaintMetrics(page: Page): Promise<{ lcp: number | null; cls: 
 // passive `page.on('request')`) — a pass-through handler (`route.continue()`) that records
 // every matching request's method and pathname, so a route bites the moment a page starts
 // making a round trip it was budgeted not to.
+//
+// Fix round m-5: these rows measure browser-visible round trips only, matched on
+// `/rest/v1/` — `/auth/v1/*` and `/functions/v1/*` never count, and a read moved
+// server-side (e.g. `src/app/(app)/layout.tsx`'s server-component reads through
+// `serverClient`) never crosses `page.route` at all, so it is invisible to every budget
+// below even though the real round-trip count would rise.
 // ---------------------------------------------------------------------------------------
 interface Seen { method: string; pathname: string }
 
@@ -253,9 +298,7 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       }
     }
     expect(median(dashboardTimings), 'dashboard median full-navigation time').toBeLessThan(PAINT.lcpMsStandard + 500) // headroom for goto+load beyond LCP itself
-    const dashboardPaint = await readPaintMetrics(page)
-    if (dashboardPaint.lcp !== null) expect(dashboardPaint.lcp).toBeLessThanOrEqual(PAINT.lcpMsStandard)
-    expect(dashboardPaint.cls).toBeLessThanOrEqual(PAINT.clsMax)
+    assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
 
     // -------------------------------------------------------------------------------
     // Course tile click -> course home. A real SPA transition (clicking the `<Link>`,
@@ -271,56 +314,80 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       const courseCalls = seen.slice(before)
       expect(courseCalls, `/course/[code] must be 0 round trips on an SPA transition; saw ${courseCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
       expect(requireMark(await readMark(page, ROUTE_READY), ROUTE_READY), 'course tile click -> course home painted').toBeLessThan(INTERACTION.courseTileClickToPaintMs)
+
+      // Paint budget (fix round I-3): a warm SPA transition fires no new
+      // `largest-contentful-paint` entry (there is no new document), so LCP/CLS are measured
+      // on a fresh navigation to the same URL instead. Round trips for this route are already
+      // asserted above from the warm transition; this reload only re-measures paint.
+      await page.reload({ waitUntil: 'load' })
+      assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
     }
 
     // -------------------------------------------------------------------------------
-    // Lesson: direct deep link (as real learners and every other e2e spec use), still
-    // inside the same SPA session started at /dashboard above.
+    // Lesson: a real `<Link>` click by its `href` (as `NodeItem.tsx` renders it), still
+    // inside the same SPA session. Fix round m-2: the previous `window.history.pushState`
+    // fallback updates the URL without rendering the route (Next's own docs: pushState
+    // "does not reload the page"), so a locator miss used to pass this budget having
+    // rendered nothing. A miss now fails loudly instead.
     // -------------------------------------------------------------------------------
     {
       const before = seen.length
-      await page.getByRole('link', { name: /Stop the submit, then check it|INFS2101-3/i }).first().click().catch(async () => {
-        // Path-map link text is content-authored and may not match by exact title;
-        // falling back to a direct client-side navigation keeps this deterministic.
-        await page.evaluate((href) => { window.history.pushState({}, '', href) }, '/lesson/INFS2101-3')
-      })
+      await page.locator('a[href="/lesson/INFS2101-3"]').first().click({ timeout: 10_000 })
       await page.waitForURL('**/lesson/INFS2101-3')
       const lessonCalls = seen.slice(before)
       expect(lessonCalls, `/lesson/[cloId] must be 0 round trips; saw ${lessonCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
+
+      // Paint budget, same reasoning as the course block above.
+      await page.reload({ waitUntil: 'load' })
+      assertPaint(await readPaintMetrics(page), PAINT.lcpMsStandard)
     }
 
     // -------------------------------------------------------------------------------
     // A lesson check -> verdict. Non-`micro-code` kind, per the brief's own carve-out.
+    // Fix round m-3: asserted visible rather than silently skipped when absent -- a route
+    // that stops rendering the surface must fail this budget, not report green having
+    // checked nothing.
     // -------------------------------------------------------------------------------
     const checkRegion = page.getByRole('region', { name: 'Check' }).first()
-    if (await checkRegion.isVisible().catch(() => false)) {
-      await clearMark(page, CHECK_VERDICT)
-      await checkRegion.getByRole('radio').first().click()
-      expect(requireMark(await readMark(page, CHECK_VERDICT), CHECK_VERDICT)).toBeLessThan(INTERACTION.lessonCheckToVerdictMs)
-    }
+    await expect(checkRegion).toBeVisible()
+    await clearMark(page, CHECK_VERDICT)
+    await checkRegion.getByRole('radio').first().click()
+    expect(requireMark(await readMark(page, CHECK_VERDICT), CHECK_VERDICT)).toBeLessThan(INTERACTION.lessonCheckToVerdictMs)
 
     // -------------------------------------------------------------------------------
-    // Exercise: this exercise is in the static bundle for INFS2101 (already loaded this
-    // session), so R5.1b's own comment says a bundle hit costs zero `exercises_public`
-    // reads — the brief's "1 seed" round trip is whatever else the page needs regardless
-    // of the bundle (e.g. prior-attempts history), so this asserts the *total*, not a
-    // specific table.
+    // Exercise: reached with a hard `page.goto`, a genuinely cold navigation. Fix round
+    // C-2: a live probe of this exact flow (three runs) found this always costs 2 round
+    // trips on a cold nav, not 1 — `exercises_public` (the bundle-hit comment this
+    // replaced described a *warm* SPA transition, which this is not) plus `attempts`
+    // (prior-attempts history). Asserted per table with a closed allow-list rather than a
+    // guessed total, so this stays correct regardless of exactly how many
+    // `exercises_public` reads a cold load costs: the "1 seed" the brief names is the
+    // `attempts` read specifically (report ruling #4). Plan amendment owed to the
+    // controller: this row is 2 round trips on a cold `page.goto`, capped to these two
+    // tables.
     // -------------------------------------------------------------------------------
     {
       const before = seen.length
       await page.goto(`${PERF_BASE_URL}/exercise/${exerciseId}`, { waitUntil: 'load' })
       await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible()
       const exerciseCalls = seen.slice(before)
-      expect(exerciseCalls.length, `/exercise/[id] (seed) should cost exactly 1 round trip; saw ${exerciseCalls.map((c) => c.pathname).join(', ')}`).toBe(1)
-      const exercisePaint = await readPaintMetrics(page)
-      if (exercisePaint.lcp !== null) expect(exercisePaint.lcp).toBeLessThanOrEqual(PAINT.lcpMsExercise)
-      expect(exercisePaint.cls).toBeLessThanOrEqual(PAINT.clsMax)
+      const allowedExerciseTables = new Set(['exercises_public', 'attempts'])
+      const unexpected = exerciseCalls.filter((call) => !allowedExerciseTables.has(tableOf(call.pathname) ?? ''))
+      expect(unexpected, `/exercise/[id] (seed) round trips must stay inside {exercises_public, attempts}; saw ${exerciseCalls.map((c) => c.pathname).join(', ')}`).toHaveLength(0)
+      const attemptsCalls = exerciseCalls.filter((call) => tableOf(call.pathname) === 'attempts')
+      expect(attemptsCalls.length, `/exercise/[id] (seed) should cost exactly 1 attempts read; saw ${exerciseCalls.map((c) => c.pathname).join(', ')}`).toBe(1)
+      assertPaint(await readPaintMetrics(page), PAINT.lcpMsExercise)
     }
 
     // -------------------------------------------------------------------------------
     // Submit -> pass/fail revealed. Deliberately wrong code (same snippet fail-fix-pass
     // uses) so the verdict is a fail, revealed exactly as fast as a pass — the budget is
-    // about "verdict shown", not about which one.
+    // about "verdict shown", not about which one. Fix round I-2: the button's own label
+    // goes Submit -> Checking… -> Submit on a fail (`page.tsx`: `outcome === 'passed' ?
+    // 'Passed' : status === 'submitting' ? 'Checking…' : 'Submit'`), so waiting on
+    // `/Passed|Submit/` was satisfied by the pre-click label at t=0 and never actually
+    // waited for grading. Waits on the verdict banner's own "Needs work" text instead
+    // (`page.tsx` renders it only once `loop.outcome` is set).
     // -------------------------------------------------------------------------------
     {
       const editor = page.getByRole('textbox', { name: 'Code editor' })
@@ -329,7 +396,7 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
       await page.keyboard.insertText('export function validateUsername(name) { return false }')
       await clearMark(page, GRADED)
       await page.getByRole('button', { name: 'Submit' }).click()
-      await expect(page.getByRole('button', { name: /Passed|Submit/ })).toBeVisible()
+      await expect(page.getByText('Needs work').first()).toBeVisible()
       expect(requireMark(await readMark(page, GRADED), GRADED)).toBeLessThan(INTERACTION.submitToVerdictMs)
     }
 
@@ -339,6 +406,19 @@ test('dashboard -> course -> lesson -> exercise -> submit stays inside its round
     // underpins the route-level budgets above, which already require it transitively).
     // -------------------------------------------------------------------------------
     requireMark(await readMark(page, SHELL_READY), SHELL_READY)
+
+    // -------------------------------------------------------------------------------
+    // INP (fix round I-3): `PAINT.inpMaxMs` was declared and referenced by nothing. INP
+    // entries exist only after a genuine interaction, so it is read here, at the end of a
+    // flow that has already clicked a course tile, a radio, Submit and Run -- skipped only
+    // when the browser itself lacks the `event` entry type, never merely because no value
+    // happened to be null.
+    // -------------------------------------------------------------------------------
+    const finalPaint = await readPaintMetrics(page)
+    if (finalPaint.inpSupported) {
+      expect(finalPaint.inp, 'INP is supported in this browser but no interaction entry was recorded').not.toBeNull()
+      expect(finalPaint.inp).toBeLessThanOrEqual(PAINT.inpMaxMs)
+    }
 
     await detach()
     await page.close()
@@ -425,13 +505,15 @@ test('derot: one wellness read serves the whole page load, including a sub-route
     const wellnessAfterFirstLoad = seen.filter((call) => tableOf(call.pathname) === 'wellness').length
     expect(wellnessAfterFirstLoad, `/derot's own load should cost exactly 1 wellness read; saw ${wellnessAfterFirstLoad}`).toBe(1)
 
+    // Fix round m-3: asserted visible rather than silently skipped when absent -- a
+    // route that stops rendering a "Start" link must fail this budget, not report green
+    // having checked nothing.
     const startLink = page.getByRole('link', { name: /^Start/ }).first()
-    if (await startLink.isVisible().catch(() => false)) {
-      await startLink.click()
-      await page.waitForLoadState('domcontentloaded')
-      const wellnessTotal = seen.filter((call) => tableOf(call.pathname) === 'wellness').length
-      expect(wellnessTotal, 'a /derot/* sub-route must not re-read wellness — one read serves the whole page load').toBe(1)
-    }
+    await expect(startLink).toBeVisible()
+    await startLink.click()
+    await page.waitForLoadState('domcontentloaded')
+    const wellnessTotal = seen.filter((call) => tableOf(call.pathname) === 'wellness').length
+    expect(wellnessTotal, 'a /derot/* sub-route must not re-read wellness — one read serves the whole page load').toBe(1)
 
     await detach()
     await page.close()
@@ -494,6 +576,15 @@ test('reports: the report tab costs exactly one round trip, only on open', async
  * `page.route` interception — actually bites, without editing any file outside this task's
  * ownership to manufacture the extra request: it plants the extra read from inside the page
  * via `page.evaluate`, the same class of call `trackApiCalls` is built to catch.
+ *
+ * Fix round m-7: this used to also assert `expect(() => expect(planted.length, ...).toBe(0))
+ * .toThrow()`, which only proves Playwright's own `expect` throws on an unequal comparison —
+ * true of any two different numbers, unrelated to this file's interception. Deleted; the
+ * assertion below (a planted, Supabase-shaped read the interception was never told to expect
+ * IS observed) is what the review criterion actually needs, and the `attempts`/`wellness`
+ * exact-equality budgets in the tests above (a real budgeted row, asserted on real application
+ * traffic) are the negative proof — change either literal `.toBe(1)` there to `.toBe(2)` and
+ * those tests fail for real, on a route this file actually budgets.
  */
 test('round-trip counting genuinely counts: a planted extra read is not silently ignored', async ({ context }) => {
   test.skip(!hasEnv(env), 'Pending C5: configure Supabase and run node scripts/seed-load.mjs first.')
@@ -505,10 +596,6 @@ test('round-trip counting genuinely counts: a planted extra read is not silently
   await page.waitForTimeout(500)
   const planted = seen.slice(before)
   expect(planted.length, 'a planted extra Supabase read must be observed by the interception').toBe(1)
-  // The assertion this whole mechanism exists to protect: had the count instead been
-  // asserted as 0 here (the wrong budget for a route that plants one extra read), the test
-  // would now correctly fail rather than pass silently.
-  expect(() => expect(planted.length, 'proof: the wrong budget fails').toBe(0)).toThrow()
   await detach()
   await page.close()
 })
