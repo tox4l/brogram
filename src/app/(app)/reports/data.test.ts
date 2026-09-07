@@ -11,13 +11,13 @@ const cloRow = {
 function makeClient(overrides: {
   clos?: { data: unknown; error: unknown }
   wellness?: { data: unknown; error: unknown }
-  attemptPages?: { data: unknown; error: unknown }[]
+  attempts?: { data: unknown; error: unknown }
 } = {}) {
   const closResult = overrides.clos ?? { data: [cloRow], error: null }
   const wellnessResult = overrides.wellness ?? { data: { drill_results: [] }, error: null }
-  const attemptPages = overrides.attemptPages ?? [{ data: [], error: null }]
+  const attemptsResult = overrides.attempts ?? { data: [], error: null }
   const cloFilters: unknown[] = []
-  const attemptCalls: { column: string; value: unknown; from: number; to: number }[] = []
+  const attemptCalls: { select: string; column: string; value: unknown; order: string; options: unknown; limit: number }[] = []
 
   return {
     client: {
@@ -51,19 +51,14 @@ function makeClient(overrides: {
         }
         if (table === 'attempts') {
           return {
-            select: () => ({
+            select: (select: string) => ({
               eq: (column: string, value: unknown) => ({
-                order: (orderColumn: string, options: { ascending: boolean }) => {
-                  expect(orderColumn).toBe('created_at')
-                  expect(options).toEqual({ ascending: true })
-                  return {
-                    range: (from: number, to: number) => {
-                      attemptCalls.push({ column, value, from, to })
-                      const page = attemptPages[attemptCalls.length - 1] ?? { data: [], error: null }
-                      return Promise.resolve(page)
-                    },
-                  }
-                },
+                order: (orderColumn: string, options: { ascending: boolean }) => ({
+                  limit: (limit: number) => {
+                    attemptCalls.push({ select, column, value, order: orderColumn, options, limit })
+                    return Promise.resolve(attemptsResult)
+                  },
+                }),
               }),
             }),
           }
@@ -99,34 +94,35 @@ describe('fetchReportData', () => {
     expect(cloFilters[0]).toEqual(['course', 'CSCI2001'])
   })
 
-  it('maps attempt rows to camelCase Attempt records and stamps the given userId', async () => {
+  it('maps attempt rows to camelCase Attempt records, stamps the given userId, and backfills code/results as empty', async () => {
+    // The row itself carries neither column (the select string never asks for
+    // them — see the next test) — this only proves the mapper never crashes
+    // reading a row shaped exactly like what the real narrow query returns.
     const row = {
-      id: 'a1', exercise_id: 'ex-1', code: 'print(1)',
-      results: [{ testId: 't1', passed: true, actual: '1', expected: '1', stdout: '1', stderr: '', durationMs: 5 }],
+      id: 'a1', exercise_id: 'ex-1',
       passed: true, duration_ms: 4200, hint_count: 1, created_at: '2026-09-01T00:00:00.000Z',
     }
-    const { client } = makeClient({ attemptPages: [{ data: [row], error: null }] })
+    const { client } = makeClient({ attempts: { data: [row], error: null } })
     const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
     expect(result.attempts).toEqual([{
-      id: 'a1', userId: 'user-1', exerciseId: 'ex-1', code: 'print(1)',
-      results: row.results, passed: true, durationMs: 4200, hintCount: 1, createdAt: '2026-09-01T00:00:00.000Z',
+      id: 'a1', userId: 'user-1', exerciseId: 'ex-1', code: '', results: [],
+      passed: true, durationMs: 4200, hintCount: 1, createdAt: '2026-09-01T00:00:00.000Z',
     }])
   })
 
-  it('pages attempts at 1000 rows until a short page ends the fetch', async () => {
-    const fullPage = Array.from({ length: 1000 }, (_, i) => ({
-      id: `a${i}`, exercise_id: 'ex-1', code: '', results: [], passed: true,
-      duration_ms: 1, hint_count: 0, created_at: '2026-09-01T00:00:00.000Z',
-    }))
-    const { client, attemptCalls } = makeClient({
-      attemptPages: [{ data: fullPage, error: null }, { data: [{ ...fullPage[0], id: 'a1000' }], error: null }],
-    })
-    const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
-    expect(result.attempts).toHaveLength(1001)
-    expect(attemptCalls.map(c => [c.column, c.value, c.from, c.to])).toEqual([
-      ['user_id', 'user-1', 0, 999],
-      ['user_id', 'user-1', 1000, 1999],
-    ])
+  it('never selects code or results, caps at 1000, and orders most-recent-first', async () => {
+    const { client, attemptCalls } = makeClient()
+    await fetchReportData(client as never, 'user-1', 'INFS1101')
+    expect(attemptCalls).toHaveLength(1)
+    const [call] = attemptCalls
+    expect(call.select).not.toMatch(/\bcode\b/)
+    expect(call.select).not.toMatch(/\bresults\b/)
+    expect(call.select).toContain('passed')
+    expect(call.column).toBe('user_id')
+    expect(call.value).toBe('user-1')
+    expect(call.order).toBe('created_at')
+    expect(call.options).toEqual({ ascending: false })
+    expect(call.limit).toBe(1000)
   })
 
   it('reads drill results from wellness and defaults to an empty list when there is no row', async () => {

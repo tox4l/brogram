@@ -1,6 +1,9 @@
+import type { PropsWithChildren } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Attempt, Clo, DrillResult, LearnerState } from '@/lib/contracts'
+import { makeQueryClient } from '@/lib/query/client'
+import { ACHIEVEMENTS, type Attempt, type Clo, type DrillResult, type LearnerState } from '@/lib/contracts'
 import ReportsPage from './page'
 
 const mocks = vi.hoisted(() => ({
@@ -9,12 +12,27 @@ const mocks = vi.hoisted(() => ({
   downloadReportPdf: vi.fn(),
 }))
 
-vi.mock('@/store/session', () => ({ useSession: () => mocks.session() }))
-vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }))
-vi.mock('./data', () => ({ fetchReportData: mocks.fetchReportData }))
+// `useWellness`/`useAchievements` (`src/lib/query/hooks.ts`) call `useSession`
+// with a selector, unlike this page's own direct call -- the mock has to
+// honour both call shapes or the selector form receives the whole session
+// object where it expects a string.
+vi.mock('@/store/session', () => ({
+  useSession: (selector?: (session: ReturnType<typeof mocks.session>) => unknown) =>
+    (selector ? selector(mocks.session()) : mocks.session()),
+}))
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    from: (table: string) => {
+      if (table === 'user_achievements') return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) }
+      if (table === 'wellness') return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }) }
+      throw new Error(`Unexpected table in this test: ${table}`)
+    },
+  }),
+}))
 // DownloadReportButton imports `downloadReportPdf` from its own relative './pdf'; mocking the
 // module by its resolved path intercepts that import even though this test never names it.
 vi.mock('@/components/report/pdf', () => ({ downloadReportPdf: mocks.downloadReportPdf }))
+vi.mock('./data', () => ({ fetchReportData: mocks.fetchReportData }))
 
 function learnerState(overrides: Partial<LearnerState> = {}): LearnerState {
   return {
@@ -56,6 +74,28 @@ function session(state: LearnerState | null = learnerState()) {
   return { user: { id: 'learner-1' }, profile: { id: 'learner-1', account_status: 'active', restricted_until: null }, learnerState: state, setLearnerState: vi.fn() }
 }
 
+function wrapper() {
+  const client = makeQueryClient()
+  return function Wrapper({ children }: PropsWithChildren) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  }
+}
+
+/** `makeQueryClient()`'s default `retry: 1` would consume this suite's
+ *  reject-then-resolve mock on an automatic retry before the "Try again"
+ *  button is ever clicked -- retries are off here so the mock sequence
+ *  matches the user-driven retry this test actually exercises. */
+function wrapperNoRetry() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
+  return function Wrapper({ children }: PropsWithChildren) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  }
+}
+
+async function openReportTab() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Report' }))
+}
+
 beforeEach(() => {
   // Only Date is faked (for a deterministic generatedAt / file name); setTimeout and friends
   // stay real so findBy*/waitFor keep working normally.
@@ -73,16 +113,38 @@ afterEach(() => {
 describe('reports page', () => {
   it('shows an empty state pointing to onboarding when no course is chosen', () => {
     mocks.session.mockReturnValue(session(learnerState({ currentCourse: null })))
-    render(<ReportsPage />)
-    expect(screen.getByText('Choose a course to see your report.')).toBeTruthy()
+    render(<ReportsPage />, { wrapper: wrapper() })
+    expect(screen.getByText('Choose a course to see progress.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Choose a course' }).getAttribute('href')).toBe('/onboarding')
     expect(mocks.fetchReportData).not.toHaveBeenCalled()
   })
 
+  it('defaults to the Trophies tab, never fetching the report until it is opened', async () => {
+    render(<ReportsPage />, { wrapper: wrapper() })
+    expect((await screen.findByRole('tab', { name: 'Trophies' })).getAttribute('aria-selected')).toBe('true')
+    expect(mocks.fetchReportData).not.toHaveBeenCalled()
+  })
+
+  it('renders every achievement on the Trophies tab and every locked one states its own rule -- nothing is a mystery box', async () => {
+    render(<ReportsPage />, { wrapper: wrapper() })
+    for (const achievement of ACHIEVEMENTS) {
+      expect(await screen.findByText(achievement.how)).toBeTruthy()
+    }
+    expect(mocks.fetchReportData).not.toHaveBeenCalled()
+  })
+
+  it('fetches the report only once the Report tab is opened', async () => {
+    render(<ReportsPage />, { wrapper: wrapper() })
+    expect(mocks.fetchReportData).not.toHaveBeenCalled()
+    await openReportTab()
+    await waitFor(() => expect(mocks.fetchReportData).toHaveBeenCalledWith(expect.anything(), 'learner-1', 'INFS1101'))
+  })
+
   it('loads clos, attempts, and drill results for the current course and passes them through to the report', async () => {
-    render(<ReportsPage />)
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
     const preview = await screen.findByTestId('report-preview')
-    expect(mocks.fetchReportData).toHaveBeenCalledWith({}, 'learner-1', 'INFS1101')
+    expect(mocks.fetchReportData).toHaveBeenCalledWith(expect.anything(), 'learner-1', 'INFS1101')
     // Attempts: one 45-minute attempt on one day.
     expect(within(preview).getByText('45m total · 1 active day')).toBeTruthy()
     // Drill results: two 'trace' runs, best 90 / mean 80.
@@ -90,9 +152,10 @@ describe('reports page', () => {
   })
 
   it('shows the Planner fallback focus sentence when no focus line is persisted', async () => {
-    render(<ReportsPage />)
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
     const preview = await screen.findByTestId('report-preview')
-    expect(within(preview).getByText('Your next exercises are still being prepared.')).toBeTruthy()
+    expect(within(preview).getByText('Next exercises are still being prepared.')).toBeTruthy()
   })
 
   it('passes a persisted focus line through to the report instead of the fallback', async () => {
@@ -100,22 +163,25 @@ describe('reports page', () => {
     // contract), written by onboarding and by useExerciseLoop's plan-refresh.
     const withFocus = { ...learnerState(), focus: 'Work on loops next.' }
     mocks.session.mockReturnValue(session(withFocus))
-    render(<ReportsPage />)
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
     const preview = await screen.findByTestId('report-preview')
     expect(within(preview).getByText('Work on loops next.')).toBeTruthy()
-    expect(within(preview).queryByText('Your next exercises are still being prepared.')).toBeNull()
+    expect(within(preview).queryByText('Next exercises are still being prepared.')).toBeNull()
   })
 
   it('renders the report even with zero attempts and zero drill results', async () => {
     mocks.fetchReportData.mockResolvedValue({ clos, attempts: [], drillResults: [] })
-    render(<ReportsPage />)
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
     const preview = await screen.findByTestId('report-preview')
     expect(within(preview).getByText('No attempts logged yet. Time spent appears after the first exercise.')).toBeTruthy()
     expect(within(preview).getAllByText('Not attempted').length).toBeGreaterThan(0)
   })
 
   it('wires the download button to the unscaled report container and a dated file name', async () => {
-    render(<ReportsPage />)
+    render(<ReportsPage />, { wrapper: wrapper() })
+    await openReportTab()
     const downloadSource = await screen.findByTestId('report-download-source')
 
     fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
@@ -124,5 +190,16 @@ describe('reports page', () => {
     const [root, fileName] = mocks.downloadReportPdf.mock.calls[0]
     expect(root).toBe(downloadSource)
     expect(fileName).toBe('brogram-report-2026-09-06.pdf')
+  })
+
+  it('shows a retry affordance when the report fails to load and refetches on click', async () => {
+    mocks.fetchReportData.mockReset().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ clos, attempts, drillResults })
+    render(<ReportsPage />, { wrapper: wrapperNoRetry() })
+    await openReportTab()
+    expect(await screen.findByRole('alert')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByTestId('report-preview')
+    expect(mocks.fetchReportData).toHaveBeenCalledTimes(2)
   })
 })
