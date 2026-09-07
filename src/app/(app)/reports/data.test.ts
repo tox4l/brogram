@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { Clo } from '@/lib/contracts'
+import type { Clo, DrillResult } from '@/lib/contracts'
 import { fetchReportData } from './data'
 
 const cloRow: Clo = {
@@ -138,6 +138,34 @@ describe('fetchReportData', () => {
   it('surfaces a clear error when the wellness query fails', async () => {
     const { client } = makeClient({ wellness: { data: null, error: { message: 'db down' } } })
     await expect(fetchReportData(client as never, 'user-1', 'INFS1101')).rejects.toThrow('Unable to load your de-rot scores.')
+  })
+
+  // F6 (fix round, Opus review of `1a13de0`): the caller (`ReportsPage`)
+  // already holds the `wellness` row via `useWellness()`, seeded server-side
+  // -- re-reading `drill_results` from Postgres here made `/reports` two
+  // round trips against the spec's budget of one. Passing that row must skip
+  // the network leg entirely.
+  it('reads drill results from a seeded wellness row and never touches Postgres for it', async () => {
+    const drillResults: DrillResult[] = [{ drillId: 'd1', kind: 'trace', correct: true, timeMs: 500, score: 80, at: '2026-09-01T00:00:00.000Z', lane: 'arcade' }]
+    const { client, tablesRead } = makeClient()
+    const result = await fetchReportData(client as never, 'user-1', 'INFS1101', { drill_results: drillResults })
+    expect(result.drillResults).toEqual(drillResults)
+    expect(tablesRead).not.toContain('wellness')
+  })
+
+  it('treats a seeded wellness row with no drill results yet as an empty list, still without a network read', async () => {
+    const { client, tablesRead } = makeClient()
+    const result = await fetchReportData(client as never, 'user-1', 'INFS1101', { drill_results: null })
+    expect(result.drillResults).toEqual([])
+    expect(tablesRead).not.toContain('wellness')
+  })
+
+  it('falls back to a Postgres read when no seeded wellness row is given at all', async () => {
+    const drillResults = [{ drillId: 'd2', kind: 'trace', correct: false, timeMs: 300, score: 40, at: '2026-09-02T00:00:00.000Z', lane: 'arcade' }]
+    const { client, tablesRead } = makeClient({ wellness: { data: { drill_results: drillResults }, error: null } })
+    const result = await fetchReportData(client as never, 'user-1', 'INFS1101')
+    expect(result.drillResults).toEqual(drillResults)
+    expect(tablesRead).toContain('wellness')
   })
 
   it('never selects from the exercises table', () => {

@@ -6,7 +6,14 @@ import { makeQueryClient } from '@/lib/query/client'
 import { qk } from '@/lib/query/keys'
 import { hasPendingPrefsWrite, resetWellnessPrefsWriterForTests, useWellnessPrefsMutation } from './prefsMutation'
 
-const db = vi.hoisted(() => ({ row: null as { prefs?: unknown } | null, selectGate: null as Promise<void> | null }))
+const db = vi.hoisted(() => ({
+  row: null as { prefs?: unknown } | null,
+  selectGate: null as Promise<void> | null,
+  // Per-call gates, consumed in order -- lets a test hold TWO overlapping
+  // `select` calls open independently (F2: an overlapping-writes race),
+  // rather than `selectGate`'s single gate shared by every call.
+  selectGates: [] as Array<Promise<void> | null>,
+}))
 const mocks = vi.hoisted(() => ({ select: vi.fn(), update: vi.fn(), insert: vi.fn(), toast: vi.fn() }))
 
 vi.mock('sonner', () => ({ toast: mocks.toast }))
@@ -19,7 +26,12 @@ vi.mock('@/lib/supabase/client', () => ({
           // releases it -- how the in-flight-write tests below observe
           // `hasPendingPrefsWrite` true for the network round trip itself,
           // not just the pre-flush debounce window.
-          maybeSingle: async () => { mocks.select(table); if (db.selectGate) await db.selectGate; return { data: db.row, error: null } },
+          maybeSingle: async () => {
+            mocks.select(table)
+            const gate = db.selectGates.length > 0 ? db.selectGates.shift() : db.selectGate
+            if (gate) await gate
+            return { data: db.row, error: null }
+          },
         }),
       }),
       update: (patch: { prefs?: unknown }) => ({
@@ -47,6 +59,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   db.row = { prefs: {} }
   db.selectGate = null
+  db.selectGates = []
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -203,5 +216,45 @@ describe('hasPendingPrefsWrite', () => {
     act(() => { result.current.mutate(() => ({ dailyGoal: 4 })) })
     expect(hasPendingPrefsWrite('learner-1')).toBe(true)
     expect(hasPendingPrefsWrite('learner-2')).toBe(false)
+  })
+
+  /**
+   * F2 (fix round): a boolean `inFlight` is wrong when two flushes overlap --
+   * both settle handlers used to assign `inFlight = false` unconditionally,
+   * so the FIRST write's settle cleared the guard while the SECOND was still
+   * on the wire, re-opening X3 inside the fix meant to close it. This drives
+   * two writes far enough apart that both are genuinely in flight at once
+   * (via `db.selectGates`, one gate per `select` call, released independently)
+   * and asserts the guard survives the first settling alone.
+   */
+  it('stays true when a second write overlaps the first, even after the first settles', async () => {
+    let releaseA: () => void = () => {}
+    let releaseB: () => void = () => {}
+    db.selectGates = [
+      new Promise((resolve) => { releaseA = resolve }),
+      new Promise((resolve) => { releaseB = resolve }),
+    ]
+    const { Wrapper } = wrapper()
+    const { result } = renderHook(() => useWellnessPrefsMutation('learner-1'), { wrapper: Wrapper })
+
+    // Write A flushes and blocks on its own gate mid network round trip.
+    act(() => { result.current.mutate(() => ({ dailyGoal: 4 })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    expect(mocks.select).toHaveBeenCalledTimes(1)
+
+    // Write B is queued once A's flush has already cleared pending/timer, and
+    // flushes 400ms later -- both A and B are now in flight simultaneously.
+    act(() => { result.current.mutate(() => ({ dailyGoal: 5 })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    expect(mocks.select).toHaveBeenCalledTimes(2)
+
+    // Release ONLY A. A boolean guard would read false here; the count must not.
+    releaseA()
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(true)
+
+    releaseB()
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(hasPendingPrefsWrite('learner-1')).toBe(false)
   })
 })

@@ -12,7 +12,10 @@
  * its own hook rather than a call to that one.
  *
  * Fix round 1, C1 (Opus review of `b509b0e`): this is now **the single
- * writer** for `wellness.prefs`. `src/components/wellness/useDockPrefs.ts`
+ * writer for wellness.prefs, for every control except `DockControl.tsx`**
+ * (`src/components/shell/DockControl.tsx`, still its own independent writer
+ * as of the F1 fix-round finding -- open until that file's owner routes it
+ * through here too). `src/components/wellness/useDockPrefs.ts`
  * used to keep its own, entirely independent debounce timer and
  * read-modify-write against the exact same JSONB blob; the wellness dock
  * widget (`Dock.tsx`, mounted in the persistent shell on every route,
@@ -105,12 +108,21 @@ interface WriterState {
   pending: Partial<WellnessPrefs> | null
   timer: ReturnType<typeof setTimeout> | null
   consecutiveFailures: number
-  /** True for the network round trip itself, between `flush` clearing
-   *  `pending`/`timer` and `persistPrefsPatch` settling. `hasPendingPrefsWrite`
-   *  needs this in addition to `pending`/`timer`: the debounce window is not
-   *  the only unsafe moment for a same-key row writer's settle-invalidate to
-   *  land the server's still-stale prefs snapshot over this write (X3). */
-  inFlight: boolean
+  /** A COUNT, not a flag (fix round, F2): non-zero for the network round trip
+   *  itself, from the moment `flush` clears `pending`/`timer` until
+   *  `persistPrefsPatch` settles. `hasPendingPrefsWrite` needs this in
+   *  addition to `pending`/`timer`: the debounce window is not the only
+   *  unsafe moment for a same-key row writer's settle-invalidate to land the
+   *  server's still-stale prefs snapshot over this write (X3).
+   *
+   *  A boolean is wrong here: two flushes can overlap (a second change queued
+   *  and debounced while the first write is still on the wire), and both
+   *  settle handlers used to assign `inFlight = false` unconditionally, so
+   *  the FIRST write's settle cleared the flag while the SECOND was still in
+   *  flight -- reopening X3 inside the fix meant to close it. Incrementing on
+   *  every flush and decrementing on every settle (success or failure) keeps
+   *  the count accurate no matter how many writes overlap. */
+  inFlight: number
 }
 
 /** Per-user, module-level -- see the file doc comment for why this cannot be
@@ -120,7 +132,7 @@ const writers = new Map<string, WriterState>()
 function writerFor(userId: string): WriterState {
   let state = writers.get(userId)
   if (!state) {
-    state = { pending: null, timer: null, consecutiveFailures: 0, inFlight: false }
+    state = { pending: null, timer: null, consecutiveFailures: 0, inFlight: 0 }
     writers.set(userId, state)
   }
   return state
@@ -138,7 +150,7 @@ function writerFor(userId: string): WriterState {
  */
 export function hasPendingPrefsWrite(userId: string): boolean {
   const writer = writers.get(userId)
-  return writer !== undefined && (writer.pending !== null || writer.timer !== null || writer.inFlight)
+  return writer !== undefined && (writer.pending !== null || writer.timer !== null || writer.inFlight > 0)
 }
 
 function flush(userId: string, queryClient: QueryClient): void {
@@ -148,22 +160,25 @@ function flush(userId: string, queryClient: QueryClient): void {
   writer.pending = null
   if (!latest) return
   const key = qk.wellness(userId)
-  writer.inFlight = true
+  writer.inFlight += 1
   void persistPrefsPatch(userId, latest)
     .then(() => {
+      writer.inFlight -= 1
       writer.consecutiveFailures = 0
-      writer.inFlight = false
       // Reconcile with the server only on success, and only when nothing
-      // newer has been queued in the meantime (by this control or any other
-      // sharing this writer) -- otherwise the refetch this triggers could
-      // land the server's still-incomplete snapshot over a change made
-      // *after* this write started, a delayed revert wearing an
+      // newer has been queued or still in flight (by this control or any
+      // other sharing this writer) -- otherwise the refetch this triggers
+      // could land the server's still-incomplete snapshot over a change made
+      // *after* this write started (queued, or a still-overlapping earlier
+      // flush's own write not yet settled), a delayed revert wearing an
       // "invalidate" name, which is exactly what brief Step 4 forbids.
-      if (writer.pending === null && writer.timer === null) void queryClient.invalidateQueries({ queryKey: key })
+      if (writer.pending === null && writer.timer === null && writer.inFlight === 0) {
+        void queryClient.invalidateQueries({ queryKey: key })
+      }
     })
     .catch(() => {
+      writer.inFlight -= 1
       writer.consecutiveFailures += 1
-      writer.inFlight = false
       // A toast, never a rollback (brief Step 4) -- the learner's choice
       // stands; this only says the server has not heard about it yet.
       if (writer.consecutiveFailures >= FAILURES_BEFORE_TOAST) {

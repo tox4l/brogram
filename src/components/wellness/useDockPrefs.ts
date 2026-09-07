@@ -17,7 +17,10 @@
  * optimistic write, visibly flipping a toggle back under the learner's
  * finger -- exactly what brief Step 4 forbids.
  *
- * There is now exactly one writer for `wellness.prefs`: this hook only
+ * There is now exactly one writer for `wellness.prefs` for every control
+ * except `DockControl.tsx` (`src/components/shell/DockControl.tsx` still
+ * keeps its own independent writer -- open: F1 fix-round follow-up). This
+ * hook only
  * shapes the dock-specific `DockChange` into the general `PrefsChange` shape
  * `useWellnessPrefsMutation` expects and delegates entirely to it -- one
  * shared, module-level debounce/pending-patch/failure-count store (see that

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { closFor } from '@/lib/curriculum'
+import type { WellnessRow } from '@/lib/learner/compile'
 import type { Attempt, Clo, CourseCode, DrillResult } from '@/lib/contracts'
 
 export interface ReportData {
@@ -71,24 +72,56 @@ async function fetchReportAttempts(client: SupabaseClient, userId: string): Prom
 }
 
 /**
+ * Fix round (F6, Opus review of `1a13de0`): `drill_results` lives on the same
+ * `wellness` row `(app)/layout.tsx` already reads server-side and seeds into
+ * `qk.wellness` (`staleTime`/`gcTime` `Infinity` — it is never refetched on
+ * navigation), and `ReportsPage` already holds that row for `motionPref`
+ * before the Report tab ever opens. Re-reading it from Postgres here made
+ * `/reports` two round trips against the spec's budget of one. This is the
+ * same seeded-cache-first pattern `course/[code]/page.tsx:136` uses: the
+ * caller passes the row it already has (`getQueryData`, or straight
+ * `useWellness().data`) and this only falls back to a network read when the
+ * caller genuinely does not have one yet.
+ */
+async function fetchWellnessDrillResults(client: SupabaseClient, userId: string): Promise<DrillResult[]> {
+  const { data, error } = await client.from('wellness').select('drill_results').eq('user_id', userId).maybeSingle()
+  if (error) throw new Error('Unable to load your de-rot scores.', { cause: error })
+  return (data?.drill_results as DrillResult[] | null) ?? []
+}
+
+/**
  * Everything the report needs for one course: every one of the course's CLOs
  * (draft ones marked, not hidden) in ordinal order, the student's most recent
  * attempts (capped, narrow columns), and their saved de-rot drill results.
  * CLOs come from the static bundle (X4) — never touches `exercises` or
  * `clos`, so a fork ships a new syllabus by editing `seed/` and rebuilding
  * with no separate Postgres table to keep in sync.
+ *
+ * `seededWellness` (F6, fix round): when the caller already holds the
+ * `wellness` row (it does, from the moment the layout seeds `qk.wellness`),
+ * pass it here and the `drill_results` Postgres leg is skipped entirely —
+ * `undefined` (the row genuinely has not been fetched yet by anyone) is the
+ * only value that falls back to a network read; a row that exists but has no
+ * drill results yet is a defined object with a null/absent field, not
+ * `undefined`, so it still counts as "already have it".
  */
-export async function fetchReportData(client: SupabaseClient, userId: string, courseCode: string): Promise<ReportData> {
-  const [wellness, attempts] = await Promise.all([
-    client.from('wellness').select('drill_results').eq('user_id', userId).maybeSingle(),
+export async function fetchReportData(
+  client: SupabaseClient,
+  userId: string,
+  courseCode: string,
+  seededWellness?: WellnessRow,
+): Promise<ReportData> {
+  const [drillResults, attempts] = await Promise.all([
+    seededWellness !== undefined
+      ? Promise.resolve(seededWellness.drill_results ?? [])
+      : fetchWellnessDrillResults(client, userId),
     fetchReportAttempts(client, userId),
   ])
-  if (wellness.error) throw new Error('Unable to load your de-rot scores.', { cause: wellness.error })
 
   return {
     clos: closFor(courseCode as CourseCode).map(markDraft),
     attempts,
-    drillResults: (wellness.data?.drill_results as DrillResult[] | null) ?? [],
+    drillResults,
     attemptsTruncated: attempts.length === REPORT_ATTEMPTS_CAP,
   }
 }

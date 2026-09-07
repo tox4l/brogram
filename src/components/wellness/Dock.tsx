@@ -28,9 +28,12 @@ import { WaterStretch, type WellnessLogEntry } from './WaterStretch'
 import { Pomodoro, type PomodoroSession } from './Pomodoro'
 
 // ---------------------------------------------------------------------------
-// Shared data hooks (X3 fix): `wellness.prefs` has exactly ONE writer in the
-// whole tree, `useWellnessPrefsMutation` (`src/app/(app)/account/prefsMutation.ts`)
-// -- this used to keep its own, independent `useOptimistic` mutation against
+// Shared data hooks (X3 fix): `wellness.prefs` has exactly ONE writer for
+// every control in this file, `useWellnessPrefsMutation`
+// (`src/app/(app)/account/prefsMutation.ts`) -- NOT yet the whole tree:
+// `src/components/shell/DockControl.tsx` still keeps its own independent
+// writer on the same JSONB blob (open: F1 fix-round follow-up). Before this
+// fix, this hook used to keep its own, independent `useOptimistic` mutation against
 // the same JSONB blob, which could revert a concurrent Account-page write (or
 // vice versa) under the learner's finger, since neither writer's debounce/
 // pending state was visible to the other. Every prefs field the dock touches
@@ -339,9 +342,12 @@ export interface DockProps {
  * The wellness dock (T2.4, spec section 6). Renders one of five placements
  * via `orientation`/`collapsed` (computed by `WellnessSlot` from
  * `wellness.prefs.dock`, `src/lib/wellness/dock.ts`); every `prefs` write
- * here (X3 fix) is a patch through the one shared writer
+ * in THIS component (X3 fix) is a patch through the one shared writer
  * (`useWellnessPrefsMutation`/`useDockPrefsMutation`), never a whole
- * resolved `WellnessPrefs` blob or a mutation local to this component.
+ * resolved `WellnessPrefs` blob or a mutation local to this component --
+ * `src/components/shell/DockControl.tsx`, a sibling in the same header,
+ * still writes independently (open: F1 fix-round follow-up), so "one
+ * writer" is a per-control guarantee here, not yet a tree-wide one.
  * `<Toaster/>` lives in `ShellLayout` now (C4), mounted once regardless of
  * dock state.
  */
